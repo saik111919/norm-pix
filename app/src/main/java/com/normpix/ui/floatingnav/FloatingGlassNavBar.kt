@@ -106,8 +106,9 @@ fun FloatingGlassNavBar(
     animationDurationMillis: Int = 420,
     barHeight: Dp = 64.dp,
     itemSpacing: Dp = 4.dp,
-    shadowElevation: Dp = 8.dp,
+    shadowElevation: Dp = 12.dp,
     saturation: Float = 1.25f,
+    borderColor: Color = Color.White,
 ) {
     val shape = RoundedCornerShape(cornerRadius)
     // Keeps item pills at ~48.dp for accessible touch targets.
@@ -130,12 +131,13 @@ fun FloatingGlassNavBar(
                 backgroundOpacity = backgroundOpacity,
                 saturation = saturation,
             )
-            // Hairline top highlight — sells the glass edge without visual noise.
+            // Design: 1px border @ 35% + inset top highlight — approximated with a
+            // gradient border that is brightest along the top edge.
             .border(
                 width = 1.dp,
                 brush = Brush.verticalGradient(
-                    0f to Color.White.copy(alpha = 0.30f),
-                    1f to Color.White.copy(alpha = 0.05f),
+                    0f to borderColor.copy(alpha = 0.40f),
+                    1f to borderColor.copy(alpha = 0.18f),
                 ),
                 shape = shape,
             )

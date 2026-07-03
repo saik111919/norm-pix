@@ -10,8 +10,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -78,6 +80,14 @@ fun CashflowApp() {
             }
         }
 
+        // Design places the bar 16px from the very bottom of the screen. Use whichever
+        // is larger: the design's 16dp or the system gesture inset — instead of stacking
+        // both, which floated the bar (and FAB/toast) visibly higher than the design.
+        val navBottomPadding = maxOf(
+            16.dp,
+            WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+        )
+
         Box(modifier = Modifier.fillMaxSize().background(t.surf)) {
             // Screen content — recorded for the glass nav backdrop. The composition
             // local lets each screen's scroll state keep the blur in sync.
@@ -104,8 +114,8 @@ fun CashflowApp() {
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .navigationBarsPadding()
-                        .padding(end = 20.dp, bottom = 96.dp)
+                        // Design: right 20, bottom 96 (= 16 above the 64dp bar at bottom 16)
+                        .padding(end = 20.dp, bottom = navBottomPadding + 80.dp)
                         .scale(fabScale)
                         .graphicsLayer { alpha = fabAlpha }
                         .shadow(8.dp, RoundedCornerShape(20.dp), spotColor = t.p.copy(alpha = 0.4f))
@@ -138,10 +148,10 @@ fun CashflowApp() {
                 activeContentColor = t.p,
                 inactiveIconColor = t.onSV,
                 saturation = 1.5f, // design: backdrop-filter saturate(1.5)
+                borderColor = if (t.dark) t.hi else Color.White, // design border color
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 16.dp),
+                    .padding(bottom = navBottomPadding),
             )
 
             // Add screen (full-screen slide-up)
@@ -165,8 +175,7 @@ fun CashflowApp() {
                 exit = fadeOut(tween(200, easing = Emphasized)),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 96.dp),
+                    .padding(bottom = navBottomPadding + 80.dp),
             ) {
                 val dark = t.dark
                 Box(

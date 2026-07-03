@@ -254,10 +254,14 @@ fun TogglePill(on: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Bottom content padding that clears the floating bar AND the system navigation inset. */
+/**
+ * Bottom content padding that clears the floating bar. Tracks the bar's actual position
+ * (16dp or the gesture inset, whichever is larger) + 64dp bar + 50dp breathing room,
+ * mirroring the design's 130px scroll padding.
+ */
 @Composable
 fun contentBottomPadding(): Dp =
-    130.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    114.dp + maxOf(16.dp, WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
 
 /**
  * A [ScrollState] that keeps the glass nav-bar backdrop in sync while content scrolls.
@@ -379,10 +383,10 @@ fun ProgressRing(
                 useCenter = false, style = Stroke(strokePx),
                 topLeft = androidx.compose.ui.geometry.Offset(inset, inset), size = arcSize,
             )
-            // Progress
+            // Progress — flat caps, matching the design's conic-gradient ring
             drawArc(
                 color = ringColor, startAngle = -90f, sweepAngle = 360f * (pct / 100f),
-                useCenter = false, style = Stroke(strokePx, cap = StrokeCap.Round),
+                useCenter = false, style = Stroke(strokePx),
                 topLeft = androidx.compose.ui.geometry.Offset(inset, inset), size = arcSize,
             )
         },

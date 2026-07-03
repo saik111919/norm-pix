@@ -27,7 +27,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -125,24 +124,21 @@ fun InsightsScreen(state: CashflowState) {
                         (p2.coerceAtMost(100)) / 100f,
                         tween(600, easing = Emphasized), label = "budgetBar",
                     )
+                    // Design: 8dp track at rgba(p, .15), 4dp radius, solid status-colored fill
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 12.dp)
-                            .height(10.dp)
-                            .clip(CircleShape)
-                            .background(t.p.copy(alpha = 0.1f)),
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(t.p.copy(alpha = 0.15f)),
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth(frac)
                                 .fillMaxHeight()
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.horizontalGradient(
-                                        listOf(barCol.copy(alpha = 0.7f), barCol)
-                                    )
-                                ),
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(barCol),
                         )
                     }
                 }
@@ -183,21 +179,34 @@ fun InsightsScreen(state: CashflowState) {
                 .padding(18.dp),
         ) {
             Text("Last 6 months", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = t.onS)
-            val trendData = listOf(52f, 66f, 48f, 74f, 58f, 71f)
-            TrendChart(
-                data = trendData,
-                color = t.p,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(96.dp)
-                    .padding(top = 16.dp, bottom = 4.dp)
-            )
+            // Design: 6 bars (52/66/48/74/58/71), gap 12, radius 8, current month solid p,
+            // others p @ 30%, labels 6 below on a shared baseline.
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Bottom,
             ) {
-                listOf("Feb", "Mar", "Apr", "May", "Jun", "Jul").forEach { m ->
-                    Text(m, fontSize = 11.sp, color = t.onSV)
+                val months = listOf("Feb" to 52, "Mar" to 66, "Apr" to 48, "May" to 74, "Jun" to 58, "Jul" to 71)
+                months.forEachIndexed { i, (m2, v) ->
+                    val current = i == months.lastIndex
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(v.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (current) t.p else t.p.copy(alpha = 0.3f)),
+                        )
+                        Text(
+                            m2, fontSize = 11.sp,
+                            fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (current) t.p else t.onSV,
+                        )
+                    }
                 }
             }
         }

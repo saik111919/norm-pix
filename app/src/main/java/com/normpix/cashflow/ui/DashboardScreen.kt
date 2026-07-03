@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,7 +31,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -82,13 +83,15 @@ fun DashboardScreen(state: CashflowState) {
                 Text("Spent this month", fontSize = 13.sp, color = t.onPc)
                 Text(
                     state.fmt(SPENT_MONTH), fontSize = 38.sp, fontWeight = FontWeight.SemiBold,
-                    color = t.onPc, letterSpacing = (-0.5).sp, modifier = Modifier.padding(top = 8.dp),
+                    color = t.onPc, letterSpacing = (-0.5).sp, maxLines = 1, softWrap = false,
+                    modifier = Modifier.padding(top = 8.dp),
                 )
                 Text("₹1,240 today", fontSize = 12.sp, color = t.onPc.copy(alpha = 0.8f), modifier = Modifier.padding(top = 6.dp))
             }
             Column(
                 modifier = Modifier
                     .weight(1f)
+                    .fillMaxHeight()
                     .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 32.dp, bottomEnd = 32.dp, bottomStart = 12.dp))
                     .background(t.sc)
                     .padding(16.dp),
@@ -150,8 +153,10 @@ fun DashboardScreen(state: CashflowState) {
                 Text("Where did my money go?", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = t.onS)
                 Icon(Icons.Rounded.ChevronRight, null, tint = t.onSV, modifier = Modifier.size(20.dp))
             }
+            // Design: bars 80/60/44/30 at rgba(p, 0.2+0.8·op), radius 10, gap 14, labels 6 below,
+            // all columns bottom-aligned so labels share one baseline and nothing overflows.
             Row(
-                modifier = Modifier.fillMaxWidth().height(88.dp).padding(top = 14.dp, start = 4.dp, end = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 14.dp, start = 4.dp, end = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
@@ -162,18 +167,14 @@ fun DashboardScreen(state: CashflowState) {
                     Column(
                         modifier = Modifier.weight(1f),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(barH.dp)
-                                .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
-                                .background(
-                                    Brush.verticalGradient(
-                                        listOf(t.p.copy(alpha = op), t.p.copy(alpha = op * 0.4f))
-                                    )
-                                ),
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(t.p.copy(alpha = 0.2f + 0.8f * op)),
                         )
                         Text(label, fontSize = 11.sp, color = t.onSV)
                     }
