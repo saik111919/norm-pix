@@ -51,7 +51,7 @@ fun DashboardScreen(state: CashflowState) {
             .fillMaxSize()
             .verticalScroll(rememberGlassSyncedScrollState())
             .statusBarsPadding()
-            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = contentBottomPadding()),
+            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = contentBottomPadding(state.showFab)),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         // Header

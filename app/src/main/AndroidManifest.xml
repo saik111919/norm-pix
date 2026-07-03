@@ -3,6 +3,11 @@
 
     <!-- Local-first: no INTERNET permission, nothing leaves the device. -->
 
+    <!-- Needed to auto-capture bank transactions from SMS. Read-only: messages are
+         parsed on-device and never transmitted anywhere. -->
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+
     <application
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"

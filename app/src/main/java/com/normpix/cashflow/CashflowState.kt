@@ -70,7 +70,44 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     var chip by mutableStateOf("All")
 
     // Settings
-    var smsOn by mutableStateOf(true)
+    // Whether the OS has actually granted SMS read/receive permission — refreshed on
+    // creation and whenever the app resumes (e.g. coming back from system Settings).
+    var smsPermissionGranted by mutableStateOf(hasSmsPermission(context))
+        private set
+
+    // Whether the system permission dialog has been shown before, so we know when a
+    // renewed request would be a silent no-op (permanently denied) vs. a fresh ask.
+    var smsPermissionRequestedBefore by mutableStateOf(prefs.getBoolean("smsPermRequested", false))
+        private set
+
+    fun markSmsPermissionRequested() {
+        smsPermissionRequestedBefore = true
+        prefs.edit().putBoolean("smsPermRequested", true).apply()
+    }
+
+    /** Called with the result of a permission request (or a fresh check on resume). */
+    fun onSmsPermissionResult(granted: Boolean) {
+        smsPermissionGranted = granted
+        setSmsOnPref(granted)
+        showToast(if (granted) "SMS access granted" else "SMS permission denied")
+    }
+
+    /** Re-checks the OS permission state, e.g. after the app resumes from system Settings. */
+    fun refreshSmsPermission() {
+        val granted = hasSmsPermission(context)
+        if (granted != smsPermissionGranted) {
+            smsPermissionGranted = granted
+            if (!granted) setSmsOnPref(false)
+        }
+    }
+
+    // User's intent to auto-capture from SMS. Only meaningful when smsPermissionGranted
+    // is also true — the Settings toggle and Inbox banner keep the two in sync.
+    var smsOn by mutableStateOf(prefs.getBoolean("smsOn", true) && hasSmsPermission(context))
+        private set
+
+    fun setSmsOnPref(v: Boolean) { smsOn = v; prefs.edit().putBoolean("smsOn", v).apply() }
+
     var catExpanded by mutableStateOf<String?>(null)
     var bankExpanded by mutableStateOf<String?>(null)
     var newBankName by mutableStateOf("")

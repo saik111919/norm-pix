@@ -255,13 +255,22 @@ fun TogglePill(on: Boolean, onClick: () -> Unit) {
 }
 
 /**
- * Bottom content padding that clears the floating bar. Tracks the bar's actual position
- * (16dp or the gesture inset, whichever is larger) + 64dp bar + 50dp breathing room,
- * mirroring the design's 130px scroll padding.
+ * Bottom content padding that clears the floating bar (and the FAB, when shown). Tracks
+ * the bar's actual position (16dp or the gesture inset, whichever is larger) + 64dp bar +
+ * 50dp breathing room, mirroring the design's 130px scroll padding.
+ *
+ * The FAB floats independently of scroll position at `bottom = navClearance + 80.dp`
+ * with a 60dp size, so its top edge sits `navClearance + 140.dp` up from the screen
+ * bottom. Without extra clearance here, scrolling a screen all the way down parks its
+ * last row directly behind the FAB — which then swallows taps meant for that row (e.g.
+ * the "Floating add button" toggle in Settings). Pass [showFab] so screens reserve that
+ * extra space only while the FAB is actually on-screen.
  */
 @Composable
-fun contentBottomPadding(): Dp =
-    114.dp + maxOf(16.dp, WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
+fun contentBottomPadding(showFab: Boolean): Dp =
+    114.dp +
+        (if (showFab) 140.dp else 0.dp) +
+        maxOf(16.dp, WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
 
 /**
  * A [ScrollState] that keeps the glass nav-bar backdrop in sync while content scrolls.

@@ -63,6 +63,7 @@ import com.normpix.cashflow.dynamicColorAvailable
 import com.normpix.cashflow.dynamicSwatch
 import com.normpix.cashflow.catList
 import com.normpix.cashflow.catSubMap
+import com.normpix.cashflow.rememberSmsPermissionRequester
 import kotlin.math.roundToInt
 
 @Composable
@@ -78,12 +79,13 @@ fun SettingsScreen(state: CashflowState, sysDark: Boolean) {
 @Composable
 private fun SettingsMain(state: CashflowState, sysDark: Boolean) {
     val t = LocalCashTokens.current
+    val requestSmsPermission = rememberSmsPermissionRequester(state)
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberGlassSyncedScrollState())
             .statusBarsPadding()
-            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = contentBottomPadding()),
+            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = contentBottomPadding(state.showFab)),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
@@ -244,8 +246,14 @@ private fun SettingsMain(state: CashflowState, sysDark: Boolean) {
         SectionTitle("Automatic capture")
         GroupCard {
             SettingRow(
-                Icons.Rounded.Sms, "Read bank SMS", "Read-only · processed on this device",
-                trailing = { TogglePill(state.smsOn) { state.smsOn = !state.smsOn } },
+                Icons.Rounded.Sms, "Read bank SMS",
+                if (state.smsPermissionGranted) "Read-only · processed on this device" else "Permission required · tap to allow",
+                trailing = {
+                    TogglePill(state.smsOn) {
+                        if (state.smsPermissionGranted) state.setSmsOnPref(!state.smsOn) else requestSmsPermission()
+                    }
+                },
+                onClick = if (!state.smsPermissionGranted) requestSmsPermission else null,
             )
             SettingRow(
                 Icons.Rounded.AccountBalance, "Bank & sender rules", "HDFC, SBI, ICICI + 40 more",
@@ -299,7 +307,7 @@ private fun CategoriesSubScreen(state: CashflowState) {
             .fillMaxSize()
             .verticalScroll(rememberGlassSyncedScrollState())
             .statusBarsPadding()
-            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = contentBottomPadding()),
+            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = contentBottomPadding(state.showFab)),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         SubHeader(state, "Categories", "12 categories · tap to see subcategories")
@@ -393,7 +401,7 @@ private fun BanksSubScreen(state: CashflowState) {
             .fillMaxSize()
             .verticalScroll(rememberGlassSyncedScrollState())
             .statusBarsPadding()
-            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = contentBottomPadding()),
+            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = contentBottomPadding(state.showFab)),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         SubHeader(state, "Bank & sender rules", "Tap a bank to see its SMS formats")
@@ -565,13 +573,14 @@ private fun BanksSubScreen(state: CashflowState) {
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(20.dp))
                 .background(t.cont)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(18.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(Icons.Rounded.Lock, null, tint = t.onSV, modifier = Modifier.size(18.dp))
             Text(
-                "SMS parsing runs entirely on this device. Sender IDs are matched locally; message text never leaves your phone.",
-                fontSize = 12.sp, lineHeight = 18.sp, color = t.onSV,
+                "Your SMS messages never leave this device. Processing happens entirely offline.",
+                fontSize = 12.sp, color = t.onSV, lineHeight = 16.sp
             )
         }
     }

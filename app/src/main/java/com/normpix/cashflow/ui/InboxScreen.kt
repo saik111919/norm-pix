@@ -34,16 +34,18 @@ import com.normpix.cashflow.CashflowState
 import com.normpix.cashflow.LocalCashTokens
 import com.normpix.cashflow.SheetTarget
 import com.normpix.cashflow.fmt
+import com.normpix.cashflow.rememberSmsPermissionRequester
 
 @Composable
 fun InboxScreen(state: CashflowState) {
     val t = LocalCashTokens.current
+    val requestSmsPermission = rememberSmsPermissionRequester(state)
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberGlassSyncedScrollState())
             .statusBarsPadding()
-            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = contentBottomPadding()),
+            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = contentBottomPadding(state.showFab)),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Column(modifier = Modifier.padding(top = 8.dp)) {
@@ -53,6 +55,37 @@ fun InboxScreen(state: CashflowState) {
                 if (n > 0) "$n detected message${if (n > 1) "s" else ""} waiting for review" else "All caught up",
                 fontSize = 13.sp, color = t.onSV, modifier = Modifier.padding(top = 4.dp),
             )
+        }
+
+        if (!state.smsPermissionGranted) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(t.cont)
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconBubble(Icons.Rounded.Sms, 44.dp, bg = t.sc, tint = t.onSc, iconSize = 22.dp)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Turn on SMS access", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = t.onS)
+                        Text(
+                            "So bank messages can be auto-detected here. Read-only, processed on this device.",
+                            fontSize = 12.sp, lineHeight = 17.sp, color = t.onSV, modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(t.p)
+                        .clickable { requestSmsPermission() },
+                    contentAlignment = Alignment.Center,
+                ) { Text("Grant access", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = t.onP) }
+            }
         }
 
         if (state.inbox.isNotEmpty()) {

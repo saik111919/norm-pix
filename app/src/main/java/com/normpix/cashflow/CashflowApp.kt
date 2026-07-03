@@ -1,5 +1,6 @@
 package com.normpix.cashflow
 
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -33,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -43,8 +45,11 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.normpix.cashflow.ui.AddScreen
 import com.normpix.cashflow.ui.DashboardScreen
 import com.normpix.cashflow.ui.EditSheet
@@ -69,6 +74,18 @@ fun CashflowApp() {
     CashflowTheme(seed = state.seed, mode = state.mode) {
         val t = LocalCashTokens.current
         val glass = rememberGlassBackdropState()
+
+        // Re-check SMS permission on resume — covers the user granting (or revoking) it
+        // from system Settings while the app was backgrounded.
+        val context = LocalContext.current
+        DisposableEffect(context) {
+            val activity = context as? ComponentActivity
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) state.refreshSmsPermission()
+            }
+            activity?.lifecycle?.addObserver(observer)
+            onDispose { activity?.lifecycle?.removeObserver(observer) }
+        }
 
         // System back: close overlays / sub-screens before leaving the app.
         BackHandler(enabled = state.sheet != null || state.addOpen || state.subScreen != null || state.tab != 0) {

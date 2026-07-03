@@ -102,8 +102,10 @@ fun Modifier.glassSource(state: GlassBackdropState): Modifier =
  * clipped to [shape].
  *
  * On API 31+ the backdrop is blurred (and gently saturated, which is what makes glass
- * read as "glass"). On older devices — or when [state] is null — it gracefully falls
- * back to a plain translucent surface at [fallbackOpacity].
+ * read as "glass"), with [backgroundOpacity] controlling the tint layered over that blur.
+ * On older devices — or when [state] is null — there's no blur to hide raw content
+ * behind, so the fallback still honors [backgroundOpacity] but floors it at
+ * [fallbackMinOpacity] for legibility, rather than ignoring the setting outright.
  */
 @Composable
 fun Modifier.glassPanel(
@@ -112,7 +114,7 @@ fun Modifier.glassPanel(
     blurRadius: Dp = 20.dp,
     backgroundColor: Color = MaterialTheme.colorScheme.surface,
     backgroundOpacity: Float = 0.5f,
-    fallbackOpacity: Float = 0.93f,
+    fallbackMinOpacity: Float = 0.6f,
     saturation: Float = 1.25f,
 ): Modifier {
     val blurLayer = rememberGraphicsLayer()
@@ -155,8 +157,11 @@ fun Modifier.glassPanel(
                 // that doesn't completely kill the blur.
                 drawRect(backgroundColor.copy(alpha = backgroundOpacity))
             } else {
-                // Graceful fallback: slightly more translucent for better visibility of content.
-                drawRect(backgroundColor.copy(alpha = fallbackOpacity.coerceAtMost(0.8f)))
+                // Graceful fallback (no blur capability, or no backdrop source): still
+                // tracks the user's backgroundOpacity so the Settings sliders always do
+                // something visible, just floored so the bar doesn't turn see-through
+                // without any blur behind it to soften the raw content.
+                drawRect(backgroundColor.copy(alpha = backgroundOpacity.coerceAtLeast(fallbackMinOpacity)))
             }
         }
 }
