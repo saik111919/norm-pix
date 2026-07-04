@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm view *)",
+      "Bash(npm ls *)",
+      "mcp__claude_design__list_files",
+      "mcp__claude_design__read_file",
+      "mcp__claude_design__get_project"
+    ]
+  }
+}

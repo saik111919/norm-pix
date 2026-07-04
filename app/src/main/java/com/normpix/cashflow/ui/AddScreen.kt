@@ -2,13 +2,16 @@ package com.normpix.cashflow.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Arrangement
@@ -18,7 +21,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -43,12 +48,20 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.normpix.cashflow.CashflowState
@@ -58,29 +71,75 @@ import com.normpix.cashflow.accounts
 import com.normpix.cashflow.addSubCats
 import com.normpix.cashflow.catIcons
 import com.normpix.cashflow.evalAmount
+import com.normpix.cashflow.formatShortDate
 import com.normpix.cashflow.groupINR
 import com.normpix.cashflow.keypad
+import com.normpix.ui.floatingnav.glassPanel
+import kotlin.math.roundToInt
 
 private val KEYS = listOf("7", "8", "9", "÷", "4", "5", "6", "×", "1", "2", "3", "-", ".", "0", "back", "+")
 
 @Composable
-fun AddScreen(state: CashflowState) {
+fun AddScreen(state: CashflowState, glass: com.normpix.ui.floatingnav.GlassBackdropState?) {
     val t = LocalCashTokens.current
     AnimatedVisibility(
         visible = state.addOpen,
         enter = slideInVertically(tween(380, easing = Emphasized)) { it },
         exit = slideOutVertically(tween(380, easing = Emphasized)) { it },
     ) {
+        // Drag-to-dismiss (design's startAddDrag): downward-only, 1:1 while dragging,
+        // closes past a 110dp threshold, otherwise animates back to 0.
+        var dragging by remember { mutableStateOf(false) }
+        var dragDeltaPx by remember { mutableFloatStateOf(0f) }
+        val density = LocalDensity.current
+        val animatedOffsetPx by animateFloatAsState(
+            targetValue = if (dragging) dragDeltaPx else 0f,
+            animationSpec = if (dragging) snap() else tween(320, easing = Emphasized),
+            label = "addDragOffset",
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(t.surf)
+                .offset { IntOffset(0, animatedOffsetPx.roundToInt()) }
+                .glassPanel(
+                    glass, RectangleShape, blurRadius = state.sheetBlur.dp,
+                    backgroundColor = t.surf, backgroundOpacity = state.sheetOpacity, saturation = 1.5f,
+                )
                 .statusBarsPadding()
                 .navigationBarsPadding(),
         ) {
+            // Drag handle (design: 36x4 pill, in a 26dp-tall row, 6dp top margin)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(26.dp)
+                    .padding(top = 6.dp)
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onDragStart = { dragging = true; dragDeltaPx = 0f },
+                            onDragEnd = {
+                                if (dragDeltaPx > with(density) { 110.dp.toPx() }) state.addOpen = false
+                                dragging = false
+                            },
+                            onDragCancel = { dragging = false },
+                        ) { change, dragAmount ->
+                            change.consume()
+                            dragDeltaPx = (dragDeltaPx + dragAmount).coerceAtLeast(0f)
+                        }
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(36.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(t.out),
+                )
+            }
             // Header
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 0.dp, bottom = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -221,6 +280,7 @@ private fun AmountDisplay(state: CashflowState) {
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun TxnFields(state: CashflowState) {
     val t = LocalCashTokens.current
@@ -304,7 +364,28 @@ private fun TxnFields(state: CashflowState) {
     ChipRowInline {
         ChoiceChip("Today", state.addDate == "Today", { state.addDate = "Today" }, icon = Icons.Rounded.Today)
         ChoiceChip("Yesterday", state.addDate == "Yesterday", { state.addDate = "Yesterday" }, icon = Icons.Rounded.History)
-        ChoiceChip("Pick date", false, { state.showToast("Date picker (demo)") }, icon = Icons.Rounded.CalendarMonth)
+        ChoiceChip(
+            state.addCustomDateMillis?.takeIf { state.addDate == "Custom" }?.let { formatShortDate(it) } ?: "Pick date",
+            state.addDate == "Custom", { state.openDatePicker() }, icon = Icons.Rounded.CalendarMonth,
+        )
+    }
+    if (state.showDatePicker) {
+        val pickerState = androidx.compose.material3.rememberDatePickerState(
+            initialSelectedDateMillis = state.addCustomDateMillis ?: System.currentTimeMillis(),
+        )
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = { state.closeDatePicker() },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { pickerState.selectedDateMillis?.let { state.pickCustomDate(it) } ?: state.closeDatePicker() },
+                ) { Text("OK") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { state.closeDatePicker() }) { Text("Cancel") }
+            },
+        ) {
+            androidx.compose.material3.DatePicker(state = pickerState)
+        }
     }
 }
 

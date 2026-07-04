@@ -162,6 +162,9 @@ private val DARK = mapOf(
 
 val LocalCashTokens = staticCompositionLocalOf { LIGHT.getValue(Seed.GREEN) }
 
+/** The lighter "container" tone paired with a seed's accent color, for the two-tone theme swatch. */
+fun seedToneColor(seed: Seed): Color = LIGHT.getOrElse(seed) { LIGHT.getValue(Seed.GREEN) }.pc
+
 /** True when Material You dynamic color is available on this device. */
 val dynamicColorAvailable: Boolean
     get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S

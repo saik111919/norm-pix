@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.height
@@ -36,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
@@ -230,15 +232,17 @@ fun TogglePill(on: Boolean, onClick: () -> Unit) {
     val t = LocalCashTokens.current
     val bg by animateColorAsState(if (on) t.p else t.cont, tween(240, easing = Emphasized), label = "toggleBg")
     val border by animateColorAsState(if (on) t.p else t.out, tween(240, easing = Emphasized), label = "toggleBorder")
-    // Design: 2px border + 2px inset → thumb travels 4dp..24dp from the outer edge, vertically centered.
-    val thumbX by animateDpAsState(if (on) 24.dp else 4.dp, tween(240, easing = Emphasized), label = "toggleThumb")
+    // Design: thumb sits inside the border, not flush against it — the trailing .padding(2.dp)
+    // below insets the content area so these offsets leave a consistent 2dp gap on both ends.
+    val thumbX by animateDpAsState(if (on) 22.dp else 2.dp, tween(240, easing = Emphasized), label = "toggleThumb")
     Box(
         modifier = Modifier
             .size(width = 52.dp, height = 32.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(bg)
             .border(2.dp, border, RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .padding(2.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
         Box(
@@ -367,6 +371,59 @@ fun CashTextField(
             cursorBrush = androidx.compose.ui.graphics.SolidColor(t.p),
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = keyboardType),
             modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/** Solid filled pill CTA (design's primary "add" button: 56dp tall, 28dp radius, tinted shadow). */
+@Composable
+fun PrimaryCtaButton(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val t = LocalCashTokens.current
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .shadow(8.dp, RoundedCornerShape(28.dp), spotColor = t.p.copy(alpha = 0.35f))
+            .clip(RoundedCornerShape(28.dp))
+            .background(t.p)
+            .clickable(onClick = onClick),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = t.onP, modifier = Modifier.size(20.dp))
+        Text(label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = t.onP)
+    }
+}
+
+/** Multi-line bordered text input for longer free-text entry (design's SMS-format textarea). */
+@Composable
+fun CashTextArea(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    minHeight: Dp = 84.dp,
+    cornerRadius: Dp = 16.dp,
+    fontSize: androidx.compose.ui.unit.TextUnit = 13.sp,
+) {
+    val t = LocalCashTokens.current
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(cornerRadius))
+            .border(1.dp, t.out, RoundedCornerShape(cornerRadius))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        if (value.isEmpty()) {
+            Text(placeholder, fontSize = fontSize, color = t.onSV.copy(alpha = 0.7f))
+        }
+        androidx.compose.foundation.text.BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = false,
+            textStyle = androidx.compose.ui.text.TextStyle(fontSize = fontSize, color = t.onS, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(t.p),
+            modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = minHeight),
         )
     }
 }

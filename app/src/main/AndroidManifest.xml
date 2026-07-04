@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Local-first: no INTERNET permission, nothing leaves the device. -->
+    <!-- Local-first: transactions, SMS content, and account data never leave this device.
+         The one exception is a GET to api.github.com/repos/.../releases/latest to check for
+         app updates (Settings > About > App updates) — no user or transaction data is sent. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Needed to auto-capture bank transactions from SMS. Read-only: messages are
          parsed on-device and never transmitted anywhere. -->
@@ -13,16 +16,29 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@style/Theme.NormPix">
 
         <activity
             android:name=".MainActivity"
+            android:theme="@style/Theme.NormPix.Splash"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Lets CashflowState.export() share a cached CSV file with other apps without
+             exposing the whole cache directory (required by FileProvider.getUriForFile). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

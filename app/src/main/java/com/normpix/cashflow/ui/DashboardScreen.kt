@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.MarkEmailUnread
 import androidx.compose.material.icons.rounded.Person
@@ -38,10 +39,7 @@ import com.normpix.cashflow.CashflowState
 import com.normpix.cashflow.LocalCashTokens
 import com.normpix.cashflow.SheetTarget
 import com.normpix.cashflow.fmt
-
-const val SPENT_MONTH = 42318.0
-const val BUDGET = 60000.0
-const val BUDGET_PCT = 71
+import com.normpix.cashflow.fmtCompact
 
 @Composable
 fun DashboardScreen(state: CashflowState) {
@@ -60,8 +58,14 @@ fun DashboardScreen(state: CashflowState) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("July", fontSize = 22.sp, fontWeight = FontWeight.Medium, color = t.onS)
+            Column {
+                Text("NormPix", fontSize = 22.sp, fontWeight = FontWeight.Medium, color = t.onS)
+                Text("July", fontSize = 12.sp, color = t.onSV, modifier = Modifier.padding(top = 2.dp))
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!state.showFab) {
+                    CircleIconButton(Icons.Rounded.Add, onClick = { state.addOpen = true }, bg = t.p, tint = t.onP)
+                }
                 CircleIconButton(Icons.Rounded.Search, onClick = { state.tab = 1 })
                 CircleIconButton(Icons.Rounded.Person, onClick = { state.tab = 4 }, bg = t.pc, tint = t.onPc)
             }
@@ -82,11 +86,14 @@ fun DashboardScreen(state: CashflowState) {
             ) {
                 Text("Spent this month", fontSize = 13.sp, color = t.onPc)
                 Text(
-                    state.fmt(SPENT_MONTH), fontSize = 38.sp, fontWeight = FontWeight.SemiBold,
+                    state.fmt(state.spentMonth), fontSize = 38.sp, fontWeight = FontWeight.SemiBold,
                     color = t.onPc, letterSpacing = (-0.5).sp, maxLines = 1, softWrap = false,
                     modifier = Modifier.padding(top = 8.dp),
                 )
-                Text("₹1,240 today", fontSize = 12.sp, color = t.onPc.copy(alpha = 0.8f), modifier = Modifier.padding(top = 6.dp))
+                Text(
+                    "${state.fmt(state.todaySpent)} today", fontSize = 12.sp,
+                    color = t.onPc.copy(alpha = 0.8f), modifier = Modifier.padding(top = 6.dp),
+                )
             }
             Column(
                 modifier = Modifier
@@ -99,12 +106,12 @@ fun DashboardScreen(state: CashflowState) {
                 verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
             ) {
                 ProgressRing(
-                    pct = BUDGET_PCT, size = 72.dp, thickness = 9.dp,
+                    pct = state.budgetPct, size = 72.dp, thickness = 9.dp,
                     ringColor = t.p, trackColor = t.p.copy(alpha = 0.18f),
                 ) {
-                    Text("$BUDGET_PCT%", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = t.onSc)
+                    Text("${state.budgetPct}%", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = t.onSc)
                 }
-                Text("of ₹60k budget", fontSize = 12.sp, color = t.onSc)
+                Text("of ${fmtCompact(state.monthlyBudget, state.currency)} budget", fontSize = 12.sp, color = t.onSc)
             }
         }
 
@@ -142,30 +149,35 @@ fun DashboardScreen(state: CashflowState) {
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(24.dp))
                 .background(t.cont)
-                .clickable { state.tab = 3 }
                 .padding(18.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().clickable { state.tab = 3 },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("Where did my money go?", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = t.onS)
                 Icon(Icons.Rounded.ChevronRight, null, tint = t.onSV, modifier = Modifier.size(20.dp))
             }
-            // Design: bars 80/60/44/30 at rgba(p, 0.2+0.8·op), radius 10, gap 14, labels 6 below,
-            // all columns bottom-aligned so labels share one baseline and nothing overflows.
+            // Bar height + opacity scale with each category's live spend relative to the
+            // highest-spending one (design: max bar 80dp, height floor 6dp, opacity floor 0.25
+            // so empty categories still render a visible sliver rather than disappearing).
+            val barCats = listOf("Food" to "Food", "Shopping" to "Shop", "Transport" to "Travel", "Bills" to "Bills")
+            val spentByCat = barCats.map { (cat, _) -> cat to state.categorySpent(cat) }
+            val maxSpent = spentByCat.maxOf { it.second }.coerceAtLeast(1.0)
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 14.dp, start = 4.dp, end = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
-                listOf(
-                    Triple("Food", 80, 1f), Triple("Shop", 60, 0.7f),
-                    Triple("Travel", 44, 0.45f), Triple("Bills", 30, 0.25f),
-                ).forEach { (label, barH, op) ->
+                barCats.forEachIndexed { i, (cat, label) ->
+                    val ratio = (spentByCat[i].second / maxSpent).toFloat()
+                    val op = ratio.coerceAtLeast(0.25f)
+                    val barH = (ratio * 80f).coerceAtLeast(6f).toInt()
                     Column(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { state.catDetail = cat },
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {

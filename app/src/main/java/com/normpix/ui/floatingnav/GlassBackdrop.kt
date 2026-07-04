@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.RenderEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.layer.CompositingStrategy
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
@@ -148,6 +149,10 @@ fun Modifier.glassPanel(
                                 drawLayer(state.contentLayer)
                             }
                         }
+                        // RenderEffect on a manually-managed GraphicsLayer only takes effect
+                        // when the layer draws through an offscreen buffer — without this,
+                        // the blur is silently dropped and the layer draws unmodified.
+                        blurLayer.compositingStrategy = CompositingStrategy.Offscreen
                         blurLayer.renderEffect = glassEffect
                         drawLayer(blurLayer)
                     }

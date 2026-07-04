@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.FilterList
@@ -44,7 +45,6 @@ import androidx.compose.ui.unit.sp
 import com.normpix.cashflow.CashflowState
 import com.normpix.cashflow.LocalCashTokens
 import com.normpix.cashflow.SheetTarget
-import com.normpix.cashflow.fmt
 import kotlin.math.abs
 
 private val chipIcons: Map<String, ImageVector> = mapOf(
@@ -78,10 +78,16 @@ fun TransactionsScreen(state: CashflowState) {
             .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = contentBottomPadding(state.showFab)),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text(
-            "Transactions", fontSize = 22.sp, fontWeight = FontWeight.Medium, color = t.onS,
-            modifier = Modifier.padding(top = 8.dp),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Transactions", fontSize = 22.sp, fontWeight = FontWeight.Medium, color = t.onS)
+            if (!state.showFab) {
+                CircleIconButton(Icons.Rounded.Add, onClick = { state.addOpen = true }, bg = t.p, tint = t.onP)
+            }
+        }
 
         // Search bar
         Row(
@@ -155,14 +161,14 @@ fun TransactionsScreen(state: CashflowState) {
                 fontSize = 12.sp, color = t.onSV,
             )
             val spent = filtered.filter { it.amount < 0 }.sumOf { abs(it.amount) }
-            Text("Spent ${fmt(spent)}", fontSize = 12.sp, color = t.onSV)
+            Text("Spent ${state.fmt(spent)}", fontSize = 12.sp, color = t.onSV)
         }
 
         if (days.isNotEmpty()) {
             days.forEach { (day, rows) ->
                 Text(day, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = t.onSV, modifier = Modifier.padding(top = 2.dp))
                 GroupCard {
-                    rows.forEach { tx -> TxRow(tx) { state.openSheet(SheetTarget("txn", txn = tx)) } }
+                    rows.forEach { tx -> TxRow(tx, state) { state.openSheet(SheetTarget("txn", txn = tx)) } }
                 }
             }
         } else {

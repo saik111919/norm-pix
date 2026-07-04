@@ -7,9 +7,9 @@ import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CardGiftcard
 import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.CurrencyPound
 import androidx.compose.material.icons.rounded.CurrencyRupee
-import androidx.compose.material.icons.rounded.CurrencyYen
 import androidx.compose.material.icons.rounded.Euro
 import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.Flight
@@ -51,7 +51,7 @@ val currencies = listOf(
     Currency("USD", "$", "US Dollar", Locale.US, Icons.Rounded.AttachMoney),
     Currency("EUR", "€", "Euro", Locale.FRANCE, Icons.Rounded.Euro),
     Currency("GBP", "£", "British Pound", Locale.UK, Icons.Rounded.CurrencyPound),
-    Currency("JPY", "¥", "Japanese Yen", Locale.JAPAN, Icons.Rounded.CurrencyYen),
+    Currency("AED", "د.إ", "UAE Dirham", Locale("ar", "AE"), Icons.Rounded.Payments),
 )
 
 data class Txn(
@@ -95,6 +95,26 @@ data class Bank(
     val parsed: String,
     val on: Boolean,
     val formats: List<String>,
+)
+
+data class Account(
+    val name: String,
+    val mask: String?,
+    val type: String, // Savings | Credit card | Cash
+    val balance: Double, // may be negative (e.g. credit card)
+    val icon: ImageVector,
+    val on: Boolean,
+)
+
+data class SmartRule(val id: String, val match: String, val cat: String)
+
+data class Webhook(val id: String, val url: String, val event: String, val on: Boolean)
+
+data class NotifPrefs(
+    val budget: Boolean = true,
+    val weekly: Boolean = true,
+    val bills: Boolean = true,
+    val sms: Boolean = true,
 )
 
 // ── Icon + formatting helpers ──
@@ -190,6 +210,25 @@ fun sampleSubs() = mutableListOf(
     Sub("Gym membership", Icons.Rounded.FitnessCenter, 1301.0, "due 25 Jul", "Monthly"),
 )
 
+fun sampleAccounts() = mutableListOf(
+    Account("HDFC Bank", "••4521", "Savings", 128430.0, Icons.Rounded.AccountBalance, true),
+    Account("SBI", "••8890", "Savings", 42110.0, Icons.Rounded.AccountBalance, true),
+    Account("ICICI Bank", "••2210", "Credit card", -8420.0, Icons.Rounded.CreditCard, true),
+    Account("Cash wallet", null, "Cash", 1200.0, Icons.Rounded.Payments, true),
+)
+
+fun sampleSmartRules() = mutableListOf(
+    SmartRule("r1", "swiggy, zomato", "Food"),
+    SmartRule("r2", "uber, ola, rapido", "Transport"),
+    SmartRule("r3", "amazon, myntra, flipkart", "Shopping"),
+)
+
+fun sampleWebhooks() = mutableListOf(
+    Webhook("w1", "https://hooks.example.com/normpix", "transaction.created", true),
+)
+
+val langList = listOf("English", "हिन्दी (Hindi)", "বাংলা (Bengali)", "தமிழ் (Tamil)", "मराठी (Marathi)", "ગુજરાતી (Gujarati)")
+
 fun sampleBanks() = mutableListOf(
     Bank(
         "HDFC Bank", "VM-HDFCBK · AD-HDFCBK", "128 parsed", true,
@@ -244,6 +283,56 @@ fun sampleTxns() = mutableListOf(
     Txn("t7", "Netflix", -649.0, "Bills", "ICICI ••2210 · Card", "Mon", "Earlier", Icons.Rounded.Subscriptions, true),
     Txn("t8", "Chai (cash)", -40.0, "Food", "Cash wallet", "Mon", "Earlier", Icons.Rounded.LocalCafe, false),
     Txn("t9", "Zomato", -520.0, "Food", "HDFC ••4521 · UPI", "Sun", "Earlier", Icons.Rounded.Restaurant, true),
+)
+
+/** Static metadata for the category detail drill-down — one entry per `Txn.cat` key (design section 9). */
+data class CatMeta(val title: String, val icon: ImageVector)
+
+val catMeta: Map<String, CatMeta> = mapOf(
+    "Food" to CatMeta("Food & dining", Icons.Rounded.LunchDining),
+    "Shopping" to CatMeta("Shopping", Icons.Rounded.ShoppingBag),
+    "Transport" to CatMeta("Transport", Icons.Rounded.LocalTaxi),
+    "Bills" to CatMeta("Bills & utilities", Icons.Rounded.Bolt),
+    "Income" to CatMeta("Income", Icons.Rounded.Savings),
+)
+
+/** Display name shown for a `Txn.cat` key in budget lists (design's category budgets section). */
+val catDisplayName: Map<String, String> = catMeta.mapValues { it.value.title }
+
+/** Sum of this month's spend in [cat] (expenses only, i.e. negative amounts). */
+fun categorySpent(txns: List<Txn>, cat: String): Double =
+    txns.filter { it.cat == cat && it.amount < 0 }.sumOf { -it.amount }
+
+/** Which relative-day bucket a picked date falls into, for grouping in the transaction list. */
+fun dayBucketFor(millis: Long): String {
+    fun sameDay(a: java.util.Calendar, b: java.util.Calendar) =
+        a.get(java.util.Calendar.YEAR) == b.get(java.util.Calendar.YEAR) &&
+            a.get(java.util.Calendar.DAY_OF_YEAR) == b.get(java.util.Calendar.DAY_OF_YEAR)
+    val picked = java.util.Calendar.getInstance().apply { timeInMillis = millis }
+    val today = java.util.Calendar.getInstance()
+    val yesterday = java.util.Calendar.getInstance().apply { add(java.util.Calendar.DATE, -1) }
+    return when {
+        sameDay(picked, today) -> "Today"
+        sameDay(picked, yesterday) -> "Yesterday"
+        else -> "Earlier"
+    }
+}
+
+/** Short "5 Jul" label for a picked date. */
+fun formatShortDate(millis: Long): String =
+    java.text.SimpleDateFormat("d MMM", Locale.getDefault()).format(java.util.Date(millis))
+
+/** Formats a number compactly with a "k"/"L" suffix, e.g. 60000 -> "₹60k" (design's budget summary text). */
+fun fmtCompact(n: Double, currency: Currency = currencies[0]): String {
+    val v = n / 1000.0
+    val s = if (v == v.toLong().toDouble()) v.toLong().toString() else String.format(Locale.US, "%.1f", v)
+    return currency.symbol + s + "k"
+}
+
+/** Icon choices offered when creating a new category (design's 6-icon picker). */
+val addCategoryIcons = listOf(
+    Icons.Rounded.Category, Icons.Rounded.ShoppingBag, Icons.Rounded.Restaurant,
+    Icons.Rounded.Flight, Icons.Rounded.FitnessCenter, Icons.Rounded.CardGiftcard,
 )
 
 data class CatInfo(val name: String, val icon: ImageVector, val subtitle: String)

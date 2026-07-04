@@ -88,6 +88,8 @@ data class FloatingNavItem(
  * @param animationDurationMillis overall animation speed; springs scale with it
  * @param barHeight total bar height (keep >= 60.dp so touch targets stay >= 48.dp)
  * @param itemSpacing horizontal gap between items
+ * @param showLabels when false, items never reveal their label even when selected — used for
+ * an icon-only pill (design's separate single-item Settings pill next to the main 4-tab pill)
  */
 @Composable
 fun FloatingGlassNavBar(
@@ -109,6 +111,7 @@ fun FloatingGlassNavBar(
     shadowElevation: Dp = 12.dp,
     saturation: Float = 1.25f,
     borderColor: Color = Color.White,
+    showLabels: Boolean = true,
 ) {
     val shape = RoundedCornerShape(cornerRadius)
     // Keeps item pills at ~48.dp for accessible touch targets.
@@ -156,6 +159,7 @@ fun FloatingGlassNavBar(
                 inactiveIconColor = inactiveIconColor,
                 indicatorColor = activeIndicatorColor,
                 durationMillis = animationDurationMillis,
+                showLabel = showLabels,
             )
         }
     }
@@ -170,6 +174,7 @@ private fun GlassNavItem(
     inactiveIconColor: Color,
     indicatorColor: Color,
     durationMillis: Int,
+    showLabel: Boolean = true,
 ) {
     val stiffness = remember(durationMillis) { spatialStiffnessFor(durationMillis) }
 
@@ -250,9 +255,10 @@ private fun GlassNavItem(
             }
         }
 
-        // Label: visible only while selected; fade + slide + scale, softly spring-driven.
+        // Label: visible only while selected (and only for pills that show labels at all);
+        // fade + slide + scale, softly spring-driven.
         AnimatedVisibility(
-            visible = selected,
+            visible = showLabel && selected,
             enter = fadeIn(tween(durationMillis, easing = EmphasizedEasing)) +
                 expandHorizontally(
                     animationSpec = spring(

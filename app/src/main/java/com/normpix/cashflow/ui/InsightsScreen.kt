@@ -3,6 +3,7 @@ package com.normpix.cashflow.ui
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Receipt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,19 +34,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.normpix.cashflow.CashflowState
 import com.normpix.cashflow.LocalCashTokens
-import com.normpix.cashflow.fmt
+import com.normpix.cashflow.catDisplayName
+import com.normpix.cashflow.catIcons
 
-private data class CatBudget(val name: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val spent: Double, val cap: Double)
+private data class CatBudget(val name: String, val key: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val spent: Double, val cap: Double)
+
+/** Default display order for the built-in budgeted categories; custom budgets append after. */
+private val defaultCatOrder = listOf("Food", "Shopping", "Transport", "Bills")
 
 @Composable
 fun InsightsScreen(state: CashflowState) {
     val t = LocalCashTokens.current
-    val cats = listOf(
-        CatBudget("Food & dining", com.normpix.cashflow.catList[0].icon, 13540.0, 15000.0),
-        CatBudget("Shopping", com.normpix.cashflow.catList[1].icon, 10220.0, 10000.0),
-        CatBudget("Transport", com.normpix.cashflow.catList[2].icon, 7610.0, 9000.0),
-        CatBudget("Bills & utilities", com.normpix.cashflow.catList[3].icon, 5890.0, 8000.0),
-    )
+    val orderedKeys = defaultCatOrder.filter { it in state.budgetCaps } +
+        state.budgetCaps.keys.filter { it !in defaultCatOrder }
+    val cats = orderedKeys.map { key ->
+        CatBudget(
+            catDisplayName[key] ?: key, key, catIcons[key] ?: Icons.Rounded.Receipt,
+            state.categorySpent(key), state.budgetCaps.getValue(key),
+        )
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -69,20 +77,21 @@ fun InsightsScreen(state: CashflowState) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ProgressRing(
-                pct = BUDGET_PCT, size = 96.dp, thickness = 12.dp,
+                pct = state.budgetPct, size = 96.dp, thickness = 12.dp,
                 ringColor = t.p, trackColor = t.p.copy(alpha = 0.18f),
             ) {
-                Text("$BUDGET_PCT%", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = t.onPc)
+                Text("${state.budgetPct}%", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = t.onPc)
             }
             Column {
                 Text("July budget", fontSize = 13.sp, color = t.onPc)
                 Text(
-                    "${fmt(SPENT_MONTH)} / ${fmt(BUDGET)}",
+                    "${state.fmt(state.spentMonth)} / ${state.fmt(state.monthlyBudget)}",
                     fontSize = 28.sp, fontWeight = FontWeight.SemiBold, color = t.onPc,
                     modifier = Modifier.padding(top = 4.dp),
                 )
                 Text(
-                    "₹17,682 left · 29 days in, on track", fontSize = 12.sp,
+                    "${state.fmt((state.monthlyBudget - state.spentMonth).coerceAtLeast(0.0))} left this month",
+                    fontSize = 12.sp,
                     color = t.onPc.copy(alpha = 0.8f), modifier = Modifier.padding(top = 4.dp),
                 )
             }
@@ -100,6 +109,7 @@ fun InsightsScreen(state: CashflowState) {
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(22.dp))
                         .background(t.cont)
+                        .clickable { state.catDetail = c.key }
                         .padding(16.dp),
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -115,10 +125,10 @@ fun InsightsScreen(state: CashflowState) {
                                     .background(t.err.copy(alpha = if (t.dark) 0.25f else 0.12f))
                                     .padding(horizontal = 9.dp, vertical = 3.dp),
                             ) {
-                                Text("Over by ${fmt(c.spent - c.cap)}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = t.err)
+                                Text("Over by ${state.fmt(c.spent - c.cap)}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = t.err)
                             }
                         }
-                        Text("${fmt(c.spent)} / ${fmt(c.cap)}", fontSize = 13.sp, color = t.onSV)
+                        Text("${state.fmt(c.spent)} / ${state.fmt(c.cap)}", fontSize = 13.sp, color = t.onSV)
                     }
                     val frac by animateFloatAsState(
                         (p2.coerceAtMost(100)) / 100f,
@@ -145,7 +155,7 @@ fun InsightsScreen(state: CashflowState) {
             }
         }
 
-        SectionTitle("Subscriptions", "${fmt(state.subsList.sumOf { it.amt })}/mo")
+        SectionTitle("Subscriptions", "${state.fmt(state.subsList.sumOf { it.amt })}/mo")
         GroupCard {
             state.subsList.forEach { sb ->
                 Row(
@@ -161,7 +171,7 @@ fun InsightsScreen(state: CashflowState) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(sb.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = t.onS)
                         Text(
-                            "${fmt(sb.amt)} · ${sb.cycle} · ${sb.due}", fontSize = 12.sp, color = t.onSV,
+                            "${state.fmt(sb.amt)} · ${sb.cycle} · ${sb.due}", fontSize = 12.sp, color = t.onSV,
                             modifier = Modifier.padding(top = 3.dp),
                         )
                     }

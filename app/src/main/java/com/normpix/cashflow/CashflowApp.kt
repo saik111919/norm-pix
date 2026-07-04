@@ -7,10 +7,14 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -51,6 +55,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.normpix.cashflow.ui.AddScreen
+import com.normpix.cashflow.ui.CategoryDetailScreen
+import com.normpix.cashflow.ui.ConfirmSheet
 import com.normpix.cashflow.ui.DashboardScreen
 import com.normpix.cashflow.ui.EditSheet
 import com.normpix.cashflow.ui.Emphasized
@@ -88,10 +94,14 @@ fun CashflowApp() {
         }
 
         // System back: close overlays / sub-screens before leaving the app.
-        BackHandler(enabled = state.sheet != null || state.addOpen || state.subScreen != null || state.tab != 0) {
+        BackHandler(
+            enabled = state.sheet != null || state.addOpen || state.catDetail != null ||
+                state.subScreen != null || state.tab != 0,
+        ) {
             when {
                 state.sheet != null -> state.closeSheet()
                 state.addOpen -> state.addOpen = false
+                state.catDetail != null -> state.catDetail = null
                 state.subScreen != null -> state.subScreen = null
                 else -> state.tab = 0
             }
@@ -146,36 +156,80 @@ fun CashflowApp() {
                 }
             }
 
-            // Floating glass nav bar — positioned exactly like the reference demo so the
-            // blurred backdrop slice stays in sync with the content behind it.
-            FloatingGlassNavBar(
-                items = listOf(
-                    FloatingNavItem("Home", Icons.Outlined.Home, Icons.Rounded.Home),
-                    FloatingNavItem("Activity", Icons.AutoMirrored.Outlined.ReceiptLong, Icons.AutoMirrored.Rounded.ReceiptLong),
-                    FloatingNavItem("Inbox", Icons.Outlined.Inbox, Icons.Rounded.Inbox, badgeCount = state.inbox.size),
-                    FloatingNavItem("Insights", Icons.Outlined.DonutSmall, Icons.Rounded.DonutSmall),
-                    FloatingNavItem("Settings", Icons.Outlined.Settings, Icons.Rounded.Settings),
-                ),
-                selectedIndex = state.tab,
-                onItemSelected = { state.tab = it },
-                glassState = glass,
-                blurRadius = state.navBlur.dp,
-                backgroundColor = t.surf,
-                backgroundOpacity = state.navOpacity,
-                activeContentColor = t.p,
-                inactiveIconColor = t.onSV,
-                saturation = 1.5f, // design: backdrop-filter saturate(1.5)
-                borderColor = if (t.dark) t.hi else Color.White, // design border color
+            // Floating glass nav — design renders this as TWO separate pills side by side
+            // (a labeled 4-tab main pill, plus a small icon-only Settings pill), not one
+            // unified 5-item bar.
+            Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = navBottomPadding),
-            )
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                FloatingGlassNavBar(
+                    items = listOf(
+                        FloatingNavItem("Home", Icons.Outlined.Home, Icons.Rounded.Home),
+                        FloatingNavItem("Activity", Icons.AutoMirrored.Outlined.ReceiptLong, Icons.AutoMirrored.Rounded.ReceiptLong),
+                        FloatingNavItem("Inbox", Icons.Outlined.Inbox, Icons.Rounded.Inbox, badgeCount = state.inbox.size),
+                        FloatingNavItem("Insights", Icons.Outlined.DonutSmall, Icons.Rounded.DonutSmall),
+                    ),
+                    selectedIndex = state.tab,
+                    onItemSelected = { state.tab = it },
+                    glassState = glass,
+                    blurRadius = state.navBlur.dp,
+                    backgroundColor = t.surf,
+                    backgroundOpacity = state.navOpacity,
+                    activeContentColor = t.p,
+                    inactiveIconColor = t.onSV,
+                    saturation = 1.5f, // design: backdrop-filter saturate(1.5)
+                    borderColor = if (t.dark) t.hi else Color.White, // design border color
+                )
+                FloatingGlassNavBar(
+                    items = listOf(
+                        FloatingNavItem("Settings", Icons.Outlined.Settings, Icons.Rounded.Settings),
+                    ),
+                    selectedIndex = if (state.tab == 4) 0 else -1,
+                    onItemSelected = { state.tab = 4 },
+                    glassState = glass,
+                    blurRadius = state.navBlur.dp,
+                    backgroundColor = t.surf,
+                    backgroundOpacity = state.navOpacity,
+                    activeContentColor = t.p,
+                    inactiveIconColor = t.onSV,
+                    saturation = 1.5f,
+                    borderColor = if (t.dark) t.hi else Color.White,
+                    showLabels = false,
+                )
+            }
+
+            // Category detail drill-down (full-screen slide-in from the right)
+            AnimatedVisibility(
+                visible = state.catDetail != null,
+                enter = slideInHorizontally(tween(360, easing = Emphasized)) { it },
+                exit = slideOutHorizontally(tween(360, easing = Emphasized)) { it },
+            ) {
+                CategoryDetailScreen(state)
+            }
 
             // Add screen (full-screen slide-up)
-            AddScreen(state)
+            AddScreen(state, glass)
 
             // Edit bottom sheet
-            EditSheet(state)
+            EditSheet(state, glass)
+
+            // Erase-all-data confirmation — a fast-to-reach bottom sheet rather than an
+            // inline warning buried in the Privacy sub-screen's scroll position.
+            ConfirmSheet(
+                visible = state.eraseConfirming,
+                glass = glass,
+                title = "Erase all ${state.txns.size} transactions, accounts and rules?",
+                message = "This clears local data on this device. It cannot be undone.",
+                confirmLabel = "Erase everything",
+                onCancel = { state.cancelErase() },
+                onConfirm = { state.confirmErase() },
+                blurRadius = state.sheetBlur.dp,
+                opacity = state.sheetOpacity,
+            )
 
             // Toast
             LaunchedEffect(state.toastTick) {

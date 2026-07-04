@@ -33,7 +33,6 @@ import androidx.compose.ui.unit.sp
 import com.normpix.cashflow.CashflowState
 import com.normpix.cashflow.LocalCashTokens
 import com.normpix.cashflow.SheetTarget
-import com.normpix.cashflow.fmt
 import com.normpix.cashflow.rememberSmsPermissionRequester
 
 @Composable
@@ -125,7 +124,7 @@ fun InboxScreen(state: CashflowState) {
                             Text(m.merchant, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = t.onS)
                             Text("${m.cat} · ${m.account}", fontSize = 12.sp, color = t.onSV, modifier = Modifier.padding(top = 2.dp))
                         }
-                        Text("−" + fmt(m.amount), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = t.onS)
+                        Text("−" + state.fmt(m.amount), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = t.onS)
                     }
                     // Actions
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches CashflowTheme.kt's default (GREEN) seed dark surface/primary. -->
+    <style name="Theme.NormPix" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF0F1512</item>
+    </style>
+
+    <style name="Theme.NormPix.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#FF0F1512</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.NormPix</item>
+    </style>
+</resources>
