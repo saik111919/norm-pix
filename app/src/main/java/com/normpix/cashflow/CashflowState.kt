@@ -20,7 +20,6 @@ import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.Payments
 import java.io.File
 import kotlin.math.roundToInt
-import kotlinx.coroutines.launch
 
 /** What the edit bottom sheet is targeting. */
 data class SheetTarget(
@@ -35,8 +34,6 @@ data class SheetTarget(
  */
 @Stable
 class CashflowState(private val context: Context, private val prefs: SharedPreferences) {
-
-    private val updateScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main + kotlinx.coroutines.SupervisorJob())
 
     // Navigation
     var tab by mutableIntStateOf(0)
@@ -105,6 +102,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
         smsPermissionGranted = granted
         setSmsOnPref(granted)
         showToast(if (granted) "SMS access granted" else "SMS permission denied")
+        if (granted) refreshSmsInbox()
     }
 
     /** Re-checks the OS permission state, e.g. after the app resumes from system Settings. */
@@ -114,6 +112,74 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
             smsPermissionGranted = granted
             if (!granted) setSmsOnPref(false)
         }
+    }
+
+    /** Merges a single parsed SMS into the inbox, inferring category from smart rules and
+     * account from the card/account last-4 digits when possible. Idempotent on [id]. */
+    private fun addParsedInboxEntry(id: String, sender: String, body: String, parsed: ParsedSms): Boolean {
+        if (inbox.any { it.id == id } || txns.any { it.id == id }) return false
+        val merchant = parsed.merchant?.takeIf { it.isNotBlank() } ?: parsed.bank.name
+        val cat = smartRules.firstOrNull { merchant.contains(it.match, ignoreCase = true) }?.cat ?: "Shopping"
+        val account = accounts.firstOrNull { a -> parsed.last4 != null && a.mask?.endsWith(parsed.last4) == true }
+            ?.let { "${it.name} ${it.mask}" }
+            ?: parsed.last4?.let { "${parsed.bank.name} ••$it" }
+            ?: parsed.bank.name
+        inbox.add(
+            0,
+            InboxMsg(
+                id = id, sender = sender, conf = if (parsed.merchant != null) "high" else "low", dup = false,
+                sms = body, merchant = merchant, amount = parsed.amount, cat = cat, account = account,
+                whenLabel = "Just now", icon = iconForCat(cat),
+            ),
+        )
+        return true
+    }
+
+    /** Picks up anything [SmsReceiver] parsed while this state wasn't active, then scans SMS
+     * already on the device (the READ_SMS half of the permission) for anything newer than the
+     * last scan. Cheap to call on every resume — the content-provider query is watermarked. */
+    fun refreshSmsInbox() {
+        if (!smsOn || !hasSmsPermission(context)) return
+        var found = 0
+        drainPendingInboxEntries(context).forEach { entry ->
+            val amount = entry.optDouble("amount", 0.0)
+            if (amount <= 0.0) return@forEach
+            val bank = entry.optString("bank")
+            val parsed = ParsedSms(
+                Bank(bank, "", "", true, emptyList()), amount,
+                entry.optString("merchant").ifBlank { null }, entry.optString("last4").ifBlank { null },
+            )
+            if (addParsedInboxEntry(entry.optString("id"), entry.optString("sender"), entry.optString("sms"), parsed)) found++
+        }
+
+        val lastScan = prefs.getLong("smsLastScan", 0L)
+        var maxDate = lastScan
+        val projection = arrayOf(
+            android.provider.Telephony.Sms.ADDRESS, android.provider.Telephony.Sms.BODY, android.provider.Telephony.Sms.DATE,
+        )
+        val cursor = runCatching {
+            context.contentResolver.query(
+                android.provider.Telephony.Sms.Inbox.CONTENT_URI, projection,
+                "${android.provider.Telephony.Sms.DATE} > ?", arrayOf(lastScan.toString()),
+                "${android.provider.Telephony.Sms.DATE} ASC",
+            )
+        }.getOrNull()
+        cursor?.use { c ->
+            val addressIdx = c.getColumnIndex(android.provider.Telephony.Sms.ADDRESS)
+            val bodyIdx = c.getColumnIndex(android.provider.Telephony.Sms.BODY)
+            val dateIdx = c.getColumnIndex(android.provider.Telephony.Sms.DATE)
+            while (c.moveToNext()) {
+                val date = c.getLong(dateIdx)
+                if (date > maxDate) maxDate = date
+                val sender = c.getString(addressIdx) ?: continue
+                val body = c.getString(bodyIdx) ?: continue
+                val parsed = parseSms(sender, body, banks) ?: continue
+                if (addParsedInboxEntry("sms$date$sender".hashCode().toString(), sender, body, parsed)) found++
+            }
+        }
+        prefs.edit().putLong("smsLastScan", maxDate).apply()
+
+        if (found > 0) showToast("$found new message${if (found == 1) "" else "s"} detected")
     }
 
     // User's intent to auto-capture from SMS. Only meaningful when smsPermissionGranted
@@ -218,60 +284,9 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
 
     var aboutExpanded by mutableStateOf<String?>(null) // null | "licenses" | "privacy"
 
-    // App update check — a single GET to the GitHub releases API, nothing else.
     val currentVersionName: String = runCatching {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
     }.getOrDefault("1.0")
-
-    var updateCheckState by mutableStateOf("idle") // idle | checking | upToDate | available | error
-    var latestVersion by mutableStateOf<String?>(null)
-    var latestReleaseUrl by mutableStateOf<String?>(null)
-
-    fun checkForUpdates() {
-        updateCheckState = "checking"
-        updateScope.launch {
-            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                runCatching {
-                    val url = java.net.URL("https://api.github.com/repos/saik111919/norm-pix/releases/latest")
-                    val conn = url.openConnection() as java.net.HttpURLConnection
-                    conn.setRequestProperty("Accept", "application/vnd.github+json")
-                    conn.setRequestProperty("User-Agent", "NormPix-Android")
-                    conn.connectTimeout = 8000
-                    conn.readTimeout = 8000
-                    check(conn.responseCode == 200) { "HTTP ${conn.responseCode}" }
-                    val body = conn.inputStream.bufferedReader().use { it.readText() }
-                    val json = org.json.JSONObject(body)
-                    json.optString("tag_name").removePrefix("v") to json.optString("html_url")
-                }.getOrNull()
-            }
-            if (result == null) {
-                updateCheckState = "error"
-            } else {
-                val (latest, releaseUrl) = result
-                latestVersion = latest
-                latestReleaseUrl = releaseUrl
-                updateCheckState = if (isNewerVersion(latest, currentVersionName)) "available" else "upToDate"
-            }
-        }
-    }
-
-    fun openLatestRelease() {
-        val url = latestReleaseUrl ?: return
-        runCatching {
-            context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }
-    }
-
-    private fun isNewerVersion(remote: String, local: String): Boolean {
-        val r = remote.split(".").map { it.toIntOrNull() ?: 0 }
-        val l = local.split(".").map { it.toIntOrNull() ?: 0 }
-        for (i in 0 until maxOf(r.size, l.size)) {
-            val rv = r.getOrElse(i) { 0 }
-            val lv = l.getOrElse(i) { 0 }
-            if (rv != lv) return rv > lv
-        }
-        return false
-    }
 
     // Budgets — per-category caps, single source of truth for the Dashboard hero, Insights
     // ring/bars, and the category drill-down. The overall monthly budget is their sum

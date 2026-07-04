@@ -61,7 +61,6 @@ import androidx.compose.material.icons.rounded.Sms
 import androidx.compose.material.icons.rounded.StarRate
 import androidx.compose.material.icons.rounded.Summarize
 import androidx.compose.material.icons.rounded.Translate
-import androidx.compose.material.icons.rounded.Update
 import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
@@ -1063,32 +1062,6 @@ private fun AboutSubScreen(state: CashflowState) {
             }
             Text("NormPix", fontSize = 18.sp, fontWeight = FontWeight.Medium, color = t.onS)
             Text("Version ${state.currentVersionName} · 100% on-device", fontSize = 12.sp, color = t.onSV)
-        }
-        GroupCard {
-            SettingRow(
-                Icons.Rounded.Update, "App updates",
-                when (state.updateCheckState) {
-                    "checking" -> "Checking…"
-                    "upToDate" -> "You're on the latest version"
-                    "available" -> "Version ${state.latestVersion} is available"
-                    "error" -> "Couldn't check for updates · tap to retry"
-                    else -> "Tap to check for the latest version"
-                },
-                trailing = {
-                    when (state.updateCheckState) {
-                        "checking" -> androidx.compose.material3.CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp), color = t.p, strokeWidth = 2.dp,
-                        )
-                        "upToDate" -> Icon(Icons.Rounded.CheckCircle, null, tint = t.p, modifier = Modifier.size(22.dp))
-                        "available" -> Icon(Icons.Rounded.Download, null, tint = t.p, modifier = Modifier.size(22.dp))
-                        "error" -> Icon(Icons.Rounded.ChevronRight, null, tint = t.onSV, modifier = Modifier.size(20.dp))
-                        else -> Icon(Icons.Rounded.ChevronRight, null, tint = t.onSV, modifier = Modifier.size(20.dp))
-                    }
-                },
-                onClick = {
-                    if (state.updateCheckState == "available") state.openLatestRelease() else state.checkForUpdates()
-                },
-            )
         }
         Column(
             modifier = Modifier

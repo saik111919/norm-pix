@@ -85,16 +85,21 @@ fun CashflowApp() {
         RequestNotificationPermissionOnce()
 
         // Re-check SMS permission on resume — covers the user granting (or revoking) it
-        // from system Settings while the app was backgrounded.
+        // from system Settings while the app was backgrounded — and pick up anything the
+        // SMS receiver queued or that arrived while the app wasn't running.
         val context = LocalContext.current
         DisposableEffect(context) {
             val activity = context as? ComponentActivity
             val observer = LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_RESUME) state.refreshSmsPermission()
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    state.refreshSmsPermission()
+                    state.refreshSmsInbox()
+                }
             }
             activity?.lifecycle?.addObserver(observer)
             onDispose { activity?.lifecycle?.removeObserver(observer) }
         }
+        LaunchedEffect(Unit) { state.refreshSmsInbox() }
 
         // System back: close overlays / sub-screens before leaving the app.
         BackHandler(

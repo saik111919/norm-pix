@@ -1,10 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Local-first: transactions, SMS content, and account data never leave this device.
-         The one exception is a GET to api.github.com/repos/.../releases/latest to check for
-         app updates (Settings > About > App updates) — no user or transaction data is sent. -->
-    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Local-first: no INTERNET permission, nothing leaves the device. -->
 
     <!-- Needed to auto-capture bank transactions from SMS. Read-only: messages are
          parsed on-device and never transmitted anywhere. -->
@@ -44,6 +41,18 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Catches incoming bank SMS in real time and queues any parsed transaction for
+             CashflowState.refreshSmsInbox() to pick up. android:permission restricts who can
+             send this broadcast to the system, so other apps can't spoof fake SMS into it. -->
+        <receiver
+            android:name=".cashflow.SmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>
