@@ -670,6 +670,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     }
 
     private fun notify(title: String, body: String) {
+        if (!hasNotificationPermission(context)) return
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             val channel = android.app.NotificationChannel("txns", "Transactions", android.app.NotificationManager.IMPORTANCE_DEFAULT)
@@ -681,13 +682,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
             .setContentText(body)
             .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
-        
-        // In a real app we'd check permission here, for demo we just try to post
-        try {
-            manager.notify(System.currentTimeMillis().toInt(), builder.build())
-        } catch (e: Exception) {
-            // Silently fail if no permission
-        }
+        manager.notify(System.currentTimeMillis().toInt(), builder.build())
     }
 }
 

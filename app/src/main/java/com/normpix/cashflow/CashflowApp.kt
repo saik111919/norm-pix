@@ -81,6 +81,9 @@ fun CashflowApp() {
         val t = LocalCashTokens.current
         val glass = rememberGlassBackdropState()
 
+        // Ask once per session so transaction-captured notifications have a chance to show.
+        RequestNotificationPermissionOnce()
+
         // Re-check SMS permission on resume — covers the user granting (or revoking) it
         // from system Settings while the app was backgrounded.
         val context = LocalContext.current
