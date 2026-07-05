@@ -279,7 +279,10 @@ data class SmsPreferences(
 data class DeveloperPreferences(
     @SerializedName("is_developer_mode_enabled")
     val isDeveloperModeEnabled: Boolean,
-    
+    @SerializedName("is_webhook_mode_enabled")
+    val isWebhookModeEnabled: Boolean = false,
+    @SerializedName("is_token_info_enabled")
+    val isTokenInfoEnabled: Boolean = false,
     @SerializedName("system_prompt")
     val systemPrompt: String?
 )

@@ -13,5 +13,7 @@ data class ChatMessage(
     val isUser: Boolean,
     val timestamp: Long = System.currentTimeMillis(),
     @ColumnInfo(defaultValue = "false")
-    val isSystemPrompt: Boolean = false // Hide from UI but include in context
+    val isSystemPrompt: Boolean = false, // Hide from UI but include in context
+    @ColumnInfo(name = "session_id", defaultValue = "legacy_session")
+    val sessionId: String = "legacy_session"
 )

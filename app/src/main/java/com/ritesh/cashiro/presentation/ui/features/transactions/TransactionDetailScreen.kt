@@ -1,7 +1,20 @@
 package com.ritesh.cashiro.presentation.ui.features.transactions
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.os.Build
 import android.util.Log
+import android.view.View
+import android.view.ViewGroup
+import androidx.annotation.RequiresApi
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalView
+import androidx.core.content.FileProvider
 import androidx.compose.animation.AnimatedContentScope
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -17,6 +30,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -51,11 +65,15 @@ import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.SubdirectoryArrowRight
 import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.Add
@@ -114,6 +132,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.focusRequester
@@ -216,7 +235,13 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import androidx.compose.ui.res.stringResource
 import com.ritesh.cashiro.R
+import com.ritesh.cashiro.presentation.ui.icons.Copy
+import dev.chrisbanes.haze.HazeDefaults
+import dev.chrisbanes.haze.HazeEffectScope
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
 
+@RequiresApi(Build.VERSION_CODES.S)
 @OptIn(
     ExperimentalMaterial3Api::class,
     ExperimentalMaterial3ExpressiveApi::class,
@@ -258,6 +283,9 @@ fun SharedTransitionScope.TransactionDetailScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val rootView = LocalView.current
+    val isDarkTheme = uiState.darkThemeConfig ?: isSystemInDarkTheme()
+    val isAmoledMode = uiState.isAmoledMode
 
     val scrollBehaviorSmall = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val scrollBehaviorLarge = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -345,6 +373,16 @@ fun SharedTransitionScope.TransactionDetailScreen(
         }
     }
 
+    // Handle duplicate success
+    LaunchedEffect(uiState.duplicateSuccess) {
+        if (uiState.duplicateSuccess) {
+            scope.launch {
+                snackbarHostState.showSnackbar(context.getString(R.string.transaction_duplicated))
+                transactionDetailViewModel.clearDuplicateSuccess()
+            }
+        }
+    }
+
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehaviorLarge.nestedScrollConnection).then(
             if (animatedContentScope != null) {
@@ -363,38 +401,6 @@ fun SharedTransitionScope.TransactionDetailScreen(
             } else {Modifier}
         ),
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        floatingActionButton = {
-            // Show FABs only when not in edit mode and transaction exists
-            if (!isEditMode && transaction != null) {
-                Column(
-                    modifier = Modifier.padding(bottom = Spacing.xxl),
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Report Issue FAB
-                    FloatingActionButton(
-                        onClick = {
-                            val reportUrl = transactionDetailViewModel.getReportUrl()
-                            Log.d("TransactionDetail", "Report FAB clicked, opening URL: ${reportUrl.take(200)}...")
-                            val intent = Intent(Intent.ACTION_VIEW, reportUrl.toUri())
-                            try {
-                                context.startActivity(intent)
-                                Log.d("TransactionDetail", "Successfully launched browser intent")
-                            } catch (e: Exception) {
-                                Log.e("TransactionDetail", "Error launching browser", e)
-                            }
-                        },
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.BugReport,
-                            contentDescription = stringResource(R.string.report_issue)
-                        )
-                    }
-                }
-            }
-        },
         topBar = {
             CustomTitleTopAppBar(
                 scrollBehaviorSmall = scrollBehaviorSmall,
@@ -482,7 +488,11 @@ fun SharedTransitionScope.TransactionDetailScreen(
                     onRemoveAttachment = transactionDetailViewModel::removeAttachment,
                     blurEffects = blurEffects,
                     hazeState = hazeState,
-                    accountIconName = uiState.accountIconName
+                    accountIconName = uiState.accountIconName,
+                    isAmoledMode = isAmoledMode,
+                    isDarkTheme = isDarkTheme,
+                    animatedContentScope = animatedContentScope,
+                    sharedTransitionScope = this@TransactionDetailScreen
                 )
             }
 
@@ -509,6 +519,7 @@ fun SharedTransitionScope.TransactionDetailScreen(
                     )
                 }
             } else{
+                var showMoreMenu by remember { mutableStateOf(false) }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -524,31 +535,140 @@ fun SharedTransitionScope.TransactionDetailScreen(
                         ),
                     contentAlignment = Alignment.BottomCenter
                 ) {
-                    TextButton(
-                        onClick = { transactionDetailViewModel.showDeleteDialog() },
-                        enabled = !isSaving,
-                        shapes = ButtonDefaults.shapes(),
-                        modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().navigationBarsPadding(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer
-                        ),
-                        contentPadding = PaddingValues(vertical = Spacing.md)
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .fillMaxWidth()
+                            .navigationBarsPadding(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center
+                        TextButton(
+                            onClick = {
+                                val txn = transaction ?: return@TextButton
+                                val bitmap = captureReceiptToBitmap(
+                                    rootView = rootView,
+                                    context = context,
+                                    transaction = txn,
+                                    primaryCurrency = accountPrimaryCurrency,
+                                    convertedAmount = convertedAmount,
+                                    categories = categories,
+                                    subcategoriesMap = allSubcategories,
+                                    linkedSubscription = linkedSubscription,
+                                    availableAccounts = availableAccounts,
+                                    attachmentService = transactionDetailViewModel.attachmentService,
+                                    isDarkTheme = isDarkTheme,
+                                    isAmoledMode = isAmoledMode
+                                )
+                                shareReceiptAsPng(
+                                    context = context,
+                                    bitmap = bitmap,
+                                    transaction = txn,
+                                    fileName = "receipt_${txn.id}"
+                                )
+                            },
+                            enabled = !isSaving,
+                            shapes = ButtonDefaults.shapes(),
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            contentPadding = PaddingValues(vertical = Spacing.md)
                         ) {
-                            Icon(
-                                imageVector = Iconax.Bag,
-                                contentDescription = stringResource(R.string.delete_transaction),
-                                modifier = Modifier.size(Dimensions.Icon.small)
-                            )
-                            Spacer(modifier = Modifier.width(Spacing.xs))
-                            Text(
-                                text = stringResource(R.string.delete),
-                                style = MaterialTheme.typography.labelLarge
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Share,
+                                    contentDescription = stringResource(R.string.share_receipt),
+                                    modifier = Modifier.size(Dimensions.Icon.small)
+                                )
+                                Spacer(modifier = Modifier.width(Spacing.xs))
+                                Text(
+                                    text = stringResource(R.string.share),
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                        }
+
+                        val dropContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        Box {
+                            IconButton(
+                                onClick = { showMoreMenu = true },
+                                colors = IconButtonDefaults.iconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                ),
+                                modifier = Modifier.size(50.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.MoreHoriz,
+                                    contentDescription = "More options",
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showMoreMenu,
+                                onDismissRequest = { showMoreMenu = false },
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .then(
+                                        if (blurEffects) Modifier.hazeEffect(
+                                            state = hazeState,
+                                            block = fun HazeEffectScope.() {
+                                                style = HazeDefaults.style(
+                                                    backgroundColor = Color.Transparent,
+                                                    tint = HazeTint(dropContainerColor.copy(0.5f)),
+                                                    blurRadius = 36.dp,
+                                                    noiseFactor = -1f,
+                                                )
+                                                blurredEdgeTreatment = BlurredEdgeTreatment.Unbounded
+                                            }
+                                        ) else Modifier
+                                    ),
+                                containerColor = dropContainerColor.copy(
+                                    alpha = if (blurEffects) 0.7f else 1f
+                                ),
+                                shape = RoundedCornerShape(24.dp)
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.report_issue)) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        val reportUrl = transactionDetailViewModel.getReportUrl()
+                                        val intent = Intent(Intent.ACTION_VIEW, reportUrl.toUri())
+                                        context.startActivity(intent)
+                                    },
+                                    leadingIcon = { Icon(Icons.Rounded.BugReport, contentDescription = null) }
+                                )
+
+                                HorizontalDivider(
+                                    thickness = 1.5.dp,
+                                    color = MaterialTheme.colorScheme.surface.copy(0.6f)
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.duplicate_transaction)) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        transactionDetailViewModel.duplicateTransaction()
+                                    },
+                                    leadingIcon = { Icon(Iconax.Copy, contentDescription = null) }
+                                )
+                                HorizontalDivider(
+                                    thickness = 1.5.dp,
+                                    color = MaterialTheme.colorScheme.surface.copy(0.6f)
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.delete_transaction)) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        transactionDetailViewModel.showDeleteDialog()
+                                    },
+                                    leadingIcon = { Icon(Iconax.Bag, contentDescription = null) }
+                                )
+                            }
                         }
                     }
                 }
@@ -662,7 +782,8 @@ fun SharedTransitionScope.TransactionDetailScreen(
                     scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.updated_transactions_format, selectedMatchIds.size)) }
                 },
                 onDismiss = { transactionDetailViewModel.hideMatchPreviewSheet() },
-                newCategory = editableTransaction?.category ?: ""
+                newCategory = editableTransaction?.category ?: "",
+                isDarkTheme = uiState.darkThemeConfig ?: isSystemInDarkTheme()
             )
         }
     }
@@ -740,7 +861,7 @@ private fun TransactionSaveContent(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalSharedTransitionApi::class)
 @Composable
 private fun TransactionDetailContent(
     modifier: Modifier = Modifier,
@@ -771,8 +892,18 @@ private fun TransactionDetailContent(
     onRemoveAttachment: (String) -> Unit = {},
     blurEffects: Boolean,
     hazeState: HazeState = remember { HazeState()},
-    accountIconName: String?
+    accountIconName: String?,
+    isAmoledMode: Boolean,
+    isDarkTheme: Boolean,
+    animatedContentScope: AnimatedContentScope? = null,
+    sharedTransitionScope: SharedTransitionScope? = null
 ) {
+
+    val receiptContainerColor = if (isAmoledMode) {
+        MaterialTheme.colorScheme.surfaceContainerLow
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
 
     Column(
         modifier = modifier
@@ -865,16 +996,96 @@ private fun TransactionDetailContent(
             } else null
 
             Column {
-                TransactionReceipt(
-                    transaction,
-                    accountPrimaryCurrency,
-                    convertedAmount,
-                    availableAccounts,
-                    categories,
-                    subcategoriesMap,
-                    linkedSubscription,
-                    viewModel.attachmentService
-                )
+                Box{
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(80.dp)
+                            .shadow(
+                                2.dp,
+                                shape = RoundedCornerShape(24.dp)
+                            )
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(
+                                color = Color.Black,
+                                shape = RoundedCornerShape(24.dp)
+                            )
+                            .align(Alignment.TopCenter),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(80.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(
+                                color =  receiptContainerColor.copy(0.5f),
+                                shape = RoundedCornerShape(24.dp)
+                            )
+                            .align(Alignment.TopCenter),
+                        contentAlignment = Alignment.Center
+                    ){
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(16.dp)
+                                .padding(horizontal = 8.dp)
+                                .background(
+                                    color = Color.Black,
+                                    shape = RoundedCornerShape(24.dp)
+                                )
+                                .border(
+                                    2.dp,
+                                    color = if(isDarkTheme) MaterialTheme.colorScheme.surface else Color.DarkGray,
+                                    shape = RoundedCornerShape(24.dp)
+                                )
+                                .align(Alignment.Center)
+                        )
+                    }
+                    TransactionReceipt(
+                        transaction = transaction,
+                        primaryCurrency = accountPrimaryCurrency,
+                        convertedAmount = convertedAmount,
+                        availableAccounts = availableAccounts,
+                        categories = categories,
+                        subcategoriesMap = subcategoriesMap,
+                        linkedSubscription = linkedSubscription,
+                        attachmentService = viewModel.attachmentService,
+                        animatedContentScope = animatedContentScope,
+                        sharedTransitionScope = sharedTransitionScope
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(80.dp)
+                            .align(Alignment.TopCenter),
+                        contentAlignment = Alignment.Center
+                    ){
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(10.dp)
+                                .padding(horizontal = 10.dp)
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.Black,
+                                            Color.Black,
+                                            Color.Transparent,
+                                        )
+                                    ),
+                                    shape = RoundedCornerShape(
+                                        bottomEnd = 0.dp,
+                                        bottomStart = 0.dp,
+                                        topStart = 24.dp,
+                                        topEnd = 24.dp
+                                    )
+                                )
+                                .align(Alignment.Center)
+                        )
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(300.dp)) // for better scroll
             }
         }
@@ -984,6 +1195,7 @@ private fun EditableTransactionHeader(
                                             TransactionType.CREDIT -> Iconax.Card
                                             TransactionType.TRANSFER -> Icons.Rounded.SwapHoriz
                                             TransactionType.INVESTMENT -> Icons.AutoMirrored.Filled.ShowChart
+                                            TransactionType.BALANCE_UPDATE -> Icons.Rounded.SwapHoriz
                                         },
                                         contentDescription = null,
                                         modifier = Modifier.size(Dimensions.Icon.small)
@@ -1996,7 +2208,7 @@ private fun DateTimeField(
 
 
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalSharedTransitionApi::class)
 @Composable
 private fun TransactionReceipt(
     transaction: TransactionEntity,
@@ -2006,7 +2218,11 @@ private fun TransactionReceipt(
     categories: List<CategoryEntity>,
     subcategoriesMap: Map<Long, List<SubcategoryEntity>>,
     linkedSubscription: SubscriptionEntity? = null,
-    attachmentService: AttachmentService
+    attachmentService: AttachmentService,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+    animatedContentScope: AnimatedContentScope? = null,
+    sharedTransitionScope: SharedTransitionScope? = null,
+    showAttachments: Boolean = true
 ) {
     val density = LocalDensity.current
     var cutoutOffsetPx by remember { mutableFloatStateOf(with(density) { 420.dp.toPx() }) }
@@ -2014,20 +2230,30 @@ private fun TransactionReceipt(
     val cutoutRadiusPx = with(density) { cutoutRadius.toPx() }
     val scallopRadiusPx = with(density) { 8.dp.toPx() }
 
+    val receiptShape = remember(cutoutRadiusPx, cutoutOffsetPx, scallopRadiusPx) {
+        ReceiptShape(cutoutRadiusPx, cutoutOffsetPx, scallopRadiusPx)
+    }
+
     Box(
-        modifier = Modifier 
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 24.dp)
+            .padding(top = 36.dp)
+            .padding(horizontal = 12.dp)
     ) {
         // Main Receipt Card
         Surface(
             modifier = Modifier
+                .shadow(
+                    elevation = 4.dp,
+                    shape = receiptShape,
+                    clip = false
+                )
                 .animateContentSize(
                     animationSpec = tween(durationMillis = 300)
                 )
                 .fillMaxWidth(),
-            shape = ReceiptShape(cutoutRadiusPx, cutoutOffsetPx, scallopRadiusPx),
-            color = MaterialTheme.colorScheme.surfaceContainerLow
+            shape = receiptShape,
+            color = containerColor
         ) {
             Column(
                 modifier = Modifier
@@ -2054,7 +2280,10 @@ private fun TransactionReceipt(
                     ReceiptBadge(
                         merchantName = transaction.merchantName,
                         categoryEntity = categoryEntity,
-                        subcategoryEntity = subcategoryEntity
+                        subcategoryEntity = subcategoryEntity,
+                        transactionId = transaction.id,
+                        animatedContentScope = animatedContentScope,
+                        sharedTransitionScope = sharedTransitionScope
                     )
                     DashedLine(
                         modifier = Modifier.weight(1f),
@@ -2359,7 +2588,7 @@ private fun TransactionReceipt(
 
                 // Original SMS Content
                 if (!transaction.smsBody.isNullOrBlank()) {
-                    var isSMSExpanded by remember { mutableStateOf(true) }
+                    var isSMSExpanded by remember { mutableStateOf(false) }
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2455,6 +2684,7 @@ private fun TransactionReceipt(
                     TransactionType.CREDIT -> Color(0xFFFF6B35)  // Orange for credit
                     TransactionType.TRANSFER -> Color(0xFF9C27B0)  // Purple for transfer
                     TransactionType.INVESTMENT -> Color(0xFF00796B)  // Teal for investment
+                    TransactionType.BALANCE_UPDATE -> Color(0xFF9C27B0)  // Purple for balance update
                 }
                 val sign = when (transaction.transactionType) {
                     TransactionType.INCOME -> "+"
@@ -2462,6 +2692,7 @@ private fun TransactionReceipt(
                     TransactionType.CREDIT -> "💳"
                     TransactionType.TRANSFER -> "↔"
                     TransactionType.INVESTMENT -> "📈"
+                    TransactionType.BALANCE_UPDATE -> "↔"
                 }
 
                 Text(
@@ -2484,45 +2715,47 @@ private fun TransactionReceipt(
                 Spacer(modifier = Modifier.height(Spacing.lg))
 
 
-                // Attachments
-                val attachments = remember(transaction.attachments) {
-                    attachmentService.parseAttachments(transaction.attachments)
-                }
-                val context = LocalContext.current
+                if (showAttachments) {
+                    // Attachments
+                    val attachments = remember(transaction.attachments) {
+                        attachmentService.parseAttachments(transaction.attachments)
+                    }
+                    val context = LocalContext.current
 
-                if (attachments.isNotEmpty()) {
-                    DashedLine(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
-                    )
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(Spacing.md),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        AttachmentSection(
-                            attachments = attachments,
-                            attachmentService = attachmentService,
-                            onAddAttachment = {},
-                            onRemoveAttachment = {},
-                            onAttachmentClick = { path ->
-                                val uri = attachmentService.getAttachmentUri(path)
-                                if (uri != null) {
-                                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                                        setDataAndType(uri, attachmentService.getAttachmentMimeType(path))
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    }
-                                    try {
-                                        context.startActivity(intent)
-                                    } catch (e: Exception) {
-                                        // Handle error
-                                    }
-                                }
-                            },
-                            isEditable = false
+                    if (attachments.isNotEmpty()) {
+                        DashedLine(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
                         )
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(Spacing.md),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            AttachmentSection(
+                                attachments = attachments,
+                                attachmentService = attachmentService,
+                                onAddAttachment = {},
+                                onRemoveAttachment = {},
+                                onAttachmentClick = { path ->
+                                    val uri = attachmentService.getAttachmentUri(path)
+                                    if (uri != null) {
+                                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                                            setDataAndType(uri, attachmentService.getAttachmentMimeType(path))
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        try {
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            // Handle error
+                                        }
+                                    }
+                                },
+                                isEditable = false
+                            )
+                        }
                     }
                 }
             }
@@ -2530,11 +2763,15 @@ private fun TransactionReceipt(
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun ReceiptBadge(
     merchantName: String,
     categoryEntity: CategoryEntity? = null,
-    subcategoryEntity: SubcategoryEntity? = null
+    subcategoryEntity: SubcategoryEntity? = null,
+    transactionId: Long = -1L,
+    animatedContentScope: AnimatedContentScope? = null,
+    sharedTransitionScope: SharedTransitionScope? = null
 ) {
     Surface(
         shape = RoundedCornerShape(24.dp),
@@ -2548,13 +2785,27 @@ private fun ReceiptBadge(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
+            val brandIconModifier = if (
+                sharedTransitionScope != null &&
+                animatedContentScope != null &&
+                transactionId != -1L
+            ) {
+                with(sharedTransitionScope) {
+                    Modifier.sharedElement(
+                        rememberSharedContentState(key = "brand_icon_$transactionId"),
+                        animatedVisibilityScope = animatedContentScope
+                    )
+                }
+            } else Modifier
+
             BrandIcon(
                 merchantName = merchantName,
-                size = 26.dp,
+                size = 34.dp,
                 showBackground = true,
                 categoryEntity = categoryEntity,
                 subcategoryEntity = subcategoryEntity,
-                accountIconName = null // Not an account icon in this context
+                accountIconName = null, // Not an account icon in this context
+                modifier = brandIconModifier
             )
             Text(
                 text = merchantName,
@@ -2984,10 +3235,11 @@ private fun MatchPreviewSheetContent(
     onDeselectAll: () -> Unit,
     onApply: () -> Unit,
     onDismiss: () -> Unit,
-    newCategory: String
+    newCategory: String,
+    isDarkTheme: Boolean
 ) {
 
-    val isDark = isSystemInDarkTheme()
+    val isDark = isDarkTheme
     Box( modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -3280,6 +3532,7 @@ private fun MatchPreviewSheetContent(
                                             TransactionType.CREDIT -> if (!isDark) credit_light else credit_dark
                                             TransactionType.TRANSFER -> if (!isDark) transfer_light else transfer_dark
                                             TransactionType.INVESTMENT -> if (!isDark) investment_light else investment_dark
+                                            TransactionType.BALANCE_UPDATE -> if (!isDark) transfer_light else transfer_dark
                                         }
                                     )
 
@@ -3343,5 +3596,117 @@ private fun MatchPreviewSheetContent(
                 )
             }
         }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.S)
+private fun captureReceiptToBitmap(
+    rootView: View,
+    context: android.content.Context,
+    transaction: TransactionEntity,
+    primaryCurrency: String,
+    convertedAmount: BigDecimal?,
+    categories: List<CategoryEntity>,
+    subcategoriesMap: Map<Long, List<SubcategoryEntity>>,
+    linkedSubscription: SubscriptionEntity?,
+    availableAccounts: List<AccountBalanceEntity>,
+    attachmentService: AttachmentService,
+    isDarkTheme: Boolean,
+    isAmoledMode: Boolean
+): Bitmap {
+    val density = context.resources.displayMetrics.density
+    val widthDp = 360f
+    val widthPx = (widthDp * density).toInt()
+
+    val composeView = ComposeView(context).apply {
+        setContent {
+            val colorScheme = if (isDarkTheme) {
+                if (isAmoledMode) {
+                    darkColorScheme(
+                        background = Color.Black,
+                        surface = Color.Black
+                    )
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    dynamicDarkColorScheme(context)
+                } else {
+                    darkColorScheme()
+                }
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                dynamicLightColorScheme(context)
+            } else {
+                lightColorScheme()
+            }
+            MaterialTheme(colorScheme = colorScheme) {
+                TransactionReceipt(
+                    transaction = transaction,
+                    primaryCurrency = primaryCurrency,
+                    convertedAmount = convertedAmount,
+                    availableAccounts = availableAccounts,
+                    categories = categories,
+                    subcategoriesMap = subcategoriesMap,
+                    linkedSubscription = linkedSubscription,
+                    attachmentService = attachmentService,
+                    showAttachments = false
+                )
+            }
+        }
+    }
+
+    val decorView = rootView.rootView as? ViewGroup
+    if (decorView == null) {
+        val fallbackBitmap = Bitmap.createBitmap(widthPx, 200, Bitmap.Config.ARGB_8888)
+        val fallbackCanvas = Canvas(fallbackBitmap)
+        fallbackCanvas.drawColor(android.graphics.Color.WHITE)
+        return fallbackBitmap
+    }
+
+    composeView.visibility = View.INVISIBLE
+    val lp = ViewGroup.MarginLayoutParams(widthPx, ViewGroup.LayoutParams.WRAP_CONTENT)
+    decorView.addView(composeView, lp)
+    try {
+        val widthMeasureSpec = View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY)
+        val heightMeasureSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        composeView.measure(widthMeasureSpec, heightMeasureSpec)
+        val heightPx = composeView.measuredHeight.coerceAtLeast(1)
+        composeView.layout(0, 0, widthPx, heightPx)
+
+        val bitmap = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        composeView.draw(canvas)
+        return bitmap
+    } finally {
+        decorView.removeView(composeView)
+    }
+}
+
+private fun shareReceiptAsPng(
+    context: android.content.Context,
+    bitmap: Bitmap,
+    transaction: TransactionEntity,
+    fileName: String
+) {
+    try {
+        val exportDir = java.io.File(context.cacheDir, "exports")
+        if (!exportDir.exists()) {
+            exportDir.mkdirs()
+        }
+        val file = java.io.File(exportDir, "$fileName.png")
+        java.io.FileOutputStream(file).use { out ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.share_receipt))
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, context.getString(R.string.share_receipt)))
+    } catch (e: Exception) {
+        Log.e("TransactionDetail", "Error sharing receipt", e)
     }
 }

@@ -270,6 +270,25 @@ interface TransactionDao {
         """
         SELECT * FROM transactions
         WHERE is_deleted = 0
+        AND reference = :reference
+        AND amount = :amount
+        AND (:accountLast4 IS NULL OR account_number = :accountLast4)
+        AND date_time BETWEEN :startDate AND :endDate
+        ORDER BY date_time DESC
+        """
+    )
+    suspend fun getTransactionsByReferenceAndAmount(
+        reference: String,
+        amount: java.math.BigDecimal,
+        accountLast4: String?,
+        startDate: LocalDateTime,
+        endDate: LocalDateTime
+    ): List<TransactionEntity>
+
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE is_deleted = 0
         AND date_time BETWEEN :startDate AND :endDate
     """
     )

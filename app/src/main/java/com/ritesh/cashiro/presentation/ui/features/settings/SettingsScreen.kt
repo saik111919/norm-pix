@@ -119,7 +119,7 @@ fun SettingsScreen(
     val downloadProgress = uiState.downloadProgress
     val totalTransactionsCount by settingsViewModel.totalTransactions.collectAsStateWithLifecycle()
     val userPreferences by settingsViewModel.userPreferences.collectAsStateWithLifecycle(initialValue = null)
-    val isDeveloperModeEnabled = userPreferences?.isDeveloperModeEnabled == true
+    val isWebhookModeEnabled = userPreferences?.isWebhookModeEnabled == true
     var showDeleteModelDialog by remember { mutableStateOf(false) }
     var showLanguageBottomSheet by remember { mutableStateOf(false) }
     val currentLanguageCode = remember(androidx.compose.ui.platform.LocalConfiguration.current) {
@@ -835,11 +835,11 @@ fun SettingsScreen(
                             )
                         },
                         onClick = { onNavigateToSms() },
-                        shape = if (isDeveloperModeEnabled) ListItemPosition.Middle.toShape()
+                        shape = if (isWebhookModeEnabled) ListItemPosition.Middle.toShape()
                             else ListItemPosition.Bottom.toShape(),
                         padding = PaddingValues(0.dp)
                     )
-                    if (isDeveloperModeEnabled) {
+                    if (isWebhookModeEnabled) {
                         ListItem(
                             headline = {
                                 Text(

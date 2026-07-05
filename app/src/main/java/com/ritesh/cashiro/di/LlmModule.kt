@@ -1,20 +1,24 @@
 package com.ritesh.cashiro.di
 
-import com.ritesh.cashiro.data.service.LlmServiceImpl
+import android.content.Context
+import com.ritesh.cashiro.data.service.LiteRtLmServiceImpl
 import com.ritesh.cashiro.domain.service.LlmService
-import dagger.Binds
 import dagger.Module
+import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
-abstract class LlmModule {
-    
-    @Binds
+object LlmModule {
+
+    @Provides
     @Singleton
-    abstract fun bindLlmService(
-        llmServiceImpl: LlmServiceImpl
-    ): LlmService
+    fun provideLlmService(
+        @ApplicationContext context: Context
+    ): LlmService {
+        return LiteRtLmServiceImpl(context)
+    }
 }

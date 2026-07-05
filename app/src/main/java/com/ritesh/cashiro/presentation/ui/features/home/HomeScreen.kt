@@ -829,50 +829,7 @@ fun SharedTransitionScope.HomeScreen(
                             shape = ListItemPosition.Middle.toShape()
                         )
 
-                        // Ask AI Option
-                        ListItem(
-                            headline = { Text(stringResource(R.string.ask_ai)) },
-                            leading = {
-                                Icon(
-                                    imageVector = Iconax.AiCommentary,
-                                    contentDescription = null,
-                                )
-                            },
-                            onClick = {
-                                showMoreBottomSheet = false
-                                onNavigateToChat()
-                            },
-                            shape = ListItemPosition.Middle.toShape()
-                        )
 
-                        // Sync SMS Option
-                        ListItem(
-                            headline = { Text(stringResource(R.string.sync_sms)) },
-                            leading = {
-                                Icon(
-                                    imageVector = Iconax.RefreshCircle,
-                                    contentDescription = null,
-                                )
-                            },
-                            supporting = { Text(stringResource(R.string.long_press_for_full_resync)) },
-                            modifier = Modifier.pointerInput(Unit) {
-                                detectTapGestures(
-                                    onTap = {
-                                        showMoreBottomSheet = false
-                                        homeViewModel.scanSmsMessages()
-                                    },
-                                    onLongPress = {
-                                        view.performHapticFeedback(
-                                            HapticFeedbackConstants.LONG_PRESS
-                                        )
-                                        showMoreBottomSheet = false
-                                        onFullResyncClick()
-                                    }
-                                )
-                            },
-                            onClick = null,
-                            shape = ListItemPosition.Middle.toShape()
-                        )
 
                         // Banner Image Toggle
                         PreferenceSwitch(

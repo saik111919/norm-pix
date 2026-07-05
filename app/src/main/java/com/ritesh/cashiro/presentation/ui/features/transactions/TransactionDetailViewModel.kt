@@ -17,6 +17,7 @@ import com.ritesh.cashiro.data.repository.MerchantMappingRepository
 import com.ritesh.cashiro.data.repository.TransactionRepository
 import com.ritesh.cashiro.data.repository.SubcategoryRepository
 import com.ritesh.cashiro.data.repository.SubscriptionRepository
+import com.ritesh.cashiro.data.preferences.UserPreferencesRepository
 import com.ritesh.cashiro.data.database.entity.SubscriptionEntity
 import com.ritesh.cashiro.data.database.entity.SubscriptionState
 import com.ritesh.cashiro.data.service.AttachmentService
@@ -34,6 +35,7 @@ import java.math.BigDecimal
 import java.net.URLEncoder
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.util.UUID
 import javax.inject.Inject
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -47,12 +49,24 @@ class TransactionDetailViewModel @Inject constructor(
     private val subscriptionRepository: SubscriptionRepository,
     private val currencyConversionService: CurrencyConversionService,
     private val currencyRepository: CurrencyRepository,
+    private val userPreferencesRepository: UserPreferencesRepository,
     val attachmentService: AttachmentService,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TransactionDetailUiState())
     val uiState: StateFlow<TransactionDetailUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            userPreferencesRepository.userPreferences.collect { prefs ->
+                _uiState.update { it.copy(
+                    isAmoledMode = prefs.isAmoledMode,
+                    darkThemeConfig = prefs.isDarkThemeEnabled
+                ) }
+            }
+        }
+    }
 
     // Categories should be based on transaction type
     val categories: StateFlow<List<CategoryEntity>> = _uiState.map { state ->
@@ -345,6 +359,7 @@ class TransactionDetailViewModel @Inject constructor(
             }
 
             TransactionType.INVESTMENT -> "Investment"
+            TransactionType.BALANCE_UPDATE -> "Miscellaneous"
         }
 
         updateCategory(newCategory)
@@ -629,6 +644,29 @@ class TransactionDetailViewModel @Inject constructor(
         }
     }
 
+    fun duplicateTransaction() {
+        viewModelScope.launch {
+            _uiState.value.transaction?.let { txn ->
+                try {
+                    val duplicate = txn.copy(
+                        id = 0,
+                        transactionHash = UUID.randomUUID().toString(),
+                        createdAt = LocalDateTime.now(),
+                        updatedAt = LocalDateTime.now()
+                    )
+                    transactionRepository.insertTransaction(duplicate)
+                    _uiState.update { it.copy(duplicateSuccess = true) }
+                } catch (e: Exception) {
+                    _uiState.update { it.copy(errorMessage = "Failed to duplicate transaction") }
+                }
+            }
+        }
+    }
+
+    fun clearDuplicateSuccess() {
+        _uiState.update { it.copy(duplicateSuccess = false) }
+    }
+
     private suspend fun syncSubscriptionForTransaction(transaction: TransactionEntity) {
         if (transaction.isRecurring) {
             val existing = subscriptionRepository.matchTransactionToSubscription(
@@ -732,6 +770,10 @@ class TransactionDetailViewModel @Inject constructor(
                         }
                     }
                 }
+
+                TransactionType.BALANCE_UPDATE -> {
+                    // Balance updates track the balance directly, no reversal needed
+                }
             }
         }
     }
@@ -779,6 +821,10 @@ class TransactionDetailViewModel @Inject constructor(
                             )
                         }
                     }
+                }
+
+                TransactionType.BALANCE_UPDATE -> {
+                    // Balance updates track the balance directly, no adjustment needed
                 }
             }
         }

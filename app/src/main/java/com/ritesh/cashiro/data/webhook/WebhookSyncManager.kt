@@ -40,8 +40,8 @@ class WebhookSyncManager @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository
 ) {
     suspend fun syncAll(reason: WebhookSyncReason, sendTestPayload: Boolean = false): WebhookSyncRunResult {
-        if (!userPreferencesRepository.isDeveloperModeEnabled.first()) {
-            // Defence in depth: if a user toggles dev mode off while WorkManager has work
+        if (!userPreferencesRepository.isWebhookModeEnabled.first()) {
+            // Defence in depth: if a user toggles webhook mode off while WorkManager has work
             // enqueued or AlarmManager has alarms armed, those callbacks must not fire deliveries.
             return WebhookSyncRunResult(anySuccess = false, anyRetryableFailure = false)
         }

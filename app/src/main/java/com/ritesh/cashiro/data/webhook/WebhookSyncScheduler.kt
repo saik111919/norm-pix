@@ -42,19 +42,19 @@ class WebhookSyncScheduler @Inject constructor(
     suspend fun applyScheduling() {
         // Read all three preference values in one go — DataStore caches by key inside a single
         // combine collection, so this is one trip through the prefs file rather than three.
-        val (settings, previouslyArmed, devModeEnabled) = kotlinx.coroutines.flow.combine(
+        val (settings, previouslyArmed, webhookEnabled) = kotlinx.coroutines.flow.combine(
             userPreferencesRepository.webhookSettings,
             userPreferencesRepository.webhookLastScheduledIds,
-            userPreferencesRepository.isDeveloperModeEnabled
-        ) { s, ids, dm -> Triple(s, ids, dm) }.first()
+            userPreferencesRepository.isWebhookModeEnabled
+        ) { s, ids, wm -> Triple(s, ids, wm) }.first()
 
         // Cancel against the *previously-armed* IDs so deleted scheduled times have their
         // PendingIntents removed too — ID-keyed alarms wouldn't otherwise be reachable from
         // settings.scheduledTimes once the user removed them.
         val idsToCancel = previouslyArmed + settings.scheduledTimes.map { it.id }
 
-        if (!devModeEnabled) {
-            // Feature is gated behind developer mode. Tear down any work / alarms that may have
+        if (!webhookEnabled) {
+            // Feature is gated behind webhook mode. Tear down any work / alarms that may have
             // been scheduled while it was on so toggling it off immediately stops background sync.
             cancelPeriodic()
             cancelAllScheduledAlarms(idsToCancel)

@@ -203,18 +203,37 @@ object BrandIcons {
         "iob" to R.drawable.ic_brand_indian_overseas_bank,
         "standard chartered" to R.drawable.ic_brand_standard_chartered,
         "equitas" to R.drawable.ic_brand_equitas_bank,
+        "dhanlaxmi bank" to R.drawable.ic_brand_dhanlaxmi_bank,
+        "jk bank" to R.drawable.ic_brand_jk_bank,
+        "jammu & kashmir bank" to R.drawable.ic_brand_jk_bank,
+        "idbi bank" to R.drawable.ic_brand_idbi,
+        "idbi" to R.drawable.ic_brand_idbi,
+        "kotak bank" to R.drawable.ic_brand_kotak_mahindra_bank,
+        "nsdl payments bank" to R.drawable.ic_brand_nsdl_payments_bank,
+        "onecard" to R.drawable.ic_brand_onecard,
+        "punjab & sind bank" to R.drawable.ic_brand_punjab_sind_bank,
+        "punjab and sind bank" to R.drawable.ic_brand_punjab_sind_bank,
+        "uco bank" to R.drawable.ic_brand_uco_bank,
+        "utkarsh bank" to R.drawable.ic_brand_utkarsh_bank,
+        "kerala bank" to R.drawable.ic_brand_kerela_bank,
         // Banks - Indian Fintech/Payments
         "juspay" to R.drawable.ic_brand_juspay,
         "india post payments bank" to R.drawable.ic_brand_ippb,
         "ippb" to R.drawable.ic_brand_ippb,
+        "cashfree" to R.drawable.ic_brand_cashfree,
+        "navi mutual fund" to R.drawable.ic_brand_navi_mutual_funds,
+        "navi" to R.drawable.ic_brand_navi_mutual_funds,
+        "hdfc mutual fund" to R.drawable.ic_brand_hdfc_mutual_funds,
         // Banks - Credit Cards
         "american express" to R.drawable.ic_brand_amex,
         "amex" to R.drawable.ic_brand_amex,
         // Banks - UAE
         "adcb" to R.drawable.ic_brand_adcb,
+        "abu dhabi commercial bank" to R.drawable.ic_brand_adcb,
         "first abu dhabi" to R.drawable.ic_brand_fab_bank,
         "fab bank" to R.drawable.ic_brand_fab_bank,
         "emirates nbd" to R.drawable.ic_brand_emirates_nbd,
+        "emirates islamic" to R.drawable.ic_brand_emirates_islamic,
         "liv bank" to R.drawable.ic_brand_liv_bank,
         "mashreq" to R.drawable.ic_brand_mashreq_bank,
         // Banks - USA
@@ -226,6 +245,10 @@ object BrandIcons {
         "navy federal" to R.drawable.ic_brand_navy_federal,
         "huntington bank" to R.drawable.ic_brand_huntington_bank,
         "huntington" to R.drawable.ic_brand_huntington_bank,
+        "adelfi" to R.drawable.ic_brand_adelfi,
+        "altana fcu" to R.drawable.ic_brand_altana_fcu,
+        "old hickory" to R.drawable.ic_brand_old_hickory,
+        "old hickory credit union" to R.drawable.ic_brand_old_hickory,
         // Banks - Nepal
         "laxmi sunrise" to R.drawable.ic_brand_laxmi_sunrise_bank,
         "nmb bank" to R.drawable.ic_brand_nmb_bank,
@@ -248,17 +271,91 @@ object BrandIcons {
         "cib egypt" to R.drawable.ic_brand_cib_egypt,
         "bpce" to R.drawable.ic_brand_bpce_bank,
         "caisse d'epargne" to R.drawable.ic_brand_bpce_bank,
+        "alecu" to R.drawable.ic_brand_alecu_bank,
+        "bank muscat" to R.drawable.ic_brand_bank_muscat,
+        "telebirr" to R.drawable.ic_brand_telebirr,
+        "access bank" to R.drawable.ic_brand_access_bank,
+        "arab bank" to R.drawable.ic_brand_arab_bank,
+        "baac" to R.drawable.ic_brand_baac,
+        "bangkok bank" to R.drawable.ic_brand_bangkok_bank,
+        "bankino" to R.drawable.ic_brand_bankino,
+        "blu bank" to R.drawable.ic_brand_blu_bank,
+        "cimb thai" to R.drawable.ic_brand_cimb,
+        "cimb" to R.drawable.ic_brand_cimb,
+        "crdb bank" to R.drawable.ic_brand_crdb,
+        "dashen bank" to R.drawable.ic_brand_dashen_bank,
+        "diamond trust bank" to R.drawable.ic_brand_diamond_trust,
+        "e-mola" to R.drawable.ic_brand_e_mola,
+        "enpara bank" to R.drawable.ic_brand_enpara,
+        "faysal bank" to R.drawable.ic_brand_faysal_bank,
+        "greater bank" to R.drawable.ic_brand_greater_bank,
+        "government savings bank" to R.drawable.ic_brand_gsb,
+        "gsb" to R.drawable.ic_brand_gsb,
+        "jaiz bank" to R.drawable.ic_brand_jaiz_bank,
+        "kasikorn bank" to R.drawable.ic_brand_kasikorn_bank,
+        "keystone bank" to R.drawable.ic_brand_keystone_bank,
+        "krungsri" to R.drawable.ic_brand_krungsri,
+        "krungthai bank" to R.drawable.ic_brand_krungthai,
+        "krungthai" to R.drawable.ic_brand_krungthai,
+        "ktc" to R.drawable.ic_brand_ktc,
+        "mellat bank" to R.drawable.ic_brand_mellat_bank,
+        "melli bank" to R.drawable.ic_brand_melli_bank,
+        "millennium bim" to R.drawable.ic_brand_millennium_bim,
+        "mixx by yas" to R.drawable.ic_brand_mixx_by_yas,
+        "nmb tanzania" to R.drawable.ic_brand_nmb_tanzania,
+        "opay" to R.drawable.ic_brand_0pay,
+        "0pay" to R.drawable.ic_brand_0pay,
+        "parsian bank" to R.drawable.ic_brand_parsian_bank,
+        "sabb bank" to R.drawable.ic_brand_sabb_bank,
+        "sampath bank" to R.drawable.ic_brand_sampath_bank,
+        "siam commercial bank" to R.drawable.ic_brand_siam_commercial,
+        "snb al ahli" to R.drawable.ic_brand_snb_alahli,
+        "sparkasse" to R.drawable.ic_brand_sparkasse_rhein_maas,
+        "sparkasse rhein-maas" to R.drawable.ic_brand_sparkasse_rhein_maas,
+        "standard bank" to R.drawable.ic_brand_standard_bank,
+        "standard bank mozambique" to R.drawable.ic_brand_standard_bank,
+        "stc bank" to R.drawable.ic_brand_stc_bank,
+        "ttb" to R.drawable.ic_brand_ttb,
+        "uob thailand" to R.drawable.ic_brand_uob,
+        "uob" to R.drawable.ic_brand_uob,
+        "zemen bank" to R.drawable.ic_brand_zemen_bank,
+        "zenith bank" to R.drawable.ic_brand_zenith_bank,
+        // Additional brands
+        "airbnb" to R.drawable.ic_brand_airbnb,
+        "apple tv" to R.drawable.ic_brand_apple_tv,
+        "bumble" to R.drawable.ic_brand_bumble,
+        "chatgpt" to R.drawable.ic_brand_chatgpt,
+        "claude" to R.drawable.ic_brand_claude,
+        "crunchyroll" to R.drawable.ic_brand_crunchyroll,
+        "disney plus" to R.drawable.ic_brand_disney_plus,
+        "fastag" to R.drawable.ic_brand_fastag,
+        "gemini" to R.drawable.ic_brand_gemini,
+        "google pay" to R.drawable.ic_brand_google_pay,
+        "google play" to R.drawable.ic_brand_google_play,
+        "google" to R.drawable.ic_brand_google,
+        "grok" to R.drawable.ic_brand_grok,
+        "hbo max" to R.drawable.ic_brand_hbo_max,
+        "jiocinema" to R.drawable.ic_brand_jiocinema,
+        "jiohotstar" to R.drawable.ic_brand_jiohotstar,
+        "oyo" to R.drawable.ic_brand_oyo,
+        "perplexity" to R.drawable.ic_brand_perplexity,
+        "playstation" to R.drawable.ic_brand_playstation,
+        "proton vpn" to R.drawable.ic_brand_proton_vpn,
+        "visa" to R.drawable.ic_brand_visa,
+        "xbox" to R.drawable.ic_brand_xbox,
+        "youtube music" to R.drawable.ic_brand_youtube_music,
+        "x" to R.drawable.ic_brand_x,
     )
     
     fun getIconResource(merchantName: String): Int? {
         val normalized = merchantName.lowercase()
 
-        // Special handling for "cred" to avoid matching "credit/credited" banking terms
         if (normalized.contains("cred") && !normalized.contains("credit")) {
             brandMappings["cred"]?.let { return it }
         }
 
         return brandMappings.entries
+            .sortedByDescending { it.key.length }
             .firstOrNull { (key, _) ->
                 key != "cred" && normalized.contains(key)
             }
@@ -328,6 +425,9 @@ object BrandIcons {
         merchantName.contains("alinma", ignoreCase = true) -> "#B8964B"
         merchantName.contains("bpce", ignoreCase = true) || 
         merchantName.contains("caisse d'epargne", ignoreCase = true) -> "#642D8E"
+        merchantName.contains("alecu", ignoreCase = true) -> "#003056"
+        merchantName.contains("bank muscat", ignoreCase = true) -> "#003B71"
+        merchantName.contains("telebirr", ignoreCase = true) -> "#E11B22"
         
         // Payments
         merchantName.contains("paytm", ignoreCase = true) -> "#00B9F1"
@@ -373,6 +473,28 @@ object BrandIcons {
         // Fitness
         merchantName.contains("cult", ignoreCase = true) -> "#FF3278"
         merchantName.contains("gym", ignoreCase = true) -> "#F15B2A"
+
+        // Additional brands
+        merchantName.contains("airbnb", ignoreCase = true) -> "#FF5A5F"
+        merchantName.contains("apple tv", ignoreCase = true) -> "#000000"
+        merchantName.contains("bumble", ignoreCase = true) -> "#FFC000"
+        merchantName.contains("chatgpt", ignoreCase = true) -> "#74AA9C"
+        merchantName.contains("claude", ignoreCase = true) -> "#D97757"
+        merchantName.contains("crunchyroll", ignoreCase = true) -> "#F47521"
+        merchantName.contains("disney plus", ignoreCase = true) -> "#113CCF"
+        merchantName.contains("fastag", ignoreCase = true) -> "#F79620"
+        merchantName.contains("gemini", ignoreCase = true) -> "#1A73E8"
+        merchantName.contains("grok", ignoreCase = true) -> "#000000"
+        merchantName.contains("hbo max", ignoreCase = true) -> "#5822B4"
+        merchantName.contains("jiocinema", ignoreCase = true) -> "#E50914"
+        merchantName.contains("jiohotstar", ignoreCase = true) -> "#E50914"
+        merchantName.contains("oyo", ignoreCase = true) -> "#2C3E50"
+        merchantName.contains("perplexity", ignoreCase = true) -> "#1E3A5F"
+        merchantName.contains("playstation", ignoreCase = true) -> "#003791"
+        merchantName.contains("proton vpn", ignoreCase = true) -> "#6D4AFF"
+        merchantName.contains("visa", ignoreCase = true) -> "#1A1F71"
+        merchantName.contains("xbox", ignoreCase = true) -> "#107C10"
+        merchantName.contains("youtube music", ignoreCase = true) -> "#FF0000"
 
         else -> null
     }

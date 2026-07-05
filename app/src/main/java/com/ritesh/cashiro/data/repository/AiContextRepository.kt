@@ -1,5 +1,6 @@
 package com.ritesh.cashiro.data.repository
 
+import com.ritesh.cashiro.data.currency.CurrencyConversionService
 import com.ritesh.cashiro.data.database.dao.SubscriptionDao
 import com.ritesh.cashiro.data.database.dao.TransactionDao
 import com.ritesh.cashiro.data.database.entity.SubscriptionState
@@ -7,6 +8,7 @@ import com.ritesh.cashiro.data.database.entity.TransactionType
 import com.ritesh.cashiro.data.model.*
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDate
@@ -21,7 +23,13 @@ import javax.inject.Singleton
 @Singleton
 class AiContextRepository @Inject constructor(
     private val transactionDao: TransactionDao,
-    private val subscriptionDao: SubscriptionDao
+    private val subscriptionDao: SubscriptionDao,
+    private val budgetRepository: BudgetRepository,
+    private val accountBalanceRepository: AccountBalanceRepository,
+    private val currencyRepository: CurrencyRepository,
+    private val currencyConversionService: CurrencyConversionService,
+    private val categoryRepository: CategoryRepository,
+    private val subcategoryRepository: SubcategoryRepository
 ) {
     
     /**
@@ -29,13 +37,17 @@ class AiContextRepository @Inject constructor(
      */
     suspend fun getChatContext(): ChatContext = coroutineScope {
         val currentDate = LocalDate.now()
+        val effectiveCurrency = currencyRepository.effectiveBaseCurrencyCode.first()
         
         // Launch parallel queries
         val monthSummaryDeferred = async { getMonthSummary(currentDate) }
-        val recentTransactionsDeferred = async { getRecentTransactions(currentDate) }
+        val recentTransactionsDeferred = async { getRecentTransactions(currentDate, effectiveCurrency) }
         val activeSubscriptionsDeferred = async { getActiveSubscriptions(currentDate) }
         val topCategoriesDeferred = async { getTopCategories(currentDate) }
-        val quickStatsDeferred = async { getQuickStats(currentDate) }
+        val quickStatsDeferred = async { getQuickStats(currentDate, effectiveCurrency) }
+        val budgetsDeferred = async { getBudgets() }
+        val accountBalancesDeferred = async { getAccountBalances() }
+        val categoriesDeferred = async { getAllCategories() }
         
         ChatContext(
             currentDate = currentDate,
@@ -43,7 +55,10 @@ class AiContextRepository @Inject constructor(
             recentTransactions = recentTransactionsDeferred.await(),
             activeSubscriptions = activeSubscriptionsDeferred.await(),
             topCategories = topCategoriesDeferred.await(),
-            quickStats = quickStatsDeferred.await()
+            quickStats = quickStatsDeferred.await(),
+            budgets = budgetsDeferred.await(),
+            accountBalances = accountBalancesDeferred.await(),
+            categories = categoriesDeferred.await()
         )
     }
     
@@ -70,6 +85,7 @@ class AiContextRepository @Inject constructor(
                 TransactionType.CREDIT -> totalExpense = totalExpense.add(transaction.amount) // Credit counts as expense
                 TransactionType.TRANSFER -> {} // Transfers don't affect income/expense totals
                 TransactionType.INVESTMENT -> {} // Investments are asset reallocation, not expenses
+                TransactionType.BALANCE_UPDATE -> {} // Balance updates track account balance, not income/expense
             }
         }
         
@@ -82,7 +98,7 @@ class AiContextRepository @Inject constructor(
         )
     }
     
-    private suspend fun getRecentTransactions(currentDate: LocalDate, days: Int = 14): List<TransactionSummary> {
+    private suspend fun getRecentTransactions(currentDate: LocalDate, effectiveCurrency: String, days: Int = 14): List<TransactionSummary> {
         val startDate = currentDate.minusDays(days.toLong())
         
         val transactions = transactionDao.getTransactionsBetweenDatesList(
@@ -99,10 +115,19 @@ class AiContextRepository @Inject constructor(
                     currentDate
                 ).toInt()
                 
+                val converted = if (transaction.currency != effectiveCurrency) {
+                    try {
+                        currencyConversionService.convertAmount(transaction.amount, transaction.currency, effectiveCurrency)
+                    } catch (_: Exception) { null }
+                } else null
+                
                 TransactionSummary(
                     merchantName = transaction.merchantName,
                     amount = transaction.amount,
+                    originalCurrency = transaction.currency,
+                    convertedAmount = converted,
                     category = transaction.category ?: "Miscellaneous",
+                    subcategory = transaction.subcategory,
                     daysAgo = daysAgo,
                     dateTime = transaction.dateTime,
                     transactionType = transaction.transactionType
@@ -169,7 +194,49 @@ class AiContextRepository @Inject constructor(
             .take(5) // Top 5 categories
     }
     
-    private suspend fun getQuickStats(currentDate: LocalDate): QuickStats {
+    private suspend fun getBudgets(): List<BudgetSummary> {
+        val budgets = budgetRepository.getAllBudgets().first()
+        return budgets
+            .filter { it.isActive }
+            .mapNotNull { budget ->
+                try {
+                    val withSpending = budgetRepository.getBudgetWithSpending(budget)
+                    BudgetSummary(
+                        name = budget.name,
+                        amount = budget.amount,
+                        currentSpending = withSpending.currentSpending,
+                        remaining = withSpending.remaining,
+                        percentUsed = withSpending.percentUsed,
+                        currency = budget.currency
+                    )
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            .sortedByDescending { it.percentUsed }
+    }
+
+    private suspend fun getAccountBalances(): List<AccountBalanceSummary> {
+        return accountBalanceRepository.getAllLatestBalances()
+            .first()
+            .map { balance ->
+                val available = if (balance.isCreditCard && balance.creditLimit != null) {
+                    balance.creditLimit - balance.balance
+                } else null
+                AccountBalanceSummary(
+                    bankName = balance.bankName,
+                    accountLast4 = balance.accountLast4,
+                    balance = balance.balance,
+                    currency = balance.currency,
+                    isCreditCard = balance.isCreditCard,
+                    isWallet = balance.isWallet,
+                    creditLimit = if (balance.isCreditCard) balance.creditLimit else null
+                )
+            }
+            .sortedBy { it.bankName }
+    }
+
+    private suspend fun getQuickStats(currentDate: LocalDate, effectiveCurrency: String): QuickStats {
         val yearMonth = YearMonth.from(currentDate)
         val startOfMonth = yearMonth.atDay(1)
         val endOfMonth = yearMonth.atEndOfMonth()
@@ -195,10 +262,19 @@ class AiContextRepository @Inject constructor(
                 currentDate
             ).toInt()
             
+            val converted = if (transaction.currency != effectiveCurrency) {
+                try {
+                    currencyConversionService.convertAmount(transaction.amount, transaction.currency, effectiveCurrency)
+                } catch (_: Exception) { null }
+            } else null
+            
             TransactionSummary(
                 merchantName = transaction.merchantName,
                 amount = transaction.amount,
+                originalCurrency = transaction.currency,
+                convertedAmount = converted,
                 category = transaction.category ?: "Miscellaneous",
+                subcategory = transaction.subcategory,
                 daysAgo = daysAgo
             )
         }
@@ -213,5 +289,14 @@ class AiContextRepository @Inject constructor(
             mostFrequentMerchant = mostFrequent?.key,
             mostFrequentMerchantCount = mostFrequent?.value ?: 0
         )
+    }
+
+    private suspend fun getAllCategories(): List<CategoryInfo> {
+        val cats = categoryRepository.getAllCategories().first()
+        val subMap = subcategoryRepository.subcategoriesMap.value
+        return cats.map { cat ->
+            val subs = subMap[cat.id]?.map { it.name } ?: emptyList()
+            CategoryInfo(name = cat.name, subcategories = subs)
+        }
     }
 }

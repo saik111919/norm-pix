@@ -437,6 +437,13 @@ class AddTransactionUseCaseTest {
         override suspend fun softDeleteByHash(transactionHash: String) = Unit
         override suspend fun softDeleteTransactions(transactionIds: List<Long>) = Unit
         override suspend fun deleteTransactionsByIds(transactionIds: List<Long>) = Unit
+        override suspend fun getTransactionsByReferenceAndAmount(
+            reference: String,
+            amount: java.math.BigDecimal,
+            accountLast4: String?,
+            startDate: LocalDateTime,
+            endDate: LocalDateTime
+        ): List<TransactionEntity> = emptyList()
         override suspend fun getTransactionsBetweenDatesList(
             startDate: LocalDateTime, endDate: LocalDateTime
         ): List<TransactionEntity> = emptyList()

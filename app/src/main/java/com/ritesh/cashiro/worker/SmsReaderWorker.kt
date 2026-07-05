@@ -23,6 +23,8 @@ import com.ritesh.cashiro.data.repository.MerchantMappingRepository
 import com.ritesh.cashiro.data.repository.SubscriptionRepository
 import com.ritesh.cashiro.data.repository.TransactionRepository
 import com.ritesh.cashiro.data.repository.UnrecognizedSmsRepository
+import com.ritesh.cashiro.data.manager.TransactionDeduplication
+import com.ritesh.cashiro.data.manager.DedupResult
 import com.ritesh.cashiro.domain.repository.RuleRepository
 import com.ritesh.cashiro.domain.service.RuleEngine
 import com.ritesh.cashiro.data.database.entity.TransactionType
@@ -39,6 +41,7 @@ import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.time.Duration
 
 /**
  * Worker responsible for reading SMS messages and logging them.
@@ -102,9 +105,10 @@ class SmsReaderWorker @AssistedInject constructor(
                 }
                 
                 // Check if sender is from a known bank
-                val parser = BankParserFactory.getParser(sms.sender)
-                if (parser != null) {
-                    Log.d(TAG, "Processing SMS from ${parser.getBankName()}")
+                val matchingParsers = BankParserFactory.getParsers(sms.sender)
+                if (matchingParsers.isNotEmpty()) {
+                    val firstParser = matchingParsers.first()
+                    Log.d(TAG, "Processing SMS from ${firstParser.getBankName()} (${matchingParsers.size} total)")
                     
                     // Calculate SMS age for subscription filtering
                     val smsDateTime = LocalDateTime.ofInstant(
@@ -116,20 +120,20 @@ class SmsReaderWorker @AssistedInject constructor(
                     
                     // Check if it's a mandate/subscription notification
                     // Only process subscription messages from the last 30 days
-                    when (parser) {
+                    when (firstParser) {
                         is SBIBankParser -> {
                             // Check for UPI-Mandate notifications
-                            if (parser.isUPIMandateNotification(sms.body)) {
+                            if (firstParser.isUPIMandateNotification(sms.body)) {
                                 if (!isRecentMessage) {
                                     Log.d(TAG, "Skipping old SBI UPI-Mandate from ${smsDateTime.toLocalDate()}")
                                     continue
                                 }
-                                val upiMandateInfo = parser.parseUPIMandateSubscription(sms.body)
+                                val upiMandateInfo = firstParser.parseUPIMandateSubscription(sms.body)
                                 if (upiMandateInfo != null) {
                                     try {
                                         val subscriptionId = subscriptionRepository.createOrUpdateFromSBIMandate(
                                             upiMandateInfo,
-                                            parser.getBankName(),
+                                            firstParser.getBankName(),
                                             sms.body
                                         )
                                         subscriptionCount++
@@ -143,17 +147,17 @@ class SmsReaderWorker @AssistedInject constructor(
                         }
                         is HDFCBankParser -> {
                             // Check for E-Mandate notifications
-                            if (parser.isEMandateNotification(sms.body)) {
+                            if (firstParser.isEMandateNotification(sms.body)) {
                                 if (!isRecentMessage) {
                                     Log.d(TAG, "Skipping old HDFC E-Mandate from ${smsDateTime.toLocalDate()}")
                                     continue
                                 }
-                                val eMandateInfo = parser.parseEMandateSubscription(sms.body)
+                                val eMandateInfo = firstParser.parseEMandateSubscription(sms.body)
                                 if (eMandateInfo != null) {
                                     try {
                                         val subscriptionId = subscriptionRepository.createOrUpdateFromEMandate(
                                             eMandateInfo,
-                                            parser.getBankName(),
+                                            firstParser.getBankName(),
                                             sms.body
                                         )
                                         subscriptionCount++
@@ -166,18 +170,18 @@ class SmsReaderWorker @AssistedInject constructor(
                             }
                             
                             // Check for Future Debit notifications (like Twitter subscription)
-                            if (parser.isFutureDebitNotification(sms.body)) {
+                            if (firstParser.isFutureDebitNotification(sms.body)) {
                                 if (!isRecentMessage) {
                                     Log.d(TAG, "Skipping old HDFC Future Debit from ${smsDateTime.toLocalDate()}")
                                     continue
                                 }
-                                val futureDebitInfo = parser.parseFutureDebit(sms.body)
+                                val futureDebitInfo = firstParser.parseFutureDebit(sms.body)
                                 if (futureDebitInfo != null) {
                                     try {
                                         // Use the same EMandateInfo structure for subscription creation
                                         val subscriptionId = subscriptionRepository.createOrUpdateFromEMandate(
                                             futureDebitInfo,
-                                            parser.getBankName(),
+                                            firstParser.getBankName(),
                                             sms.body
                                         )
                                         subscriptionCount++
@@ -190,8 +194,8 @@ class SmsReaderWorker @AssistedInject constructor(
                             }
                             
                             // Check for Balance Update notifications
-                            if (parser.isBalanceUpdateNotification(sms.body)) {
-                                val balanceUpdateInfo = parser.parseBalanceUpdate(sms.body)
+                            if (firstParser.isBalanceUpdateNotification(sms.body)) {
+                                val balanceUpdateInfo = firstParser.parseBalanceUpdate(sms.body)
                                 if (balanceUpdateInfo != null) {
                                     try {
                                         // Save to account_balances table
@@ -200,7 +204,7 @@ class SmsReaderWorker @AssistedInject constructor(
                                             accountLast4 = balanceUpdateInfo.accountLast4,
                                             balance = balanceUpdateInfo.balance,
                                             timestamp = balanceUpdateInfo.asOfDate ?: smsDateTime,
-                                            currency = parser.getCurrency()
+                                            currency = firstParser.getCurrency()
                                         )
                                         Log.d(TAG, "Saved balance update for ${balanceUpdateInfo.bankName}")
                                     } catch (e: Exception) {
@@ -212,16 +216,17 @@ class SmsReaderWorker @AssistedInject constructor(
                         }
                         is IndusIndBankParser -> {
                             // Balance-only updates for IndusInd (same flow as HDFC)
-                            if (parser.isBalanceUpdateNotification(sms.body)) {
-                                val balanceUpdateInfo = parser.parseBalanceUpdate(sms.body)
+                            if (firstParser.isBalanceUpdateNotification(sms.body)) {
+                                val balanceUpdateInfo = firstParser.parseBalanceUpdate(sms.body)
                                 if (balanceUpdateInfo != null) {
                                     try {
                                         accountBalanceRepository.insertBalanceUpdate(
                                             bankName = balanceUpdateInfo.bankName,
                                             accountLast4 = balanceUpdateInfo.accountLast4,
                                             balance = balanceUpdateInfo.balance,
+
                                             timestamp = balanceUpdateInfo.asOfDate ?: smsDateTime,
-                                            currency = parser.getCurrency()
+                                            currency = firstParser.getCurrency()
                                         )
                                         Log.d(TAG, "Saved balance update for ${balanceUpdateInfo.bankName}")
                                     } catch (e: Exception) {
@@ -232,17 +237,17 @@ class SmsReaderWorker @AssistedInject constructor(
                             }
                         }
                         is IndianBankParser -> {
-                            if (parser.isMandateNotification(sms.body)) {
+                            if (firstParser.isMandateNotification(sms.body)) {
                                 if (!isRecentMessage) {
                                     Log.d(TAG, "Skipping old Indian Bank Mandate from ${smsDateTime.toLocalDate()}")
                                     continue
                                 }
-                                val mandateInfo = parser.parseMandateSubscription(sms.body)
+                                val mandateInfo = firstParser.parseMandateSubscription(sms.body)
                                 if (mandateInfo != null) {
                                     try {
                                         val subscriptionId = subscriptionRepository.createOrUpdateFromIndianBankMandate(
                                             mandateInfo,
-                                            parser.getBankName(),
+                                            firstParser.getBankName(),
                                             sms.body
                                         )
                                         subscriptionCount++
@@ -256,8 +261,10 @@ class SmsReaderWorker @AssistedInject constructor(
                         }
                     }
                     
-                    // Parse the transaction
-                    val parsedTransaction = parser.parse(sms.body, sms.sender, sms.timestamp)
+                    // Parse the transaction — try all matching parsers
+                    val parsedTransaction = matchingParsers.firstNotNullOfOrNull { parser ->
+                        parser.parse(sms.body, sms.sender, sms.timestamp)
+                    }
                     
                     if (parsedTransaction != null) {
                         parsedCount++
@@ -277,16 +284,48 @@ class SmsReaderWorker @AssistedInject constructor(
                         // Convert to entity and save
                         val entity = parsedTransaction.toEntity()
 
-                        // Check if this transaction was previously deleted by the user
+                        // Check if this transaction was previously deleted or is a duplicate
                         val existingTransaction = transactionRepository.getTransactionByHash(entity.transactionHash)
                         if (existingTransaction != null) {
-                            if (existingTransaction.isDeleted) {
-                                Log.d(TAG, "Skipping previously deleted transaction with hash: ${entity.transactionHash}")
-                                continue
+                            when (TransactionDeduplication.checkHash(existingTransaction)) {
+                                DedupResult.PreviouslyDeleted -> {
+                                    Log.d(TAG, "Skipping previously deleted transaction with hash: ${entity.transactionHash}")
+                                    continue
+                                }
+                                DedupResult.HashDuplicate -> {
+                                    Log.d(TAG, "Transaction already exists: ${entity.transactionHash}")
+                                    continue
+                                }
+                                else -> {}
                             }
-                            // Transaction already exists and not deleted - normal deduplication
-                            Log.d(TAG, "Transaction already exists: ${entity.transactionHash}")
-                            continue
+                        }
+
+                        // Check for UPI duplicate within the time window
+                        if (TransactionDeduplication.hasUpiReference(entity)) {
+                            val windowEnd = entity.dateTime
+                            val windowStart = windowEnd.minus(TransactionDeduplication.UPI_DUPLICATE_WINDOW)
+                            val upiCandidates = transactionRepository.getTransactionsByReferenceAndAmount(
+                                reference = entity.reference!!,
+                                amount = entity.amount,
+                                accountLast4 = entity.accountNumber,
+                                startDate = windowStart,
+                                endDate = windowEnd
+                            )
+                            val candidateForReplacement = upiCandidates.firstOrNull { existing ->
+                                TransactionDeduplication.shouldReplaceWithIncoming(existing, entity)
+                            }
+                            if (candidateForReplacement != null) {
+                                Log.d(TAG, "Replacing UPI transaction ${candidateForReplacement.id} with incoming from ${entity.bankName}")
+                                transactionRepository.deleteTransaction(candidateForReplacement, hardDelete = false)
+                            } else {
+                                val upiDuplicate = upiCandidates.any { existing ->
+                                    TransactionDeduplication.isSameUpiTransaction(existing, entity)
+                                }
+                                if (upiDuplicate) {
+                                    Log.d(TAG, "UPI duplicate transaction detected for reference: ${entity.reference}")
+                                    continue
+                                }
+                            }
                         }
 
                         // Check for custom merchant mapping

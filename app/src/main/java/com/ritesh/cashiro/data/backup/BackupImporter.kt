@@ -551,6 +551,8 @@ class BackupImporter @Inject constructor(
         
         // Developer preferences
         userPreferencesRepository.updateDeveloperMode(preferences.developer.isDeveloperModeEnabled)
+        userPreferencesRepository.setWebhookModeEnabled(preferences.developer.isWebhookModeEnabled)
+        userPreferencesRepository.setTokenInfoEnabled(preferences.developer.isTokenInfoEnabled)
         preferences.developer.systemPrompt?.let {
             userPreferencesRepository.updateSystemPrompt(it)
         }

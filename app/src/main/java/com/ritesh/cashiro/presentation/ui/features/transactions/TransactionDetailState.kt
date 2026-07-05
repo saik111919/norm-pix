@@ -20,6 +20,7 @@ data class TransactionDetailUiState(
     val showDeleteDialog: Boolean = false,
     val isDeleting: Boolean = false,
     val deleteSuccess: Boolean = false,
+    val duplicateSuccess: Boolean = false,
     val subscription: SubscriptionEntity? = null,
     val accountIconName: String? = null,
     val isCustomCycle: Boolean = false,
@@ -33,4 +34,6 @@ data class TransactionDetailUiState(
     val isLoadingMatches: Boolean = false,
     val matchSearchQuery: String = "",
     val matchSearchResults: List<TransactionEntity> = emptyList(),
+    val isAmoledMode: Boolean = false,
+    val darkThemeConfig: Boolean? = null,
 )

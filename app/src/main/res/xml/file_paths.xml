@@ -10,6 +10,11 @@
         name="backups" 
         path="backups/" />
     
+    <!-- Cache directory for crash log files -->
+    <cache-path
+        name="crash_logs"
+        path="." />
+
     <!-- Files directory for attachments -->
     <files-path 
         name="attachments" 

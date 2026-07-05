@@ -109,6 +109,8 @@ class SettingsViewModel @Inject constructor(
 
     // Developer mode state
     val isDeveloperModeEnabled = userPreferencesRepository.isDeveloperModeEnabled
+    val isWebhookModeEnabled = userPreferencesRepository.isWebhookModeEnabled
+    val isTokenInfoEnabled = userPreferencesRepository.isTokenInfoEnabled
     val isTestNotificationAlertsEnabled = userPreferencesRepository.isTestNotificationAlertsEnabled
 
     // SMS scan period state
@@ -421,15 +423,9 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun toggleDeveloperMode(enabled: Boolean) {
+    fun toggleWebhookMode(enabled: Boolean) {
         viewModelScope.launch {
-            userPreferencesRepository.setDeveloperModeEnabled(enabled)
-            // The Webhooks feature is gated behind dev mode. Reconcile any in-flight WorkManager
-            // work / AlarmManager alarms so toggling the gate immediately stops or resumes sync.
-            // applyScheduling() can throw on DataStore / AlarmManager failures; isolate that
-            // failure mode so the toggle itself doesn't crash this coroutine. Explicit try/catch
-            // (not runCatching) so structured concurrency's CancellationException still propagates
-            // when viewModelScope is cleared.
+            userPreferencesRepository.setWebhookModeEnabled(enabled)
             try {
                 webhookSyncScheduler.applyScheduling()
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -437,6 +433,12 @@ class SettingsViewModel @Inject constructor(
             } catch (t: Throwable) {
                 Log.e("SettingsViewModel", "Failed to apply webhook scheduling", t)
             }
+        }
+    }
+
+    fun toggleTokenInfoMode(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setTokenInfoEnabled(enabled)
         }
     }
 

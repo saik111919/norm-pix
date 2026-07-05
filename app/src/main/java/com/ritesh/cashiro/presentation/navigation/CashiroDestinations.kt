@@ -237,6 +237,8 @@ data class Transactions(
 
 @Serializable object AddAccount
 
+
+
 @Serializable object About
 
 @Serializable object Licenses
@@ -244,5 +246,6 @@ data class Transactions(
 // Routes where bottom navigation should be visible
 val BOTTOM_NAV_ROUTES = setOf(
     Home::class.qualifiedName,
-    Analytics::class.qualifiedName
+    Analytics::class.qualifiedName,
+    Transactions::class.qualifiedName
 )

@@ -9,11 +9,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.ritesh.cashiro.presentation.ui.icons.AiCommentary
 import com.ritesh.cashiro.presentation.ui.icons.FavoriteChart
 import com.ritesh.cashiro.presentation.ui.icons.Home
+import com.ritesh.cashiro.presentation.ui.icons.ReceiptItem
 import com.ritesh.cashiro.presentation.ui.icons.Iconax
 import kotlin.reflect.KClass
 import com.ritesh.cashiro.presentation.navigation.Home as HomeDestination
 import com.ritesh.cashiro.presentation.navigation.Analytics as AnalyticsDestination
-import com.ritesh.cashiro.presentation.navigation.Chat as ChatDestination
+import com.ritesh.cashiro.presentation.navigation.Transactions as TransactionsDestination
 
 sealed class BottomNavItem(
     val route: String,
@@ -38,11 +39,11 @@ sealed class BottomNavItem(
         destinationType = AnalyticsDestination::class
     )
 
-    data object Chat : BottomNavItem(
-        route = "chat",
-        title = "Chat",
-        icon = Iconax.AiCommentary,
-        destination = ChatDestination,
-        destinationType = ChatDestination::class
+    data object Transactions : BottomNavItem(
+        route = "transactions",
+        title = "Transactions",
+        icon = Iconax.ReceiptItem,
+        destination = TransactionsDestination(),
+        destinationType = TransactionsDestination::class
     )
 }

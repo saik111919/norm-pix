@@ -173,7 +173,7 @@ constructor(
                     }
                 }
                 TransactionType.INVESTMENT -> {
-                    // Subtract amount from the selected account
+                    // Investment transactions: subtract from balance
                     val currentBalance = accountBalanceRepository.getLatestBalance(bankName, accountLast4)
                     val newBalance = (currentBalance?.balance ?: BigDecimal.ZERO) - amount
                     accountBalanceRepository.insertBalance(
@@ -190,6 +190,9 @@ constructor(
                             currency = currency
                         )
                     )
+                }
+                TransactionType.BALANCE_UPDATE -> {
+                    // Balance update already comes with its own balance, no adjustment needed
                 }
             }
         }

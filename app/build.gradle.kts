@@ -39,7 +39,10 @@ android {
             // Fallback empty key for CI/CD builds
             buildConfigField("String", "RSA_PUBLIC_KEY", "\"\"")
         }
+        
+
     }
+
 
     signingConfigs {
         create("release") {
@@ -116,7 +119,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
-        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlin
@@ -137,7 +139,12 @@ android {
         // Disables dependency metadata when building Android App Bundles.
         includeInBundle = false
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
+
 
 // Configure Room schema export
 ksp {
@@ -148,9 +155,6 @@ ksp {
 
 dependencies {
     implementation(libs.androidx.compose.animation)
-    implementation(libs.appcompat)
-    // Core Library Desugaring
-    coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     // Local modules
     implementation(project(":parser-core"))
@@ -164,9 +168,6 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
-    implementation(libs.material.icons.extended)
-    
-    // Material Icons Extended
     implementation(libs.androidx.compose.material.icons.extended)
     
     // Color Picker for Compose
@@ -204,8 +205,6 @@ dependencies {
 
     // Hilt
     implementation(libs.hilt.android)
-    implementation(libs.androidx.compose.material3)
-    implementation(libs.material3)
     ksp(libs.hilt.android.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
     
@@ -221,8 +220,9 @@ dependencies {
     implementation(libs.androidx.hilt.work)
     ksp(libs.androidx.hilt.compiler)
     
-    // MediaPipe for LLM inference
-    implementation(libs.tasks.genai)
+    // LiteRT-LM for on-device LLM inference
+    implementation(libs.litertlm.android)
+
     
     // Google Play In-App Updates (only for standard flavor)
     "standardImplementation"(libs.app.update)
@@ -241,11 +241,13 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
-    implementation(libs.androidx.ui.tooling)
+    debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
     
     // Markdown support
     implementation(libs.markdown)
+    implementation(libs.mikepenz.markdown.renderer)
+    implementation(libs.mikepenz.markdown.renderer.m3)
     
     // OpenCSV for CSV export
     implementation(libs.opencsv)

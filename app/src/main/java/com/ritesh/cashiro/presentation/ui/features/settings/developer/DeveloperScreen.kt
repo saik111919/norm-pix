@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DeveloperMode
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.CircularProgressIndicator
@@ -41,13 +40,14 @@ import com.ritesh.cashiro.presentation.ui.components.PreferenceSwitch
 import com.ritesh.cashiro.presentation.ui.components.toShape
 import com.ritesh.cashiro.presentation.ui.features.categories.NavigationContent
 import com.ritesh.cashiro.presentation.ui.features.settings.SettingsViewModel
-import com.ritesh.cashiro.presentation.ui.icons.CodeCircle
 import com.ritesh.cashiro.presentation.ui.icons.Glass
 import com.ritesh.cashiro.presentation.ui.icons.Iconax
 import com.ritesh.cashiro.presentation.ui.icons.NotificationBing
 import com.ritesh.cashiro.presentation.ui.theme.Dimensions
 import com.ritesh.cashiro.presentation.ui.theme.grey_dark
 import com.ritesh.cashiro.presentation.ui.theme.grey_light
+import androidx.compose.material.icons.rounded.Webhook
+import androidx.compose.material.icons.rounded.Code
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 
@@ -58,11 +58,16 @@ fun DeveloperScreen(
     onNavigateBack: () -> Unit,
     settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
-    val isDeveloperModeEnabled by
-            settingsViewModel.isDeveloperModeEnabled.collectAsStateWithLifecycle(
+    val isWebhookModeEnabled by
+            settingsViewModel.isWebhookModeEnabled.collectAsStateWithLifecycle(
                 initialValue = false
             )
-    
+
+    val isTokenInfoEnabled by
+            settingsViewModel.isTokenInfoEnabled.collectAsStateWithLifecycle(
+                initialValue = false
+            )
+
     val isTestNotificationAlertsEnabled by
         settingsViewModel.isTestNotificationAlertsEnabled.collectAsStateWithLifecycle(
             initialValue = false
@@ -118,10 +123,10 @@ fun DeveloperScreen(
                 verticalArrangement = Arrangement.spacedBy(1.5.dp)
             ) {
                 PreferenceSwitch(
-                    title = "Developer Mode",
-                    subtitle = "Show technical information in chat",
-                    checked = isDeveloperModeEnabled,
-                    onCheckedChange = { settingsViewModel.toggleDeveloperMode(it) },
+                    title = "Webhooks",
+                    subtitle = "Enable BYOAPI webhook sync",
+                    checked = isWebhookModeEnabled,
+                    onCheckedChange = { settingsViewModel.toggleWebhookMode(it) },
                     leadingIcon = {
                         Box(
                             modifier = Modifier
@@ -133,7 +138,7 @@ fun DeveloperScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                Iconax.CodeCircle,
+                                Icons.Rounded.Webhook,
                                 contentDescription = null,
                                 tint = grey_dark
                             )
@@ -142,6 +147,33 @@ fun DeveloperScreen(
                     padding = PaddingValues(0.dp),
                     isSingle = false,
                     isFirst = true
+                )
+                
+                PreferenceSwitch(
+                    title = "Chat Token Info",
+                    subtitle = "Show technical information in chat",
+                    checked = isTokenInfoEnabled,
+                    onCheckedChange = { settingsViewModel.toggleTokenInfoMode(it) },
+                    leadingIcon = {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(
+                                    color = grey_light,
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Rounded.Code,
+                                contentDescription = null,
+                                tint = grey_dark
+                            )
+                        }
+                    },
+                    padding = PaddingValues(0.dp),
+                    isSingle = false,
+                    isLast = false
                 )
                 
                 PreferenceSwitch(

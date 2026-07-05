@@ -20,19 +20,8 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
-# MediaPipe
--keep class com.google.mediapipe.** { *; }
--keep class com.google.mediapipe.tasks.genai.** { *; }
--dontwarn com.google.mediapipe.framework.image.BitmapExtractor
--dontwarn com.google.mediapipe.framework.image.ByteBufferExtractor
--dontwarn com.google.mediapipe.framework.image.MPImage
--dontwarn com.google.mediapipe.framework.image.MPImageProperties
--dontwarn com.google.mediapipe.framework.image.MediaImageExtractor
-
-# AutoValue (used by MediaPipe)
--dontwarn com.google.auto.value.AutoValue
--dontwarn com.google.auto.value.AutoValue$Builder
--keep class com.google.auto.value.** { *; }
+# LiteRT (Edge AI) - Critical for JNI method resolution
+-keep class com.google.ai.edge.litertlm.** { *; }
 
 # Room
 -keep class * extends androidx.room.RoomDatabase
@@ -52,9 +41,7 @@
 -keep @dagger.Module class * { *; }
 -keep @dagger.hilt.android.EntryPoint class * { *; }
 
-# Jetpack Compose
--keep class androidx.compose.** { *; }
--dontwarn androidx.compose.**
+
 
 # Kotlin Serialization
 -keepattributes *Annotation*, InnerClasses
@@ -73,9 +60,7 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 
-# JetBrains Markdown
--keep class org.intellij.markdown.** { *; }
--dontwarn org.intellij.markdown.**
+
 
 # WorkManager
 -keep class androidx.work.** { *; }
@@ -119,10 +104,9 @@
 -dontwarn org.slf4j.impl.StaticLoggerBinder
 
 # PDFBox-Android
--keep class com.tom_roush.pdfbox.** { *; }
+-keep class com.tom_roush.pdfbox.android.PDFBoxResourceLoader { *; }
+-keep class com.tom_roush.pdfbox.pdmodel.PDDocument { *; }
+-keep class com.tom_roush.pdfbox.text.PDFTextStripper { *; }
 -dontwarn com.tom_roush.pdfbox.filter.JPXFilter
 -dontwarn com.tom_roush.pdfbox.pdmodel.graphics.image.SampledImageReader
 -dontwarn com.gemalto.jp2.JP2Decoder
--dontwarn org.bouncycastle.**
--dontwarn org.apache.harmony.**
--dontwarn javax.xml.stream.**

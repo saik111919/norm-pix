@@ -103,7 +103,44 @@ object BankParserFactory {
         ChaseBankParser(),  // Chase Bank (USA)
         TBankParser(),  // T-Bank / Tinkoff (Russia)
         BankMuscatParser(),  // Bank Muscat (Oman)
-        BPCEParser()      // BPCE (France)
+        BPCEParser(),      // BPCE (France)
+        // Africa Expansion P3-D: Mozambique
+        StandardBankMozambiqueParser(),  // Standard Bank Mozambique
+        MillenniumBimParser(),  // Millennium BIM (Mozambique)
+        EMolaParser(),  // E-Mola (Mozambique)
+        MPesaMozambiqueParser(),  // M-PESA Mozambique (must be after MPesaTanzaniaParser)
+        // Africa Expansion P3-D: Tanzania
+        CrdbBankParser(),  // CRDB Bank (Tanzania)
+        DiamondTrustBankParser(),  // Diamond Trust Bank (Tanzania)
+        MixxByYasParser(),  // Mixx by Yas (Tanzania)
+        NMBTanzaniaParser(),  // NMB Tanzania
+        GreaterBankParser(),  // Greater Bank (Tanzania)
+        // P3-A: Nigerian Banks
+        AccessBankParser(),  // Access Bank (Nigeria)
+        ZenithBankParser(),  // Zenith Bank (Nigeria)
+        KeystoneBankParser(),  // Keystone Bank (Nigeria)
+        JaizBankParser(),  // Jaiz Bank (Nigeria)
+        OpayBankParser(),  // Opay (Nigeria)
+        // P3-B: Additional Indian Banks
+        NSDLPaymentsBankParser(),  // NSDL Payments Bank (India)
+        PunjabSindBankParser(),  // Punjab & Sind Bank (India)
+        KeralaBankParser(),  // Kerala Bank (India)
+        CashfreeParser(),  // Cashfree (India)
+        NaviMutualFundParser(),  // Navi Mutual Fund (India)
+        // P3-C: Middle East Expansion
+        EmiratesIslamicParser(),  // Emirates Islamic (UAE)
+        SNBAlAhliBankParser(),  // SNB AlAhli (Saudi Arabia)
+        STCBankParser(),  // STC Bank (Saudi Arabia)
+        SabbBankParser(),  // SABB Bank (Saudi Arabia)
+        MellatBankParser(),  // Mellat Bank (Iran)
+        BankinoBankParser(),  // Bankino (Iran)
+        BluBankParser(),  // Blu Bank (Iran)
+        ArabBankParser(),  // Arab Bank (Egypt)
+        // P3-E: Other Regions
+        SampathBankParser(),  // Sampath Bank (Sri Lanka)
+        EnparaBankParser(),  // Enpara Bank (Turkey)
+        SparkasseRheinMaasParser(),  // Sparkasse Rhein-Maas (Germany)
+        AltanaFCUParser()  // Altana FCU (USA)
         // Add more bank parsers here as we implement them
     )
 
@@ -113,6 +150,16 @@ object BankParserFactory {
      */
     fun getParser(sender: String): BankParser? {
         return parsers.firstOrNull { it.canHandle(sender) }
+    }
+
+    /**
+     * Returns all bank parsers that can handle the given sender.
+     * Multiple parsers may match the same sender (e.g., specialized parsers
+     * before a general one), so callers should use firstNotNullOfOrNull
+     * to let the content decide which parser produces a result.
+     */
+    fun getParsers(sender: String): List<BankParser> {
+        return parsers.filter { it.canHandle(sender) }
     }
 
     /**

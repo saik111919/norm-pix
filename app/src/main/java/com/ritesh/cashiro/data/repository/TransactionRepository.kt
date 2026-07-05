@@ -149,6 +149,15 @@ class TransactionRepository @Inject constructor(
     suspend fun getTransactionByHash(transactionHash: String): TransactionEntity? =
             transactionDao.getTransactionByHash(transactionHash)
 
+    suspend fun getTransactionsByReferenceAndAmount(
+        reference: String,
+        amount: BigDecimal,
+        accountLast4: String?,
+        startDate: LocalDateTime,
+        endDate: LocalDateTime
+    ): List<TransactionEntity> =
+        transactionDao.getTransactionsByReferenceAndAmount(reference, amount, accountLast4, startDate, endDate)
+
     suspend fun undoDeleteTransaction(transaction: TransactionEntity) {
         transactionDao.updateTransaction(transaction.copy(isDeleted = false))
         applyBalanceForTransaction(transaction)

@@ -9,8 +9,11 @@ import com.ritesh.cashiro.data.database.MIGRATION_48_49
 import com.ritesh.cashiro.data.database.MIGRATION_49_50
 import com.ritesh.cashiro.data.database.MIGRATION_50_51
 import com.ritesh.cashiro.data.database.MIGRATION_51_52
+import com.ritesh.cashiro.data.database.MIGRATION_52_53
+import com.ritesh.cashiro.data.database.MIGRATION_53_54
 
 import com.ritesh.cashiro.data.database.dao.AccountBalanceDao
+import com.ritesh.cashiro.data.database.dao.BankNotificationDao
 import com.ritesh.cashiro.data.database.dao.BudgetDao
 import com.ritesh.cashiro.data.database.dao.CardDao
 import com.ritesh.cashiro.data.database.dao.CategoryDao
@@ -69,7 +72,11 @@ object DatabaseModule {
                     MIGRATION_48_49,
                     MIGRATION_49_50,
                     MIGRATION_50_51,
-                    MIGRATION_51_52
+                    MIGRATION_51_52,
+                    MIGRATION_52_53,
+                    MIGRATION_53_54,
+                    CashiroDatabase.MIGRATION_54_55,
+                    CashiroDatabase.MIGRATION_55_56
                 )
 
                 // Enable auto-migrations
@@ -245,6 +252,18 @@ object DatabaseModule {
     @Singleton
     fun provideWebhookCursorDao(database: CashiroDatabase): WebhookCursorDao {
         return database.webhookCursorDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideBankNotificationDao(database: CashiroDatabase): BankNotificationDao {
+        return database.bankNotificationDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideChatSessionDao(database: CashiroDatabase): com.ritesh.cashiro.data.database.dao.ChatSessionDao {
+        return database.chatSessionDao()
     }
 }
 /** Database callback to seed initial data when database is first created */

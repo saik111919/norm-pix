@@ -4,35 +4,28 @@ import android.content.Context
 import android.net.Uri
 import android.provider.Telephony
 import android.util.Log
-import com.ritesh.cashiro.BuildConfig
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.ritesh.cashiro.data.database.entity.UnrecognizedSmsEntity
+import com.ritesh.cashiro.data.preferences.UserPreferencesRepository
+import com.ritesh.cashiro.data.repository.AccountBalanceRepository
+import com.ritesh.cashiro.data.repository.LlmRepository
+import com.ritesh.cashiro.data.repository.SubscriptionRepository
+import com.ritesh.cashiro.data.repository.TransactionRepository
+import com.ritesh.cashiro.data.repository.UnrecognizedSmsRepository
+import com.ritesh.cashiro.data.manager.SmsTransactionProcessor
+import com.ritesh.cashiro.utils.PiiRedactor
+import com.ritesh.cashiro.worker.OptimizedSmsReaderWorker.Companion.TAG
 import com.ritesh.parser.core.ParsedTransaction
+import com.ritesh.parser.core.SmsFilter
 import com.ritesh.parser.core.bank.BankParserFactory
 import com.ritesh.parser.core.bank.FederalBankParser
 import com.ritesh.parser.core.bank.HDFCBankParser
 import com.ritesh.parser.core.bank.IndianBankParser
 import com.ritesh.parser.core.bank.SBIBankParser
 import com.ritesh.parser.core.bank.IndusIndBankParser
-import com.ritesh.parser.core.SmsFilter
-import com.ritesh.cashiro.data.database.entity.TransactionType
-import com.ritesh.cashiro.data.database.entity.UnrecognizedSmsEntity
-import com.ritesh.cashiro.data.mapper.toEntity
-import com.ritesh.cashiro.data.mapper.toEntityType
-import com.ritesh.cashiro.data.preferences.UserPreferencesRepository
-import com.ritesh.cashiro.data.repository.AccountBalanceRepository
-import com.ritesh.cashiro.data.repository.CardRepository
-import com.ritesh.cashiro.data.repository.LlmRepository
-import com.ritesh.cashiro.data.repository.MerchantMappingRepository
-import com.ritesh.cashiro.data.repository.SubscriptionRepository
-import com.ritesh.cashiro.data.repository.TransactionRepository
-import com.ritesh.cashiro.data.repository.UnrecognizedSmsRepository
-import com.ritesh.cashiro.domain.repository.RuleRepository
-import com.ritesh.cashiro.domain.service.RuleEngine
-import com.ritesh.cashiro.utils.CurrencyFormatter
-import com.ritesh.cashiro.utils.PiiRedactor
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
@@ -65,13 +58,10 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
     private val transactionRepository: TransactionRepository,
     private val subscriptionRepository: SubscriptionRepository,
     private val accountBalanceRepository: AccountBalanceRepository,
-    private val cardRepository: CardRepository,
     private val llmRepository: LlmRepository,
-    private val merchantMappingRepository: MerchantMappingRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val unrecognizedSmsRepository: UnrecognizedSmsRepository,
-    private val ruleRepository: RuleRepository,
-    private val ruleEngine: RuleEngine
+    private val smsTransactionProcessor: SmsTransactionProcessor
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
@@ -129,9 +119,8 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
      * same account simultaneously, they read the same "previous balance" value,
      * causing incorrect balance calculations.
      */
-    private fun calculateOptimalParallelism(totalMessages: Int, availableCores: Int): Int {
-        // Always use sequential processing to ensure correct balance calculations
-        return 1
+    private fun calculateParseParallelism(availableCores: Int): Int {
+        return maxOf(1, availableCores - 1)
     }
 
     data class ProcessingStats(
@@ -175,51 +164,79 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
 
             val stats = ProcessingStats()
 
-            // Read SMS messages (force resync ignores last scan timestamp)
-            val messages = readSmsMessages(forceResync)
-            stats.totalMessages = messages.size
-            Log.d(TAG, "Found ${messages.size} SMS messages to process")
+            // Calculate scan parameters
+            val lastScanTimestamp = userPreferencesRepository.getLastScanTimestamp().first() ?: 0L
+            val scanMonths = userPreferencesRepository.getSmsScanMonths()
+            val scanAllTime = userPreferencesRepository.getSmsScanAllTime()
+            val lastScanPeriod = userPreferencesRepository.getLastScanPeriod().first() ?: 0
+            val now = System.currentTimeMillis()
 
-            // Calculate optimal batch size and parallelism based on available cores and message count
+            val needsFullScan = forceResync || lastScanTimestamp == 0L || scanAllTime || scanMonths > lastScanPeriod
+
+            val scanStartTime = if (needsFullScan) {
+                val calendar = java.util.Calendar.getInstance().apply {
+                    if (scanAllTime) {
+                        add(java.util.Calendar.YEAR, -10)
+                    } else {
+                        add(java.util.Calendar.MONTH, -scanMonths)
+                    }
+                    set(java.util.Calendar.HOUR_OF_DAY, 0)
+                    set(java.util.Calendar.MINUTE, 0)
+                    set(java.util.Calendar.SECOND, 0)
+                    set(java.util.Calendar.MILLISECOND, 0)
+                }
+                calendar.timeInMillis
+            } else {
+                val threeDaysAgo = now - (3 * 24 * 60 * 60 * 1000L)
+                val periodLimit = java.util.Calendar.getInstance().apply {
+                    add(java.util.Calendar.MONTH, -scanMonths)
+                }.timeInMillis
+
+                maxOf(
+                    minOf(lastScanTimestamp, threeDaysAgo),
+                    periodLimit
+                )
+            }
+
+            // Get total count upfront for stats
+            val totalMsgCount = getSmsAndRcsCount(scanStartTime)
+            stats.totalMessages = totalMsgCount
+            Log.d(TAG, "Found $totalMsgCount SMS & RCS messages to process")
+
+            // Calculate optimal batch size and parse parallelism
             val availableCores = Runtime.getRuntime().availableProcessors()
-            val batchSize = calculateOptimalBatchSize(messages.size, availableCores)
-            val parallelism = calculateOptimalParallelism(messages.size, availableCores)
+            val batchSize = calculateOptimalBatchSize(totalMsgCount, availableCores)
+            val parseParallelism = calculateParseParallelism(availableCores)
 
             Log.d(TAG, "Auto-calculated optimization parameters:")
             Log.d(TAG, "- Available CPU cores: $availableCores")
             Log.d(TAG, "- Batch size: $batchSize")
-            Log.d(TAG, "- Parallelism: $parallelism")
-            Log.d(TAG, "- Total batches: ${(messages.size + batchSize - 1) / batchSize}")
+            Log.d(TAG, "- Parse parallelism: $parseParallelism")
+            Log.d(TAG, "- Total batches: ${(totalMsgCount + batchSize - 1) / batchSize}")
 
-            // Debug: Log first 20 unique senders to understand what we're working with
-            val uniqueSenders = messages.take(50).map { it.sender }.distinct()
-            Log.d(TAG, "First 20 unique senders: ${uniqueSenders.joinToString(", ")}")
-
-            // Debug: Check for any FAB-related senders
-            val fabSenders = messages.map { it.sender }.filter {
-                it.uppercase().contains("FAB") ||
-                        it.uppercase().contains("ABU DHABI") ||
-                        it.uppercase().contains("FIRST ABU DHABI")
-            }.distinct()
-            Log.d(TAG, "Found FAB-related senders: ${fabSenders.joinToString(", ")}")
+            // Update scan tracking immediately
+            userPreferencesRepository.setLastScanTimestamp(System.currentTimeMillis())
+            if (needsFullScan) {
+                userPreferencesRepository.setLastScanPeriod(scanMonths)
+            }
 
             // Report initial progress
             setProgress(
                 workDataOf(
-                    PROGRESS_TOTAL to messages.size,
+                    PROGRESS_TOTAL to totalMsgCount,
                     PROGRESS_PROCESSED to 0,
                     PROGRESS_PARSED to 0,
                     PROGRESS_SAVED to 0,
                     PROGRESS_TIME_ELAPSED to 0L,
                     PROGRESS_ESTIMATED_TIME_REMAINING to 0L,
                     PROGRESS_CURRENT_BATCH to 1,
-                    PROGRESS_TOTAL_BATCHES to (messages.size + batchSize - 1) / batchSize
+                    PROGRESS_TOTAL_BATCHES to (totalMsgCount + batchSize - 1) / batchSize
                 )
             )
 
-            // Process messages in parallel for maximum speed
+            // Process messages via 3-stage channel pipeline
             val processingTime = measureTimeMillis {
-                processMessagesInParallel(messages, stats, batchSize, parallelism)
+                processWithChannelPipeline(scanStartTime, stats, batchSize, parseParallelism)
             }
 
             stats.updateTimeElapsed()
@@ -258,14 +275,14 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
             // Report final progress
             setProgress(
                 workDataOf(
-                    PROGRESS_TOTAL to messages.size,
-                    PROGRESS_PROCESSED to messages.size,
+                    PROGRESS_TOTAL to totalMsgCount,
+                    PROGRESS_PROCESSED to totalMsgCount,
                     PROGRESS_PARSED to stats.parsedTransactions,
                     PROGRESS_SAVED to stats.savedTransactions,
                     PROGRESS_TIME_ELAPSED to stats.updateTimeElapsed(),
                     PROGRESS_ESTIMATED_TIME_REMAINING to 0L,
-                    PROGRESS_CURRENT_BATCH to (messages.size + batchSize - 1) / batchSize,
-                    PROGRESS_TOTAL_BATCHES to (messages.size + batchSize - 1) / batchSize
+                    PROGRESS_CURRENT_BATCH to (totalMsgCount + batchSize - 1) / batchSize,
+                    PROGRESS_TOTAL_BATCHES to (totalMsgCount + batchSize - 1) / batchSize
                 )
             )
 
@@ -276,455 +293,176 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
         }
     }
 
-    private suspend fun processMessagesSequentially(
-        messages: List<SmsMessage>,
+    private suspend fun processWithChannelPipeline(
+        scanStartTime: Long,
         stats: ProcessingStats,
-        batchSize: Int
-    ) {
-        val totalBatches = (messages.size + batchSize - 1) / batchSize
+        batchSize: Int,
+        parseParallelism: Int
+    ) = coroutineScope {
+        val totalBatches = (stats.totalMessages + batchSize - 1) / batchSize
 
-        messages.chunked(batchSize).forEachIndexed { batchIndex, batch ->
-            var parsedCount = 0
-            var savedCount = 0
-            var subscriptionCount = 0
+        val inputChannel = Channel<SmsMessage>(Channel.UNLIMITED)
+        val outputChannel = Channel<ParseResult>(Channel.UNLIMITED)
 
-            for (sms in batch) {
-                try {
-                    // Skip promotional (-P) and government (-G) messages
-                    // Exception: Allow known banks like DOP that use -G sender IDs
-                    val senderUpper = sms.sender.uppercase()
-                    val isKnownBank = BankParserFactory.isKnownBankSender(sms.sender)
-                    if ((senderUpper.endsWith("-P") || senderUpper.endsWith("-G")) && !isKnownBank) {
-                        Log.d(TAG, "Skipping promotional/government SMS from: ${sms.sender}")
-                        continue
-                    }
+        val atomicProcessed = java.util.concurrent.atomic.AtomicInteger(0)
 
-                    val parser = BankParserFactory.getParser(sms.sender)
-                    if (parser != null) {
-                        Log.d(
-                            TAG,
-                            "Found parser: ${parser.getBankName()} for sender: ${sms.sender}"
-                        )
-                        // Check if this is a subscription notification first
-                        val smsDateTime = java.time.LocalDateTime.ofInstant(
-                            java.time.Instant.ofEpochMilli(sms.timestamp),
-                            java.time.ZoneId.systemDefault()
-                        )
-                        val thirtyDaysAgo = java.time.LocalDateTime.now().minusDays(30)
-                        val isRecentMessage = smsDateTime.isAfter(thirtyDaysAgo)
-                        val subscriptionResult = processSubscriptionNotifications(
-                            parser,
-                            sms,
-                            smsDateTime,
-                            isRecentMessage
-                        )
-                        subscriptionCount += subscriptionResult.subscriptionCount
-
-                        if (subscriptionResult.shouldSkipTransaction) {
-                            // This was a subscription/balance update notification, skip transaction parsing
-                            continue
-                        }
-
-                        // Parse as regular transaction
-                        val parsedTransaction = parser.parse(sms.body, sms.sender, sms.timestamp)
-                        if (parsedTransaction != null) {
-                            parsedCount++
-                            Log.d(
-                                TAG, """
-                                Parsed Transaction:
-                                Bank: ${parsedTransaction.bankName}
-                                Amount: ${parsedTransaction.amount}
-                                Type: ${parsedTransaction.type}
-                                Merchant: ${parsedTransaction.merchant}
-                                Reference: ${PiiRedactor.redactSuffix(parsedTransaction.reference)}
-                                Account: ${PiiRedactor.redactSuffix(parsedTransaction.accountLast4)}
-                                Balance: ${parsedTransaction.balance}
-                                Credit Limit: ${parsedTransaction.creditLimit}
-                                ID: ${parsedTransaction.generateTransactionId()}
-                            """.trimIndent()
-                            )
-
-                            // Save transaction to database
-                            val success = saveParsedTransaction(parsedTransaction, sms)
-                            if (success) {
-                                savedCount++
-                                Log.d(TAG, "Saved transaction successfully")
-                            }
-                        } else {
-                            // Log some sample unparsed messages for debugging
-                            if (batch.indexOf(sms) < 3) { // Only log first 3 to avoid spam
-                                Log.d(
-                                    TAG,
-                                    "Failed to parse SMS from ${sms.sender}: ${sms.body.take(100)}..."
-                                )
-                            }
-                        }
-                    } else {
-                        // Check if it's from a potential financial provider (-T or -S suffix)
-                        val upperSender = sms.sender.uppercase()
-                        if (upperSender.endsWith("-T") || upperSender.endsWith("-S")) {
-                            processUnrecognizedSms(sms)
-                        } else {
-                            // Log ALL unrecognized senders for debugging (but limit first batch)
-                            if (batch.indexOf(sms) < 10) { // Log first 10 of each batch
-                                Log.d(TAG, "No parser found for sender: ${sms.sender}")
-                            }
-                        }
-                    }
-                }
-                    catch (e: Exception) {
-                        Log.e(TAG, "Error processing SMS from ${sms.sender}: ${e.message}")
-                    }
-
+        // Stage 1: Feed — stream messages into input channel
+        val feedJob = launch {
+            streamSmsToChannel(inputChannel, scanStartTime)
+            streamRcsToChannel(inputChannel, scanStartTime)
+            inputChannel.close()
         }
 
-        // Update stats
-        stats.processedMessages += batch.size
-        stats.parsedTransactions += parsedCount
-        stats.savedTransactions += savedCount
-        stats.subscriptionCount += subscriptionCount
+        // Stage 2: Parse — N coroutines pull from input, parse, emit results
+        val parseJobs = (0 until parseParallelism).map { _ ->
+            launch(Dispatchers.IO) {
+                for (msg in inputChannel) {
+                    val result = parseMessage(msg)
+                    outputChannel.send(result)
+                    atomicProcessed.incrementAndGet()
+                }
+            }
+        }
 
-        // Update progress
+        // Stage 3: Save — single coroutine, sequential DB writes
+        var parsedCount = 0
+        var savedCount = 0
+        val saveJob = launch {
+            for (result in outputChannel) {
+                when (result) {
+                    is ParseResult.Transaction -> {
+                        parsedCount++
+                        val success = smsTransactionProcessor.saveParsedTransaction(
+                            result.parsed,
+                            result.smsBody
+                        ).success
+                        if (success) savedCount++
+                    }
+                    is ParseResult.Subscription -> { /* counted during parse */ }
+                    is ParseResult.Unrecognized -> { /* already stored during parse */ }
+                    is ParseResult.Skipped -> { /* no-op */ }
+                }
+            }
+        }
+
+        // Progress monitoring
+        val progressJob = launch {
+            var lastReported = 0
+            while (atomicProcessed.get() < stats.totalMessages) {
+                val current = atomicProcessed.get()
+                if (current - lastReported >= PROGRESS_REPORT_INTERVAL || current >= stats.totalMessages) {
+                    stats.processedMessages = current
+                    stats.parsedTransactions = parsedCount
+                    stats.savedTransactions = savedCount
+                    stats.updateMessagesPerSecond()
+                    setProgress(
+                        workDataOf(
+                            PROGRESS_TOTAL to stats.totalMessages,
+                            PROGRESS_PROCESSED to current,
+                            PROGRESS_PARSED to parsedCount,
+                            PROGRESS_SAVED to savedCount,
+                            PROGRESS_TIME_ELAPSED to stats.updateTimeElapsed(),
+                            PROGRESS_ESTIMATED_TIME_REMAINING to stats.getEstimatedTimeRemaining(),
+                            PROGRESS_CURRENT_BATCH to (current + batchSize - 1) / batchSize,
+                            PROGRESS_TOTAL_BATCHES to totalBatches
+                        )
+                    )
+                    lastReported = current
+                }
+                delay(50)
+            }
+        }
+
+        feedJob.join()
+        parseJobs.forEach { it.join() }
+        outputChannel.close()
+        saveJob.join()
+        progressJob.cancel()
+
+        stats.processedMessages = stats.totalMessages
+        stats.parsedTransactions = parsedCount
+        stats.savedTransactions = savedCount
         stats.updateMessagesPerSecond()
-        if (stats.processedMessages % PROGRESS_REPORT_INTERVAL == 0 || stats.processedMessages == stats.totalMessages) {
-            try {
-                setProgress(
-                    workDataOf(
-                        PROGRESS_TOTAL to stats.totalMessages,
-                        PROGRESS_PROCESSED to stats.processedMessages,
-                        PROGRESS_PARSED to stats.parsedTransactions,
-                        PROGRESS_SAVED to stats.savedTransactions,
-                        PROGRESS_TIME_ELAPSED to stats.updateTimeElapsed(),
-                        PROGRESS_ESTIMATED_TIME_REMAINING to stats.getEstimatedTimeRemaining(),
-                        PROGRESS_CURRENT_BATCH to batchIndex + 1,
-                        PROGRESS_TOTAL_BATCHES to totalBatches
-                    )
-                )
-            } catch (e: Exception) {
-                Log.e(TAG, "Error setting progress: ${e.message}")
-            }
-        }
-    }
-}
 
-private suspend fun processMessagesInParallel(
-    messages: List<SmsMessage>,
-    stats: ProcessingStats,
-    batchSize: Int,
-    parallelism: Int
-) = coroutineScope {
-    val totalBatches = (messages.size + batchSize - 1) / batchSize
-
-    // Use atomic counters for real-time progress tracking
-    val atomicProcessed = java.util.concurrent.atomic.AtomicInteger(0)
-    val atomicParsed = java.util.concurrent.atomic.AtomicInteger(0)
-    val atomicSaved = java.util.concurrent.atomic.AtomicInteger(0)
-
-    // Create parallel processing coroutines that return results directly
-    val processingJobs = (1..parallelism).map { coroutineId ->
-        async(Dispatchers.IO) {
-            processBatchCoroutinesDirect(
-                messages,
-                coroutineId,
-                totalBatches,
-                stats,
-                atomicProcessed,
-                atomicParsed,
-                atomicSaved,
-                batchSize,
-                parallelism
+        setProgress(
+            workDataOf(
+                PROGRESS_TOTAL to stats.totalMessages,
+                PROGRESS_PROCESSED to stats.totalMessages,
+                PROGRESS_PARSED to parsedCount,
+                PROGRESS_SAVED to savedCount,
+                PROGRESS_TIME_ELAPSED to stats.updateTimeElapsed(),
+                PROGRESS_ESTIMATED_TIME_REMAINING to 0L,
+                PROGRESS_CURRENT_BATCH to totalBatches,
+                PROGRESS_TOTAL_BATCHES to totalBatches
             )
-        }
-    }
-
-    // Create progress monitoring coroutine that reads atomic counters
-    val progressJob = launch(Dispatchers.IO) {
-        var lastReportedProcessed = 0
-
-        while (atomicProcessed.get() < stats.totalMessages) {
-            val currentProcessed = atomicProcessed.get()
-            val currentParsed = atomicParsed.get()
-            val currentSaved = atomicSaved.get()
-
-            // Update stats and report progress every few messages or time interval
-            if (currentProcessed - lastReportedProcessed >= PROGRESS_REPORT_INTERVAL ||
-                currentProcessed >= stats.totalMessages
-            ) {
-
-                stats.processedMessages = currentProcessed
-                stats.parsedTransactions = currentParsed
-                stats.savedTransactions = currentSaved
-                stats.updateMessagesPerSecond()
-
-                setProgress(
-                    workDataOf(
-                        PROGRESS_TOTAL to stats.totalMessages,
-                        PROGRESS_PROCESSED to currentProcessed,
-                        PROGRESS_PARSED to currentParsed,
-                        PROGRESS_SAVED to currentSaved,
-                        PROGRESS_TIME_ELAPSED to stats.updateTimeElapsed(),
-                        PROGRESS_ESTIMATED_TIME_REMAINING to stats.getEstimatedTimeRemaining(),
-                        PROGRESS_CURRENT_BATCH to (currentProcessed + batchSize - 1) / batchSize,
-                        PROGRESS_TOTAL_BATCHES to totalBatches
-                    )
-                )
-
-                lastReportedProcessed = currentProcessed
-            }
-
-            delay(50) // Check every 50ms for smooth updates
-        }
-    }
-
-    // Wait for all jobs to complete
-    val results = processingJobs.awaitAll()
-    progressJob.cancel()
-
-    // Aggregate final results
-    results.forEach { result ->
-        stats.parsedTransactions += result.parsedCount
-        stats.savedTransactions += result.savedCount
-        stats.subscriptionCount += result.subscriptionCount
-    }
-
-    // Final progress update
-    stats.processedMessages = stats.totalMessages
-    stats.updateMessagesPerSecond()
-    setProgress(
-        workDataOf(
-            PROGRESS_TOTAL to stats.totalMessages,
-            PROGRESS_PROCESSED to stats.processedMessages,
-            PROGRESS_PARSED to stats.parsedTransactions,
-            PROGRESS_SAVED to stats.savedTransactions,
-            PROGRESS_TIME_ELAPSED to stats.updateTimeElapsed(),
-            PROGRESS_ESTIMATED_TIME_REMAINING to 0L,
-            PROGRESS_CURRENT_BATCH to totalBatches,
-            PROGRESS_TOTAL_BATCHES to totalBatches
         )
-    )
-}
-
-private suspend fun processBatchCoroutines(
-    messages: List<SmsMessage>,
-    coroutineId: Int,
-    totalBatches: Int,
-    stats: ProcessingStats,
-    resultsChannel: Channel<ProcessingResult>,
-    batchSize: Int,
-    parallelism: Int
-) {
-    val messageBatchSize = (messages.size + parallelism - 1) / parallelism
-    val startIndex = (coroutineId - 1) * messageBatchSize
-    val endIndex = minOf(startIndex + messageBatchSize, messages.size)
-
-    if (startIndex >= messages.size) return
-
-    val assignedMessages = messages.subList(startIndex, endIndex)
-
-    // Process assigned messages in smaller chunks
-    for (i in assignedMessages.indices step batchSize) {
-        val chunkEnd = minOf(i + batchSize, assignedMessages.size)
-        val chunk = assignedMessages.subList(i, chunkEnd)
-
-        val result = processMessageChunk(chunk, coroutineId, i / batchSize + 1)
-        resultsChannel.send(result)
     }
-}
 
-private suspend fun processMessageChunk(
-    messages: List<SmsMessage>,
-    coroutineId: Int,
-    batchNumber: Int
-): ProcessingResult {
-    var parsedCount = 0
-    var savedCount = 0
-    var subscriptionCount = 0
+private suspend fun parseMessage(sms: SmsMessage): ParseResult {
+    return try {
+        val senderUpper = sms.sender.uppercase()
+        val isKnownBank = BankParserFactory.isKnownBankSender(sms.sender)
+        if ((senderUpper.endsWith("-P") || senderUpper.endsWith("-G")) && !isKnownBank) {
+            return ParseResult.Skipped("Promotional/government message")
+        }
 
-    for (sms in messages) {
-        try {
-            // Skip promotional (-P) and government (-G) messages
-            // Exception: Allow known banks like DOP that use -G sender IDs
-            val senderUpper = sms.sender.uppercase()
-            val isKnownBank = BankParserFactory.isKnownBankSender(sms.sender)
-            if ((senderUpper.endsWith("-P") || senderUpper.endsWith("-G")) && !isKnownBank) {
-                continue
-            }
-
-            // Check if sender is from a known bank
-            val parser = BankParserFactory.getParser(sms.sender)
-            if (parser != null) {
-                Log.d(TAG, "Processing SMS from ${parser.getBankName()}")
-                // Calculate SMS age for subscription filtering
-                val smsDateTime = LocalDateTime.ofInstant(
-                    Instant.ofEpochMilli(sms.timestamp),
-                    ZoneId.systemDefault()
-                )
-                val thirtyDaysAgo = LocalDateTime.now().minusDays(30)
-                val isRecentMessage = smsDateTime.isAfter(thirtyDaysAgo)
-
-                // Process subscription notifications
-                val subscriptionResult =
-                    processSubscriptionNotifications(parser, sms, smsDateTime, isRecentMessage)
-                subscriptionCount += subscriptionResult.subscriptionCount
-                if (subscriptionResult.shouldSkipTransaction) {
-                    continue
-                }
-
-                // Parse the transaction
-                val parsedTransaction = parser.parse(sms.body, sms.sender, sms.timestamp)
-
-                if (parsedTransaction != null) {
-                    parsedCount++
-                    Log.d(
-                        TAG, """
-                            Parsed Transaction:
-                            Bank: ${parsedTransaction.bankName}
-                            Amount: ${parsedTransaction.amount}
-                            Type: ${parsedTransaction.type}
-                            Merchant: ${parsedTransaction.merchant}
-                            Reference: ${PiiRedactor.redactSuffix(parsedTransaction.reference)}
-                            Account: ${PiiRedactor.redactSuffix(parsedTransaction.accountLast4)}
-                            Balance: ${parsedTransaction.balance}
-                            Credit Limit: ${parsedTransaction.creditLimit}
-                            ID: ${parsedTransaction.generateTransactionId()}
-                        """.trimIndent()
-                    )
-
-                    val saveResult = saveParsedTransaction(parsedTransaction, sms)
-                    if (saveResult) savedCount++
-                } else {
-                    // Log some sample unparsed messages for debugging
-                    Log.d(TAG, "Failed to parse SMS from ${sms.sender}: ${sms.body.take(100)}...")
-                }
-            } else {
-                // Handle unrecognized SMS
+        val matchingParsers = BankParserFactory.getParsers(sms.sender)
+        if (matchingParsers.isEmpty()) {
+            val upperSender = sms.sender.uppercase()
+            if (upperSender.endsWith("-T") || upperSender.endsWith("-S")) {
                 processUnrecognizedSms(sms)
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error processing SMS from ${sms.sender}: ${e.message}")
+            return ParseResult.Skipped("No parser found")
         }
-    }
 
-    return ProcessingResult(
-        processedCount = messages.size,
-        parsedCount = parsedCount,
-        savedCount = savedCount,
-        subscriptionCount = subscriptionCount,
-        coroutineId = coroutineId,
-        batchNumber = batchNumber
-    )
+        val firstParser = matchingParsers.first()
+        val smsDateTime = LocalDateTime.ofInstant(
+            Instant.ofEpochMilli(sms.timestamp),
+            ZoneId.systemDefault()
+        )
+        val thirtyDaysAgo = LocalDateTime.now().minusDays(30)
+        val isRecentMessage = smsDateTime.isAfter(thirtyDaysAgo)
+
+        val subscriptionResult = processSubscriptionNotifications(
+            firstParser, sms, smsDateTime, isRecentMessage
+        )
+        if (subscriptionResult.shouldSkipTransaction) {
+            return ParseResult.Subscription(subscriptionResult.subscriptionCount)
+        }
+
+        val parsedTransaction = matchingParsers.firstNotNullOfOrNull { parser ->
+            parser.parse(sms.body, sms.sender, sms.timestamp)
+        }
+
+        if (parsedTransaction != null) {
+            Log.d(TAG, """
+                Parsed: ${parsedTransaction.bankName}
+                Amount: ${parsedTransaction.amount} Type: ${parsedTransaction.type}
+                Merchant: ${parsedTransaction.merchant}
+            """.trimIndent())
+            ParseResult.Transaction(parsedTransaction, sms.timestamp, sms.body)
+        } else {
+            if (isRecentMessage) {
+                Log.d(TAG, "Failed to parse from ${sms.sender}: ${sms.body.take(100)}...")
+            }
+            ParseResult.Skipped("Parsing returned null")
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Error parsing SMS from ${sms.sender}: ${e.message}")
+        ParseResult.Skipped("Error: ${e.message}")
+    }
 }
 
-private suspend fun processBatchCoroutinesDirect(
-    messages: List<SmsMessage>,
-    coroutineId: Int,
-    totalBatches: Int,
-    stats: ProcessingStats,
-    atomicProcessed: java.util.concurrent.atomic.AtomicInteger,
-    atomicParsed: java.util.concurrent.atomic.AtomicInteger,
-    atomicSaved: java.util.concurrent.atomic.AtomicInteger,
-    batchSize: Int,
-    parallelism: Int
-): ProcessingResult {
-    var parsedCount = 0
-    var savedCount = 0
-    var subscriptionCount = 0
+private sealed class ParseResult {
+    data class Transaction(
+        val parsed: ParsedTransaction,
+        val timestamp: Long,
+        val smsBody: String
+    ) : ParseResult()
 
-    // Calculate batch assignments for this coroutine
-    val batchesPerCoroutine = (totalBatches + parallelism - 1) / parallelism
-    val startBatch = (coroutineId - 1) * batchesPerCoroutine
-    val endBatch = minOf(startBatch + batchesPerCoroutine, totalBatches)
-
-    // Process assigned batches
-    for (batchIndex in startBatch until endBatch) {
-        val startIndex = batchIndex * batchSize
-        val endIndex = minOf(startIndex + batchSize, messages.size)
-        val batch = messages.subList(startIndex, endIndex)
-
-        for (sms in batch) {
-            try {
-                // Update processed count immediately for real-time progress
-                atomicProcessed.incrementAndGet()
-
-                // Skip promotional (-P) and government (-G) messages
-                // Exception: Allow known banks like DOP that use -G sender IDs
-                val senderUpper = sms.sender.uppercase()
-                val isKnownBank = BankParserFactory.isKnownBankSender(sms.sender)
-                if ((senderUpper.endsWith("-P") || senderUpper.endsWith("-G")) && !isKnownBank) {
-                    continue
-                }
-
-                val parser = BankParserFactory.getParser(sms.sender)
-                if (parser != null) {
-                    Log.d(TAG, "Processing SMS from ${parser.getBankName()}")
-                    // Check if this is a subscription notification first
-                    val smsDateTime = java.time.LocalDateTime.ofInstant(
-                        java.time.Instant.ofEpochMilli(sms.timestamp),
-                        java.time.ZoneId.systemDefault()
-                    )
-                    val thirtyDaysAgo = java.time.LocalDateTime.now().minusDays(30)
-                    val isRecentMessage = smsDateTime.isAfter(thirtyDaysAgo)
-                    val subscriptionResult =
-                        processSubscriptionNotifications(parser, sms, smsDateTime, isRecentMessage)
-                    subscriptionCount += subscriptionResult.subscriptionCount
-
-                    if (subscriptionResult.shouldSkipTransaction) {
-                        // This was a subscription/balance update notification, skip transaction parsing
-                        continue
-                    }
-
-                    // Parse as regular transaction
-                    val parsedTransaction = parser.parse(sms.body, sms.sender, sms.timestamp)
-                    if (parsedTransaction != null) {
-                        parsedCount++
-                        atomicParsed.incrementAndGet()
-
-                        Log.d(
-                            TAG, """
-                                Parsed Transaction:
-                                Bank: ${parsedTransaction.bankName}
-                                Amount: ${parsedTransaction.amount}
-                                Type: ${parsedTransaction.type}
-                                Merchant: ${parsedTransaction.merchant}
-                                Reference: ${PiiRedactor.redactSuffix(parsedTransaction.reference)}
-                                Account: ${PiiRedactor.redactSuffix(parsedTransaction.accountLast4)}
-                                Balance: ${parsedTransaction.balance}
-                                Credit Limit: ${parsedTransaction.creditLimit}
-                                ID: ${parsedTransaction.generateTransactionId()}
-                            """.trimIndent()
-                        )
-
-                        // Save transaction to database
-                        val success = saveParsedTransaction(parsedTransaction, sms)
-                        if (success) {
-                            savedCount++
-                            atomicSaved.incrementAndGet()
-                        }
-                    } else {
-                        // Log some sample unparsed messages for debugging
-                        Log.d(
-                            TAG,
-                            "Failed to parse SMS from ${sms.sender}: ${sms.body.take(100)}..."
-                        )
-                    }
-                } else {
-                    // Handle unrecognized SMS
-                    processUnrecognizedSms(sms)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error processing SMS from ${sms.sender}: ${e.message}")
-            }
-        }
-    }
-
-    return ProcessingResult(
-        processedCount = (endBatch - startBatch) * batchSize, // Approximate
-        parsedCount = parsedCount,
-        savedCount = savedCount,
-        subscriptionCount = subscriptionCount,
-        coroutineId = coroutineId,
-        batchNumber = startBatch
-    )
+    data class Subscription(val count: Int) : ParseResult()
+    data class Unrecognized(val sms: SmsMessage) : ParseResult()
+    data class Skipped(val reason: String) : ParseResult()
 }
 
 private data class SubscriptionResult(
@@ -1021,246 +759,6 @@ private suspend fun processSubscriptionNotifications(
     }
 }
 
-private suspend fun saveParsedTransaction(
-    parsedTransaction: ParsedTransaction,
-    sms: SmsMessage
-): Boolean {
-    return try {
-        // Convert to entity and save
-        val entity = parsedTransaction.toEntity()
-
-        // Check if this transaction was previously deleted by the user
-        val existingTransaction = transactionRepository.getTransactionByHash(entity.transactionHash)
-        if (existingTransaction != null) {
-            if (existingTransaction.isDeleted) {
-                Log.d(
-                    TAG,
-                    "Skipping previously deleted transaction with hash: ${entity.transactionHash}"
-                )
-                return false
-            }
-            // Transaction already exists and not deleted - normal deduplication
-            Log.d(TAG, "Transaction already exists: ${entity.transactionHash}")
-            return false
-        }
-
-        // Check for custom merchant mapping
-        val customCategory = merchantMappingRepository.getCategoryForMerchant(entity.merchantName)
-        val entityWithMapping = if (customCategory != null) {
-            Log.d(TAG, "Found custom category mapping: ${entity.merchantName} -> $customCategory")
-            entity.copy(category = customCategory)
-        } else {
-            entity
-        }
-
-        // Apply rule engine to the transaction
-        val activeRules = ruleRepository.getActiveRulesByType(entityWithMapping.transactionType)
-
-        // Check if this transaction should be blocked
-        val blockingRule = ruleEngine.shouldBlockTransaction(
-            entityWithMapping,
-            sms.body,
-            activeRules
-        )
-
-        if (blockingRule != null) {
-            Log.d(TAG, "Transaction blocked by rule: ${blockingRule.name}")
-            return false  // Don't save the transaction
-        }
-
-        val (entityWithRules, ruleApplications) = ruleEngine.evaluateRules(
-            entityWithMapping,
-            sms.body,
-            activeRules
-        )
-
-        if (ruleApplications.isNotEmpty()) {
-            Log.d(TAG, "Applied ${ruleApplications.size} rules to transaction")
-            ruleApplications.forEach { app ->
-                Log.d(TAG, "Applied rule: ${app.ruleName}")
-            }
-        }
-
-        // Check if this transaction matches an active subscription
-        val matchedSubscription = subscriptionRepository.matchTransactionToSubscription(
-            entityWithRules.merchantName,
-            entityWithRules.amount
-        )
-
-        val finalEntity = if (matchedSubscription != null) {
-            Log.d(
-                TAG,
-                "Transaction matched to active subscription: ${matchedSubscription.merchantName}"
-            )
-            subscriptionRepository.updateNextPaymentDateAfterCharge(
-                matchedSubscription.id,
-                entityWithRules.dateTime.toLocalDate()
-            )
-            entityWithRules.copy(isRecurring = true)
-        } else {
-            entityWithRules
-        }
-        val finalEntityForInsert = accountBalanceRepository.resolveEntityAccountNumber(finalEntity, parsedTransaction)
-
-        val rowId = transactionRepository.insertTransaction(finalEntityForInsert)
-        if (rowId != -1L) {
-            Log.d(
-                TAG,
-                "Saved new transaction with ID: $rowId${if (finalEntityForInsert.isRecurring) " (Recurring)" else ""}"
-            )
-
-            // Save rule applications if any rules were applied
-            if (ruleApplications.isNotEmpty()) {
-                val applicationsWithId = ruleApplications.map { 
-                    it.copy(transactionId = rowId.toString())
-                }
-                ruleRepository.saveRuleApplications(applicationsWithId)
-                Log.d(
-                    TAG,
-                    "Saved ${ruleApplications.size} rule applications for transaction: $rowId"
-                )
-            }
-
-            // Process balance updates
-            processBalanceUpdate(parsedTransaction, finalEntityForInsert, rowId)
-            return true
-        } else {
-            Log.d(
-                TAG,
-                "Transaction already exists (duplicate), skipping both transaction and balance update: ${entity.transactionHash}"
-            )
-        }
-        false
-    } catch (e: Exception) {
-        Log.e(TAG, "Error saving transaction: ${e.message}")
-        false
-    }
-}
-
-private suspend fun processBalanceUpdate(
-    parsedTransaction: ParsedTransaction,
-    entity: com.ritesh.cashiro.data.database.entity.TransactionEntity,
-    rowId: Long
-) {
-    val parsedAccountLast4Clean = parsedTransaction.accountLast4?.takeIf { it.isNotBlank() }
-    val fallbackAccount = parsedAccountLast4Clean ?: entity.accountNumber?.takeIf { it.isNotBlank() }
-    if (fallbackAccount != null) {
-        // Determine if this transaction is from a card based on the message pattern
-        val isFromCard = parsedTransaction.isFromCard
-        val sanitizedSmsSource = PiiRedactor.redact(parsedTransaction.smsBody).take(500)
-
-        if (BuildConfig.DEBUG) {
-            Log.d(
-                TAG, """
-                    Processing transaction:
-                    - Is From Card: $isFromCard
-                    - Transaction Type: ${parsedTransaction.type}
-                """.trimIndent()
-            )
-        }
-
-        val targetAccountLast4 = if (isFromCard) {
-            // This is a card transaction
-            Log.d(TAG, "Transaction identified as CARD transaction")
-
-            var card = cardRepository.getCard(parsedTransaction.bankName, fallbackAccount)
-
-            if (card == null) {
-                // First time seeing this card - create it
-                // Determine if it's a credit card based on transaction type
-                val isCredit = (parsedTransaction.type.toEntityType() == TransactionType.CREDIT)
-                Log.d(TAG, "Creating new card for ${parsedTransaction.bankName}")
-
-                cardRepository.findOrCreateCard(
-                    cardLast4 = fallbackAccount,
-                    bankName = parsedTransaction.bankName,
-                    isCredit = isCredit
-                )
-
-                // CRITICAL: Refetch the card to get the actual state (might have been created before)
-                card = cardRepository.getCard(parsedTransaction.bankName, fallbackAccount)!!
-                Log.d(TAG, "Card created/found successfully")
-            } else {
-                Log.d(TAG, "Found existing card")
-            }
-
-            // Always update card's balance and source (for debugging)
-            Log.d(TAG, "Updating card balance")
-            cardRepository.updateCardBalance(
-                cardId = card.id,
-                balance = parsedTransaction.balance,  // Can be null
-                source = sanitizedSmsSource.take(200),
-                date = LocalDateTime.ofInstant(
-                    Instant.ofEpochMilli(parsedTransaction.timestamp),
-                    ZoneId.systemDefault()
-                )
-            )
-
-            // For cards, check if we should create balance entry
-            val result = when {
-                card.cardType == com.ritesh.cashiro.data.database.entity.CardType.CREDIT -> {
-                    // Credit cards get balance entries
-                    Log.d(TAG, "CREDIT card - will create balance entry")
-                    fallbackAccount
-                }
-
-                card.cardType == com.ritesh.cashiro.data.database.entity.CardType.DEBIT && card.accountLast4 != null -> {
-                    // Linked debit card - use the linked account for balance
-                    Log.d(
-                        TAG,
-                        "DEBIT card linked to account **${PiiRedactor.redactSuffix(card.accountLast4)} - will update linked account balance"
-                    )
-                    card.accountLast4
-                }
-
-                else -> {
-                    // Unlinked debit card - no balance entry
-                    Log.d(TAG, "DEBIT card NOT linked - NO balance entry will be created")
-                    null
-                }
-            }
-            result
-        } else {
-            // This is a direct account transaction - always create balance entry
-            Log.d(TAG, "Transaction identified as ACCOUNT transaction - will create balance entry")
-            fallbackAccount
-        }
-
-        // Create balance entry if we have a target account
-        if (targetAccountLast4 != null) {
-            val isCreditCard = (parsedTransaction.type.toEntityType() == TransactionType.CREDIT) ||
-                    fallbackAccount.let {
-                        cardRepository.getCard(parsedTransaction.bankName, it)?.cardType
-                    } == com.ritesh.cashiro.data.database.entity.CardType.CREDIT
-
-            accountBalanceRepository.insertTransactionBalance(
-                bankName = parsedTransaction.bankName,
-                accountLast4 = targetAccountLast4,
-                amount = parsedTransaction.amount,
-                transactionType = parsedTransaction.type.toEntityType(),
-                explicitBalance = parsedTransaction.balance,
-                timestamp = entity.dateTime,
-                transactionId = if (rowId != -1L) rowId else null,
-                creditLimit = parsedTransaction.creditLimit,
-                isCreditCard = isCreditCard,
-                smsSource = sanitizedSmsSource,
-                currency = parsedTransaction.currency
-            )
-
-            if (BuildConfig.DEBUG) {
-                Log.d(TAG, "Saved balance update from SMS transaction")
-            }
-        } else {
-            if (BuildConfig.DEBUG) {
-                Log.d(
-                    TAG,
-                    "No balance entry created for unlinked debit card: ${parsedTransaction.bankName} **${PiiRedactor.redactSuffix(parsedTransaction.accountLast4)}"
-                )
-            }
-        }
-    }
-}
-
 private suspend fun processUnrecognizedSms(sms: SmsMessage) {
     val upperSender = sms.sender.uppercase()
     if (upperSender.endsWith("-T") || upperSender.endsWith("-S")) {
@@ -1288,59 +786,61 @@ private suspend fun processUnrecognizedSms(sms: SmsMessage) {
     }
 }
 
-private suspend fun readSmsMessages(forceResync: Boolean = false): List<SmsMessage> {
-    val messages = mutableListOf<SmsMessage>()
+private fun getSmsAndRcsCount(scanStartTime: Long): Int {
+    var total = 0
+    try {
+        val smsCursor = applicationContext.contentResolver.query(
+            Telephony.Sms.CONTENT_URI,
+            arrayOf(Telephony.Sms._ID),
+            "${Telephony.Sms.TYPE} = ? AND ${Telephony.Sms.DATE} >= ?",
+            arrayOf(Telephony.Sms.MESSAGE_TYPE_INBOX.toString(), scanStartTime.toString()),
+            null
+        )
+        smsCursor?.use {
+            total += it.count
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Error counting SMS: ${e.message}")
+    }
 
     try {
-        // Get scan parameters
-        val lastScanTimestamp = userPreferencesRepository.getLastScanTimestamp().first() ?: 0L
-        val scanMonths = userPreferencesRepository.getSmsScanMonths()
-        val scanAllTime = userPreferencesRepository.getSmsScanAllTime()
-        val lastScanPeriod = userPreferencesRepository.getLastScanPeriod().first() ?: 0
-        val now = System.currentTimeMillis()
-
-        // Determine if we need a full scan
-        // Force resync always triggers a full scan from scratch
-        val needsFullScan = forceResync || lastScanTimestamp == 0L || scanAllTime || scanMonths > lastScanPeriod
-
-        if (forceResync) {
-            Log.d(TAG, "Force resync requested - performing full scan and reprocessing all messages")
-        }
-
-        // Calculate scan start time
-        val scanStartTime = if (needsFullScan) {
-            val calendar = java.util.Calendar.getInstance().apply {
-                if (scanAllTime) {
-                    // Scan all time - go back 10 years (effectively all SMS)
-                    add(java.util.Calendar.YEAR, -10)
-                    Log.d(TAG, "Performing full SMS scan for all time")
-                } else {
-                    add(java.util.Calendar.MONTH, -scanMonths)
-                    Log.d(TAG, "Performing full SMS scan for last $scanMonths months")
+        val scanStartTimeSeconds = scanStartTime / 1000
+        val mmsCursor = applicationContext.contentResolver.query(
+            Uri.parse("content://mms"),
+            arrayOf("_id", "tr_id"),
+            "date >= ?",
+            arrayOf(scanStartTimeSeconds.toString()),
+            null
+        )
+        mmsCursor?.use { cursor ->
+            val trIdIndex = cursor.getColumnIndex("tr_id")
+            while (cursor.moveToNext()) {
+                val trId = if (trIdIndex >= 0) cursor.getString(trIdIndex) ?: "" else ""
+                if (trId.startsWith("proto:")) {
+                    // Extract sender from tr_id to verify if it's from recognized financial sender
+                    val sender = extractRcsSender(trId)
+                    if (sender != null) {
+                        val senderUpper = sender.uppercase()
+                        if (senderUpper.contains("PUNJAB NATIONAL BANK") ||
+                            senderUpper.contains("DEPARTMENT OF POST") ||
+                            senderUpper.contains("DOPBNK")) {
+                            total++
+                        }
+                    }
                 }
-                set(java.util.Calendar.HOUR_OF_DAY, 0)
-                set(java.util.Calendar.MINUTE, 0)
-                set(java.util.Calendar.SECOND, 0)
-                set(java.util.Calendar.MILLISECOND, 0)
             }
-            calendar.timeInMillis
-        } else {
-            val threeDaysAgo = now - (3 * 24 * 60 * 60 * 1000L)
-            val periodLimit = java.util.Calendar.getInstance().apply {
-                add(java.util.Calendar.MONTH, -scanMonths)
-            }.timeInMillis
-
-            val incrementalStart = maxOf(
-                minOf(lastScanTimestamp, threeDaysAgo),
-                periodLimit
-            )
-
-            val daysSinceLastScan = (now - lastScanTimestamp) / (24 * 60 * 60 * 1000L)
-            Log.d(TAG, "Performing incremental SMS scan (last scan: $daysSinceLastScan days ago)")
-            incrementalStart
         }
+    } catch (e: Exception) {
+        Log.e(TAG, "Error counting RCS: ${e.message}")
+    }
+    return total
+}
 
-        // Query SMS inbox
+private suspend fun streamSmsToChannel(
+    channel: Channel<SmsMessage>,
+    scanStartTime: Long
+) {
+    try {
         val cursor = applicationContext.contentResolver.query(
             Telephony.Sms.CONTENT_URI,
             SMS_PROJECTION,
@@ -1364,94 +864,75 @@ private suspend fun readSmsMessages(forceResync: Boolean = false): List<SmsMessa
                     body = it.getString(bodyIndex) ?: "",
                     type = it.getInt(typeIndex)
                 )
-                messages.add(message)
+                channel.send(message)
             }
         }
+    } catch (e: Exception) {
+        Log.e(TAG, "Error streaming SMS messages: ${e.message}", e)
+    }
+}
 
-        // Log SMS processing order for verification
-        if (messages.isNotEmpty()) {
-            val firstMsg = messages.first()
-            val lastMsg = messages.last()
-            Log.d(TAG, """
-                Loaded ${messages.size} SMS messages
-                - First (oldest): ${java.time.Instant.ofEpochMilli(firstMsg.timestamp)}
-                - Last (newest): ${java.time.Instant.ofEpochMilli(lastMsg.timestamp)}
-                - Processing order: Chronological (oldest → newest)
-            """.trimIndent())
-        }
+private suspend fun streamRcsToChannel(
+    channel: Channel<SmsMessage>,
+    scanStartTime: Long
+) {
+    try {
+        val scanStartTimeSeconds = scanStartTime / 1000
 
-        // Update scan tracking
-        userPreferencesRepository.setLastScanTimestamp(System.currentTimeMillis())
-        if (needsFullScan) {
-            userPreferencesRepository.setLastScanPeriod(scanMonths)
-        }
+        val mmsCursor = applicationContext.contentResolver.query(
+            Uri.parse("content://mms"),
+            arrayOf("_id", "thread_id", "date", "tr_id", "m_id"),
+            "date >= ?",
+            arrayOf(scanStartTimeSeconds.toString()),
+            "date ASC"  // Process oldest first (chronological order)
+        )
 
-        Log.d(TAG, "SMS scan completed. Found ${messages.size} messages")
+        mmsCursor?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val messageId = cursor.getLong(cursor.getColumnIndexOrThrow("_id"))
+                val date = cursor.getLong(cursor.getColumnIndexOrThrow("date"))
+                val trIdIndex = cursor.getColumnIndex("tr_id")
+                val trId = if (trIdIndex >= 0) cursor.getString(trIdIndex) ?: "" else ""
 
-        // Try to read RCS messages from MMS provider
-        try {
-            // MMS/RCS uses seconds since epoch, not milliseconds
-            val scanStartTimeSeconds = scanStartTime / 1000
+                // Check if this is an RCS message (has proto: in tr_id)
+                if (trId.startsWith("proto:")) {
+                    // Extract sender from tr_id (it's base64 encoded protobuf)
+                    val sender = extractRcsSender(trId)
 
-            val mmsCursor = applicationContext.contentResolver.query(
-                Uri.parse("content://mms"),
-                arrayOf("_id", "thread_id", "date", "tr_id", "m_id"),
-                "date >= ?",
-                arrayOf(scanStartTimeSeconds.toString()),
-                "date DESC"
-            )
+                    // Get message text from parts
+                    var messageText = getRcsMessageText(messageId)
 
-            mmsCursor?.use { cursor ->
-                while (cursor.moveToNext()) {
-                    val messageId = cursor.getLong(cursor.getColumnIndexOrThrow("_id"))
-                    val date = cursor.getLong(cursor.getColumnIndexOrThrow("date"))
-                    val trIdIndex = cursor.getColumnIndex("tr_id")
-                    val trId = if (trIdIndex >= 0) cursor.getString(trIdIndex) ?: "" else ""
+                    // If it's JSON (RCS Rich Card), extract the actual text
+                    if (messageText != null && messageText.trim().startsWith("{")) {
+                        messageText = extractTextFromRcsJson(messageText)
+                    }
 
-                    // Check if this is an RCS message (has proto: in tr_id)
-                    if (trId.startsWith("proto:")) {
-                        // Extract sender from tr_id (it's base64 encoded protobuf)
-                        val sender = extractRcsSender(trId)
-
-                        // Get message text from parts
-                        var messageText = getRcsMessageText(messageId)
-
-                        // If it's JSON (RCS Rich Card), extract the actual text
-                        if (messageText != null && messageText.trim().startsWith("{")) {
-                            messageText = extractTextFromRcsJson(messageText)
-                        }
-
-                        // Convert to SmsMessage format for processing
-                        if (messageText != null && sender != null) {
-                            val senderUpper = sender.uppercase()
-                            // Process RCS messages from known financial senders (PNB, Department of Post)
-                            if (senderUpper.contains("PUNJAB NATIONAL BANK") ||
-                                senderUpper.contains("DEPARTMENT OF POST") ||
-                                senderUpper.contains("DOPBNK")) {
-                                Log.d(TAG, "RCS message from recognized financial sender: $sender")
-                                val rcsMessage = SmsMessage(
-                                    id = messageId,
-                                    sender = sender,
-                                    timestamp = date * 1000, // MMS uses seconds, SMS uses milliseconds
-                                    body = messageText,
-                                    type = Telephony.Sms.MESSAGE_TYPE_INBOX
-                                )
-                                messages.add(rcsMessage)
-                            } else {
-                                Log.d(TAG, "Skipping RCS message from non-financial sender: $sender")
-                            }
+                    // Convert to SmsMessage format for processing
+                    if (messageText != null && sender != null) {
+                        val senderUpper = sender.uppercase()
+                        // Process RCS messages from known financial senders (PNB, Department of Post)
+                        if (senderUpper.contains("PUNJAB NATIONAL BANK") ||
+                            senderUpper.contains("DEPARTMENT OF POST") ||
+                            senderUpper.contains("DOPBNK")) {
+                            Log.d(TAG, "RCS message from recognized financial sender: $sender")
+                            val rcsMessage = SmsMessage(
+                                id = messageId,
+                                sender = sender,
+                                timestamp = date * 1000, // MMS uses seconds, SMS uses milliseconds
+                                body = messageText,
+                                type = Telephony.Sms.MESSAGE_TYPE_INBOX
+                            )
+                            channel.send(rcsMessage)
+                        } else {
+                            Log.d(TAG, "Skipping RCS message from non-financial sender: $sender")
                         }
                     }
                 }
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error reading RCS messages: ${e.message}")
         }
     } catch (e: Exception) {
-        Log.e(TAG, "Error querying SMS content provider", e)
+        Log.e(TAG, "Error streaming RCS messages: ${e.message}")
     }
-
-    return messages
 }
 
 /**
@@ -1637,15 +1118,6 @@ private fun extractTextFromRcsJson(json: String): String? {
         json
     }
 }
-
-data class ProcessingResult(
-    val processedCount: Int,
-    val parsedCount: Int,
-    val savedCount: Int,
-    val subscriptionCount: Int,
-    val coroutineId: Int,
-    val batchNumber: Int
-)
 
 private data class SmsMessage(
     val id: Long,

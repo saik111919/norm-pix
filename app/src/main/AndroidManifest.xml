@@ -134,6 +134,13 @@
                 android:resource="@xml/shortcuts" />
         </activity-alias>
         
+        <!-- Crash report screen – launched in a separate process so it survives main-process death -->
+        <activity
+            android:name=".presentation.ui.screens.crash.CrashActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CashiroCompose"
+            android:process=":crash" />
+
         <!-- Disable default WorkManager initialization -->
         <provider
             android:name="androidx.startup.InitializationProvider"
@@ -237,6 +244,17 @@
             <meta-data
                 android:name="autoStoreLocales"
                 android:value="true" />
+        </service>
+
+        <!-- Notification Listener Service for intercepting bank push notifications -->
+        <service
+            android:name=".receiver.BankNotificationListenerService"
+            android:exported="true"
+            android:label="Bank Notification Listener"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
         </service>
     </application>
 

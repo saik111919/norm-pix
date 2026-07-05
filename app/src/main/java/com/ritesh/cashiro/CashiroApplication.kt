@@ -28,11 +28,12 @@ class CashiroApplication : Application(), Configuration.Provider {
     @Inject
     lateinit var webhookSyncScheduler: WebhookSyncScheduler
 
-    // SupervisorJob alone swallows uncaught exceptions; without an explicit handler a DataStore
-    // read failure or a SecurityException from AlarmManager inside applyScheduling() would
-    // disappear silently and webhook scheduling would never set up.
+    // Route any unhandled coroutine exception to the CrashHandler so the crash screen
+    // appears even when the crash originates inside a coroutine (which normally bypasses
+    // Thread.UncaughtExceptionHandler).
     private val applicationExceptionHandler = CoroutineExceptionHandler { _, throwable ->
         Log.e("CashiroApplication", "Unhandled error in application scope", throwable)
+        com.ritesh.cashiro.utils.CrashHandler.triggerCrash(this, throwable)
     }
     private val applicationScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Main + applicationExceptionHandler
@@ -55,9 +56,25 @@ class CashiroApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        
+        // Check if we are running in the isolated :crash process.
+        // If so, we skip installing the crash handler (to avoid infinite loops)
+        // and skip all background/database initialization which could fail due to multi-process locks.
+        val processName = android.app.Application.getProcessName()
+        if (processName != null && processName.endsWith(":crash")) {
+            Log.d("CashiroApplication", "Started in :crash process. Skipping main initialization.")
+            return
+        }
+
+        // Install crash handler first — must be before any other initialization
+        com.ritesh.cashiro.utils.CrashHandler.install(this)
         registerActivityLifecycleCallbacks(AppLockLifecycleObserver())
         applicationScope.launch {
-            webhookSyncScheduler.applyScheduling()
+            try {
+                webhookSyncScheduler.applyScheduling()
+            } catch (e: Exception) {
+                Log.e("CashiroApplication", "Error scheduling webhooks", e)
+            }
         }
     }
 

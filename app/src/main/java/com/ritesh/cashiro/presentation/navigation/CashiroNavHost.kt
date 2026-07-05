@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,9 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Sync
@@ -31,9 +35,12 @@ import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,6 +60,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -96,6 +104,8 @@ import com.ritesh.cashiro.presentation.ui.features.transactions.TransactionDetai
 import com.ritesh.cashiro.presentation.ui.features.transactions.TransactionsScreen
 import com.ritesh.cashiro.presentation.ui.features.transactions.TransactionsViewModel
 import com.ritesh.cashiro.presentation.ui.icons.Iconax
+import com.ritesh.cashiro.presentation.ui.icons.AiCommentary
+import com.ritesh.cashiro.presentation.ui.icons.Search
 import com.ritesh.cashiro.presentation.ui.icons.ImportArrow01
 import com.ritesh.cashiro.presentation.ui.theme.Dimensions
 import com.ritesh.cashiro.presentation.ui.theme.Spacing
@@ -143,11 +153,15 @@ fun CashiroNavHost(
     var showExportDialog by remember { mutableStateOf(false) }
 
     val isHomeScreen = currentRoute?.contains(Home::class.qualifiedName ?: "") == true
+    val isAnalyticsScreen = currentRoute?.contains(Analytics::class.qualifiedName ?: "") == true
     val isTransactionsScreen = currentRoute?.contains(Transactions::class.qualifiedName ?: "") == true
     val isAddTransactionScreen = currentRoute?.contains(AddTransaction::class.qualifiedName ?: "") == true
     val isSubscriptionsScreen = currentRoute?.contains(Subscriptions::class.qualifiedName ?: "") == true
     val isBudgetDetailScreen = currentRoute?.contains(BudgetDetail::class.qualifiedName ?: "") == true
 
+    val isFloatingNav = themeUiState.navigationBarStyle == NavigationBarStyle.FLOATING
+    val hideFabsForFloatingNav = isFloatingNav && (isHomeScreen || isTransactionsScreen)
+    val showFloatingFab = isFloatingNav && (isHomeScreen || isTransactionsScreen || isAnalyticsScreen)
 
     val hazeState = remember { HazeState() }
 
@@ -580,10 +594,10 @@ fun CashiroNavHost(
                 }
 
                 composable<Transactions>(
-                    enterTransition = CashiroTransitions.noneEnter,
-                    exitTransition = CashiroTransitions.noneExit,
-                    popEnterTransition = CashiroTransitions.noneEnter,
-                    popExitTransition = CashiroTransitions.noneExit
+                    enterTransition = CashiroTransitions.verticalSlideEnter,
+                    exitTransition = CashiroTransitions.verticalSlideExit,
+                    popEnterTransition = CashiroTransitions.verticalSlidePopEnter,
+                    popExitTransition = CashiroTransitions.verticalSlidePopExit
                 ) { backStackEntry ->
                     val transactions = backStackEntry.toRoute<Transactions>()
                     TransactionsScreen(
@@ -699,7 +713,7 @@ fun CashiroNavHost(
                 modifier = Modifier.fillMaxSize()
             ) {
                 AnimatedVisibility(
-                    visible = isHomeScreen || isTransactionsScreen || isSubscriptionsScreen || isBudgetDetailScreen,
+                    visible = (isHomeScreen || isTransactionsScreen || isSubscriptionsScreen || isBudgetDetailScreen) && !hideFabsForFloatingNav,
                     enter = fadeIn() + scaleIn(),
                     exit = fadeOut() + scaleOut(),
                     modifier = Modifier
@@ -743,7 +757,10 @@ fun CashiroNavHost(
                                         } else {
                                             // Use default click handling for Transactions screen
                                             detectTapGestures(onTap = {
-                                                if (isTransactionsScreen) showExportDialog = true
+                                                if (isTransactionsScreen) {
+                                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                                    showExportDialog = true
+                                                }
                                             })
                                         }
                                     },
@@ -772,6 +789,7 @@ fun CashiroNavHost(
                         // Add FAB
                         FloatingActionButton(
                             onClick = { 
+                                view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                 val initialTab = if (isSubscriptionsScreen) 1 else 0
                                 navController.safeNavigate(AddTransaction(initialTab = initialTab)) 
                             },
@@ -945,6 +963,126 @@ fun CashiroNavHost(
             )
         }
 
+        val fabConfig = remember(showFloatingFab, isHomeScreen, isTransactionsScreen, isAnalyticsScreen) {
+            if (showFloatingFab) {
+                FabConfig(
+                    icon = Icons.Rounded.Add,
+                    contentDescription = "Options",
+                    dropdownContent = { dismiss ->
+                        if (isHomeScreen || isTransactionsScreen) {
+                            DropdownMenuItem(
+                                text = { Text(
+                                    text = "Add Transaction",
+                                ) },
+                                onClick = { 
+                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    dismiss()
+                                    navController.safeNavigate(AddTransaction(initialTab = 0))
+                                },
+                                leadingIcon = { Icon(Icons.Rounded.Add, contentDescription = null) }
+                            )
+                            HorizontalDivider(
+                                thickness = 1.5.dp,
+                                color = MaterialTheme.colorScheme.surface.copy(0.6f)
+                            )
+                        }
+
+                        
+                        if (isHomeScreen) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .combinedClickable(
+                                        onClick = {
+                                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                            dismiss()
+                                            homeViewModel.scanSmsMessages()
+                                        },
+                                        onLongClick = {
+                                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                            dismiss()
+                                            showFullResyncDialog = true
+                                        }
+                                    )
+                                    .padding(MenuDefaults.DropdownMenuItemContentPadding),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Sync,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "Sync SMS",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
+                            HorizontalDivider(
+                                thickness = 1.5.dp,
+                                color = MaterialTheme.colorScheme.surface.copy(0.6f)
+                            )
+
+                            DropdownMenuItem(
+                                text = { Text(
+                                    text = "Ask AI",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ) },
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    dismiss()
+                                    navController.safeNavigate(Chat)
+                                },
+                                leadingIcon = { Icon(Iconax.AiCommentary, contentDescription = null) }
+                            )
+                        } else if (isTransactionsScreen) {
+                            DropdownMenuItem(
+                                text = { Text("Export") },
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    dismiss()
+                                    showExportDialog = true
+                                },
+                                leadingIcon = { Icon(Iconax.ImportArrow01, contentDescription = null) }
+                            )
+                        } else if (isAnalyticsScreen) {
+                            DropdownMenuItem(
+                                text = { Text("Search") },
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    dismiss()
+                                    navController.safeNavigate(Transactions(focusSearch = true)) {
+                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = false
+                                    }
+                                },
+                                leadingIcon = { Icon(Iconax.Search, contentDescription = null) }
+                            )
+                            HorizontalDivider(
+                                thickness = 1.5.dp,
+                                color = MaterialTheme.colorScheme.surface.copy(0.6f)
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Ask AI") },
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    dismiss()
+                                    navController.safeNavigate(Chat)
+                                },
+                                leadingIcon = { Icon(Iconax.AiCommentary, contentDescription = null) }
+                            )
+                        }
+                    }
+                )
+            } else null
+        }
+
         // Bottom Navigation
         CashiroBottomNavigation(
             navController = navController,
@@ -955,7 +1093,8 @@ fun CashiroNavHost(
             blurEffects = themeUiState.blurEffects,
             visible = showBottomNav,
             modifier = Modifier.align(Alignment.BottomCenter),
-            hazeState = hazeState
+            hazeState = hazeState,
+            fabConfig = fabConfig
         )
     }
 }

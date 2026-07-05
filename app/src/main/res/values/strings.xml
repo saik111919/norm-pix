@@ -467,6 +467,9 @@
     <string name="transaction_details">Transaction Details</string>
     <string name="report_issue">Report Issue</string>
     <string name="delete_transaction">Delete Transaction</string>
+    <string name="duplicate_transaction">Duplicate Transaction</string>
+    <string name="transaction_duplicated">Transaction duplicated</string>
+    <string name="share_receipt">Share Receipt</string>
     <string name="transaction_updated_successfully">Transaction updated successfully</string>
     <string name="merchant_label">Merchant</string>
     <string name="description_optional_label">Description (Optional)</string>
@@ -554,6 +557,10 @@
     <string name="licenses">Licenses</string>
     <string name="licenses_desc">Open source libraries</string>
     <string name="developer_options">Developer Options</string>
+    <string name="webhook_mode">Webhooks</string>
+    <string name="webhook_mode_desc">Enable BYOAPI webhook sync</string>
+    <string name="token_info">Chat Token Info</string>
+    <string name="token_info_desc">Show technical information in chat</string>
     <string name="developer_options_desc">Tests and Experimental features</string>
     <string name="delete_all_data">Delete All Data</string>
     <string name="delete_all_data_desc">Permanently clear all records</string>
@@ -857,6 +864,7 @@
     <string name="type_investment">Investment</string>
     <string name="type_income">Income</string>
     <string name="type_expense">Expense</string>
+    <string name="type_balance_update">Balance Update</string>
 
     <!-- Estimated amounts -->
     <string name="estimated_amount_format">est. %1$s</string>
@@ -930,4 +938,6 @@
     <string name="exchange_rates_notice_title">Exchange Rates Notice</string>
     <string name="exchange_rates_notice_text">The exchange rates displayed within this app are for informational purposes only and should not be used for investment decisions. These rates are estimates and may not reflect actual rates. By using this app you acknowledge that you understand and accept these limitations.</string>
     <string name="custom_label">CUSTOM</string>
+    <string name="new_chat">New Chat</string>
+    <string name="chat_history">Chat History</string>
 </resources>

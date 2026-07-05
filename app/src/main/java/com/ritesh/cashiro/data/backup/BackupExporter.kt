@@ -230,6 +230,8 @@ class BackupExporter @Inject constructor(
                 ),
                 developer = DeveloperPreferences(
                     isDeveloperModeEnabled = prefs.isDeveloperModeEnabled,
+                    isWebhookModeEnabled = prefs.isWebhookModeEnabled,
+                    isTokenInfoEnabled = prefs.isTokenInfoEnabled,
                     systemPrompt = systemPrompt
                 ),
                 app = AppPreferences(

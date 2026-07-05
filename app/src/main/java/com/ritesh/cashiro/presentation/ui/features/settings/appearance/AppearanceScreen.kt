@@ -491,6 +491,20 @@ fun AppearanceScreen(
                     }
                     item {
                         AppLogoOption(
+                            name = "Comic",
+                            icon = AppIcon.COMIC,
+                            backgroundColor = Color.Transparent,
+                            drawableResId = R.drawable.cashiro_comic,
+                            backgroundDrawableResId = R.drawable.ic_logo_comic_bg,
+                            isSelected = themeUiState.currentAppIcon == AppIcon.COMIC,
+                            onClick = {
+                                IconSwitchingUtils.switchAppIcon(context, AppIcon.COMIC)
+                                themeViewModel.updateAppIcon(AppIcon.COMIC)
+                            }
+                        )
+                    }
+                    item {
+                        AppLogoOption(
                             name = "Zenith",
                             icon = AppIcon.ZENITH,
                             backgroundColor = Color(0xFFE6E6E6),
@@ -516,20 +530,7 @@ fun AppearanceScreen(
                             }
                         )
                     }
-                    item {
-                        AppLogoOption(
-                            name = "Comic",
-                            icon = AppIcon.COMIC,
-                            backgroundColor = Color.Transparent,
-                            drawableResId = R.drawable.cashiro_comic,
-                            backgroundDrawableResId = R.drawable.ic_logo_comic_bg,
-                            isSelected = themeUiState.currentAppIcon == AppIcon.COMIC,
-                            onClick = {
-                                IconSwitchingUtils.switchAppIcon(context, AppIcon.COMIC)
-                                themeViewModel.updateAppIcon(AppIcon.COMIC)
-                            }
-                        )
-                    }
+
                 }
 
                 // Navigation Style Section

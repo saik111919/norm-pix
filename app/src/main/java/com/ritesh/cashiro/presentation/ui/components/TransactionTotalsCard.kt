@@ -83,7 +83,6 @@ fun TransactionTotalsCard(
                     // Income Column
                     Box(
                         modifier = Modifier
-                            .fillMaxHeight()
                             .weight(1f)
                             .background(
                                 color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -130,7 +129,6 @@ fun TransactionTotalsCard(
                     // Expenses Column
                     Box(
                         modifier = Modifier
-                            .fillMaxHeight()
                             .weight(1f)
                             .background(
                                 color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -187,7 +185,6 @@ fun TransactionTotalsCard(
                     }
                     Box(
                         modifier = Modifier
-                            .fillMaxHeight()
                             .weight(1f)
                             .background(
                                 color = MaterialTheme.colorScheme.surfaceContainerLow,

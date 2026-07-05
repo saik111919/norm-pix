@@ -1,9 +1,11 @@
 package com.ritesh.cashiro.presentation.ui.features.chat
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
@@ -12,7 +14,10 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,14 +37,21 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -55,7 +67,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -63,6 +77,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -72,18 +87,27 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mikepenz.markdown.m3.Markdown
+import com.mikepenz.markdown.m3.markdownTypography
+import com.ritesh.cashiro.R
 import com.ritesh.cashiro.data.database.entity.ChatMessage
 import com.ritesh.cashiro.data.repository.ModelState
 import com.ritesh.cashiro.presentation.effects.overScrollVertical
@@ -91,19 +115,25 @@ import com.ritesh.cashiro.presentation.effects.rememberOverscrollFlingBehavior
 import com.ritesh.cashiro.presentation.ui.components.CustomTitleTopAppBar
 import com.ritesh.cashiro.presentation.ui.components.LoadingCircle
 import com.ritesh.cashiro.presentation.ui.components.LoadingLine
+import com.ritesh.cashiro.presentation.ui.components.SearchBarBox
 import com.ritesh.cashiro.presentation.ui.features.categories.NavigationContent
+import com.ritesh.cashiro.presentation.ui.icons.Bag
 import com.ritesh.cashiro.presentation.ui.icons.Iconax
 import com.ritesh.cashiro.presentation.ui.icons.Send
 import com.ritesh.cashiro.presentation.ui.theme.Dimensions
+import com.ritesh.cashiro.presentation.ui.theme.LocalBlurEffects
 import com.ritesh.cashiro.presentation.ui.theme.Spacing
 import com.ritesh.cashiro.utils.TokenUtils
+import dev.chrisbanes.haze.HazeDefaults
+import dev.chrisbanes.haze.HazeEffectScope
 import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import androidx.compose.ui.res.stringResource
-import com.ritesh.cashiro.R
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -117,17 +147,41 @@ fun ChatScreen(
     val modelState by chatViewModel.modelState.collectAsStateWithLifecycle()
     val uiState by chatViewModel.uiState.collectAsStateWithLifecycle()
     val currentResponse by chatViewModel.currentResponse.collectAsStateWithLifecycle()
-    val isDeveloperMode by chatViewModel.isDeveloperModeEnabled.collectAsStateWithLifecycle()
+    val isTokenInfoEnabled by chatViewModel.isTokenInfoEnabled.collectAsStateWithLifecycle()
     val chatStats by chatViewModel.chatStats.collectAsStateWithLifecycle()
+    val chatSessions by chatViewModel.chatSessions.collectAsStateWithLifecycle()
+    val currentSessionId by chatViewModel.currentSessionId.collectAsStateWithLifecycle()
     
-    var inputText by remember { mutableStateOf("") }
+    var inputText by remember { mutableStateOf(TextFieldValue("")) }
+    var editingMessageId by remember { mutableStateOf<String?>(null) }
+    var searchQuery by remember { mutableStateOf(TextFieldValue("")) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
     var showMenu by remember { mutableStateOf(false) }
     
+    var showHistorySheet by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+
+    val context = LocalContext.current
+    val blurEffects = LocalBlurEffects.current
+    
+    // Only auto-scroll on new messages, not on initial load
+    var isInitialLoad by remember { mutableStateOf(true) }
+    
+    // Collect toast events
+    LaunchedEffect(Unit) {
+        chatViewModel.toastEvent.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+    
     // Auto-scroll to bottom when new messages arrive
     LaunchedEffect(messages.size, currentResponse) {
+        if (isInitialLoad) {
+            isInitialLoad = false
+            return@LaunchedEffect
+        }
         if (messages.isNotEmpty() || currentResponse.isNotEmpty()) {
             scope.launch {
                 listState.animateScrollToItem(
@@ -140,8 +194,7 @@ fun ChatScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scrollBehaviorSmall = TopAppBarDefaults.pinnedScrollBehavior()
     val hazeState = remember { HazeState() }
-    val context = LocalContext.current
-
+    val dropContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
@@ -172,8 +225,55 @@ fun ChatScreen(
                         }
                         DropdownMenu(
                             expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
+                            onDismissRequest = { showMenu = false },modifier = Modifier
+                                .clip(RoundedCornerShape(24.dp))
+                                .then(
+                                    if (blurEffects) Modifier.hazeEffect(
+                                        state = hazeState,
+                                        block = fun HazeEffectScope.() {
+                                            style = HazeDefaults.style(
+                                                backgroundColor = Color.Transparent,
+                                                tint = HazeTint(dropContainerColor.copy(0.5f)),
+                                                blurRadius = 36.dp,
+                                                noiseFactor = -1f,
+                                            )
+                                            blurredEdgeTreatment = BlurredEdgeTreatment.Unbounded
+                                        }
+                                    ) else Modifier
+                                ),
+                            containerColor = dropContainerColor.copy(
+                                alpha = if (blurEffects) 0.7f else 1f
+                            ),
+                            shape = RoundedCornerShape(24.dp)
                         ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.new_chat)) },
+                                onClick = {
+                                    showMenu = false
+                                    chatViewModel.startNewChat()
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.Add, contentDescription = null)
+                                }
+                            )
+                            HorizontalDivider(
+                                thickness = 1.5.dp,
+                                color = MaterialTheme.colorScheme.surface.copy(0.6f)
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.chat_history)) },
+                                onClick = {
+                                    showMenu = false
+                                    showHistorySheet = true
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.History, contentDescription = null)
+                                }
+                            )
+                            HorizontalDivider(
+                                thickness = 1.5.dp,
+                                color = MaterialTheme.colorScheme.surface.copy(0.6f)
+                            )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.clear_chat)) },
                                 onClick = {
@@ -190,7 +290,7 @@ fun ChatScreen(
                 },
                 extraInfoCard = {
                     // Developer info card
-                    if(isDeveloperMode && messages.isNotEmpty()) {
+                    if(isTokenInfoEnabled && messages.isNotEmpty()) {
                         DeveloperInfoCard(
                             chatStats = chatStats,
                             modifier = Modifier.padding(end =Spacing.md)
@@ -251,6 +351,7 @@ fun ChatScreen(
                                 state = listState,
                                 modifier = Modifier
                                     .weight(1f)
+                                    .hazeSource(hazeState)
                                     .fillMaxWidth()
                                     .overScrollVertical(),
                                 flingBehavior = rememberOverscrollFlingBehavior { listState },
@@ -263,7 +364,23 @@ fun ChatScreen(
                                 verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                             ) {
                                 items(messages) { message ->
-                                    ChatMessageItem(message = message)
+                                    ChatMessageItem(
+                                        message = message,
+                                        onCopy = { 
+                                            val clipboardManager = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            clipboardManager.setPrimaryClip(ClipData.newPlainText("Copied Text", it.message))
+                                        },
+                                        onDelete = { chatViewModel.deleteMessage(it.id) },
+                                        onEdit = {
+                                            editingMessageId = it.id
+                                            inputText = TextFieldValue(
+                                                text = it.message,
+                                                selection = TextRange(it.message.length)
+                                            )
+                                            focusRequester.requestFocus()
+                                        },
+                                        onRegenerate = { chatViewModel.regenerateMessage(it.id) }
+                                    )
                                 }
                             }
                         }
@@ -373,6 +490,7 @@ fun ChatScreen(
                                     state = listState,
                                     modifier = Modifier
                                         .weight(1f)
+                                        .hazeSource(hazeState)
                                         .fillMaxWidth()
                                         .clip( CardDefaults.shape)
                                         .overScrollVertical(),
@@ -387,7 +505,23 @@ fun ChatScreen(
                                     reverseLayout = false
                                 ) {
                                     items(messages) { message ->
-                                        ChatMessageItem(message = message)
+                                        ChatMessageItem(
+                                            message = message,
+                                            onCopy = { 
+                                                val clipboardManager = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                                clipboardManager.setPrimaryClip(ClipData.newPlainText("Copied Text", it.message))
+                                            },
+                                            onDelete = { chatViewModel.deleteMessage(it.id) },
+                                            onEdit = {
+                                                editingMessageId = it.id
+                                                inputText = TextFieldValue(
+                                                    text = it.message,
+                                                    selection = TextRange(it.message.length)
+                                                )
+                                                focusRequester.requestFocus()
+                                            },
+                                            onRegenerate = { chatViewModel.regenerateMessage(it.id) }
+                                        )
                                     }
 
                                     // Show streaming response if available
@@ -512,18 +646,29 @@ fun ChatScreen(
                                             trailingIcon = {
                                                 FilledIconButton(
                                                     onClick = {
-                                                        chatViewModel.sendMessage(inputText)
-                                                        inputText = ""
-                                                        // Keep keyboard open by requesting focus
-                                                        focusRequester.requestFocus()
+                                                        if (uiState.isLoading) {
+                                                            chatViewModel.stopGeneration()
+                                                        } else {
+                                                            if (editingMessageId != null) {
+                                                                chatViewModel.editMessage(editingMessageId!!, inputText.text)
+                                                                editingMessageId = null
+                                                            } else {
+                                                                chatViewModel.sendMessage(inputText.text)
+                                                            }
+                                                            inputText = TextFieldValue("")
+                                                            // Keep keyboard open by requesting focus
+                                                            focusRequester.requestFocus()
+                                                        }
                                                     },
-                                                    enabled = inputText.isNotBlank() && !uiState.isLoading,
+                                                    enabled = uiState.isLoading || inputText.text.isNotBlank(),
                                                     modifier = Modifier
                                                         .size(48.dp)
                                                         .padding(Spacing.xs)
                                                 ) {
                                                     if (uiState.isLoading) {
-                                                        LoadingCircle(
+                                                        Icon(
+                                                            Icons.Rounded.Stop,
+                                                            contentDescription = "Stop",
                                                             modifier = Modifier.size(24.dp)
                                                         )
                                                     } else {
@@ -540,6 +685,56 @@ fun ChatScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Chat History Bottom Sheet
+    if (showHistorySheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showHistorySheet = false },
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Chat History",
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                )
+                SearchBarBox(
+                    searchQuery = searchQuery,
+                    onSearchQueryChange = { searchQuery = it },
+                    modifier = Modifier.padding(bottom = 16.dp),
+                    label = { Text("Search chats...") },
+                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) }
+                )
+                LazyColumn {
+                    val filteredSessions = chatSessions.filter { 
+                        it.title.contains(searchQuery.text, ignoreCase = true) 
+                    }
+                    items(filteredSessions) { session ->
+                        val isSelected = session.id == currentSessionId
+                        ListItem(
+                            modifier = Modifier.clickable {
+                                chatViewModel.loadSession(session.id)
+                                showHistorySheet = false
+                            },
+                            headlineContent = { Text(session.title, fontWeight = if (isSelected) FontWeight.Bold else null) },
+                            supportingContent = { Text(java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(Date(session.createdAt))) },
+                            trailingContent = {
+                                IconButton(onClick = { chatViewModel.deleteSession(session.id) }) {
+                                    Icon(
+                                        Iconax.Bag,
+                                        contentDescription = "Delete",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -760,111 +955,241 @@ fun DeveloperInfoCard(
 fun TypingIndicator(
     modifier: Modifier = Modifier
 ) {
+    val infiniteTransition = rememberInfiniteTransition(label = "typing")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(
+                durationMillis = 1200,
+                easing = androidx.compose.animation.core.FastOutSlowInEasing
+            ),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "logo_alpha"
+    )
+    
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Start
     ) {
-        Card(
-            modifier = Modifier.widthIn(max = 280.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer
-            )
+        Row(
+            modifier = Modifier.padding(
+                horizontal = Dimensions.Padding.content,
+                vertical = Spacing.md
+            ),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.padding(
-                    horizontal = Dimensions.Padding.content,
-                    vertical = Spacing.md
-                ),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Three animated dots
-                val infiniteTransition = rememberInfiniteTransition(label = "typing")
-                
-                for (i in 0..2) {
-                    val alpha by infiniteTransition.animateFloat(
-                        initialValue = 0.3f,
-                        targetValue = 1f,
-                        animationSpec = infiniteRepeatable(
-                            animation = keyframes {
-                                durationMillis = 1200
-                                0.3f at 0
-                                1f at 400
-                                0.3f at 800
-                            },
-                            repeatMode = RepeatMode.Restart,
-                            initialStartOffset = StartOffset(i * 200)
-                        ),
-                        label = "dot_alpha_$i"
-                    )
-                    
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .background(
-                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = alpha),
-                                shape = RoundedCornerShape(50)
-                            )
-                    )
-                }
-            }
+            Icon(
+                painter = painterResource(id = R.drawable.cashiro),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(24.dp)
+                    .graphicsLayer(alpha = alpha),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            
+            Text(
+                text = "Thinking about your request...",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.graphicsLayer(alpha = alpha)
+            )
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatMessageItem(
     message: ChatMessage,
-    isStreaming: Boolean = false
+    isStreaming: Boolean = false,
+    onEdit: (ChatMessage) -> Unit = {},
+    onDelete: (ChatMessage) -> Unit = {},
+    onCopy: (ChatMessage) -> Unit = {},
+    onRegenerate: (ChatMessage) -> Unit = {}
 ) {
-    val timeFormat = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
+    val timeFormat = remember { java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()) }
+    var showMenu by remember { mutableStateOf(false) }
+    var showTimestamp by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start
     ) {
-        Card(
-            modifier = Modifier
-                .widthIn(max = 280.dp)
-                .animateContentSize(),
-            colors = CardDefaults.cardColors(
-                containerColor = if (message.isUser)
-                    MaterialTheme.colorScheme.primaryContainer
-                else
-                    MaterialTheme.colorScheme.secondaryContainer
-            )
-        ) {
+        if (message.isUser) {
+            Box {
+                Card(
+                    modifier = Modifier
+                        .widthIn(max = 280.dp)
+                        .animateContentSize()
+                        .clip(
+                            RoundedCornerShape(
+                                topEnd = 24.dp,
+                                topStart = 24.dp,
+                                bottomStart = 24.dp,
+                                bottomEnd = 8.dp
+                            )
+                        )
+                        .combinedClickable(
+                            onClick = { showTimestamp = !showTimestamp },
+                            onLongClick = { showMenu = true }
+                        ),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    ),
+                    shape = RoundedCornerShape(
+                        topEnd = 24.dp,
+                        topStart = 24.dp,
+                        bottomStart = 24.dp,
+                        bottomEnd = 8.dp
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(Dimensions.Padding.content)
+                    ) {
+                        Text(
+                            text = message.message,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        AnimatedVisibility(visible = showTimestamp) {
+                            Column {
+                                Spacer(modifier = Modifier.height(Spacing.xs))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                                ) {
+                                    Text(
+                                        text = timeFormat.format(java.util.Date(message.timestamp)),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Copy") },
+                        onClick = {
+                            showMenu = false
+                            onCopy(message)
+                        },
+                        leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null) }
+                    )
+                    HorizontalDivider(
+                        thickness = 1.5.dp,
+                        color = MaterialTheme.colorScheme.surface.copy(0.6f)
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Edit") },
+                        onClick = {
+                            showMenu = false
+                            onEdit(message)
+                        },
+                        leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) }
+                    )
+                    HorizontalDivider(
+                        thickness = 1.5.dp,
+                        color = MaterialTheme.colorScheme.surface.copy(0.6f)
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete") },
+                        onClick = {
+                            showMenu = false
+                            onDelete(message)
+                        },
+                        leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) }
+                    )
+                }
+            }
+        } else {
+            // AI Message Layout
             Column(
-                modifier = Modifier.padding(Dimensions.Padding.content)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = Spacing.sm)
             ) {
-                Text(
-                    text = message.message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (message.isUser)
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    else
-                        MaterialTheme.colorScheme.onSecondaryContainer
+                // Markdown Content
+                Markdown(
+                    content = message.message,
+                    modifier = Modifier.fillMaxWidth(),
+                    typography = markdownTypography(
+                        h1 = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        h2 = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        h3 = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        h4 = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                        h5 = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        h6 = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                    )
                 )
-
+                
                 Spacer(modifier = Modifier.height(Spacing.xs))
-
+                
+                // Bottom row with streaming indicator, time and actions
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (isStreaming) {
-                        LoadingCircle(
-                            modifier = Modifier.size(12.dp)
-                        )
+                        LoadingCircle(modifier = Modifier.size(12.dp))
                     }
                     Text(
                         text = timeFormat.format(Date(message.timestamp)),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (message.isUser)
-                            MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                        else
-                            MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(0.6f)
                     )
+
+                    // Action Buttons (Only show when not streaming)
+                    if (!isStreaming) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                        ) {
+                            IconButton(
+                                onClick = { onCopy(message) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.ContentCopy,
+                                    contentDescription = "Copy",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(0.6f)
+                                )
+                            }
+                            IconButton(
+                                onClick = { onRegenerate(message) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Refresh,
+                                    contentDescription = "Regenerate",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(0.6f)
+                                )
+                            }
+                            IconButton(
+                                onClick = { onDelete(message) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Iconax.Bag,
+                                    contentDescription = "Delete",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.error.copy(0.6f)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

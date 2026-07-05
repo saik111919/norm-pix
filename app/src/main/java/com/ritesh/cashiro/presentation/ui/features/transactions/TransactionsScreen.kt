@@ -1,11 +1,19 @@
 package com.ritesh.cashiro.presentation.ui.features.transactions
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,6 +55,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -57,6 +66,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -111,7 +121,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class,
-    ExperimentalMaterial3ExpressiveApi::class
+    ExperimentalMaterial3ExpressiveApi::class, ExperimentalFoundationApi::class
 )
 @Composable
 fun SharedTransitionScope.TransactionsScreen(
@@ -196,6 +206,15 @@ fun SharedTransitionScope.TransactionsScreen(
     // Remember scroll position across navigation
     val listState = rememberSaveable(saver = LazyListState.Saver) {
         LazyListState()
+    }
+
+    val density = LocalDensity.current
+    val collapseThresholdPx = with(density) { 48.dp.roundToPx() }
+    val isCollapsed by remember(collapseThresholdPx) {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 0 ||
+                    listState.firstVisibleItemScrollOffset > collapseThresholdPx
+        }
     }
 
     // Cache expensive operations
@@ -295,15 +314,13 @@ fun SharedTransitionScope.TransactionsScreen(
             .fillMaxSize()
             .nestedScroll(scrollBehaviorLarge.nestedScrollConnection)
             .then(
-                if (animatedContentScope != null) {
+                if (animatedContentScope != null && (initialCategory != null || initialMerchant != null)) {
                     Modifier.sharedBounds(
                         rememberSharedContentState(
                             key = if (initialCategory != null) {
                                 "category_$initialCategory"
-                            } else if (initialMerchant != null) {
-                                "merchant_$initialMerchant"
                             } else {
-                                "transactions_screen"
+                                "merchant_$initialMerchant"
                             }
                         ),
                         animatedVisibilityScope = animatedContentScope,
@@ -323,15 +340,14 @@ fun SharedTransitionScope.TransactionsScreen(
                 scrollBehaviorSmall = scrollBehaviorSmall,
                 scrollBehaviorLarge = scrollBehaviorLarge,
                 hazeState = hazeState,
-                hasBackButton = true,
+                hasBackButton = selectionMode,
                 navigationContent = {
-                    NavigationContent {
-                        if (selectionMode) {
+                    if (selectionMode) {
+                        NavigationContent {
                             transactionsViewModel.toggleSelectionMode()
-                        } else {
-                            onNavigateBack()
                         }
-                    } },
+                    }
+                },
                 actionContent = {
                     BlurredAnimatedVisibility(selectionMode) {
                         Row(
@@ -550,60 +566,68 @@ fun SharedTransitionScope.TransactionsScreen(
                 )
             }
 
-            // Period Filter Chips - Always visible
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = Spacing.sm),
-                contentPadding = PaddingValues(horizontal = Dimensions.Padding.content),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            // Period Filter Chips - hide on scroll down
+            AnimatedVisibility(
+                visible = !isCollapsed,
+                enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
+                exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top)
             ) {
-                // Period filter chips
-                items(timePeriods) { period ->
-                    FilterChip(
-                        // Only show CUSTOM as selected if both period is CUSTOM AND dates are set
-                        selected = if (period == TimePeriod.CUSTOM) {
-                            selectedPeriod == period && customDateRange != null
-                        } else {
-                            selectedPeriod == period
-                        },
-                        onClick = {
-                            if (period == TimePeriod.CUSTOM) {
-                                showDateRangePicker = true
-                                // Don't change selectedPeriod until user confirms dates
-                            } else {
-                                transactionsViewModel.selectPeriod(period)
-                            }
-                        },
-                        label = {
-                            Text(
-                                if (period == TimePeriod.CUSTOM && customRangeLabel != null) {
-                                    customRangeLabel
+                Column {
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = Spacing.sm),
+                        contentPadding = PaddingValues(horizontal = Dimensions.Padding.content),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    ) {
+                        // Period filter chips
+                        items(timePeriods) { period ->
+                            FilterChip(
+                                // Only show CUSTOM as selected if both period is CUSTOM AND dates are set
+                                selected = if (period == TimePeriod.CUSTOM) {
+                                    selectedPeriod == period && customDateRange != null
                                 } else {
-                                    period.label
-                                }
+                                    selectedPeriod == period
+                                },
+                                onClick = {
+                                    if (period == TimePeriod.CUSTOM) {
+                                        showDateRangePicker = true
+                                        // Don't change selectedPeriod until user confirms dates
+                                    } else {
+                                        transactionsViewModel.selectPeriod(period)
+                                    }
+                                },
+                                label = {
+                                    Text(
+                                        if (period == TimePeriod.CUSTOM && customRangeLabel != null) {
+                                            customRangeLabel
+                                        } else {
+                                            period.label
+                                        }
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(0.7f),
+                                    labelColor = MaterialTheme.colorScheme.onSurface
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    borderWidth = 0.dp,
+                                    selected = if (period == TimePeriod.CUSTOM) {
+                                        selectedPeriod == period && customDateRange != null
+                                    } else {
+                                        selectedPeriod == period
+                                    },
+                                    enabled = true
+                                ),
                             )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(0.7f),
-                            labelColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            borderWidth = 0.dp,
-                            selected = if (period == TimePeriod.CUSTOM) {
-                                selectedPeriod == period && customDateRange != null
-                            } else {
-                                selectedPeriod == period
-                            },
-                            enabled = true
-                        ),
-                    )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(Spacing.sm))
                 }
             }
-
-            Spacer(modifier = Modifier.height(Spacing.sm))
 
             // Transaction List
             when {
@@ -624,31 +648,38 @@ fun SharedTransitionScope.TransactionsScreen(
                     )
                 }
                 else -> {
-
-
                     LazyColumn(
                         state = listState,
                         modifier = Modifier
-                            .fillMaxSize()
+                            .weight(1f)
                             .padding(horizontal = Dimensions.Padding.content)
                             .padding(top = Spacing.sm)
                             .clip(RoundedCornerShape(20.dp))
                             .overScrollVertical(),
                         flingBehavior = rememberOverscrollFlingBehavior { listState },
+                        contentPadding = PaddingValues(
+                            bottom = 150.dp
+                        )
 
                     ) {
                         stickyHeader {
-                            // Totals Card
-                            TransactionTotalsCard(
-                                income = filteredTotals.income,
-                                expenses = filteredTotals.expenses,
-                                netBalance = filteredTotals.netBalance,
-                                currency = baseCurrency,
-                                isLoading = uiState.isLoading,
-                            )
-
-
+                            Surface(
+                                color = MaterialTheme.colorScheme.surface,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                TransactionTotalsCard(
+                                    income = filteredTotals.income,
+                                    expenses = filteredTotals.expenses,
+                                    netBalance = filteredTotals.netBalance,
+                                    currency = baseCurrency,
+                                    isLoading = uiState.isLoading,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = Spacing.sm)
+                                )
+                            }
                         }
+
                         // Iterate through date groups in order
                         listOf(
                             DateGroup.TODAY,

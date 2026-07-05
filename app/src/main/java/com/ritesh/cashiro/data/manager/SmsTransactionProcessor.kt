@@ -1,26 +1,18 @@
 package com.ritesh.cashiro.data.manager
 
 import android.util.Log
-import com.ritesh.cashiro.BuildConfig
 import com.ritesh.parser.core.ParsedTransaction
 import com.ritesh.parser.core.bank.BankParserFactory
-import com.ritesh.cashiro.data.database.entity.CardType
 import com.ritesh.cashiro.data.database.entity.TransactionEntity
-import com.ritesh.cashiro.data.database.entity.TransactionType
 import com.ritesh.cashiro.data.mapper.toEntity
-import com.ritesh.cashiro.data.mapper.toEntityType
 import com.ritesh.cashiro.data.repository.AccountBalanceRepository
-import com.ritesh.cashiro.data.repository.CardRepository
 import com.ritesh.cashiro.data.repository.MerchantMappingRepository
 import com.ritesh.cashiro.data.repository.SubscriptionRepository
 import com.ritesh.cashiro.data.repository.TransactionRepository
 import com.ritesh.cashiro.domain.repository.RuleRepository
 import com.ritesh.cashiro.domain.service.RuleEngine
-import java.math.BigDecimal
-import java.time.Instant
-import java.time.LocalDateTime
-import java.time.ZoneId
-import com.ritesh.cashiro.utils.PiiRedactor
+import com.ritesh.cashiro.data.manager.TransactionDeduplication
+import com.ritesh.cashiro.data.manager.DedupResult
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,11 +24,11 @@ import javax.inject.Singleton
 class SmsTransactionProcessor @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val accountBalanceRepository: AccountBalanceRepository,
-    private val cardRepository: CardRepository,
     private val merchantMappingRepository: MerchantMappingRepository,
     private val subscriptionRepository: SubscriptionRepository,
     private val ruleRepository: RuleRepository,
-    private val ruleEngine: RuleEngine
+    private val ruleEngine: RuleEngine,
+    private val balanceUpdateProcessor: BalanceUpdateProcessor
 ) {
     companion object {
         private const val TAG = "SmsTransactionProcessor"
@@ -65,18 +57,20 @@ class SmsTransactionProcessor @Inject constructor(
         timestamp: Long
     ): ProcessingResult {
         try {
-            // Get the appropriate parser for this sender
-            val parser = BankParserFactory.getParser(sender) ?: return ProcessingResult(
+            // Get all parsers that can handle this sender and let content decide
+            val parsers = BankParserFactory.getParsers(sender)
+            if (parsers.isEmpty()) return ProcessingResult(
                 false,
                 reason = "No parser found for sender: $sender"
             )
 
-            // Parse the SMS
-            val parsedTransaction =
-                parser.parse(body, sender, timestamp) ?: return ProcessingResult(
-                    false,
-                    reason = "Could not parse transaction from SMS"
-                )
+            // Parse the SMS — try each matching parser in order, return first result
+            val parsedTransaction = parsers.firstNotNullOfOrNull { parser ->
+                parser.parse(body, sender, timestamp)
+            } ?: return ProcessingResult(
+                false,
+                reason = "Could not parse transaction from SMS"
+            )
 
             Log.d(TAG, "Parsed transaction: ${parsedTransaction.amount} from ${parsedTransaction.bankName}")
 
@@ -104,16 +98,48 @@ class SmsTransactionProcessor @Inject constructor(
             // Convert to entity
             val entity = parsedTransaction.toEntity()
 
-            // Check if this transaction was previously deleted by the user
+            // Check if this transaction was previously deleted or is a duplicate
             val existingTransaction = transactionRepository.getTransactionByHash(entity.transactionHash)
             if (existingTransaction != null) {
-                if (existingTransaction.isDeleted) {
-                    Log.d(TAG, "Skipping previously deleted transaction with hash: ${entity.transactionHash}")
-                    return ProcessingResult(false, reason = "Transaction was previously deleted")
+                when (TransactionDeduplication.checkHash(existingTransaction)) {
+                    DedupResult.PreviouslyDeleted -> {
+                        Log.d(TAG, "Skipping previously deleted transaction with hash: ${entity.transactionHash}")
+                        return ProcessingResult(false, reason = "Transaction was previously deleted")
+                    }
+                    DedupResult.HashDuplicate -> {
+                        Log.d(TAG, "Transaction already exists: ${entity.transactionHash}")
+                        return ProcessingResult(false, reason = "Duplicate transaction")
+                    }
+                    else -> {} // Not reached
                 }
-                // Transaction already exists and not deleted - normal deduplication
-                Log.d(TAG, "Transaction already exists: ${entity.transactionHash}")
-                return ProcessingResult(false, reason = "Duplicate transaction")
+            }
+
+            // Check for UPI duplicate within the time window
+            if (TransactionDeduplication.hasUpiReference(entity)) {
+                val windowEnd = entity.dateTime
+                val windowStart = windowEnd.minus(TransactionDeduplication.UPI_DUPLICATE_WINDOW)
+                val upiCandidates = transactionRepository.getTransactionsByReferenceAndAmount(
+                    reference = entity.reference!!,
+                    amount = entity.amount,
+                    accountLast4 = entity.accountNumber,
+                    startDate = windowStart,
+                    endDate = windowEnd
+                )
+                val candidateForReplacement = upiCandidates.firstOrNull { existing ->
+                    TransactionDeduplication.shouldReplaceWithIncoming(existing, entity)
+                }
+                if (candidateForReplacement != null) {
+                    Log.d(TAG, "Replacing UPI transaction ${candidateForReplacement.id} with incoming from ${entity.bankName}")
+                    transactionRepository.deleteTransaction(candidateForReplacement, hardDelete = false)
+                } else {
+                    val upiDuplicate = upiCandidates.any { existing ->
+                        TransactionDeduplication.isSameUpiTransaction(existing, entity)
+                    }
+                    if (upiDuplicate) {
+                        Log.d(TAG, "UPI duplicate transaction detected for reference: ${entity.reference}")
+                        return ProcessingResult(false, reason = "UPI duplicate transaction")
+                    }
+                }
             }
 
             // Check for custom merchant mapping
@@ -181,7 +207,7 @@ class SmsTransactionProcessor @Inject constructor(
                 }
 
                 // Process balance updates
-                processBalanceUpdate(parsedTransaction, finalEntityForInsert, rowId)
+                balanceUpdateProcessor.process(parsedTransaction, finalEntityForInsert, rowId)
 
                 return ProcessingResult(true, transactionId = rowId)
             } else {
@@ -194,83 +220,4 @@ class SmsTransactionProcessor @Inject constructor(
         }
     }
 
-    private suspend fun processBalanceUpdate(
-        parsedTransaction: ParsedTransaction,
-        entity: TransactionEntity,
-        rowId: Long
-    ) {
-        val parsedAccountLast4 = parsedTransaction.accountLast4?.takeIf { it.isNotBlank() }
-        val resolvedAccountLast4 = entity.accountNumber?.takeIf { it.isNotBlank() }
-        val fallbackAccountLast4 = parsedAccountLast4 ?: resolvedAccountLast4
-        if (fallbackAccountLast4 == null) return
-
-        val isFromCard = parsedTransaction.isFromCard
-
-        val targetAccountLast4: String? = if (isFromCard) {
-            var card = cardRepository.getCard(parsedTransaction.bankName, fallbackAccountLast4)
-
-            if (card == null) {
-                val isCredit = (parsedTransaction.type.toEntityType() == TransactionType.CREDIT)
-                cardRepository.findOrCreateCard(
-                    cardLast4 = fallbackAccountLast4,
-                    bankName = parsedTransaction.bankName,
-                    isCredit = isCredit
-                )
-                card = cardRepository.getCard(parsedTransaction.bankName, fallbackAccountLast4)
-            }
-
-            if (card == null) {
-                Log.w(TAG, "Could not create/find card for ${parsedTransaction.bankName}")
-                null
-            } else {
-                // Update card's balance
-                cardRepository.updateCardBalance(
-                    cardId = card.id,
-                    balance = parsedTransaction.balance,
-                    source = sanitizeSmsSource(parsedTransaction).take(200),
-                    date = LocalDateTime.ofInstant(
-                        Instant.ofEpochMilli(parsedTransaction.timestamp),
-                        ZoneId.systemDefault()
-                    )
-                )
-
-                when {
-                    card.cardType == CardType.CREDIT -> fallbackAccountLast4
-                    card.cardType == CardType.DEBIT && card.accountLast4 != null -> card.accountLast4
-                    else -> null
-                }
-            }
-        } else {
-            fallbackAccountLast4
-        }
-
-        if (targetAccountLast4 != null) {
-            val isCreditCard = (parsedTransaction.type.toEntityType() == TransactionType.CREDIT) ||
-                    fallbackAccountLast4.let {
-                        cardRepository.getCard(parsedTransaction.bankName, it)?.cardType
-                    } == CardType.CREDIT
-
-            accountBalanceRepository.insertTransactionBalance(
-                bankName = parsedTransaction.bankName,
-                accountLast4 = targetAccountLast4,
-                amount = parsedTransaction.amount,
-                transactionType = parsedTransaction.type.toEntityType(),
-                explicitBalance = parsedTransaction.balance,
-                timestamp = entity.dateTime,
-                transactionId = if (rowId != -1L) rowId else null,
-                creditLimit = parsedTransaction.creditLimit,
-                isCreditCard = isCreditCard,
-                smsSource = sanitizeSmsSource(parsedTransaction),
-                currency = parsedTransaction.currency
-            )
-
-            if (BuildConfig.DEBUG) {
-                Log.d(TAG, "Saved balance update from SMS transaction")
-            }
-        }
-    }
-
-    private fun sanitizeSmsSource(parsedTransaction: ParsedTransaction): String {
-        return PiiRedactor.redact(parsedTransaction.smsBody).take(500)
-    }
 }

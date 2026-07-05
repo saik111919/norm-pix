@@ -7,5 +7,7 @@ interface LlmService {
     suspend fun generateResponse(prompt: String): Result<String>
     fun generateResponseStream(prompt: String): Flow<String>
     suspend fun reset()
+    /** Resets the conversation history without unloading the model engine. */
+    suspend fun resetConversation()
     fun isInitialized(): Boolean
 }

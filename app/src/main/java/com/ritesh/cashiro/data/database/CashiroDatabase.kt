@@ -11,9 +11,11 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.ritesh.cashiro.data.database.converter.Converters
 import com.ritesh.cashiro.data.database.dao.AccountBalanceDao
+import com.ritesh.cashiro.data.database.dao.BankNotificationDao
 import com.ritesh.cashiro.data.database.dao.CardDao
 import com.ritesh.cashiro.data.database.dao.CategoryDao
 import com.ritesh.cashiro.data.database.dao.ChatDao
+import com.ritesh.cashiro.data.database.dao.ChatSessionDao
 
 import com.ritesh.cashiro.data.database.dao.ExchangeRateDao
 import com.ritesh.cashiro.data.database.dao.MerchantMappingDao
@@ -28,11 +30,13 @@ import com.ritesh.cashiro.data.database.dao.WebhookCursorDao
 import com.ritesh.cashiro.data.database.dao.WebhookLogDao
 import com.ritesh.cashiro.data.database.dao.WebhookProfileDao
 import com.ritesh.cashiro.data.database.entity.AccountBalanceEntity
+import com.ritesh.cashiro.data.database.entity.BankNotificationEntity
 import com.ritesh.cashiro.data.database.entity.BudgetCategoryLimitEntity
 import com.ritesh.cashiro.data.database.entity.BudgetEntity
 import com.ritesh.cashiro.data.database.entity.CardEntity
 import com.ritesh.cashiro.data.database.entity.CategoryEntity
 import com.ritesh.cashiro.data.database.entity.ChatMessage
+import com.ritesh.cashiro.data.database.entity.ChatSession
 
 import com.ritesh.cashiro.data.database.entity.ExchangeRateEntity
 import com.ritesh.cashiro.data.database.entity.MerchantMappingEntity
@@ -62,6 +66,7 @@ import com.ritesh.cashiro.data.database.entity.WebhookProfileEntity
             TransactionEntity::class,
             SubscriptionEntity::class,
             ChatMessage::class,
+            ChatSession::class,
             MerchantMappingEntity::class,
             CategoryEntity::class,
             AccountBalanceEntity::class,
@@ -75,9 +80,10 @@ import com.ritesh.cashiro.data.database.entity.WebhookProfileEntity
             BudgetCategoryLimitEntity::class,
             WebhookProfileEntity::class,
             WebhookLogEntity::class,
-            WebhookCursorEntity::class
+            WebhookCursorEntity::class,
+            BankNotificationEntity::class
         ],
-    version = 52,
+    version = 56,
     exportSchema = true,
     autoMigrations =
         [
@@ -109,6 +115,7 @@ abstract class CashiroDatabase : RoomDatabase() {
     abstract fun transactionDao(): TransactionDao
     abstract fun subscriptionDao(): SubscriptionDao
     abstract fun chatDao(): ChatDao
+    abstract fun chatSessionDao(): ChatSessionDao
     abstract fun merchantMappingDao(): MerchantMappingDao
     abstract fun categoryDao(): CategoryDao
     abstract fun accountBalanceDao(): AccountBalanceDao
@@ -122,6 +129,7 @@ abstract class CashiroDatabase : RoomDatabase() {
     abstract fun webhookProfileDao(): WebhookProfileDao
     abstract fun webhookLogDao(): WebhookLogDao
     abstract fun webhookCursorDao(): WebhookCursorDao
+    abstract fun bankNotificationDao(): BankNotificationDao
 
     companion object {
         const val DATABASE_NAME = "pennywise_database"
@@ -152,7 +160,11 @@ abstract class CashiroDatabase : RoomDatabase() {
             MIGRATION_48_49,
             MIGRATION_49_50,
             MIGRATION_50_51,
-            MIGRATION_51_52
+            MIGRATION_51_52,
+            MIGRATION_52_53,
+            MIGRATION_53_54,
+            MIGRATION_54_55,
+            MIGRATION_55_56
                             )
                             .build()
                     INSTANCE = instance
@@ -465,6 +477,52 @@ abstract class CashiroDatabase : RoomDatabase() {
                     db.execSQL(
                         "CREATE INDEX IF NOT EXISTS index_rule_applications_applied_at ON rule_applications (applied_at)"
                     )
+                }
+            }
+
+        /**
+         * Manual migration from version 54 to 55. Adds chat_sessions table and session_id column to chat_messages.
+         */
+        val MIGRATION_54_55 =
+            object : Migration(54, 55) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    // Create chat_sessions table
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS chat_sessions (
+                            id TEXT PRIMARY KEY NOT NULL,
+                            title TEXT NOT NULL,
+                            createdAt INTEGER NOT NULL
+                        )
+                        """
+                    )
+
+                    // Insert legacy session to preserve existing messages
+                    val currentTime = System.currentTimeMillis()
+                    db.execSQL(
+                        "INSERT INTO chat_sessions (id, title, createdAt) VALUES ('legacy_session', 'Legacy Chat', ?)",
+                        arrayOf<Any>(currentTime)
+                    )
+
+                    // Add session_id column to chat_messages with default value
+                    db.execSQL("ALTER TABLE chat_messages ADD COLUMN session_id TEXT NOT NULL DEFAULT 'legacy_session'")
+
+                    // Drop the status index from bank_notifications — it was created in
+                    // MIGRATION_53_54 but is not declared in BankNotificationEntity,
+                    // causing Room schema validation to fail.
+                    db.execSQL("DROP INDEX IF EXISTS index_bank_notifications_status")
+                }
+            }
+
+        /**
+         * Migration from version 55 to 56.
+         * Drops the orphaned status index on bank_notifications for devices
+         * that were already migrated to version 55 before the index was removed.
+         */
+        val MIGRATION_55_56 =
+            object : Migration(55, 56) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("DROP INDEX IF EXISTS index_bank_notifications_status")
                 }
             }
 
@@ -893,6 +951,35 @@ val MIGRATION_51_52 =
             db.execSQL("ALTER TABLE exchange_rates ADD COLUMN is_custom INTEGER NOT NULL DEFAULT 0")
         }
     }
+
+val MIGRATION_52_53 =
+    object : Migration(52, 53) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE transactions ADD COLUMN reference TEXT")
+        }
+    }
+
+val MIGRATION_53_54 = object : Migration(53, 54) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS bank_notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                package_name TEXT NOT NULL,
+                notification_id INTEGER NOT NULL,
+                sender_alias TEXT NOT NULL,
+                message_body TEXT NOT NULL,
+                status TEXT NOT NULL,
+                transaction_id INTEGER,
+                error_message TEXT,
+                received_at TEXT NOT NULL,
+                processed_at TEXT
+            )
+        """)
+        // Only create the composite unique index — the status index is intentionally
+        // omitted as it is not declared on BankNotificationEntity.
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_bank_notifications_package_name_notification_id ON bank_notifications (package_name, notification_id)")
+    }
+}
 
 val MIGRATION_29_30 =
     object : Migration(29, 30) {

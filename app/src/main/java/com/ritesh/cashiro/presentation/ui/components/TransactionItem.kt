@@ -100,6 +100,7 @@ fun SharedTransitionScope.TransactionItem(
             TransactionType.CREDIT -> if (!isDark) credit_light else credit_dark
             TransactionType.TRANSFER -> if (!isDark) transfer_light else transfer_dark
             TransactionType.INVESTMENT -> if (!isDark) investment_light else investment_dark
+            TransactionType.BALANCE_UPDATE -> if (!isDark) transfer_light else transfer_dark
         }
     }
 
@@ -157,7 +158,13 @@ fun SharedTransitionScope.TransactionItem(
                 subcategory = transaction?.subcategory,
                 accountIconResId = accountIconResId,
                 accountIconName = accountIconName,
-                accountColorHex = accountColorHex
+                accountColorHex = accountColorHex,
+                modifier = if (animatedContentScope != null && transaction != null) {
+                    Modifier.sharedElement(
+                        rememberSharedContentState(key = "brand_icon_${transaction.id}"),
+                        animatedVisibilityScope = animatedContentScope
+                    )
+                } else Modifier
             )
         }
     }
@@ -365,6 +372,13 @@ fun SharedTransitionScope.TransactionItem(
                                     contentDescription = stringResource(R.string.type_expense),
                                     modifier = Modifier.size(Dimensions.Icon.small),
                                     tint = if (!isSystemInDarkTheme()) expense_light else expense_dark
+                                )
+
+                                TransactionType.BALANCE_UPDATE -> Icon(
+                                    Icons.Rounded.SwapHoriz,
+                                    contentDescription = stringResource(R.string.type_balance_update),
+                                    modifier = Modifier.size(Dimensions.Icon.small),
+                                    tint = if (!isSystemInDarkTheme()) transfer_light else transfer_dark
                                 )
                             }
                         }
