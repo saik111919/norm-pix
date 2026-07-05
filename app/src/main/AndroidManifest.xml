@@ -12,6 +12,16 @@
          CashflowState.notify(); requested at runtime, see RequestNotificationPermissionOnce(). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Reminders fire as real OS alarms (see ReminderScheduler.kt) so they work even if the
+         app isn't running. SCHEDULE_EXACT_ALARM is user-grantable via Settings only (no runtime
+         dialog) — see requestExactAlarmPermission(); without it alarms still fire, just not
+         necessarily to the exact minute. USE_FULL_SCREEN_INTENT shows the alarm over the lock
+         screen; RECEIVE_BOOT_COMPLETED lets BootReceiver re-arm alarms after a reboot. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <application
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
@@ -29,6 +39,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- The real full-screen reminder alarm — launched by ReminderAlarmReceiver's
+             full-screen-intent notification, over the lock screen if needed. -->
+        <activity
+            android:name=".cashflow.AlarmActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.NormPix" />
 
         <!-- Lets CashflowState.export() share a cached CSV file with other apps without
              exposing the whole cache directory (required by FileProvider.getUriForFile). -->
@@ -51,6 +69,20 @@
             android:permission="android.permission.BROADCAST_SMS">
             <intent-filter>
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Fires when a reminder's scheduled AlarmManager alarm goes off. -->
+        <receiver
+            android:name=".cashflow.ReminderAlarmReceiver"
+            android:exported="false" />
+
+        <!-- Re-arms every reminder's alarm after a reboot (AlarmManager alarms don't survive one). -->
+        <receiver
+            android:name=".cashflow.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
     </application>

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.Check
@@ -128,6 +129,9 @@ fun SettingsScreen(state: CashflowState, sysDark: Boolean) {
         "smartrules" -> SmartRulesSubScreen(state)
         "privacy" -> PrivacySubScreen(state)
         "notifications" -> NotificationsSubScreen(state)
+        "reminders" -> RemindersSubScreen(state)
+        "appExceptions" -> AppExceptionsSubScreen(state)
+        "syncedMessages" -> SyncedMessagesSubScreen(state)
         "webhooks" -> WebhooksSubScreen(state)
         "about" -> AboutSubScreen(state)
         else -> SettingsMain(state)
@@ -259,7 +263,7 @@ private fun SettingsMain(state: CashflowState) {
 }
 
 @Composable
-private fun SubHeader(state: CashflowState, title: String, sub: String? = null) {
+internal fun SubHeader(state: CashflowState, title: String, sub: String? = null) {
     val t = LocalCashTokens.current
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -275,7 +279,7 @@ private fun SubHeader(state: CashflowState, title: String, sub: String? = null) 
 }
 
 @Composable
-private fun subScreenModifier(state: CashflowState) = Modifier
+internal fun subScreenModifier(state: CashflowState) = Modifier
     .fillMaxSize()
     .verticalScroll(rememberGlassSyncedScrollState())
     .statusBarsPadding()
@@ -977,6 +981,14 @@ private fun NotificationsSubScreen(state: CashflowState) {
             SettingRow(
                 Icons.Rounded.Sms, "New SMS detected", "When a bank message needs review",
                 trailing = { TogglePill(state.notifPrefs.sms) { state.toggleNotif("sms") } },
+            )
+        }
+        GroupCard {
+            val activeCount = state.reminders.count { it.on }
+            SettingRow(
+                Icons.Rounded.Alarm, "Manage reminders",
+                "$activeCount of ${state.reminders.size} active · time, frequency & alert style",
+                onClick = { state.subScreen = "reminders" },
             )
         }
     }

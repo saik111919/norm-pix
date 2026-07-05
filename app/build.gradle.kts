@@ -12,11 +12,22 @@ android {
         applicationId = "com.normpix"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
+    }
+
+    signingConfigs {
+        getByName("debug") {
+            // Using a fixed debug keystore location if you want to share builds between
+            // different machines without uninstalling. 
+            // storeFile = file("../debug.keystore")
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(

@@ -36,34 +36,34 @@ data class SheetTarget(
 class CashflowState(private val context: Context, private val prefs: SharedPreferences) {
 
     // Navigation
-    var tab by mutableIntStateOf(0)
-    var subScreen by mutableStateOf<String?>(null) // null | "banks" | "categories" | "privacy"
-    var catDetail by mutableStateOf<String?>(null) // null | "Food" | "Shopping" | "Transport" | "Bills" | "Income"
+    var tab: Int by mutableIntStateOf(0)
+    var subScreen: String? by mutableStateOf(null) // null | "banks" | "categories" | "privacy"
+    var catDetail: String? by mutableStateOf(null) // null | "Food" | "Shopping" | "Transport" | "Bills" | "Income"
 
     // Long-press menu popped from the floating nav bar's Inbox tab
-    var inboxMenuOpen by mutableStateOf(false)
+    var inboxMenuOpen: Boolean by mutableStateOf(false)
 
     // Appearance (persisted)
-    var seed by mutableStateOf(runCatching { Seed.valueOf(prefs.getString("seed", "GREEN")!!) }.getOrDefault(Seed.GREEN))
+    var seed: Seed by mutableStateOf(runCatching { Seed.valueOf(prefs.getString("seed", "GREEN")!!) }.getOrDefault(Seed.GREEN))
         private set
-    var mode by mutableStateOf(runCatching { ThemeMode.valueOf(prefs.getString("mode", "LIGHT")!!) }.getOrDefault(ThemeMode.LIGHT))
+    var mode: ThemeMode by mutableStateOf(runCatching { ThemeMode.valueOf(prefs.getString("mode", "LIGHT")!!) }.getOrDefault(ThemeMode.LIGHT))
         private set
-    var navBlur by mutableStateOf(prefs.getFloat("navBlur", 22f))
+    var navBlur: Float by mutableStateOf(prefs.getFloat("navBlur", 22f))
         private set
-    var navOpacity by mutableStateOf(prefs.getFloat("navOpacity", 0.55f))
+    var navOpacity: Float by mutableStateOf(prefs.getFloat("navOpacity", 0.55f))
         private set
-    var showFab by mutableStateOf(prefs.getBoolean("showFab", true))
+    var showFab: Boolean by mutableStateOf(prefs.getBoolean("showFab", true))
         private set
 
     // Centralized blur strength + tint opacity for the Add screen and Edit/confirm sheets
     // (design uses fixed values; this makes them user-adjustable settings like the nav bar's).
-    var sheetBlur by mutableStateOf(prefs.getFloat("sheetBlur", 24f))
+    var sheetBlur: Float by mutableStateOf(prefs.getFloat("sheetBlur", 24f))
         private set
-    var sheetOpacity by mutableStateOf(prefs.getFloat("sheetOpacity", 0.9f))
+    var sheetOpacity: Float by mutableStateOf(prefs.getFloat("sheetOpacity", 0.9f))
         private set
 
     // Currency (persisted)
-    var currency by mutableStateOf(runCatching { 
+    var currency: Currency by mutableStateOf(runCatching { 
         currencies.find { it.code == prefs.getString("currency", "INR") } ?: currencies[0] 
     }.getOrDefault(currencies[0]))
         private set
@@ -81,18 +81,18 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     fun fmt(n: Double): String = com.normpix.cashflow.fmt(n, currency)
 
     // Transactions screen
-    var search by mutableStateOf("")
-    var chip by mutableStateOf("All")
+    var search: String by mutableStateOf("")
+    var chip: String by mutableStateOf("All")
 
     // Settings
     // Whether the OS has actually granted SMS read/receive permission — refreshed on
     // creation and whenever the app resumes (e.g. coming back from system Settings).
-    var smsPermissionGranted by mutableStateOf(hasSmsPermission(context))
+    var smsPermissionGranted: Boolean by mutableStateOf(com.normpix.cashflow.hasSmsPermission(context))
         private set
 
     // Whether the system permission dialog has been shown before, so we know when a
     // renewed request would be a silent no-op (permanently denied) vs. a fresh ask.
-    var smsPermissionRequestedBefore by mutableStateOf(prefs.getBoolean("smsPermRequested", false))
+    var smsPermissionRequestedBefore: Boolean by mutableStateOf(prefs.getBoolean("smsPermRequested", false))
         private set
 
     fun markSmsPermissionRequested() {
@@ -110,7 +110,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
 
     /** Re-checks the OS permission state, e.g. after the app resumes from system Settings. */
     fun refreshSmsPermission() {
-        val granted = hasSmsPermission(context)
+        val granted = com.normpix.cashflow.hasSmsPermission(context)
         if (granted != smsPermissionGranted) {
             smsPermissionGranted = granted
             if (!granted) setSmsOnPref(false)
@@ -142,9 +142,9 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
      * already on the device (the READ_SMS half of the permission) for anything newer than the
      * last scan. Cheap to call on every resume — the content-provider query is watermarked. */
     fun refreshSmsInbox() {
-        if (!smsOn || !hasSmsPermission(context)) return
+        if (!smsOn || !com.normpix.cashflow.hasSmsPermission(context)) return
         var found = 0
-        drainPendingInboxEntries(context).forEach { entry ->
+        com.normpix.cashflow.drainPendingInboxEntries(context).forEach { entry ->
             val amount = entry.optDouble("amount", 0.0)
             if (amount <= 0.0) return@forEach
             val bank = entry.optString("bank")
@@ -176,7 +176,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
                 if (date > maxDate) maxDate = date
                 val sender = c.getString(addressIdx) ?: continue
                 val body = c.getString(bodyIdx) ?: continue
-                val parsed = parseSms(sender, body, banks) ?: continue
+                val parsed = com.normpix.cashflow.parseSms(sender, body, banks) ?: continue
                 if (addParsedInboxEntry("sms$date$sender".hashCode().toString(), sender, body, parsed)) found++
             }
         }
@@ -187,19 +187,19 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
 
     // User's intent to auto-capture from SMS. Only meaningful when smsPermissionGranted
     // is also true — the Settings toggle and Inbox banner keep the two in sync.
-    var smsOn by mutableStateOf(prefs.getBoolean("smsOn", true) && hasSmsPermission(context))
+    var smsOn: Boolean by mutableStateOf(prefs.getBoolean("smsOn", true) && com.normpix.cashflow.hasSmsPermission(context))
         private set
 
     fun setSmsOnPref(v: Boolean) { smsOn = v; prefs.edit().putBoolean("smsOn", v).apply() }
 
-    var catExpanded by mutableStateOf<String?>(null)
-    var bankExpanded by mutableStateOf<String?>(null)
-    var newBankName by mutableStateOf("")
-    var newSenderId by mutableStateOf("")
+    var catExpanded: String? by mutableStateOf(null)
+    var bankExpanded: String? by mutableStateOf(null)
+    var newBankName: String by mutableStateOf("")
+    var newSenderId: String by mutableStateOf("")
 
     // Bank SMS-format sub-screen: inline add-format form
-    var addingFormatFor by mutableStateOf<String?>(null)
-    var newFormatText by mutableStateOf("")
+    var addingFormatFor: String? by mutableStateOf(null)
+    var newFormatText: String by mutableStateOf("")
 
     fun startAddFormat(bankName: String) { addingFormatFor = bankName; newFormatText = "" }
     fun cancelAddFormat() { addingFormatFor = null; newFormatText = "" }
@@ -215,16 +215,16 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     }
 
     // Profile (persisted)
-    var profileName by mutableStateOf(prefs.getString("profileName", "Aditi Rao")!!)
+    var profileName: String by mutableStateOf(prefs.getString("profileName", "Aditi Rao")!!)
         private set
-    var profileColor by mutableStateOf(prefs.getString("profileColor", "green")!!)
+    var profileColor: String by mutableStateOf(prefs.getString("profileColor", "green")!!)
         private set
 
     fun setProfileNamePref(v: String) { profileName = v; prefs.edit().putString("profileName", v).apply() }
     fun setProfileColorPref(v: String) { profileColor = v; prefs.edit().putString("profileColor", v).apply() }
 
     // Language (persisted)
-    var language by mutableStateOf(prefs.getString("language", "English")!!)
+    var language: String by mutableStateOf(prefs.getString("language", "English")!!)
         private set
 
     fun setLanguagePref(l: String) { language = l; prefs.edit().putString("language", l).apply(); showToast("Language set to $l") }
@@ -236,9 +236,9 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     }
 
     // Developer mode + auto-backup (persisted)
-    var devMode by mutableStateOf(prefs.getBoolean("devMode", false))
+    var devMode: Boolean by mutableStateOf(prefs.getBoolean("devMode", false))
         private set
-    var autoBackup by mutableStateOf(prefs.getBoolean("autoBackup", true))
+    var autoBackup: Boolean by mutableStateOf(prefs.getBoolean("autoBackup", true))
         private set
 
     fun toggleDevMode() {
@@ -250,7 +250,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     fun toggleAutoBackup() { autoBackup = !autoBackup; prefs.edit().putBoolean("autoBackup", autoBackup).apply() }
 
     // Notification preferences (persisted)
-    var notifPrefs by mutableStateOf(
+    var notifPrefs: NotifPrefs by mutableStateOf(
         NotifPrefs(
             budget = prefs.getBoolean("notif_budget", true),
             weekly = prefs.getBoolean("notif_weekly", true),
@@ -277,20 +277,20 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
 
     // Reminders sub-screen — persisted to SharedPreferences (not just in-memory) so the real
     // AlarmManager alarms scheduled for them keep working across app restarts and reboots.
-    val reminders = mutableStateListOf<Reminder>().apply { addAll(loadReminders(context) ?: sampleReminders()) }
-    var reminderEditing by mutableStateOf<String?>(null)
-    var alarmFiring by mutableStateOf<Reminder?>(null)
+    val reminders = mutableStateListOf<Reminder>().apply { addAll(com.normpix.cashflow.loadReminders(context) ?: com.normpix.cashflow.sampleReminders()) }
+    var reminderEditing: String? by mutableStateOf(null)
+    var alarmFiring: Reminder? by mutableStateOf(null)
 
-    var addingReminder by mutableStateOf(false)
-    var newReminderTitle by mutableStateOf("")
-    var newReminderKind by mutableStateOf("event") // event | review_spend
-    var newReminderTxnId by mutableStateOf<String?>(null)
-    var newReminderDate by mutableStateOf<String?>(null)
-    var newReminderTime by mutableStateOf("09:00")
+    var addingReminder: Boolean by mutableStateOf(false)
+    var newReminderTitle: String by mutableStateOf("")
+    var newReminderKind: String by mutableStateOf("event") // event | review_spend
+    var newReminderTxnId: String? by mutableStateOf(null)
+    var newReminderDate: String? by mutableStateOf(null)
+    var newReminderTime: String by mutableStateOf("09:00")
 
     // Whether the OS will let NormPix schedule exact-time alarms (API 31+ only; always true
     // below that). Without it, reminders still fire, just not necessarily to the exact minute.
-    var exactAlarmsAllowed by mutableStateOf(canScheduleExactAlarms(context))
+    var exactAlarmsAllowed: Boolean by mutableStateOf(canScheduleExactAlarms(context))
         private set
 
     fun refreshExactAlarmPermission() { exactAlarmsAllowed = canScheduleExactAlarms(context) }
@@ -298,14 +298,14 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
 
     /** Saves the reminder list and re-syncs every reminder's real OS alarm to match. */
     private fun persistReminders() {
-        saveReminders(context, reminders)
-        syncReminderAlarms(context, reminders)
+        com.normpix.cashflow.saveReminders(context, reminders)
+        com.normpix.cashflow.syncReminderAlarms(context, reminders)
     }
 
     init {
         // First run (or a fresh install): seed persisted storage from the sample defaults so
         // their alarms are actually scheduled, not just shown in the list.
-        if (loadReminders(context) == null) persistReminders()
+        if (com.normpix.cashflow.loadReminders(context) == null) persistReminders()
     }
 
     fun toggleReminder(id: String) {
@@ -333,7 +333,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     fun removeReminder(id: String) {
         reminders.removeAll { it.id == id }
         if (reminderEditing == id) reminderEditing = null
-        cancelReminder(context, id)
+        com.normpix.cashflow.cancelReminder(context, id)
         persistReminders()
     }
 
@@ -343,7 +343,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     fun snoozeAlarm() {
         val r = alarmFiring
         alarmFiring = null
-        if (r != null) scheduleExactAt(context, r, System.currentTimeMillis() + 10 * 60 * 1000)
+        if (r != null) com.normpix.cashflow.scheduleExactAt(context, r, System.currentTimeMillis() + 10 * 60 * 1000)
         showToast("Snoozed for 10 minutes")
     }
 
@@ -363,7 +363,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
             Reminder(
                 id = "cr" + System.currentTimeMillis(),
                 type = "custom",
-                icon = reminderIcon("custom", hasLinkedTxn = newReminderKind == "review_spend"),
+                icon = com.normpix.cashflow.reminderIcon("custom", hasLinkedTxn = newReminderKind == "review_spend"),
                 title = title, on = true, time = newReminderTime.ifBlank { "09:00" }, freq = "once",
                 date = newReminderDate, sound = true, vibration = true, priority = "normal",
                 linkedTxnId = if (newReminderKind == "review_spend") newReminderTxnId else null,
@@ -376,7 +376,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
 
     // Full-screen behavior exceptions (which apps a reminder alarm may cover the screen of)
     val appExceptions = mutableStateMapOf<String, Boolean>().apply { putAll(defaultAppExceptions()) }
-    var appExceptionSearch by mutableStateOf("")
+    var appExceptionSearch: String by mutableStateOf("")
 
     fun setAppException(name: String, fullScreen: Boolean) { appExceptions[name] = fullScreen }
     fun resetAppExceptions() {
@@ -386,9 +386,9 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
 
     // Synced-messages sub-screen
     val syncHistory = mutableStateListOf<SyncHistoryEntry>().apply { addAll(sampleSyncHistory()) }
-    var smsSyncing by mutableStateOf(false)
-    var smsLastSynced by mutableStateOf<Long?>(null)
-    var syncTick by mutableIntStateOf(0)
+    var smsSyncing: Boolean by mutableStateOf(false)
+    var smsLastSynced: Long? by mutableStateOf(null)
+    var syncTick: Int by mutableIntStateOf(0)
 
     /** Kicks off a visible sync pass; the spinner clears itself via [finishSync] after a short delay. */
     fun syncSms() {
@@ -406,7 +406,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     }
 
     // About screen: star rating (persisted) + Licenses/Privacy accordions
-    var rating by mutableStateOf(prefs.getInt("rating", 0))
+    var rating: Int by mutableStateOf(prefs.getInt("rating", 0))
         private set
 
     fun rate(v: Int) {
@@ -415,7 +415,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
         showToast("Thanks for the $v-star rating!")
     }
 
-    var aboutExpanded by mutableStateOf<String?>(null) // null | "licenses" | "privacy"
+    var aboutExpanded: String? by mutableStateOf(null) // null | "licenses" | "privacy"
 
     val currentVersionName: String = runCatching {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
@@ -433,11 +433,11 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     fun setBudgetCap(cat: String, cap: Double) { budgetCaps[cat] = cap }
 
     // Budgets sub-screen: inline edit-existing / add-new flows (design's editingBudgetFor / addingBudget)
-    var editingBudgetFor by mutableStateOf<String?>(null)
-    var editBudgetVal by mutableStateOf("")
-    var addingBudget by mutableStateOf(false)
-    var newBudgetKey by mutableStateOf<String?>(null)
-    var newBudgetVal by mutableStateOf("")
+    var editingBudgetFor: String? by mutableStateOf(null)
+    var editBudgetVal: String by mutableStateOf("")
+    var addingBudget: Boolean by mutableStateOf(false)
+    var newBudgetKey: String? by mutableStateOf(null)
+    var newBudgetVal: String by mutableStateOf("")
 
     /** Categories not yet budgeted, as (key, display name) — the 4 canonical ones first, then any other catalog category. */
     fun availableBudgetCats(): List<Pair<String, String>> {
@@ -511,10 +511,10 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     // Accounts sub-screen
     fun toggleAccount(i: Int) { accounts[i] = accounts[i].copy(on = !accounts[i].on) }
 
-    var addingAccount by mutableStateOf(false)
-    var newAccountName by mutableStateOf("")
-    var newAccountType by mutableStateOf("Savings") // Savings | Credit card | Cash
-    var newAccountBalance by mutableStateOf("")
+    var addingAccount: Boolean by mutableStateOf(false)
+    var newAccountName: String by mutableStateOf("")
+    var newAccountType: String by mutableStateOf("Savings") // Savings | Credit card | Cash
+    var newAccountBalance: String by mutableStateOf("")
 
     fun startAddAccount() {
         addingAccount = true
@@ -538,8 +538,8 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     }
 
     // Smart rules sub-screen
-    var newRuleMatch by mutableStateOf("")
-    var newRuleCat by mutableStateOf("Food")
+    var newRuleMatch: String by mutableStateOf("")
+    var newRuleCat: String by mutableStateOf("Food")
 
     fun addSmartRule() {
         val m = newRuleMatch.trim()
@@ -552,7 +552,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     fun removeSmartRule(id: String) { smartRules.removeAll { it.id == id } }
 
     // Webhooks sub-screen (dev mode only)
-    var newWebhookUrl by mutableStateOf("")
+    var newWebhookUrl: String by mutableStateOf("")
 
     fun addWebhook() {
         val u = newWebhookUrl.trim()
@@ -568,7 +568,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
         if (i >= 0) webhooks[i] = webhooks[i].copy(on = !webhooks[i].on)
     }
 
-    var eraseConfirming by mutableStateOf(false)
+    var eraseConfirming: Boolean by mutableStateOf(false)
 
     fun eraseAllData() { eraseConfirming = true }
     fun cancelErase() { eraseConfirming = false }
@@ -586,21 +586,21 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     }
 
     // Add screen
-    var addOpen by mutableStateOf(false)
-    var addTab by mutableStateOf("txn") // txn | sub
-    var addType by mutableStateOf("expense") // expense | income | transfer
-    var addAmount by mutableStateOf("")
-    var addMerchant by mutableStateOf("")
-    var addCat by mutableStateOf("Food")
-    var addSubCat by mutableStateOf<String?>(null)
-    var addAccount by mutableStateOf("HDFC ••4521")
-    var addFrom by mutableStateOf("HDFC ••4521")
-    var addTo by mutableStateOf("SBI ••8890")
-    var addDate by mutableStateOf("Today") // Today | Yesterday | Custom
-    var addCustomDateMillis by mutableStateOf<Long?>(null)
-    var showDatePicker by mutableStateOf(false)
-    var subName by mutableStateOf("")
-    var subCycle by mutableStateOf("Monthly")
+    var addOpen: Boolean by mutableStateOf(false)
+    var addTab: String by mutableStateOf("txn") // txn | sub
+    var addType: String by mutableStateOf("expense") // expense | income | transfer
+    var addAmount: String by mutableStateOf("")
+    var addMerchant: String by mutableStateOf("")
+    var addCat: String by mutableStateOf("Food")
+    var addSubCat: String? by mutableStateOf(null)
+    var addAccount: String by mutableStateOf("HDFC ••4521")
+    var addFrom: String by mutableStateOf("HDFC ••4521")
+    var addTo: String by mutableStateOf("SBI ••8890")
+    var addDate: String by mutableStateOf("Today") // Today | Yesterday | Custom
+    var addCustomDateMillis: Long? by mutableStateOf(null)
+    var showDatePicker: Boolean by mutableStateOf(false)
+    var subName: String by mutableStateOf("")
+    var subCycle: String by mutableStateOf("Monthly")
 
     fun openDatePicker() { showDatePicker = true }
     fun closeDatePicker() { showDatePicker = false }
@@ -620,15 +620,15 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
         if (addDate == "Custom") addCustomDateMillis?.let { formatShortDate(it) } ?: "Just now" else "Just now"
 
     // Bottom sheet
-    var sheet by mutableStateOf<SheetTarget?>(null)
-    var editMerchant by mutableStateOf("")
-    var editAmount by mutableStateOf("")
-    var editCat by mutableStateOf("Food")
+    var sheet: SheetTarget? by mutableStateOf(null)
+    var editMerchant: String by mutableStateOf("")
+    var editAmount: String by mutableStateOf("")
+    var editCat: String by mutableStateOf("Food")
 
     // Categories sub-screen: inline add-category / add-subcategory forms
-    var addingCategory by mutableStateOf(false)
-    var newCatName by mutableStateOf("")
-    var newCatIconIdx by mutableStateOf(0)
+    var addingCategory: Boolean by mutableStateOf(false)
+    var newCatName: String by mutableStateOf("")
+    var newCatIconIdx: Int by mutableIntStateOf(0)
 
     fun startAddCategory() { addingCategory = true; newCatName = ""; newCatIconIdx = 0 }
     fun cancelAddCategory() { addingCategory = false; newCatName = "" }
@@ -640,8 +640,8 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
         showToast("Category added")
     }
 
-    var addingSubFor by mutableStateOf<String?>(null)
-    var newSubCatName by mutableStateOf("")
+    var addingSubFor: String? by mutableStateOf(null)
+    var newSubCatName: String by mutableStateOf("")
 
     fun startAddSubcat(parent: String) { addingSubFor = parent; newSubCatName = "" }
     fun cancelAddSubcat() { addingSubFor = null; newSubCatName = "" }
@@ -655,8 +655,8 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     }
 
     // Toast
-    var toast by mutableStateOf<String?>(null)
-    var toastTick by mutableIntStateOf(0)
+    var toast: String? by mutableStateOf(null)
+    var toastTick: Int by mutableIntStateOf(0)
 
     fun showToast(msg: String) { toast = msg; toastTick++ }
 
@@ -664,12 +664,12 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
         when (target.type) {
             "inbox" -> {
                 editMerchant = target.inbox!!.merchant.replace(" (Amazon?)", "")
-                editAmount = groupINR(target.inbox.amount, currency.locale).replace(",", "")
+                editAmount = com.normpix.cashflow.groupINR(target.inbox.amount, currency.locale).replace(",", "")
                 editCat = target.inbox.cat
             }
             "txn" -> {
                 editMerchant = target.txn!!.merchant
-                editAmount = groupINR(kotlin.math.abs(target.txn.amount), currency.locale).replace(",", "")
+                editAmount = com.normpix.cashflow.groupINR(kotlin.math.abs(target.txn.amount), currency.locale).replace(",", "")
                 editCat = target.txn.cat
             }
         }
@@ -821,7 +821,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     }
 
     private fun notify(title: String, body: String) {
-        if (!hasNotificationPermission(context)) return
+        if (!com.normpix.cashflow.hasNotificationPermission(context)) return
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             val channel = android.app.NotificationChannel("txns", "Transactions", android.app.NotificationManager.IMPORTANCE_DEFAULT)

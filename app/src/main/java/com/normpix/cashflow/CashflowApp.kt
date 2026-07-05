@@ -55,11 +55,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.normpix.cashflow.ui.AddScreen
+import com.normpix.cashflow.ui.AlarmFiringOverlay
 import com.normpix.cashflow.ui.CategoryDetailScreen
 import com.normpix.cashflow.ui.ConfirmSheet
 import com.normpix.cashflow.ui.DashboardScreen
 import com.normpix.cashflow.ui.EditSheet
 import com.normpix.cashflow.ui.Emphasized
+import com.normpix.cashflow.ui.InboxMenuOverlay
 import com.normpix.cashflow.ui.InboxScreen
 import com.normpix.cashflow.ui.InsightsScreen
 import com.normpix.cashflow.ui.SettingsScreen
@@ -94,6 +96,7 @@ fun CashflowApp() {
                 if (event == Lifecycle.Event.ON_RESUME) {
                     state.refreshSmsPermission()
                     state.refreshSmsInbox()
+                    state.refreshExactAlarmPermission()
                 }
             }
             activity?.lifecycle?.addObserver(observer)
@@ -103,10 +106,12 @@ fun CashflowApp() {
 
         // System back: close overlays / sub-screens before leaving the app.
         BackHandler(
-            enabled = state.sheet != null || state.addOpen || state.catDetail != null ||
-                state.subScreen != null || state.tab != 0,
+            enabled = state.alarmFiring != null || state.inboxMenuOpen || state.sheet != null || state.addOpen ||
+                state.catDetail != null || state.subScreen != null || state.tab != 0,
         ) {
             when {
+                state.alarmFiring != null -> state.dismissAlarm()
+                state.inboxMenuOpen -> state.inboxMenuOpen = false
                 state.sheet != null -> state.closeSheet()
                 state.addOpen -> state.addOpen = false
                 state.catDetail != null -> state.catDetail = null
@@ -178,7 +183,10 @@ fun CashflowApp() {
                     items = listOf(
                         FloatingNavItem("Home", Icons.Outlined.Home, Icons.Rounded.Home),
                         FloatingNavItem("Activity", Icons.AutoMirrored.Outlined.ReceiptLong, Icons.AutoMirrored.Rounded.ReceiptLong),
-                        FloatingNavItem("Inbox", Icons.Outlined.Inbox, Icons.Rounded.Inbox, badgeCount = state.inbox.size),
+                        FloatingNavItem(
+                            "Inbox", Icons.Outlined.Inbox, Icons.Rounded.Inbox, badgeCount = state.inbox.size,
+                            onLongClick = { state.inboxMenuOpen = true },
+                        ),
                         FloatingNavItem("Insights", Icons.Outlined.DonutSmall, Icons.Rounded.DonutSmall),
                     ),
                     selectedIndex = state.tab,
@@ -238,6 +246,12 @@ fun CashflowApp() {
                 blurRadius = state.sheetBlur.dp,
                 opacity = state.sheetOpacity,
             )
+
+            // Long-press menu popped from the floating nav's Inbox tab
+            InboxMenuOverlay(state, glass)
+
+            // Full-screen reminder alarm (on top of everything else)
+            AlarmFiringOverlay(state)
 
             // Toast
             LaunchedEffect(state.toastTick) {

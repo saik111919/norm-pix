@@ -17,8 +17,10 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,7 +31,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,6 +50,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -64,6 +68,8 @@ data class FloatingNavItem(
     val selectedIcon: ImageVector = icon,
     /** When > 0, a small error-colored count badge is drawn on the icon. */
     val badgeCount: Int = 0,
+    /** Fired on a long-press of this item, in addition to the normal tap selection. */
+    val onLongClick: (() -> Unit)? = null,
 )
 
 /**
@@ -165,6 +171,7 @@ fun FloatingGlassNavBar(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun GlassNavItem(
     item: FloatingNavItem,
@@ -195,11 +202,11 @@ private fun GlassNavItem(
             .fillMaxHeight()
             .clip(CircleShape)
             .background(pillColor)
-            .selectable(
-                selected = selected,
+            .semantics { role = Role.Tab; this.selected = selected }
+            .combinedClickable(
                 interactionSource = interactionSource,
                 indication = ripple(color = activeContentColor),
-                role = Role.Tab,
+                onLongClick = item.onLongClick,
                 onClick = onClick,
             )
             .sizeIn(minWidth = 48.dp)

@@ -1,9 +1,12 @@
 package com.normpix.cashflow
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.AttachMoney
+import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.CardGiftcard
 import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.Cloud
@@ -11,16 +14,25 @@ import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.CurrencyPound
 import androidx.compose.material.icons.rounded.CurrencyRupee
 import androidx.compose.material.icons.rounded.Euro
+import androidx.compose.material.icons.rounded.Event
+import androidx.compose.material.icons.rounded.EventRepeat
 import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.Flight
 import androidx.compose.material.icons.rounded.HomeWork
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.LocalCafe
 import androidx.compose.material.icons.rounded.LocalTaxi
 import androidx.compose.material.icons.rounded.LunchDining
+import androidx.compose.material.icons.rounded.Mail
+import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.Medication
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Payments
+import androidx.compose.material.icons.rounded.PhoneInTalk
+import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Receipt
 import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material.icons.rounded.Savings
@@ -28,8 +40,10 @@ import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.ShoppingBag
 import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material.icons.rounded.Subscriptions
+import androidx.compose.material.icons.rounded.Summarize
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Today
+import androidx.compose.material.icons.rounded.VideoCall
 import androidx.compose.ui.graphics.vector.ImageVector
 import java.text.NumberFormat
 import java.util.Locale
@@ -115,6 +129,95 @@ data class NotifPrefs(
     val weekly: Boolean = true,
     val bills: Boolean = true,
     val sms: Boolean = true,
+)
+
+/** A scheduled or instant notification NormPix can fire (design's "Reminders" screen). */
+data class Reminder(
+    val id: String,
+    val type: String, // daily_summary | weekly_summary | budget_alert | bill_due | custom
+    val icon: ImageVector,
+    val title: String,
+    val on: Boolean,
+    val time: String?, // "HH:mm" 24h; null when freq == "instant"
+    val freq: String, // daily | weekly | custom | instant | once
+    val days: List<String> = emptyList(), // "Mon".."Sun", for freq == weekly/custom
+    val sound: Boolean = true,
+    val vibration: Boolean = true,
+    val priority: String = "normal", // silent | normal | urgent
+    val date: String? = null, // "yyyy-MM-dd", for a one-off custom reminder
+    val linkedTxnId: String? = null, // for a "review a spend" custom reminder
+)
+
+/**
+ * Derives a [Reminder]'s icon from its [type] (and, for a custom reminder, whether it links a
+ * transaction) rather than storing the [ImageVector] itself — reminders are persisted to
+ * SharedPreferences as JSON so [android.app.AlarmManager] alarms survive process death and
+ * reboot, and [ImageVector] isn't serializable.
+ */
+fun reminderIcon(type: String, hasLinkedTxn: Boolean): ImageVector = when (type) {
+    "daily_summary" -> Icons.Rounded.Today
+    "weekly_summary" -> Icons.Rounded.Summarize
+    "budget_alert" -> Icons.Rounded.NotificationsActive
+    "bill_due" -> Icons.Rounded.EventRepeat
+    else -> if (hasLinkedTxn) Icons.AutoMirrored.Rounded.ReceiptLong else Icons.Rounded.Event
+}
+
+fun sampleReminders() = mutableListOf(
+    Reminder("r_daily", "daily_summary", reminderIcon("daily_summary", false), "Daily spend summary", true, "21:00", "daily", emptyList(), true, true, "normal"),
+    Reminder("r_weekly", "weekly_summary", reminderIcon("weekly_summary", false), "Weekly summary", true, "09:00", "weekly", listOf("Mon"), true, false, "normal"),
+    Reminder("r_budget", "budget_alert", reminderIcon("budget_alert", false), "Budget cap warnings", true, null, "instant", emptyList(), true, true, "urgent"),
+    Reminder("r_bills", "bill_due", reminderIcon("bill_due", false), "Bill due reminders", true, "10:00", "custom", listOf("Mon", "Thu"), false, true, "normal"),
+)
+
+/** An app NormPix can show full-screen reminder alarms over, or keep to a plain notification. */
+data class AppInfo(val name: String, val icon: ImageVector, val category: String) // category: call | other
+
+val appsList = listOf(
+    AppInfo("Phone", Icons.Rounded.Call, "call"),
+    AppInfo("WhatsApp Calls", Icons.Rounded.PhoneInTalk, "call"),
+    AppInfo("Google Meet", Icons.Rounded.VideoCall, "call"),
+    AppInfo("Zoom", Icons.Rounded.VideoCall, "call"),
+    AppInfo("Instagram", Icons.Rounded.Image, "other"),
+    AppInfo("Chrome", Icons.Rounded.Language, "other"),
+    AppInfo("Gmail", Icons.Rounded.Mail, "other"),
+    AppInfo("Spotify", Icons.Rounded.MusicNote, "other"),
+    AppInfo("Maps", Icons.Rounded.Map, "other"),
+    AppInfo("Camera", Icons.Rounded.PhotoCamera, "other"),
+)
+
+/** Default per-app behavior: calling apps stay notification-only so an alarm never interrupts a call. */
+fun defaultAppExceptions(): Map<String, Boolean> = appsList.associate { it.name to (it.category != "call") }
+
+/** A synced SMS shown in the "Synced messages" history (already accepted into Transactions, or ignored). */
+data class SyncHistoryEntry(
+    val id: String,
+    val sender: String,
+    val sms: String,
+    val merchant: String,
+    val amount: Double?,
+    val cat: String?,
+    val whenLabel: String,
+    val icon: ImageVector,
+    val status: String, // added | ignored
+)
+
+fun sampleSyncHistory() = mutableListOf(
+    SyncHistoryEntry(
+        "h1", "VM-SBIUPI", "Dear UPI user A/C X8890 debited by Rs520.0 on date 30Jun26 trf to ZOMATO Refno 887744221.",
+        "Zomato", 520.0, "Food", "Mon, 8:15 PM", Icons.Rounded.Restaurant, "added",
+    ),
+    SyncHistoryEntry(
+        "h2", "VM-HDFCBK", "Rs.1,240.00 debited from a/c **4521 on 29-06-26 to VPA bigbasket@icici (UPI Ref 552013341).",
+        "BigBasket", 1240.0, "Food", "Sun, 11:04 AM", Icons.Rounded.ShoppingCart, "added",
+    ),
+    SyncHistoryEntry(
+        "h3", "VM-ICICIB", "INR 649.00 spent using ICICI Bank Card XX2210 on 28-Jun-26 on NETFLIX.",
+        "Netflix", 649.0, "Bills", "Sat, 8:00 AM", Icons.Rounded.Subscriptions, "added",
+    ),
+    SyncHistoryEntry(
+        "h4", "AD-PROMOB", "Get 20% cashback on your next HDFC card transaction. T&C apply.",
+        "Promotional SMS", null, null, "Fri, 2:30 PM", Icons.Rounded.Block, "ignored",
+    ),
 )
 
 // ── Icon + formatting helpers ──
