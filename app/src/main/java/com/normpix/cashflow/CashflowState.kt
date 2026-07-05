@@ -40,6 +40,9 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     var subScreen by mutableStateOf<String?>(null) // null | "banks" | "categories" | "privacy"
     var catDetail by mutableStateOf<String?>(null) // null | "Food" | "Shopping" | "Transport" | "Bills" | "Income"
 
+    // Long-press menu popped from the floating nav bar's Inbox tab
+    var inboxMenuOpen by mutableStateOf(false)
+
     // Appearance (persisted)
     var seed by mutableStateOf(runCatching { Seed.valueOf(prefs.getString("seed", "GREEN")!!) }.getOrDefault(Seed.GREEN))
         private set
@@ -272,6 +275,136 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
             .apply()
     }
 
+    // Reminders sub-screen — persisted to SharedPreferences (not just in-memory) so the real
+    // AlarmManager alarms scheduled for them keep working across app restarts and reboots.
+    val reminders = mutableStateListOf<Reminder>().apply { addAll(loadReminders(context) ?: sampleReminders()) }
+    var reminderEditing by mutableStateOf<String?>(null)
+    var alarmFiring by mutableStateOf<Reminder?>(null)
+
+    var addingReminder by mutableStateOf(false)
+    var newReminderTitle by mutableStateOf("")
+    var newReminderKind by mutableStateOf("event") // event | review_spend
+    var newReminderTxnId by mutableStateOf<String?>(null)
+    var newReminderDate by mutableStateOf<String?>(null)
+    var newReminderTime by mutableStateOf("09:00")
+
+    // Whether the OS will let NormPix schedule exact-time alarms (API 31+ only; always true
+    // below that). Without it, reminders still fire, just not necessarily to the exact minute.
+    var exactAlarmsAllowed by mutableStateOf(canScheduleExactAlarms(context))
+        private set
+
+    fun refreshExactAlarmPermission() { exactAlarmsAllowed = canScheduleExactAlarms(context) }
+    fun requestExactAlarmPermission() = com.normpix.cashflow.requestExactAlarmPermission(context)
+
+    /** Saves the reminder list and re-syncs every reminder's real OS alarm to match. */
+    private fun persistReminders() {
+        saveReminders(context, reminders)
+        syncReminderAlarms(context, reminders)
+    }
+
+    init {
+        // First run (or a fresh install): seed persisted storage from the sample defaults so
+        // their alarms are actually scheduled, not just shown in the list.
+        if (loadReminders(context) == null) persistReminders()
+    }
+
+    fun toggleReminder(id: String) {
+        val i = reminders.indexOfFirst { it.id == id }
+        if (i >= 0) reminders[i] = reminders[i].copy(on = !reminders[i].on)
+        persistReminders()
+    }
+
+    private fun updateReminder(id: String, transform: (Reminder) -> Reminder) {
+        val i = reminders.indexOfFirst { it.id == id }
+        if (i >= 0) reminders[i] = transform(reminders[i])
+        persistReminders()
+    }
+
+    fun setReminderFreq(id: String, freq: String) = updateReminder(id) { it.copy(freq = freq) }
+    fun setReminderTime(id: String, time: String) = updateReminder(id) { it.copy(time = time) }
+    fun setReminderDate(id: String, date: String) = updateReminder(id) { it.copy(date = date) }
+    fun setReminderPriority(id: String, priority: String) = updateReminder(id) { it.copy(priority = priority) }
+    fun setReminderSound(id: String, v: Boolean) = updateReminder(id) { it.copy(sound = v) }
+    fun setReminderVibration(id: String, v: Boolean) = updateReminder(id) { it.copy(vibration = v) }
+    fun toggleReminderDay(id: String, day: String) = updateReminder(id) {
+        it.copy(days = if (day in it.days) it.days - day else it.days + day)
+    }
+
+    fun removeReminder(id: String) {
+        reminders.removeAll { it.id == id }
+        if (reminderEditing == id) reminderEditing = null
+        cancelReminder(context, id)
+        persistReminders()
+    }
+
+    /** Shows the full-screen alarm UI for [r] (a foreground preview of the real thing). */
+    fun fireAlarm(r: Reminder) { alarmFiring = r }
+    fun dismissAlarm() { alarmFiring = null }
+    fun snoozeAlarm() {
+        val r = alarmFiring
+        alarmFiring = null
+        if (r != null) scheduleExactAt(context, r, System.currentTimeMillis() + 10 * 60 * 1000)
+        showToast("Snoozed for 10 minutes")
+    }
+
+    fun startAddReminder() {
+        addingReminder = true
+        newReminderTitle = ""; newReminderKind = "event"; newReminderTxnId = null
+        newReminderDate = null; newReminderTime = "09:00"
+    }
+
+    fun cancelAddReminder() { addingReminder = false }
+
+    fun saveAddReminder() {
+        val title = newReminderTitle.trim()
+        if (title.isEmpty()) { showToast("Enter a reminder title"); return }
+        if (newReminderKind == "review_spend" && newReminderTxnId == null) { showToast("Pick a spend to review"); return }
+        reminders.add(
+            Reminder(
+                id = "cr" + System.currentTimeMillis(),
+                type = "custom",
+                icon = reminderIcon("custom", hasLinkedTxn = newReminderKind == "review_spend"),
+                title = title, on = true, time = newReminderTime.ifBlank { "09:00" }, freq = "once",
+                date = newReminderDate, sound = true, vibration = true, priority = "normal",
+                linkedTxnId = if (newReminderKind == "review_spend") newReminderTxnId else null,
+            ),
+        )
+        addingReminder = false
+        persistReminders()
+        showToast("Reminder added")
+    }
+
+    // Full-screen behavior exceptions (which apps a reminder alarm may cover the screen of)
+    val appExceptions = mutableStateMapOf<String, Boolean>().apply { putAll(defaultAppExceptions()) }
+    var appExceptionSearch by mutableStateOf("")
+
+    fun setAppException(name: String, fullScreen: Boolean) { appExceptions[name] = fullScreen }
+    fun resetAppExceptions() {
+        appExceptions.clear(); appExceptions.putAll(defaultAppExceptions())
+        showToast("Reset to defaults")
+    }
+
+    // Synced-messages sub-screen
+    val syncHistory = mutableStateListOf<SyncHistoryEntry>().apply { addAll(sampleSyncHistory()) }
+    var smsSyncing by mutableStateOf(false)
+    var smsLastSynced by mutableStateOf<Long?>(null)
+    var syncTick by mutableIntStateOf(0)
+
+    /** Kicks off a visible sync pass; the spinner clears itself via [finishSync] after a short delay. */
+    fun syncSms() {
+        if (smsSyncing) return
+        smsSyncing = true
+        syncTick++
+    }
+
+    /** Called by the UI after its delay — keeps the coroutine/delay concern out of this state holder. */
+    fun finishSync() {
+        refreshSmsInbox()
+        smsSyncing = false
+        smsLastSynced = System.currentTimeMillis()
+        showToast("SMS sync complete")
+    }
+
     // About screen: star rating (persisted) + Licenses/Privacy accordions
     var rating by mutableStateOf(prefs.getInt("rating", 0))
         private set
@@ -447,6 +580,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
         smartRules.clear()
         webhooks.clear()
         accounts.clear()
+        syncHistory.clear()
         eraseConfirming = false
         showToast("All local data erased")
     }
@@ -560,12 +694,14 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
                 auto = true,
             ),
         )
+        syncHistory.add(0, SyncHistoryEntry(item.id, item.sender, item.sms, merchant, amount, cat, item.whenLabel, item.icon, "added"))
         showToast("Added to Transactions")
         notify("Transaction Captured", "Added ${fmt(amount)} at $merchant")
     }
 
     fun ignoreInbox(item: InboxMsg) {
         inbox.removeAll { it.id == item.id }
+        syncHistory.add(0, SyncHistoryEntry(item.id, item.sender, item.sms, item.merchant, item.amount, item.cat, item.whenLabel, item.icon, "ignored"))
         showToast("Message ignored")
     }
 
