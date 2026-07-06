@@ -162,6 +162,45 @@ private val DARK = mapOf(
 
 val LocalCashTokens = staticCompositionLocalOf { LIGHT.getValue(Seed.GREEN) }
 
+/** Brand-accurate hues for Cashiro's default categories (design `catHexMap`); anything else falls back to a hash-derived hue. */
+private val CAT_HEX_MAP = mapOf(
+    "Food & Drinks" to 0xFFFC8019,
+    "Groceries" to 0xFF5AC85A,
+    "Transport" to 0xFF5B6472,
+    "Shopping" to 0xFFFF9900,
+    "Bill" to 0xFF4CAF50,
+    "Entertainment" to 0xFFE50914,
+    "Medical" to 0xFF10847E,
+    "Investment" to 0xFF00D09C,
+    "Personal" to 0xFF6A4C93,
+    "Fitness" to 0xFFFF3278,
+    "Insurance" to 0xFF0066CC,
+    "Travel" to 0xFF00BCD4,
+    "Miscellaneous" to 0xFF757575,
+    "Salary" to 0xFF4CAF50,
+    "Income" to 0xFF2E7D32,
+)
+
+private fun hexToHue(hex: Long): Float {
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(hex.toInt(), hsv)
+    return hsv[0]
+}
+
+private fun hashHue(name: String): Float = (name.sumOf { it.code } * 47 % 360).toFloat()
+
+/** Foreground/background pair for a category, sender or bank name (design `catColor`). */
+data class CatColor(val bg: Color, val fg: Color)
+
+fun catColor(name: String, dark: Boolean): CatColor {
+    val hue = CAT_HEX_MAP[name]?.let { hexToHue(it) } ?: hashHue(name)
+    return if (dark) {
+        CatColor(bg = Color.hsl(hue, 0.22f, 0.20f), fg = Color.hsl(hue, 0.55f, 0.72f))
+    } else {
+        CatColor(bg = Color.hsl(hue, 0.55f, 0.90f), fg = Color.hsl(hue, 0.55f, 0.40f))
+    }
+}
+
 /** The lighter "container" tone paired with a seed's accent color, for the two-tone theme swatch. */
 fun seedToneColor(seed: Seed): Color = LIGHT.getOrElse(seed) { LIGHT.getValue(Seed.GREEN) }.pc
 

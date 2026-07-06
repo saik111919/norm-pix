@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Sms
 import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material3.Icon
@@ -26,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -33,11 +35,13 @@ import androidx.compose.ui.unit.sp
 import com.normpix.cashflow.CashflowState
 import com.normpix.cashflow.LocalCashTokens
 import com.normpix.cashflow.SheetTarget
+import com.normpix.cashflow.openNotificationListenerSettings
 import com.normpix.cashflow.rememberSmsPermissionRequester
 
 @Composable
 fun InboxScreen(state: CashflowState) {
     val t = LocalCashTokens.current
+    val context = LocalContext.current
     val requestSmsPermission = rememberSmsPermissionRequester(state)
     Column(
         modifier = Modifier
@@ -82,6 +86,37 @@ fun InboxScreen(state: CashflowState) {
                         .clip(RoundedCornerShape(22.dp))
                         .background(t.p)
                         .clickable { requestSmsPermission() },
+                    contentAlignment = Alignment.Center,
+                ) { Text("Grant access", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = t.onP) }
+            }
+        }
+
+        if (!state.notifListenerGranted) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(t.cont)
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconBubble(Icons.Rounded.NotificationsActive, 44.dp, bg = t.sc, tint = t.onSc, iconSize = 22.dp)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Turn on notification access", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = t.onS)
+                        Text(
+                            "Catches Google Pay/PhonePe payments that never send an SMS. Read-only, processed on this device.",
+                            fontSize = 12.sp, lineHeight = 17.sp, color = t.onSV, modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(t.p)
+                        .clickable { openNotificationListenerSettings(context) },
                     contentAlignment = Alignment.Center,
                 ) { Text("Grant access", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = t.onP) }
             }

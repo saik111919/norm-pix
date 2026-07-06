@@ -9,17 +9,23 @@ import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.CardGiftcard
 import androidx.compose.material.icons.rounded.Category
+import androidx.compose.material.icons.rounded.ChildCare
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.CurrencyPound
 import androidx.compose.material.icons.rounded.CurrencyRupee
+import androidx.compose.material.icons.rounded.Devices
+import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.Euro
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.EventRepeat
+import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.Flight
+import androidx.compose.material.icons.rounded.HealthAndSafety
 import androidx.compose.material.icons.rounded.HomeWork
 import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Label
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.LocalCafe
 import androidx.compose.material.icons.rounded.LocalTaxi
@@ -31,6 +37,7 @@ import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Payments
+import androidx.compose.material.icons.rounded.Pets
 import androidx.compose.material.icons.rounded.PhoneInTalk
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Receipt
@@ -39,11 +46,16 @@ import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.ShoppingBag
 import androidx.compose.material.icons.rounded.ShoppingCart
+import androidx.compose.material.icons.rounded.Spa
+import androidx.compose.material.icons.rounded.SportsEsports
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Subscriptions
 import androidx.compose.material.icons.rounded.Summarize
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material.icons.rounded.VideoCall
+import androidx.compose.material.icons.rounded.VolunteerActivism
+import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.ui.graphics.vector.ImageVector
 import java.text.NumberFormat
 import java.util.Locale
@@ -103,6 +115,9 @@ data class Sub(
     val cycle: String,
 )
 
+/** [senders] holds SMS sender IDs (e.g. "VM-HDFCBK") for SMS-based banks, or a notification
+ * package name (e.g. "com.phonepe.app") for apps captured via [BankNotificationListener] —
+ * [parseSms] treats both the same way: a substring to match against the message's origin. */
 data class Bank(
     val name: String,
     val senders: String,
@@ -224,6 +239,7 @@ fun sampleSyncHistory() = mutableListOf(
 
 val catIcons: Map<String, ImageVector> = mapOf(
     "Food" to Icons.Rounded.LunchDining,
+    "Groceries" to Icons.Rounded.ShoppingCart,
     "Shopping" to Icons.Rounded.ShoppingBag,
     "Transport" to Icons.Rounded.LocalTaxi,
     "Bills" to Icons.Rounded.Bolt,
@@ -356,6 +372,32 @@ fun sampleBanks() = mutableListOf(
         "Paytm Payments Bank", "VM-PYTMPB", "8 parsed", false,
         listOf("Rs.{amount} paid to {merchant} from Paytm Wallet. Order {ref}"),
     ),
+    // Captured via BankNotificationListener, not SMS — these apps often push a notification
+    // with no SMS at all for a UPI payment. `senders` holds the app's package name instead of
+    // an SMS sender ID (parseSms treats both the same way). The formats below are a best-effort
+    // starting point, not verified against live notifications — edit them here (Settings > Banks)
+    // to match what you actually see once notification access is granted.
+    Bank(
+        "Google Pay", "com.google.android.apps.nbu.paisa.user", "0 parsed", true,
+        listOf(
+            "₹{amount} paid to {merchant}",
+            "You paid {merchant} ₹{amount}",
+        ),
+    ),
+    Bank(
+        "PhonePe", "com.phonepe.app", "0 parsed", true,
+        listOf(
+            "Payment of ₹{amount} to {merchant} was successful",
+            "You paid ₹{amount} to {merchant}",
+        ),
+    ),
+    Bank(
+        "Paytm", "net.one97.paytm", "0 parsed", true,
+        listOf(
+            "Paid ₹{amount} to {merchant}",
+            "Payment of ₹{amount} to {merchant} is successful",
+        ),
+    ),
 )
 
 fun sampleInbox() = mutableListOf(
@@ -432,10 +474,15 @@ fun fmtCompact(n: Double, currency: Currency = currencies[0]): String {
     return currency.symbol + s + "k"
 }
 
-/** Icon choices offered when creating a new category (design's 6-icon picker). */
+/** Icon choices offered when creating a new category (design's 28-icon picker). */
 val addCategoryIcons = listOf(
-    Icons.Rounded.Category, Icons.Rounded.ShoppingBag, Icons.Rounded.Restaurant,
-    Icons.Rounded.Flight, Icons.Rounded.FitnessCenter, Icons.Rounded.CardGiftcard,
+    Icons.Rounded.LunchDining, Icons.Rounded.LocalCafe, Icons.Rounded.ShoppingBag, Icons.Rounded.ShoppingCart,
+    Icons.Rounded.LocalTaxi, Icons.Rounded.Flight, Icons.Rounded.DirectionsCar, Icons.Rounded.Bolt,
+    Icons.Rounded.Wifi, Icons.Rounded.HomeWork, Icons.Rounded.Medication, Icons.Rounded.FitnessCenter,
+    Icons.Rounded.Spa, Icons.Rounded.School, Icons.Rounded.Movie, Icons.Rounded.SportsEsports,
+    Icons.Rounded.Subscriptions, Icons.Rounded.Pets, Icons.Rounded.ChildCare, Icons.Rounded.CardGiftcard,
+    Icons.Rounded.VolunteerActivism, Icons.Rounded.Devices, Icons.Rounded.HealthAndSafety, Icons.Rounded.Savings,
+    Icons.Rounded.Category, Icons.Rounded.Label, Icons.Rounded.Star, Icons.Rounded.Extension,
 )
 
 data class CatInfo(val name: String, val icon: ImageVector, val subtitle: String)

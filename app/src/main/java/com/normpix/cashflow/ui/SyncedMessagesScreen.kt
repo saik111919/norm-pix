@@ -37,6 +37,7 @@ import com.normpix.cashflow.CashflowState
 import com.normpix.cashflow.InboxMsg
 import com.normpix.cashflow.LocalCashTokens
 import com.normpix.cashflow.SyncHistoryEntry
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -107,12 +108,12 @@ fun SyncedMessagesSubScreen(state: CashflowState) {
 
     LaunchedEffect(state.syncTick) {
         if (state.smsSyncing) {
-            delay(900)
+            delay(900.milliseconds)
             state.finishSync()
         }
     }
 
-    Column(modifier = subScreenModifier(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(modifier = Modifier.subScreen(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SubHeader(state, "Synced messages", "${state.inbox.size + state.syncHistory.size} messages detected on this device")
 
         Row(

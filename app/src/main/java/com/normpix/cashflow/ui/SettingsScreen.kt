@@ -11,10 +11,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -61,13 +63,16 @@ import androidx.compose.material.icons.rounded.Policy
 import androidx.compose.material.icons.rounded.Sms
 import androidx.compose.material.icons.rounded.StarRate
 import androidx.compose.material.icons.rounded.Summarize
+import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Upload
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,6 +84,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.normpix.cashflow.CashflowState
@@ -95,8 +101,12 @@ import com.normpix.cashflow.fmt
 import com.normpix.cashflow.langList
 import com.normpix.cashflow.rememberSmsPermissionRequester
 import com.normpix.cashflow.seedToneColor
+import com.normpix.cashflow.openNotificationListenerSettings
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /** Top-right diagonal half of a shape (design's `clipPath: polygon(0 0, 100% 0, 100% 100%)`),
  * used to render a seed's accent color over its lighter "tone" base in the theme swatch. */
@@ -141,6 +151,7 @@ fun SettingsScreen(state: CashflowState, sysDark: Boolean) {
 @Composable
 private fun SettingsMain(state: CashflowState) {
     val t = LocalCashTokens.current
+    val context = LocalContext.current
     val requestSmsPermission = rememberSmsPermissionRequester(state)
     Column(
         modifier = Modifier
@@ -242,6 +253,26 @@ private fun SettingsMain(state: CashflowState) {
                 },
                 onClick = { if (!state.smsPermissionGranted) requestSmsPermission() else state.subScreen = "banks" },
             )
+            SettingRow(
+                Icons.Rounded.NotificationsActive, "Notification capture",
+                if (state.notifListenerGranted) "Catches Google Pay/PhonePe payments with no SMS" else "Access required · tap to allow",
+                trailing = {
+                    TogglePill(state.notifCaptureOn) {
+                        if (state.notifListenerGranted) state.setNotifCaptureOnPref(!state.notifCaptureOn) else openNotificationListenerSettings(context)
+                    }
+                },
+                onClick = { if (!state.notifListenerGranted) openNotificationListenerSettings(context) else state.subScreen = "banks" },
+            )
+            SettingRow(
+                Icons.Rounded.Sync, "Sync SMS messages",
+                if (state.smsSyncing) "Syncing…"
+                else state.smsLastSynced?.let { "Last synced ${SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(it))}" }
+                    ?: "Not synced yet · tap to view",
+                trailing = if (state.smsSyncing) {
+                    { CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = t.p) }
+                } else null,
+                onClick = { state.subScreen = "syncedMessages" },
+            )
             if (state.devMode) {
                 SettingRow(
                     Icons.Rounded.Link, "Webhooks", "${state.webhooks.size} endpoint(s) configured",
@@ -263,14 +294,14 @@ private fun SettingsMain(state: CashflowState) {
 }
 
 @Composable
-internal fun SubHeader(state: CashflowState, title: String, sub: String? = null) {
+internal fun SubHeader(state: CashflowState, title: String, sub: String? = null, backTo: String? = null) {
     val t = LocalCashTokens.current
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CircleIconButton(Icons.AutoMirrored.Rounded.ArrowBack, onClick = { state.subScreen = null })
+        CircleIconButton(Icons.AutoMirrored.Rounded.ArrowBack, onClick = { state.subScreen = backTo })
         Column {
             Text(title, fontSize = 20.sp, fontWeight = FontWeight.Medium, color = t.onS)
             if (sub != null) Text(sub, fontSize = 12.sp, color = t.onSV, modifier = Modifier.padding(top = 2.dp))
@@ -279,7 +310,7 @@ internal fun SubHeader(state: CashflowState, title: String, sub: String? = null)
 }
 
 @Composable
-internal fun subScreenModifier(state: CashflowState) = Modifier
+internal fun Modifier.subScreen(state: CashflowState) = this
     .fillMaxSize()
     .verticalScroll(rememberGlassSyncedScrollState())
     .statusBarsPadding()
@@ -289,7 +320,7 @@ internal fun subScreenModifier(state: CashflowState) = Modifier
 private fun ProfileSubScreen(state: CashflowState) {
     val t = LocalCashTokens.current
     val seeds = listOf(Triple("green", "Forest", Seed.GREEN.swatch), Triple("blue", "Ocean", Seed.BLUE.swatch), Triple("purple", "Orchid", Seed.PURPLE.swatch))
-    Column(modifier = subScreenModifier(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(modifier = Modifier.subScreen(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SubHeader(state, "Profile", "Shown across NormPix")
 
         Column(
@@ -345,7 +376,7 @@ private fun ProfileSubScreen(state: CashflowState) {
 @Composable
 private fun AppearanceSubScreen(state: CashflowState, sysDark: Boolean) {
     val t = LocalCashTokens.current
-    Column(modifier = subScreenModifier(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(modifier = Modifier.subScreen(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SubHeader(state, "Appearance", "Theme, color & navigation bar")
 
         Column(
@@ -374,7 +405,7 @@ private fun AppearanceSubScreen(state: CashflowState, sysDark: Boolean) {
                     Column(
                         modifier = Modifier
                             .width(92.dp)
-                            .offset(y = lift)
+                            .offset { IntOffset(0, lift.roundToPx()) }
                             .clip(RoundedCornerShape(22.dp))
                             .background(bg)
                             .border(2.dp, if (sel) swatchColor else Color.Transparent, RoundedCornerShape(22.dp))
@@ -505,6 +536,27 @@ private fun AppearanceSubScreen(state: CashflowState, sysDark: Boolean) {
                 }
                 TogglePill(state.showFab) { state.setShowFabPref(!state.showFab) }
             }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp)
+                    .height(1.dp)
+                    .background(t.out.copy(alpha = 0.5f)),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Tab labels", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = t.onS)
+                    Text(
+                        "Show text label on the selected tab", fontSize = 12.sp, color = t.onSV,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                TogglePill(state.navLabelsOn) { state.setNavLabelsOnPref(!state.navLabelsOn) }
+            }
         }
 
         SectionTitle("Sheets & overlays")
@@ -550,7 +602,7 @@ private fun AppearanceSubScreen(state: CashflowState, sysDark: Boolean) {
 @Composable
 private fun LanguageSubScreen(state: CashflowState) {
     val t = LocalCashTokens.current
-    Column(modifier = subScreenModifier(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(modifier = Modifier.subScreen(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SubHeader(state, "Language", "Used across menus and messages")
         Row(
             modifier = Modifier
@@ -595,7 +647,7 @@ private fun LanguageSubScreen(state: CashflowState) {
 @Composable
 private fun CurrencySubScreen(state: CashflowState) {
     val t = LocalCashTokens.current
-    Column(modifier = subScreenModifier(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(modifier = Modifier.subScreen(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SubHeader(state, "Currency", "Used for all amounts in NormPix")
         GroupCard {
             currencies.forEach { c ->
@@ -634,7 +686,7 @@ private fun CurrencySubScreen(state: CashflowState) {
 @Composable
 private fun AccountsSubScreen(state: CashflowState) {
     val t = LocalCashTokens.current
-    Column(modifier = subScreenModifier(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(modifier = Modifier.subScreen(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SubHeader(state, "Accounts", "${state.accounts.size} linked")
         GroupCard {
             state.accounts.forEachIndexed { i, a ->
@@ -722,7 +774,7 @@ private fun BudgetsSubScreen(state: CashflowState) {
     val t = LocalCashTokens.current
     val orderedKeys = listOf("Food", "Shopping", "Transport", "Bills").filter { it in state.budgetCaps } +
         state.budgetCaps.keys.filter { it !in listOf("Food", "Shopping", "Transport", "Bills") }
-    Column(modifier = subScreenModifier(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(modifier = Modifier.subScreen(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SubHeader(state, "Budgets", "Monthly caps by category")
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             orderedKeys.forEach { key ->
@@ -848,7 +900,7 @@ private fun BudgetsSubScreen(state: CashflowState) {
 @Composable
 private fun SmartRulesSubScreen(state: CashflowState) {
     val t = LocalCashTokens.current
-    Column(modifier = subScreenModifier(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(modifier = Modifier.subScreen(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SubHeader(state, "Smart rules", "Auto-categorize transactions by merchant keyword")
         GroupCard {
             state.smartRules.forEach { r ->
@@ -893,7 +945,7 @@ private fun SmartRulesSubScreen(state: CashflowState) {
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                listOf("Food", "Shopping", "Transport", "Bills").forEach { c ->
+                listOf("Food", "Groceries", "Shopping", "Transport", "Bills").forEach { c ->
                     ChoiceChip(c, state.newRuleCat == c, { state.newRuleCat = c }, icon = catIcons[c])
                 }
             }
@@ -927,7 +979,7 @@ private fun rememberCsvImportLauncher(state: CashflowState): () -> Unit {
 private fun PrivacySubScreen(state: CashflowState) {
     val t = LocalCashTokens.current
     val importCsv = rememberCsvImportLauncher(state)
-    Column(modifier = subScreenModifier(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(modifier = Modifier.subScreen(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SubHeader(state, "Data & privacy", "Everything stays on this device")
         Row(
             modifier = Modifier
@@ -963,7 +1015,7 @@ private fun PrivacySubScreen(state: CashflowState) {
 
 @Composable
 private fun NotificationsSubScreen(state: CashflowState) {
-    Column(modifier = subScreenModifier(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(modifier = Modifier.subScreen(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SubHeader(state, "Notifications", "Choose what NormPix can notify you about")
         GroupCard {
             SettingRow(
@@ -983,6 +1035,7 @@ private fun NotificationsSubScreen(state: CashflowState) {
                 trailing = { TogglePill(state.notifPrefs.sms) { state.toggleNotif("sms") } },
             )
         }
+        SectionTitle("Scheduled reminders")
         GroupCard {
             val activeCount = state.reminders.count { it.on }
             SettingRow(
@@ -997,7 +1050,7 @@ private fun NotificationsSubScreen(state: CashflowState) {
 @Composable
 private fun WebhooksSubScreen(state: CashflowState) {
     val t = LocalCashTokens.current
-    Column(modifier = subScreenModifier(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(modifier = Modifier.subScreen(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SubHeader(state, "Webhooks", "Send events to your own endpoint")
         GroupCard {
             state.webhooks.forEach { w ->
@@ -1059,7 +1112,7 @@ private fun WebhooksSubScreen(state: CashflowState) {
 @Composable
 private fun AboutSubScreen(state: CashflowState) {
     val t = LocalCashTokens.current
-    Column(modifier = subScreenModifier(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(modifier = Modifier.subScreen(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SubHeader(state, "About")
         Column(
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -1152,10 +1205,11 @@ private fun AboutSubScreen(state: CashflowState) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun CategoriesSubScreen(state: CashflowState) {
     val t = LocalCashTokens.current
-    Column(modifier = subScreenModifier(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(modifier = Modifier.subScreen(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SubHeader(state, "Categories", "12 categories · tap to see subcategories")
         GroupCard {
             state.categories.forEach { cat ->
@@ -1273,12 +1327,21 @@ private fun CategoriesSubScreen(state: CashflowState) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text("New category", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = t.onS)
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                CashTextField(
+                    value = state.newCatName, onValueChange = { state.newCatName = it },
+                    placeholder = "Category name", modifier = Modifier.fillMaxWidth(),
+                )
+                Text("Pick an icon", fontSize = 12.sp, color = t.onSV, modifier = Modifier.padding(top = (-4).dp))
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 172.dp).verticalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     addCategoryIcons.forEachIndexed { i, icon ->
                         val sel = state.newCatIconIdx == i
                         Box(
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(38.dp)
                                 .clip(CircleShape)
                                 .background(if (sel) t.sc else t.hi)
                                 .border(2.dp, if (sel) t.p else Color.Transparent, CircleShape)
@@ -1289,10 +1352,6 @@ private fun CategoriesSubScreen(state: CashflowState) {
                         }
                     }
                 }
-                CashTextField(
-                    value = state.newCatName, onValueChange = { state.newCatName = it },
-                    placeholder = "Category name", modifier = Modifier.fillMaxWidth(),
-                )
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Box(
                         modifier = Modifier
@@ -1327,7 +1386,7 @@ private fun CategoriesSubScreen(state: CashflowState) {
 @Composable
 private fun BanksSubScreen(state: CashflowState) {
     val t = LocalCashTokens.current
-    Column(modifier = subScreenModifier(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(modifier = Modifier.subScreen(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SubHeader(state, "Bank & sender rules", "Tap a bank to see its SMS formats")
         GroupCard {
             state.banks.forEachIndexed { bi, b ->
@@ -1502,7 +1561,11 @@ private fun BanksSubScreen(state: CashflowState) {
                     .background(t.p)
                     .clickable {
                         val nm = state.newBankName.trim()
-                        val sid = state.newSenderId.trim().uppercase()
+                        val sidRaw = state.newSenderId.trim()
+                        // Package names (e.g. com.phonepe.app, for a notification-captured app)
+                        // are lowercase and would be mangled by uppercasing — SMS sender IDs never
+                        // contain a dot, so that's a safe way to tell the two apart here.
+                        val sid = if (sidRaw.contains('.')) sidRaw else sidRaw.uppercase()
                         if (nm.isEmpty() || sid.isEmpty()) {
                             state.showToast("Enter bank name and sender ID")
                         } else {

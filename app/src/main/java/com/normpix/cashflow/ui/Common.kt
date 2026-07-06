@@ -3,10 +3,15 @@ package com.normpix.cashflow.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,12 +22,14 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -32,6 +39,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,16 +62,21 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import com.normpix.cashflow.CashflowState
 import com.normpix.cashflow.LocalCashTokens
 import com.normpix.cashflow.Txn
+import com.normpix.cashflow.catColor
 import com.normpix.cashflow.fmt
 import com.normpix.ui.floatingnav.LocalGlassBackdropState
+import kotlin.math.roundToInt
 
 /** M3 emphasized easing used throughout the design. */
 val Emphasized = CubicBezierEasing(0.2f, 0f, 0f, 1f)
@@ -129,44 +145,104 @@ fun SectionTitle(label: String, trailing: String? = null, onTrailingClick: (() -
     }
 }
 
-/** A transaction row inside a [GroupCard] (design `txRow`). */
+/** A transaction row inside a [GroupCard], with swipe-left-to-reveal Edit/Delete (design `txRow`). */
 @Composable
 fun TxRow(tx: Txn, state: CashflowState? = null, onClick: () -> Unit) {
     val t = LocalCashTokens.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(t.hi)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        val income = tx.amount > 0
-        IconBubble(
-            tx.icon, 44.dp,
-            bg = if (income) t.pc else t.sc,
-            tint = if (income) t.onPc else t.onSc,
-            iconSize = 22.dp,
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                tx.merchant, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = t.onS,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
-            val extra = buildString {
-                append(tx.whenLabel); append(" · "); append(tx.account)
-                tx.sub?.let { append(" · "); append(it) }
-                if (tx.auto) append(" · auto")
+    val density = LocalDensity.current
+    val btnWidthPx = with(density) { 72.dp.toPx() }
+    val maxOffsetPx = btnWidthPx * 2
+    var localOpen by remember { mutableStateOf(false) }
+    val isOpen = if (state != null) state.swipedTxId == tx.id else localOpen
+    fun setOpen(open: Boolean) {
+        if (state != null) state.swipedTxId = if (open) tx.id else null else localOpen = open
+    }
+    var dragging by remember { mutableStateOf(false) }
+    var dragPx by remember { mutableFloatStateOf(0f) }
+    val animatedPx by animateFloatAsState(
+        targetValue = if (dragging) dragPx else if (isOpen) -maxOffsetPx else 0f,
+        animationSpec = if (dragging) snap() else tween(260, easing = Emphasized),
+        label = "txSwipe",
+    )
+    val progress = (-animatedPx / maxOffsetPx).coerceIn(0f, 1f)
+    val btnWidth = 72.dp * progress
+
+    Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))) {
+        Row(modifier = Modifier.matchParentSize(), horizontalArrangement = Arrangement.End) {
+            Box(
+                modifier = Modifier
+                    .width(btnWidth)
+                    .fillMaxHeight()
+                    .background(t.sc)
+                    .clickable(enabled = progress > 0f) { setOpen(false); onClick() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Rounded.Edit, contentDescription = "Edit", tint = t.onSc, modifier = Modifier.size(20.dp))
+                    Text("Edit", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = t.onSc)
+                }
             }
-            Text(extra, fontSize = 12.sp, color = t.onSV, modifier = Modifier.padding(top = 3.dp))
+            Box(
+                modifier = Modifier
+                    .width(btnWidth)
+                    .fillMaxHeight()
+                    .background(t.err)
+                    .clickable(enabled = progress > 0f) { setOpen(false); state?.deleteTxn(tx.id) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Rounded.Delete, contentDescription = "Delete", tint = Color.White, modifier = Modifier.size(20.dp))
+                    Text("Delete", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                }
+            }
         }
-        Text(
-            (if (income) "+" else "−") + (state?.fmt(tx.amount) ?: fmt(tx.amount)),
-            fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-            color = if (income) t.p else t.onS,
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset { IntOffset(animatedPx.roundToInt(), 0) }
+                .background(t.hi)
+                .draggable(
+                    orientation = Orientation.Horizontal,
+                    state = rememberDraggableState { delta ->
+                        dragPx = (dragPx + delta).coerceIn(-maxOffsetPx, 0f)
+                    },
+                    onDragStarted = { dragPx = if (isOpen) -maxOffsetPx else 0f; dragging = true },
+                    onDragStopped = {
+                        dragging = false
+                        setOpen(-dragPx > maxOffsetPx / 2)
+                    },
+                )
+                .clickable(onClick = { if (isOpen) setOpen(false) else onClick() })
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val income = tx.amount > 0
+            val cc = catColor(tx.cat, t.dark)
+            IconBubble(
+                tx.icon, 44.dp,
+                bg = if (income) t.pc else cc.bg,
+                tint = if (income) t.onPc else cc.fg,
+                iconSize = 22.dp,
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    tx.merchant, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = t.onS,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                val extra = buildString {
+                    append(tx.whenLabel); append(" · "); append(tx.account)
+                    tx.sub?.let { append(" · "); append(it) }
+                    if (tx.auto) append(" · auto")
+                }
+                Text(extra, fontSize = 12.sp, color = t.onSV, modifier = Modifier.padding(top = 3.dp))
+            }
+            Text(
+                (if (income) "+" else "−") + (state?.fmt(tx.amount) ?: fmt(tx.amount)),
+                fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                color = if (income) t.p else t.onS,
+            )
+        }
     }
 }
 
@@ -182,13 +258,14 @@ fun ChoiceChip(
 ) {
     val t = LocalCashTokens.current
     val bg by animateColorAsState(if (selected) t.sc else Color.Transparent, tween(200, easing = Emphasized), label = "chipBg")
+    val border by animateColorAsState(if (selected) t.sc else t.out, tween(200, easing = Emphasized), label = "chipBorder")
     val fg = if (selected) t.onSc else t.onSV
     Row(
         modifier = Modifier
             .height(36.dp)
             .clip(RoundedCornerShape(cornerRadius))
             .background(bg)
-            .border(1.dp, if (selected) t.sc else t.out, RoundedCornerShape(cornerRadius))
+            .border(1.dp, border, RoundedCornerShape(cornerRadius))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -222,7 +299,7 @@ fun FieldLabel(text: String, modifier: Modifier = Modifier) {
     val t = LocalCashTokens.current
     Text(
         text, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = t.onSV,
-        modifier = modifier.padding(start = 4.dp, top = 2.dp),
+        modifier = modifier.padding(start = 4.dp, top = 2.dp, bottom = (-6).dp),
     )
 }
 
@@ -230,11 +307,13 @@ fun FieldLabel(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun TogglePill(on: Boolean, onClick: () -> Unit) {
     val t = LocalCashTokens.current
-    val bg by animateColorAsState(if (on) t.p else t.cont, tween(240, easing = Emphasized), label = "toggleBg")
+    val bg by animateColorAsState(if (on) t.p else t.hi, tween(240, easing = Emphasized), label = "toggleBg")
     val border by animateColorAsState(if (on) t.p else t.out, tween(240, easing = Emphasized), label = "toggleBorder")
     // Design: thumb sits inside the border, not flush against it — the trailing .padding(2.dp)
     // below insets the content area so these offsets leave a consistent 2dp gap on both ends.
-    val thumbX by animateDpAsState(if (on) 22.dp else 2.dp, tween(240, easing = Emphasized), label = "toggleThumb")
+    val thumbX by animateDpAsState(if (on) 22.dp else 6.dp, tween(240, easing = Emphasized), label = "toggleThumb")
+    val thumbSize by animateDpAsState(if (on) 24.dp else 16.dp, tween(240, easing = Emphasized), label = "toggleThumbSize")
+    val thumbColor by animateColorAsState(if (on) t.onP else t.out, tween(240, easing = Emphasized), label = "toggleThumbColor")
     Box(
         modifier = Modifier
             .size(width = 52.dp, height = 32.dp)
@@ -248,12 +327,12 @@ fun TogglePill(on: Boolean, onClick: () -> Unit) {
         Box(
             modifier = Modifier
                 .offset(x = thumbX)
-                .size(24.dp)
+                .size(thumbSize)
                 .clip(CircleShape)
-                .background(if (on) t.onP else t.onSV),
+                .background(thumbColor),
             contentAlignment = Alignment.Center,
         ) {
-            if (on) Icon(Icons.Rounded.Check, null, tint = t.p, modifier = Modifier.size(14.dp))
+            if (on) Icon(Icons.Rounded.Check, null, tint = t.p, modifier = Modifier.size(16.dp))
         }
     }
 }

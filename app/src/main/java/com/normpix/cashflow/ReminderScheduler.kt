@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.core.content.edit
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
@@ -70,7 +71,7 @@ fun saveReminders(context: Context, reminders: List<Reminder>) {
         )
     }
     context.getSharedPreferences(REMINDERS_PREFS, Context.MODE_PRIVATE)
-        .edit().putString(REMINDERS_KEY, arr.toString()).apply()
+        .edit { putString(REMINDERS_KEY, arr.toString()) }
 }
 
 /** True on API < 31 (no permission needed there) or once the user has granted exact-alarm scheduling. */

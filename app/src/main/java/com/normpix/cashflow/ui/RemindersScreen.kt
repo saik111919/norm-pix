@@ -21,6 +21,7 @@ import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CurrencyRupee
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -243,6 +244,49 @@ private fun DateField(dateKey: String?, onChange: (String) -> Unit) {
     }
 }
 
+/** Live preview of a "daily summary" reminder's notification content (design's `reminderPreview`). */
+@Composable
+private fun ReminderPreview(state: CashflowState, r: Reminder) {
+    if (r.type != "daily_summary") return
+    val t = LocalCashTokens.current
+    val todaySpends = state.txns.filter { it.day == "Today" && it.amount < 0 }
+        .sortedByDescending { kotlin.math.abs(it.amount) }
+    val todayTotal = todaySpends.sumOf { kotlin.math.abs(it.amount) }
+    val title = if (todaySpends.isNotEmpty())
+        "Today’s spending: ${state.fmt(todayTotal)} across ${todaySpends.size} expense${if (todaySpends.size == 1) "" else "s"}"
+    else "No expenses logged yet today"
+    val body = todaySpends.joinToString(" · ") { "${it.merchant} ${state.fmt(it.amount)}" }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(if (t.dark) androidx.compose.ui.graphics.Color.White.copy(alpha = 0.06f) else androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.04f))
+            .border(1.dp, t.out.copy(alpha = 0.6f), RoundedCornerShape(18.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("PREVIEW · HIGHEST TO LOWEST", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = t.onSV)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(
+                modifier = Modifier.size(30.dp).clip(RoundedCornerShape(9.dp)).background(t.p),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Rounded.CurrencyRupee, null, tint = t.onP, modifier = Modifier.size(15.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("NormPix", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = t.onS)
+                    Text(formatTime12(r.time).ifEmpty { "now" }, fontSize = 11.sp, color = t.onSV)
+                }
+                Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = t.onS, modifier = Modifier.padding(top = 2.dp))
+                if (body.isNotEmpty()) {
+                    Text(body, fontSize = 12.sp, color = t.onSV, lineHeight = 18.sp, modifier = Modifier.padding(top = 2.dp))
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ReminderCard(state: CashflowState, r: Reminder) {
     val t = LocalCashTokens.current
@@ -339,6 +383,8 @@ private fun ReminderCard(state: CashflowState, r: Reminder) {
                     TogglePill(r.vibration) { state.setReminderVibration(r.id, !r.vibration) }
                 }
 
+                ReminderPreview(state, r)
+
                 if (r.type == "custom") {
                     Row(
                         modifier = Modifier
@@ -416,7 +462,7 @@ private fun AddReminderForm(state: CashflowState) {
 @Composable
 fun RemindersSubScreen(state: CashflowState) {
     val t = LocalCashTokens.current
-    Column(modifier = subScreenModifier(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(modifier = Modifier.subScreen(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SubHeader(state, "Reminders", "Schedule when and how NormPix notifies you")
         if (!state.exactAlarmsAllowed) {
             Row(
@@ -476,8 +522,8 @@ fun AppExceptionsSubScreen(state: CashflowState) {
     val filtered = appsList.filter { it.name.lowercase().contains(query) }
     val callApps = filtered.filter { it.category == "call" }
     val otherApps = filtered.filter { it.category == "other" }
-    Column(modifier = subScreenModifier(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SubHeader(state, "Full-screen behavior", "Choose which apps stay notification-only")
+    Column(modifier = Modifier.subScreen(state), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        SubHeader(state, "Full-screen behavior", "Choose which apps stay notification-only", backTo = "reminders")
         Row(
             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(t.cont).padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),

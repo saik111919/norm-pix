@@ -4,19 +4,23 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.provider.Telephony
+import androidx.core.content.edit
 import org.json.JSONArray
 import org.json.JSONObject
 
 private const val PENDING_INBOX_PREFS = "cashflow_pending_inbox"
 private const val PENDING_INBOX_KEY = "pending"
 
-/** Persists a freshly parsed SMS transaction so [CashflowState] can pick it up next time it's
- * active — the receiver runs in its own short-lived context, with no access to the live app state. */
-private fun queuePendingInboxEntry(context: Context, sender: String, body: String, parsed: ParsedSms) {
+/** Persists a freshly parsed transaction (from SMS or, via [BankNotificationListener], a bank/UPI
+ * notification) so [CashflowState] can pick it up next time it's active — the receiver/service
+ * runs in its own short-lived context, with no access to the live app state. [idPrefix]
+ * namespaces the two sources ("sms" / "ntf") so their generated ids can never collide in
+ * [CashflowState.addParsedInboxEntry]'s cross-source dedup-by-id check. */
+internal fun queuePendingInboxEntry(context: Context, sender: String, body: String, parsed: ParsedSms, idPrefix: String = "sms") {
     val prefs = context.getSharedPreferences(PENDING_INBOX_PREFS, Context.MODE_PRIVATE)
     val existing = runCatching { JSONArray(prefs.getString(PENDING_INBOX_KEY, "[]")) }.getOrDefault(JSONArray())
     val entry = JSONObject().apply {
-        put("id", "sms" + System.currentTimeMillis())
+        put("id", idPrefix + System.currentTimeMillis())
         put("sender", sender)
         put("sms", body)
         put("bank", parsed.bank.name)
@@ -25,14 +29,14 @@ private fun queuePendingInboxEntry(context: Context, sender: String, body: Strin
         put("last4", parsed.last4 ?: "")
     }
     existing.put(entry)
-    prefs.edit().putString(PENDING_INBOX_KEY, existing.toString()).apply()
+    prefs.edit { putString(PENDING_INBOX_KEY, existing.toString()) }
 }
 
 /** Reads and clears any SMS-derived transactions queued since [CashflowState] last checked. */
 fun drainPendingInboxEntries(context: Context): List<JSONObject> {
     val prefs = context.getSharedPreferences(PENDING_INBOX_PREFS, Context.MODE_PRIVATE)
     val raw = prefs.getString(PENDING_INBOX_KEY, null) ?: return emptyList()
-    prefs.edit().remove(PENDING_INBOX_KEY).apply()
+    prefs.edit { remove(PENDING_INBOX_KEY) }
     val arr = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
     return (0 until arr.length()).map { arr.getJSONObject(it) }
 }

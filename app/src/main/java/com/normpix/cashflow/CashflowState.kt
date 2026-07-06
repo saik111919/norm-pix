@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -14,11 +15,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
+import androidx.core.content.edit
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.Payments
 import java.io.File
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** What the edit bottom sheet is targeting. */
@@ -36,6 +39,7 @@ data class SheetTarget(
 class CashflowState(private val context: Context, private val prefs: SharedPreferences) {
 
     // Navigation
+
     var tab: Int by mutableIntStateOf(0)
     var subScreen: String? by mutableStateOf(null) // null | "banks" | "categories" | "privacy"
     var catDetail: String? by mutableStateOf(null) // null | "Food" | "Shopping" | "Transport" | "Bills" | "Income"
@@ -48,18 +52,20 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
         private set
     var mode: ThemeMode by mutableStateOf(runCatching { ThemeMode.valueOf(prefs.getString("mode", "LIGHT")!!) }.getOrDefault(ThemeMode.LIGHT))
         private set
-    var navBlur: Float by mutableStateOf(prefs.getFloat("navBlur", 22f))
+    var navBlur: Float by mutableFloatStateOf(prefs.getFloat("navBlur", 22f))
         private set
-    var navOpacity: Float by mutableStateOf(prefs.getFloat("navOpacity", 0.55f))
+    var navOpacity: Float by mutableFloatStateOf(prefs.getFloat("navOpacity", 0.55f))
         private set
     var showFab: Boolean by mutableStateOf(prefs.getBoolean("showFab", true))
+        private set
+    var navLabelsOn: Boolean by mutableStateOf(prefs.getBoolean("navLabelsOn", true))
         private set
 
     // Centralized blur strength + tint opacity for the Add screen and Edit/confirm sheets
     // (design uses fixed values; this makes them user-adjustable settings like the nav bar's).
-    var sheetBlur: Float by mutableStateOf(prefs.getFloat("sheetBlur", 24f))
+    var sheetBlur: Float by mutableFloatStateOf(prefs.getFloat("sheetBlur", 24f))
         private set
-    var sheetOpacity: Float by mutableStateOf(prefs.getFloat("sheetOpacity", 0.9f))
+    var sheetOpacity: Float by mutableFloatStateOf(prefs.getFloat("sheetOpacity", 0.9f))
         private set
 
     // Currency (persisted)
@@ -68,17 +74,18 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     }.getOrDefault(currencies[0]))
         private set
 
-    fun setSeedPref(v: Seed) { seed = v; prefs.edit().putString("seed", v.name).apply() }
-    fun setModePref(v: ThemeMode) { mode = v; prefs.edit().putString("mode", v.name).apply() }
-    fun setNavBlurPref(v: Float) { navBlur = v; prefs.edit().putFloat("navBlur", v).apply() }
-    fun setSheetBlurPref(v: Float) { sheetBlur = v; prefs.edit().putFloat("sheetBlur", v).apply() }
-    fun setSheetOpacityPref(v: Float) { sheetOpacity = v; prefs.edit().putFloat("sheetOpacity", v).apply() }
-    fun setNavOpacityPref(v: Float) { navOpacity = v; prefs.edit().putFloat("navOpacity", v).apply() }
-    fun setShowFabPref(v: Boolean) { showFab = v; prefs.edit().putBoolean("showFab", v).apply() }
-    fun setCurrencyPref(v: Currency) { currency = v; prefs.edit().putString("currency", v.code).apply() }
+    fun setSeedPref(v: Seed) { seed = v; prefs.edit { putString("seed", v.name) } }
+    fun setModePref(v: ThemeMode) { mode = v; prefs.edit { putString("mode", v.name) } }
+    fun setNavBlurPref(v: Float) { navBlur = v; prefs.edit { putFloat("navBlur", v) } }
+    fun setSheetBlurPref(v: Float) { sheetBlur = v; prefs.edit { putFloat("sheetBlur", v) } }
+    fun setSheetOpacityPref(v: Float) { sheetOpacity = v; prefs.edit { putFloat("sheetOpacity", v) } }
+    fun setNavOpacityPref(v: Float) { navOpacity = v; prefs.edit { putFloat("navOpacity", v) } }
+    fun setShowFabPref(v: Boolean) { showFab = v; prefs.edit { putBoolean("showFab", v) } }
+    fun setNavLabelsOnPref(v: Boolean) { navLabelsOn = v; prefs.edit { putBoolean("navLabelsOn", v) } }
+    fun setCurrencyPref(v: Currency) { currency = v; prefs.edit { putString("currency", v.code) } }
 
     // Formatting helper
-    fun fmt(n: Double): String = com.normpix.cashflow.fmt(n, currency)
+    fun fmt(n: Double): String = fmt(n, currency)
 
     // Transactions screen
     var search: String by mutableStateOf("")
@@ -87,7 +94,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     // Settings
     // Whether the OS has actually granted SMS read/receive permission — refreshed on
     // creation and whenever the app resumes (e.g. coming back from system Settings).
-    var smsPermissionGranted: Boolean by mutableStateOf(com.normpix.cashflow.hasSmsPermission(context))
+    var smsPermissionGranted: Boolean by mutableStateOf(hasSmsPermission(context))
         private set
 
     // Whether the system permission dialog has been shown before, so we know when a
@@ -97,7 +104,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
 
     fun markSmsPermissionRequested() {
         smsPermissionRequestedBefore = true
-        prefs.edit().putBoolean("smsPermRequested", true).apply()
+        prefs.edit { putBoolean("smsPermRequested", true) }
     }
 
     /** Called with the result of a permission request (or a fresh check on resume). */
@@ -110,7 +117,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
 
     /** Re-checks the OS permission state, e.g. after the app resumes from system Settings. */
     fun refreshSmsPermission() {
-        val granted = com.normpix.cashflow.hasSmsPermission(context)
+        val granted = hasSmsPermission(context)
         if (granted != smsPermissionGranted) {
             smsPermissionGranted = granted
             if (!granted) setSmsOnPref(false)
@@ -142,9 +149,9 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
      * already on the device (the READ_SMS half of the permission) for anything newer than the
      * last scan. Cheap to call on every resume — the content-provider query is watermarked. */
     fun refreshSmsInbox() {
-        if (!smsOn || !com.normpix.cashflow.hasSmsPermission(context)) return
+        if (!smsOn || !hasSmsPermission(context)) return
         var found = 0
-        com.normpix.cashflow.drainPendingInboxEntries(context).forEach { entry ->
+        drainPendingInboxEntries(context).forEach { entry ->
             val amount = entry.optDouble("amount", 0.0)
             if (amount <= 0.0) return@forEach
             val bank = entry.optString("bank")
@@ -176,21 +183,43 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
                 if (date > maxDate) maxDate = date
                 val sender = c.getString(addressIdx) ?: continue
                 val body = c.getString(bodyIdx) ?: continue
-                val parsed = com.normpix.cashflow.parseSms(sender, body, banks) ?: continue
+                val parsed = parseSms(sender, body, banks) ?: continue
                 if (addParsedInboxEntry("sms$date$sender".hashCode().toString(), sender, body, parsed)) found++
             }
         }
-        prefs.edit().putLong("smsLastScan", maxDate).apply()
+        prefs.edit { putLong("smsLastScan", maxDate) }
 
         if (found > 0) showToast("$found new message${if (found == 1) "" else "s"} detected")
     }
 
     // User's intent to auto-capture from SMS. Only meaningful when smsPermissionGranted
     // is also true — the Settings toggle and Inbox banner keep the two in sync.
-    var smsOn: Boolean by mutableStateOf(prefs.getBoolean("smsOn", true) && com.normpix.cashflow.hasSmsPermission(context))
+    var smsOn: Boolean by mutableStateOf(prefs.getBoolean("smsOn", true) && hasSmsPermission(context))
         private set
 
-    fun setSmsOnPref(v: Boolean) { smsOn = v; prefs.edit().putBoolean("smsOn", v).apply() }
+    fun setSmsOnPref(v: Boolean) { smsOn = v; prefs.edit { putBoolean("smsOn", v) } }
+
+    // Whether the OS has granted "Notification access" (a special-access permission, no runtime
+    // dialog) — needed for BankNotificationListener to catch bank/UPI notifications like Google
+    // Pay/PhonePe payments that never send an SMS. Refreshed on resume, like smsPermissionGranted.
+    var notifListenerGranted: Boolean by mutableStateOf(hasNotificationListenerPermission(context))
+        private set
+
+    // User's intent to auto-capture from notifications. Only meaningful when notifListenerGranted
+    // is also true — mirrors smsOn/smsPermissionGranted.
+    var notifCaptureOn: Boolean by mutableStateOf(prefs.getBoolean("notifCaptureOn", true) && hasNotificationListenerPermission(context))
+        private set
+
+    fun setNotifCaptureOnPref(v: Boolean) { notifCaptureOn = v; prefs.edit { putBoolean("notifCaptureOn", v) } }
+
+    /** Re-checks the OS permission state, e.g. after the app resumes from system Settings. */
+    fun refreshNotificationListenerPermission() {
+        val granted = hasNotificationListenerPermission(context)
+        if (granted != notifListenerGranted) {
+            notifListenerGranted = granted
+            if (!granted) setNotifCaptureOnPref(false)
+        }
+    }
 
     var catExpanded: String? by mutableStateOf(null)
     var bankExpanded: String? by mutableStateOf(null)
@@ -220,14 +249,12 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     var profileColor: String by mutableStateOf(prefs.getString("profileColor", "green")!!)
         private set
 
-    fun setProfileNamePref(v: String) { profileName = v; prefs.edit().putString("profileName", v).apply() }
-    fun setProfileColorPref(v: String) { profileColor = v; prefs.edit().putString("profileColor", v).apply() }
+    fun setProfileNamePref(v: String) { profileName = v; prefs.edit { putString("profileName", v) } }
+    fun setProfileColorPref(v: String) { profileColor = v; prefs.edit { putString("profileColor", v) } }
 
     // Language (persisted)
     var language: String by mutableStateOf(prefs.getString("language", "English")!!)
         private set
-
-    fun setLanguagePref(l: String) { language = l; prefs.edit().putString("language", l).apply(); showToast("Language set to $l") }
 
     fun setCurrencyByCode(code: String) {
         val c = currencies.find { it.code == code } ?: return
@@ -243,11 +270,11 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
 
     fun toggleDevMode() {
         devMode = !devMode
-        prefs.edit().putBoolean("devMode", devMode).apply()
+        prefs.edit { putBoolean("devMode", devMode) }
         if (devMode) showToast("Developer mode enabled")
     }
 
-    fun toggleAutoBackup() { autoBackup = !autoBackup; prefs.edit().putBoolean("autoBackup", autoBackup).apply() }
+    fun toggleAutoBackup() { autoBackup = !autoBackup; prefs.edit { putBoolean("autoBackup", autoBackup) } }
 
     // Notification preferences (persisted)
     var notifPrefs: NotifPrefs by mutableStateOf(
@@ -267,17 +294,17 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
             "bills" -> notifPrefs.copy(bills = !notifPrefs.bills)
             else -> notifPrefs.copy(sms = !notifPrefs.sms)
         }
-        prefs.edit()
-            .putBoolean("notif_budget", notifPrefs.budget)
-            .putBoolean("notif_weekly", notifPrefs.weekly)
-            .putBoolean("notif_bills", notifPrefs.bills)
-            .putBoolean("notif_sms", notifPrefs.sms)
-            .apply()
+        prefs.edit {
+            putBoolean("notif_budget", notifPrefs.budget)
+            putBoolean("notif_weekly", notifPrefs.weekly)
+            putBoolean("notif_bills", notifPrefs.bills)
+            putBoolean("notif_sms", notifPrefs.sms)
+        }
     }
 
     // Reminders sub-screen — persisted to SharedPreferences (not just in-memory) so the real
     // AlarmManager alarms scheduled for them keep working across app restarts and reboots.
-    val reminders = mutableStateListOf<Reminder>().apply { addAll(com.normpix.cashflow.loadReminders(context) ?: com.normpix.cashflow.sampleReminders()) }
+    val reminders = mutableStateListOf<Reminder>().apply { addAll(loadReminders(context) ?: sampleReminders()) }
     var reminderEditing: String? by mutableStateOf(null)
     var alarmFiring: Reminder? by mutableStateOf(null)
 
@@ -294,18 +321,18 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
         private set
 
     fun refreshExactAlarmPermission() { exactAlarmsAllowed = canScheduleExactAlarms(context) }
-    fun requestExactAlarmPermission() = com.normpix.cashflow.requestExactAlarmPermission(context)
+    fun requestExactAlarmPermission() = requestExactAlarmPermission(context)
 
     /** Saves the reminder list and re-syncs every reminder's real OS alarm to match. */
     private fun persistReminders() {
-        com.normpix.cashflow.saveReminders(context, reminders)
-        com.normpix.cashflow.syncReminderAlarms(context, reminders)
+        saveReminders(context, reminders)
+        syncReminderAlarms(context, reminders)
     }
 
     init {
         // First run (or a fresh install): seed persisted storage from the sample defaults so
         // their alarms are actually scheduled, not just shown in the list.
-        if (com.normpix.cashflow.loadReminders(context) == null) persistReminders()
+        if (loadReminders(context) == null) persistReminders()
     }
 
     fun toggleReminder(id: String) {
@@ -333,7 +360,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     fun removeReminder(id: String) {
         reminders.removeAll { it.id == id }
         if (reminderEditing == id) reminderEditing = null
-        com.normpix.cashflow.cancelReminder(context, id)
+        cancelReminder(context, id)
         persistReminders()
     }
 
@@ -343,7 +370,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     fun snoozeAlarm() {
         val r = alarmFiring
         alarmFiring = null
-        if (r != null) com.normpix.cashflow.scheduleExactAt(context, r, System.currentTimeMillis() + 10 * 60 * 1000)
+        if (r != null) scheduleExactAt(context, r, System.currentTimeMillis() + 10 * 60 * 1000)
         showToast("Snoozed for 10 minutes")
     }
 
@@ -363,7 +390,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
             Reminder(
                 id = "cr" + System.currentTimeMillis(),
                 type = "custom",
-                icon = com.normpix.cashflow.reminderIcon("custom", hasLinkedTxn = newReminderKind == "review_spend"),
+                icon = reminderIcon("custom", hasLinkedTxn = newReminderKind == "review_spend"),
                 title = title, on = true, time = newReminderTime.ifBlank { "09:00" }, freq = "once",
                 date = newReminderDate, sound = true, vibration = true, priority = "normal",
                 linkedTxnId = if (newReminderKind == "review_spend") newReminderTxnId else null,
@@ -406,12 +433,12 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     }
 
     // About screen: star rating (persisted) + Licenses/Privacy accordions
-    var rating: Int by mutableStateOf(prefs.getInt("rating", 0))
+    var rating: Int by mutableIntStateOf(prefs.getInt("rating", 0))
         private set
 
     fun rate(v: Int) {
         rating = v
-        prefs.edit().putInt("rating", v).apply()
+        prefs.edit { putInt("rating", v) }
         showToast("Thanks for the $v-star rating!")
     }
 
@@ -429,8 +456,6 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     }
 
     val monthlyBudget: Double get() = budgetCaps.values.sum()
-
-    fun setBudgetCap(cat: String, cap: Double) { budgetCaps[cat] = cap }
 
     // Budgets sub-screen: inline edit-existing / add-new flows (design's editingBudgetFor / addingBudget)
     var editingBudgetFor: String? by mutableStateOf(null)
@@ -483,7 +508,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     }
 
     /** This month's spend for [cat] — live-computed from [txns], not a snapshot. */
-    fun categorySpent(cat: String): Double = com.normpix.cashflow.categorySpent(txns, cat)
+    fun categorySpent(cat: String): Double = categorySpent(txns, cat)
 
     /** Total expense this month across all non-transfer categories — live-computed from [txns]. */
     val spentMonth: Double get() = txns.filter { it.amount < 0 && it.cat != "Transfer" }.sumOf { -it.amount }
@@ -493,6 +518,14 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
 
     /** Percent of [monthlyBudget] spent so far this month. */
     val budgetPct: Int get() = if (monthlyBudget <= 0) 0 else ((spentMonth / monthlyBudget) * 100).roundToInt()
+
+    /** Id of the [Txn] currently swiped open to reveal Edit/Delete (design `swipedTxId`); only one at a time. */
+    var swipedTxId: String? by mutableStateOf(null)
+
+    fun deleteTxn(id: String) {
+        txns.removeAll { it.id == id }
+        if (swipedTxId == id) swipedTxId = null
+    }
 
     // Data
     val txns = mutableStateListOf<Txn>().apply { addAll(sampleTxns()) }
@@ -664,12 +697,12 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
         when (target.type) {
             "inbox" -> {
                 editMerchant = target.inbox!!.merchant.replace(" (Amazon?)", "")
-                editAmount = com.normpix.cashflow.groupINR(target.inbox.amount, currency.locale).replace(",", "")
+                editAmount = groupINR(target.inbox.amount, currency.locale).replace(",", "")
                 editCat = target.inbox.cat
             }
             "txn" -> {
                 editMerchant = target.txn!!.merchant
-                editAmount = com.normpix.cashflow.groupINR(kotlin.math.abs(target.txn.amount), currency.locale).replace(",", "")
+                editAmount = groupINR(abs(target.txn.amount), currency.locale).replace(",", "")
                 editCat = target.txn.cat
             }
         }
@@ -685,7 +718,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
             Txn(
                 id = "n" + item.id,
                 merchant = merchant,
-                amount = -kotlin.math.abs(amount),
+                amount = -abs(amount),
                 cat = cat,
                 account = item.account + " · UPI",
                 whenLabel = item.whenLabel.replace("Today, ", ""),
@@ -758,7 +791,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
                 if (idx >= 0) {
                     val old = txns[idx]
                     val sign = if (old.amount > 0) 1 else -1
-                    val newAmt = editAmount.toDoubleOrNull()?.let { kotlin.math.abs(it) } ?: kotlin.math.abs(old.amount)
+                    val newAmt = editAmount.toDoubleOrNull()?.let { abs(it) } ?: abs(old.amount)
                     txns[idx] = old.copy(
                         merchant = editMerchant,
                         cat = editCat,
@@ -776,7 +809,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     fun importCsv(uri: android.net.Uri) {
         val lines = try {
             context.contentResolver.openInputStream(uri)?.bufferedReader()?.readLines()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
         if (lines == null) { showToast("Couldn't read file"); return }
@@ -821,7 +854,7 @@ class CashflowState(private val context: Context, private val prefs: SharedPrefe
     }
 
     private fun notify(title: String, body: String) {
-        if (!com.normpix.cashflow.hasNotificationPermission(context)) return
+        if (!hasNotificationPermission(context)) return
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             val channel = android.app.NotificationChannel("txns", "Transactions", android.app.NotificationManager.IMPORTANCE_DEFAULT)

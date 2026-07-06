@@ -41,6 +41,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,6 +73,7 @@ import com.normpix.ui.floatingnav.FloatingNavItem
 import com.normpix.ui.floatingnav.LocalGlassBackdropState
 import com.normpix.ui.floatingnav.glassSource
 import com.normpix.ui.floatingnav.rememberGlassBackdropState
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 
 /** Root of the Cashflow app — theme, screens, glass nav bar, FAB, add flow, sheet, toast. */
@@ -95,6 +98,7 @@ fun CashflowApp() {
             val observer = LifecycleEventObserver { _, event ->
                 if (event == Lifecycle.Event.ON_RESUME) {
                     state.refreshSmsPermission()
+                    state.refreshNotificationListenerPermission()
                     state.refreshSmsInbox()
                     state.refreshExactAlarmPermission()
                 }
@@ -199,6 +203,7 @@ fun CashflowApp() {
                     inactiveIconColor = t.onSV,
                     saturation = 1.5f, // design: backdrop-filter saturate(1.5)
                     borderColor = if (t.dark) t.hi else Color.White, // design border color
+                    showLabels = state.navLabelsOn,
                 )
                 FloatingGlassNavBar(
                     items = listOf(
@@ -256,11 +261,11 @@ fun CashflowApp() {
             // Toast
             LaunchedEffect(state.toastTick) {
                 if (state.toast != null) {
-                    delay(2200)
+                    delay(2200.milliseconds)
                     state.toast = null
                 }
             }
-            var lastToast by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+            var lastToast by remember { mutableStateOf("") }
             state.toast?.let { lastToast = it }
             AnimatedVisibility(
                 visible = state.toast != null,
