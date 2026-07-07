@@ -928,7 +928,7 @@ class TransactionsViewModel @Inject constructor(
         val encodedTitle = URLEncoder.encode(issueTitle, "UTF-8")
         val encodedBody = URLEncoder.encode(issueBody, "UTF-8")
 
-        return "https://github.com/ritesh-kanwar/Cashiro/issues/new?title=$encodedTitle&body=$encodedBody"
+        return "https://github.com/saik111919/norm-pix/issues/new?title=$encodedTitle&body=$encodedBody"
     }
     
 }

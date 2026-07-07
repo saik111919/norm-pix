@@ -68,12 +68,7 @@ object Constants {
      */
     object Links {
         const val DISCORD_URL = "https://discord.gg/6qaYgpJTg"
-        const val GITHUB_URL = "https://github.com/ritesh-kanwar/Cashiro"
-        const val WEBSITE_URL = "https://ritesh-kanwar.github.io/cashiro.showcase"
-        const val PRIVACY_POLICY_URL = "https://ritesh-kanwar.github.io/cashiro.showcase/privacy"
-        const val TERMS_OF_SERVICE_URL = "https://ritesh-kanwar.github.io/cashiro.showcase/terms"
-        const val FAQ_URL = "https://ritesh-kanwar.github.io/cashiro.showcase/faq"
-        const val GUIDE_URL = "https://ritesh-kanwar.github.io/cashiro.showcase/guides"
-        const val REPORT_BUG_URL = "https://github.com/ritesh-kanwar/Cashiro/issues/new/choose"
+        const val GITHUB_URL = "https://github.com/saik111919/norm-pix"
+        const val REPORT_BUG_URL = "https://github.com/saik111919/norm-pix/issues/new/choose"
     }
 }

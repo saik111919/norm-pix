@@ -515,24 +515,15 @@
 
     <!-- About Screen -->
     <string name="about">About</string>
-    <string name="cashiro_logo_cd">Cashiro Logo</string>
+    <string name="cashiro_logo_cd">NOrmPix Logo</string>
     <string name="version_format">Version %1$s, db-v%2$d</string>
     <string name="developed_by">Developed By Ritesh</string>
     <string name="lead_developer_cd">lead developer</string>
-    <string name="website">Website</string>
     <string name="github">Github</string>
     <string name="discord">Discord</string>
     <string name="join_community">Join our community</string>
-    <string name="faq">FAQ</string>
-    <string name="faq_desc">Frequently asked questions</string>
-    <string name="guides">Guides</string>
-    <string name="guides_desc">How to use Cashiro</string>
     <string name="report_bug">Report Bug</string>
-    <string name="report_bug_desc">Help us improve Cashiro</string>
-    <string name="privacy_policy">Privacy Policy</string>
-    <string name="privacy_policy_desc">Your data usage and privacy</string>
-    <string name="terms_of_service">Terms of Service</string>
-    <string name="terms_of_service_desc">Rules for using the app</string>
+    <string name="report_bug_desc">Help us improve NOrmPix</string>
     <string name="licenses">Licenses</string>
     <string name="licenses_desc">Open source libraries</string>
     <string name="developer_options">Developer Options</string>

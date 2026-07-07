@@ -10,8 +10,8 @@
 [//]: # ([![Downloads]&#40;https://img.shields.io/badge/Downloads-100+-green&#41;]&#40;https://play.google.com/store/apps/details?id=com.pennywiseai.tracker&#41;)
 
 [![F-Droid](https://img.shields.io/f-droid/v/com.ritesh.cashiro?color=green)](https://f-droid.org/packages/com.ritesh.cashiro/)
-[![GitHub release](https://img.shields.io/github/v/release/ritesh-kanwar/Cashiro)](https://github.com/ritesh-kanwar/Cashiro/releases)
-[![GitHub last commit](https://img.shields.io/github/last-commit/ritesh-kanwar/Cashiro)](https://github.com/ritesh-kanwar/Cashiro/commits)
+[![GitHub release](https://img.shields.io/github/v/release/saik111919/norm-pix)](https://github.com/saik111919/norm-pix/releases)
+[![GitHub last commit](https://img.shields.io/github/last-commit/saik111919/norm-pix)](https://github.com/saik111919/norm-pix/commits)
 
 [//]: # ([![Discord]&#40;https://img.shields.io/badge/Discord-Join_Community-5865F2&#41;]&#40;https://discord.gg/H3xWeMWjKQ&#41;)
 
@@ -24,10 +24,10 @@ NOrmPix is a comprehensive financial tracking manager that Turn bank SMS and PDF
 ⭐ **Star us on GitHub**
 
 [//]: # ()
-[![Share](https://img.shields.io/badge/share-000000?logo=x&logoColor=white)](https://x.com/intent/tweet?text=Check%20out%20NOrmPix%20AI%20-%20Privacy-first%20expense-budget%20tracker%20with%20on-device%20AI:%20https://github.com/ritesh-kanwar/Cashiro%20%23Android%20%23PrivacyFirst%20%23OnDeviceAI)
-[![Share](https://img.shields.io/badge/share-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/ritesh-kanwar/Cashiro)
-[![Share](https://img.shields.io/badge/share-FF4500?logo=reddit&logoColor=white)](https://www.reddit.com/submit?title=NOrmPix%20AI%20-%20Privacy-first%20expense-budget%20tracker&url=https://github.com/ritesh-kanwar/Cashiro)
-[![Share](https://img.shields.io/badge/share-0088CC?logo=telegram&logoColor=white)](https://t.me/share/url?url=https://github.com/ritesh-kanwar/Cashiro&text=Check%20out%20NOrmPix%20AI)
+[![Share](https://img.shields.io/badge/share-000000?logo=x&logoColor=white)](https://x.com/intent/tweet?text=Check%20out%20NOrmPix%20AI%20-%20Privacy-first%20expense-budget%20tracker%20with%20on-device%20AI:%20https://github.com/saik111919/norm-pix%20%23Android%20%23PrivacyFirst%20%23OnDeviceAI)
+[![Share](https://img.shields.io/badge/share-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/saik111919/norm-pix)
+[![Share](https://img.shields.io/badge/share-FF4500?logo=reddit&logoColor=white)](https://www.reddit.com/submit?title=NOrmPix%20AI%20-%20Privacy-first%20expense-budget%20tracker&url=https://github.com/saik111919/norm-pix)
+[![Share](https://img.shields.io/badge/share-0088CC?logo=telegram&logoColor=white)](https://t.me/share/url?url=https://github.com/saik111919/norm-pix&text=Check%20out%20NOrmPix%20AI)
 
 ## Overview
 
@@ -130,7 +130,7 @@ Supporting **80+ banks** across **14 countries** with **multi-currency** capabil
 ### 🇧🇾 Belarus (1 bank) - BYN Br
 - **Priorbank** - Russian/Belarusian SMS support
 
-More banks being added regularly! [Request your bank →](https://github.com/ritesh-kanwar/Cashiro/issues/new?template=bank_support_request.md)
+More banks being added regularly! [Request your bank →](https://github.com/saik111919/norm-pix/issues/new?template=bank_support_request.md)
 
 ## Privacy First
 
@@ -181,8 +181,8 @@ All processing happens on your device using MediaPipe's LLM. Your financial data
 
 ```bash
 # Clone repository
-git clone https://github.com/ritesh-kanwar/Cashiro.git
-cd Cashiro
+git clone https://github.com/saik111919/norm-pix.git
+cd norm-pix
 
 # Build APK
 ./gradlew assembleDebug
@@ -230,7 +230,7 @@ com.ritesh.cashiro
 ## Community & Support
 
 [//]: # (- **Discord**: Join the community, share feedback, and get help — [Join Discord]&#40;https://discord.gg/H3xWeMWjKQ&#41;)
-- **Issues**: Report bugs or request features — [Open an issue](https://github.com/ritesh-kanwar/Cashiro/issues)
+- **Issues**: Report bugs or request features — [Open an issue](https://github.com/saik111919/norm-pix/issues)
 
 ## Contributing
 
@@ -307,7 +307,7 @@ GNU General Public License v3.0 - see [LICENSE](LICENSE)
 ---
 
 <p align="center">
-<a href="https://github.com/ritesh-kanwar/Cashiro/releases">Download</a> •
-<a href="https://github.com/ritesh-kanwar/Cashiro/issues">Report Bug</a> •
-<a href="https://github.com/ritesh-kanwar/Cashiro/issues">Request Feature</a>
+<a href="https://github.com/saik111919/norm-pix/releases">Download</a> •
+<a href="https://github.com/saik111919/norm-pix/issues">Report Bug</a> •
+<a href="https://github.com/saik111919/norm-pix/issues">Request Feature</a>
 </p>

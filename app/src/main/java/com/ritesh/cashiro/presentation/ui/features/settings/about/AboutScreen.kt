@@ -222,24 +222,8 @@ fun AboutScreen(
                     verticalArrangement = Arrangement.spacedBy(1.5.dp)
                 ) {
                     AboutListItem(
-                        title = stringResource(R.string.website),
-                        subtitle = "cashiro.showcase",
-                        icon = Iconax.Shop,
-                        iconColor = orange_dark,
-                        iconBackground = orange_light,
-                        isLink = true,
-                        onClick = {
-                            val intent = Intent(
-                                Intent.ACTION_VIEW,
-                                Constants.Links.WEBSITE_URL.toUri()
-                            )
-                            context.startActivity(intent)
-                        },
-                        position = ListItemPosition.Top
-                    )
-                    AboutListItem(
                         title = stringResource(R.string.github),
-                        subtitle = "ritesh-kanwar/Cashiro",
+                        subtitle = "saik111919/norm-pix",
                         icon = Iconax.Github,
                         iconColor = green_dark,
                         iconBackground = green_light,
@@ -251,7 +235,7 @@ fun AboutScreen(
                             )
                             context.startActivity(intent)
                         },
-                        position = ListItemPosition.Middle
+                        position = ListItemPosition.Top
                     )
                     AboutListItem(
                         title = stringResource(R.string.discord),
@@ -277,40 +261,6 @@ fun AboutScreen(
                 ) {
 
                     AboutListItem(
-                        title = stringResource(R.string.faq),
-                        subtitle = stringResource(R.string.faq_desc),
-                        icon = Iconax.MessageQuestion,
-                        iconColor = orange_dark,
-                        iconBackground = orange_light,
-                        isLink = true,
-                        onClick = {
-                            val intent = Intent(
-                                Intent.ACTION_VIEW,
-                                Constants.Links.FAQ_URL.toUri()
-                            )
-                            context.startActivity(intent)
-                        },
-                        position = ListItemPosition.Top
-                    )
-
-                    AboutListItem(
-                        title = stringResource(R.string.guides),
-                        subtitle = stringResource(R.string.guides_desc),
-                        icon = Iconax.DocumentText2,
-                        iconColor = purple_dark,
-                        iconBackground = purple_light,
-                        isLink = true,
-                        onClick = {
-                            val intent = Intent(
-                                Intent.ACTION_VIEW,
-                                Constants.Links.GUIDE_URL.toUri()
-                            )
-                            context.startActivity(intent)
-                        },
-                        position = ListItemPosition.Middle
-                    )
-
-                    AboutListItem(
                         title = stringResource(R.string.report_bug),
                         subtitle = stringResource(R.string.report_bug_desc),
                         icon = Iconax.Ghost,
@@ -324,41 +274,7 @@ fun AboutScreen(
                             )
                             context.startActivity(intent)
                         },
-                        position = ListItemPosition.Middle
-                    )
-
-                    AboutListItem(
-                        title = stringResource(R.string.privacy_policy),
-                        subtitle = stringResource(R.string.privacy_policy_desc),
-                        icon = Iconax.SecuritySafe,
-                        iconColor = green_dark,
-                        iconBackground = green_light,
-                        isLink = true,
-                        onClick = {
-                            val intent = Intent(
-                                Intent.ACTION_VIEW,
-                                Constants.Links.PRIVACY_POLICY_URL.toUri()
-                            )
-                            context.startActivity(intent)
-                        },
-                        position = ListItemPosition.Middle
-                    )
-
-                    AboutListItem(
-                        title = stringResource(R.string.terms_of_service),
-                        subtitle = stringResource(R.string.terms_of_service_desc),
-                        icon = Iconax.DocumentText2,
-                        iconColor = cyan_dark,
-                        iconBackground = cyan_light,
-                        isLink = true,
-                        onClick = {
-                            val intent = Intent(
-                                Intent.ACTION_VIEW,
-                                Constants.Links.TERMS_OF_SERVICE_URL.toUri()
-                            )
-                            context.startActivity(intent)
-                        },
-                        position = ListItemPosition.Middle
+                        position = ListItemPosition.Top
                     )
 
                     AboutListItem(

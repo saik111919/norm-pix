@@ -112,7 +112,7 @@ app/
 ## Community
 
 [//]: # (- Join our [Discord]&#40;https://discord.gg/H3xWeMWjKQ&#41; for discussions)
-- Follow development updates on [GitHub](https://github.com/ritesh-kanwar/Cashiro)
+- Follow development updates on [GitHub](https://github.com/saik111919/norm-pix)
 
 ## Code of Conduct
 

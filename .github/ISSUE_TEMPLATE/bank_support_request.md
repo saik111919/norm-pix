@@ -3,7 +3,7 @@ name: Bank Support Request
 about: Request support for a new bank or report issues with existing bank parsing
 title: '[BANK] '
 labels: bank-support
-assignees: 'ritesh-kanwar'
+assignees: 'saik111919'
 
 ---
 
