@@ -33,10 +33,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ritesh.cashiro.R
 import com.ritesh.cashiro.presentation.effects.BlurredAnimatedVisibility
 import com.ritesh.cashiro.presentation.ui.theme.LocalBlurEffects
 import com.ritesh.cashiro.presentation.ui.theme.Spacing
@@ -160,6 +162,7 @@ private fun LargerTopAppBar(
     themeColors: ColorScheme,
 
     ){
+    val homeTitle = stringResource(R.string.cashiro_title)
     LargeTopAppBar(
         title = {
             TitleForLargeTopAppBar(
@@ -176,17 +179,17 @@ private fun LargerTopAppBar(
             NavigationForLargeTopAppBar(
                 hasBackButton = hasBackButton,
                 navigationContent = navigationContent,
-                isHomeScreen = title == "Cashiro"
+                isHomeScreen = title == homeTitle
             )
         },
         actions = {
             ActionForLargeTopAppBar(
                 actionContent = actionContent,
-                isHomeScreen = title == "Cashiro"
+                isHomeScreen = title == homeTitle
             )
         },
         collapsedHeight = TopAppBarDefaults.LargeAppBarCollapsedHeight,
-        expandedHeight = if (title == "Cashiro") 150.dp else 110.dp,
+        expandedHeight = if (title == homeTitle) 150.dp else 110.dp,
         windowInsets = WindowInsets(0.dp),
         scrollBehavior = scrollBehaviorLarge,
         modifier = Modifier
@@ -225,12 +228,13 @@ private fun TitleForLargeTopAppBar(
     title: String,
     extraInfoCard: @Composable () -> Unit = {},
 ){
+    val homeTitle = stringResource(R.string.cashiro_title)
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
         BlurredAnimatedVisibility(
-            visible = title != "Cashiro",
+            visible = title != homeTitle,
             enter = fadeIn() + scaleIn(),
             exit = fadeOut() + scaleOut()
         ) {
@@ -296,7 +300,8 @@ private fun RegularTopAppBar(
         enter = fadeIn(),
         exit = fadeOut()
     ) {
-        val isHomeScreen = title == "Cashiro"
+        val homeTitle = stringResource(R.string.cashiro_title)
+        val isHomeScreen = title == homeTitle
 
         TopAppBar(
             title = {
@@ -308,7 +313,7 @@ private fun RegularTopAppBar(
                     modifier = Modifier.animatedOffsetModifier(
                         hasBackButton = hasBackButton,
                         hasActionButton = hasActionButton,
-                        isHomeScreen = title == "Cashiro",
+                        isHomeScreen = title == homeTitle,
                     )
                 )
             },

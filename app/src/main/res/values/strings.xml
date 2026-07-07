@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Cashiro</string>
+    <string name="app_name">NOrmPix</string>
 
     <!-- App shortcuts -->
     <string name="add_transaction">Add Transaction</string>
@@ -311,33 +311,12 @@
     <string name="chart_type_heatmap">Heatmap</string>
     <string name="chart_format">%1$s Chart</string>
     <string name="toggle_view">Toggle View</string>
-    <!-- Chat Screen -->
-    <string name="cashiro_ai">Cashiro AI</string>
     <string name="more_options">More options</string>
-    <string name="clear_chat">Clear Chat</string>
-    <string name="qwen_model_required">Qwen Model Required</string>
-    <string name="download_ai_model_prompt">Download the AI model from Settings to start chatting</string>
-    <string name="go_to_settings">Go to Settings</string>
-    <string name="model_required">Model Required</string>
-    <string name="download_to_continue_chatting">Download to continue chatting</string>
     <string name="download">Download</string>
-    <string name="downloading_model_format">Downloading Model... %1$d%%</string>
-    <string name="check_settings_for_more_details">Check Settings for more details</string>
-    <string name="initializing_ai_model">Initializing AI Model...</string>
-    <string name="this_may_take_a_few_seconds">This may take a few seconds</string>
     <string name="dismiss">Dismiss</string>
-    <string name="ask_about_expenses_placeholder">Ask about your expenses...</string>
     <string name="send">Send</string>
-    <string name="chat_memory_full_warning">Chat memory almost full! Clear chat to continue.</string>
-    <string name="chat_memory_almost_full_warning_format">Chat memory is %1$d%% full. Consider clearing soon.</string>
-    <string name="chat_memory_usage_format">Chat memory is %1$d%% full.</string>
     <string name="clear">Clear</string>
-    <string name="qwen_model_messages_format">Qwen 2.5 • %1$d messages</string>
-    <string name="tokens_format">%1$s tokens</string>
-    <string name="context_usage">Context Usage</string>
     <string name="percentage_format_no_brackets">%1$d%%</string>
-    <string name="tokens_usage_format">%1$s / %2$s tokens</string>
-    <string name="system_tokens_format">System: %1$s</string>
     <!-- Home Screen & Widgets -->
     <string name="edit_widgets">Edit Widgets</string>
     <string name="edit_widgets_desc">Reorder or hide sections on your home screen.</string>
@@ -345,7 +324,7 @@
     <string name="press_back_again_to_close">Press back again to close the app</string>
     <string name="transaction_deleted">Transaction deleted</string>
     <string name="undo">Undo</string>
-    <string name="cashiro_title">Cashiro</string>
+    <string name="cashiro_title">NOrmPix</string>
     <string name="profile">Profile</string>
     <string name="banner">Banner</string>
     <string name="recent">Recent</string>
@@ -791,8 +770,6 @@
     <string name="delete_category_confirm_no_transactions">Are you sure you want to delete \u2018%1$s\u2019?</string>
     <string name="delete_budget_title">Delete Budget?</string>
     <string name="delete_budget_confirm">Are you sure you want to delete this budget? This action cannot be undone.</string>
-    <string name="delete_ai_model_title">Delete AI Model?</string>
-    <string name="delete_ai_model_confirm">Are you sure you want to delete the AI model? This will remove the offline chat capability until you download it again.</string>
     <string name="delete_subscription_title">Delete Subscription?</string>
     <string name="delete_subscription_confirm">Are you sure you want to delete \u2018%1$s\u2019? This will permanently remove it from your subscriptions list.</string>
     <string name="delete_subcategory_title">Delete Subcategory?</string>
@@ -886,13 +863,6 @@
     <string name="categories_subtitle">Manage expense and income categories</string>
     <string name="smart_rules_subtitle">Automatic transaction categorization</string>
     <string name="data_privacy_subtitle">Manage your data and privacy settings</string>
-    <string name="ai_chat_assistant">AI Chat Assistant</string>
-    <string name="ai_chat_subtitle_not_downloaded">Download Qwen 2.5 model (%1$d MB)</string>
-    <string name="ai_chat_subtitle_downloading">Downloading… %1$d%%</string>
-    <string name="ai_chat_subtitle_paused">Download paused. Tap to resume.</string>
-    <string name="ai_chat_subtitle_completed">Qwen ready for chat</string>
-    <string name="ai_chat_subtitle_failed">Download failed. Tap to retry.</string>
-    <string name="ai_chat_subtitle_insufficient_space">Not enough storage space</string>
     <string name="notifications">Notifications</string>
     <string name="notifications_subtitle">Manage reminder notification settings</string>
     <string name="sms_subtitle">Manage SMS settings</string>
@@ -938,6 +908,4 @@
     <string name="exchange_rates_notice_title">Exchange Rates Notice</string>
     <string name="exchange_rates_notice_text">The exchange rates displayed within this app are for informational purposes only and should not be used for investment decisions. These rates are estimates and may not reflect actual rates. By using this app you acknowledge that you understand and accept these limitations.</string>
     <string name="custom_label">CUSTOM</string>
-    <string name="new_chat">New Chat</string>
-    <string name="chat_history">Chat History</string>
 </resources>

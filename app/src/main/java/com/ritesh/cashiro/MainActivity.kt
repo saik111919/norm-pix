@@ -22,7 +22,6 @@ import com.ritesh.cashiro.presentation.ui.features.add.AddViewModel
 import com.ritesh.cashiro.presentation.ui.features.analytics.AnalyticsViewModel
 import com.ritesh.cashiro.presentation.ui.features.budgets.BudgetViewModel
 import com.ritesh.cashiro.presentation.ui.features.categories.CategoriesViewModel
-import com.ritesh.cashiro.presentation.ui.features.chat.ChatViewModel
 import com.ritesh.cashiro.presentation.ui.features.home.HomeViewModel
 import com.ritesh.cashiro.presentation.ui.features.onboarding.OnBoardingViewModel
 import com.ritesh.cashiro.presentation.ui.features.profile.ProfileViewModel

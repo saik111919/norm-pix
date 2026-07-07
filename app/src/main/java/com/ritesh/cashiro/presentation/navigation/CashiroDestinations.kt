@@ -191,8 +191,6 @@ data class Transactions(
 
 @Serializable object Analytics
 
-@Serializable object Chat
-
 @Serializable data class TransactionDetail(val transactionId: Long, val sharedElementKey: String? = null)
 
 @Serializable data class AddTransaction(val initialTab: Int = 0, val subscriptionId: Long? = null, val type: String? = null)

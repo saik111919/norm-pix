@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Dinheiro</string>
+    <string name="app_name">NOrmPix</string>
     <!-- App shortcuts -->
     <string name="add_transaction">Adicionar transação</string>
     <string name="add_subscription">Adicionar inscrição</string>
@@ -323,7 +323,7 @@
     <string name="press_back_again_to_close">Pressione o botão \"voltar\" novamente para fechar o aplicativo</string>
     <string name="transaction_deleted">Transação excluída</string>
     <string name="undo">Desfazer</string>
-    <string name="cashiro_title">Dinheiro</string>
+    <string name="cashiro_title">NOrmPix</string>
     <string name="profile">Perfil</string>
     <string name="banner">Estandarte</string>
     <string name="recent">Recente</string>

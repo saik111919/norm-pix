@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Cashiro</string>
+    <string name="app_name">NOrmPix</string>
     <!-- App shortcuts -->
     <string name="add_transaction">Přidat transakci</string>
     <string name="add_subscription">Přidat odběr</string>
@@ -323,7 +323,7 @@
     <string name="press_back_again_to_close">Stiskněte znovu pro zavření aplikace</string>
     <string name="transaction_deleted">Transakce odstraněna</string>
     <string name="undo">Zpět</string>
-    <string name="cashiro_title">Cashiro</string>
+    <string name="cashiro_title">NOrmPix</string>
     <string name="profile">Profil</string>
     <string name="banner">Banner</string>
     <string name="recent">Nedávné</string>

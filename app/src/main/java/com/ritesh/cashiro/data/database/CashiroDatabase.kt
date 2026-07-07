@@ -14,9 +14,6 @@ import com.ritesh.cashiro.data.database.dao.AccountBalanceDao
 import com.ritesh.cashiro.data.database.dao.BankNotificationDao
 import com.ritesh.cashiro.data.database.dao.CardDao
 import com.ritesh.cashiro.data.database.dao.CategoryDao
-import com.ritesh.cashiro.data.database.dao.ChatDao
-import com.ritesh.cashiro.data.database.dao.ChatSessionDao
-
 import com.ritesh.cashiro.data.database.dao.ExchangeRateDao
 import com.ritesh.cashiro.data.database.dao.MerchantMappingDao
 import com.ritesh.cashiro.data.database.dao.RuleApplicationDao
@@ -35,9 +32,6 @@ import com.ritesh.cashiro.data.database.entity.BudgetCategoryLimitEntity
 import com.ritesh.cashiro.data.database.entity.BudgetEntity
 import com.ritesh.cashiro.data.database.entity.CardEntity
 import com.ritesh.cashiro.data.database.entity.CategoryEntity
-import com.ritesh.cashiro.data.database.entity.ChatMessage
-import com.ritesh.cashiro.data.database.entity.ChatSession
-
 import com.ritesh.cashiro.data.database.entity.ExchangeRateEntity
 import com.ritesh.cashiro.data.database.entity.MerchantMappingEntity
 import com.ritesh.cashiro.data.database.entity.RuleApplicationEntity
@@ -65,8 +59,6 @@ import com.ritesh.cashiro.data.database.entity.WebhookProfileEntity
         [
             TransactionEntity::class,
             SubscriptionEntity::class,
-            ChatMessage::class,
-            ChatSession::class,
             MerchantMappingEntity::class,
             CategoryEntity::class,
             AccountBalanceEntity::class,
@@ -83,7 +75,7 @@ import com.ritesh.cashiro.data.database.entity.WebhookProfileEntity
             WebhookCursorEntity::class,
             BankNotificationEntity::class
         ],
-    version = 56,
+    version = 57,
     exportSchema = true,
     autoMigrations =
         [
@@ -114,8 +106,6 @@ import com.ritesh.cashiro.data.database.entity.WebhookProfileEntity
 abstract class CashiroDatabase : RoomDatabase() {
     abstract fun transactionDao(): TransactionDao
     abstract fun subscriptionDao(): SubscriptionDao
-    abstract fun chatDao(): ChatDao
-    abstract fun chatSessionDao(): ChatSessionDao
     abstract fun merchantMappingDao(): MerchantMappingDao
     abstract fun categoryDao(): CategoryDao
     abstract fun accountBalanceDao(): AccountBalanceDao
@@ -164,7 +154,8 @@ abstract class CashiroDatabase : RoomDatabase() {
             MIGRATION_52_53,
             MIGRATION_53_54,
             MIGRATION_54_55,
-            MIGRATION_55_56
+            MIGRATION_55_56,
+            MIGRATION_56_57
                             )
                             .build()
                     INSTANCE = instance
@@ -523,6 +514,19 @@ abstract class CashiroDatabase : RoomDatabase() {
             object : Migration(55, 56) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("DROP INDEX IF EXISTS index_bank_notifications_status")
+                }
+            }
+
+        /**
+         * Migration from version 56 to 57.
+         * Drops the chat_messages and chat_sessions tables — the on-device AI chat
+         * feature has been removed.
+         */
+        val MIGRATION_56_57 =
+            object : Migration(56, 57) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("DROP TABLE IF EXISTS chat_messages")
+                    db.execSQL("DROP TABLE IF EXISTS chat_sessions")
                 }
             }
 

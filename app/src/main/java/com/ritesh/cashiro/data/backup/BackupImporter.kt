@@ -165,7 +165,6 @@ class BackupImporter @Inject constructor(
                 database.unrecognizedSmsDao().deleteAll()
                 database.merchantMappingDao().deleteAllMappings()
                 database.unrecognizedSmsDao().deleteAll()
-                database.chatDao().deleteAllMessages()
                 database.budgetDao().deleteAllBudgets()
                 database.subcategoryDao().getAllSubcategories().first().forEach { 
                     database.subcategoryDao().deleteSubcategory(it)
@@ -204,11 +203,7 @@ class BackupImporter @Inject constructor(
                 backup.database.unrecognizedSms.forEach { sms ->
                     database.unrecognizedSmsDao().insert(sms)
                 }
-                
-                backup.database.chatMessages.forEach { message ->
-                    database.chatDao().insertMessage(message)
-                }
-                
+
                 backup.database.exchangeRates.forEach { rate ->
                     database.exchangeRateDao().insertExchangeRate(rate)
                 }
@@ -552,11 +547,7 @@ class BackupImporter @Inject constructor(
         // Developer preferences
         userPreferencesRepository.updateDeveloperMode(preferences.developer.isDeveloperModeEnabled)
         userPreferencesRepository.setWebhookModeEnabled(preferences.developer.isWebhookModeEnabled)
-        userPreferencesRepository.setTokenInfoEnabled(preferences.developer.isTokenInfoEnabled)
-        preferences.developer.systemPrompt?.let {
-            userPreferencesRepository.updateSystemPrompt(it)
-        }
-        
+
         // App preferences
         userPreferencesRepository.updateHasShownScanTutorial(preferences.app.hasShownScanTutorial)
         preferences.app.firstLaunchTime?.let {

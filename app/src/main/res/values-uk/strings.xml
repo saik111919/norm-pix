@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Касіро</string>
+    <string name="app_name">NOrmPix</string>
     <!-- App shortcuts -->
     <string name="add_transaction">Додати транзакцію</string>
     <string name="add_subscription">Додати передплату</string>
@@ -323,7 +323,7 @@
     <string name="press_back_again_to_close">Натисніть ще раз, щоб закрити додаток</string>
     <string name="transaction_deleted">Транзакцію видалено</string>
     <string name="undo">Скасувати</string>
-    <string name="cashiro_title">Касіро</string>
+    <string name="cashiro_title">NOrmPix</string>
     <string name="profile">Анкета</string>
     <string name="banner">Стяг</string>
     <string name="recent">Недавні</string>

@@ -1,5 +1,5 @@
 <a name="top"></a>
-[![Cashiro Banner](banner.png)](https://github.com/sarim2000/pennywiseai-tracker)
+[![NOrmPix Banner](banner.png)](https://github.com/sarim2000/pennywiseai-tracker)
 
 [//]: # ([![GitHub stars]&#40;https://img.shields.io/github/stars/sarim2000/pennywiseai-tracker?style=social&#41;]&#40;https://github.com/sarim2000/pennywiseai-tracker&#41;)
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
@@ -15,19 +15,19 @@
 
 [//]: # ([![Discord]&#40;https://img.shields.io/badge/Discord-Join_Community-5865F2&#41;]&#40;https://discord.gg/H3xWeMWjKQ&#41;)
 
-## Cashiro — Free & Open‑Source, private SMS‑powered expense tracker
+## NOrmPix — Free & Open‑Source, private SMS‑powered expense tracker
 
-Cashiro is a comprehensive financial tracking manager that Turn bank SMS and PDF Statements into a clean, searchable money timeline with on-device AI assistance. 100% private, no cloud processing.
+NOrmPix is a comprehensive financial tracking manager that Turn bank SMS and PDF Statements into a clean, searchable money timeline with on-device AI assistance. 100% private, no cloud processing.
 
 
 [//]: # ()
 ⭐ **Star us on GitHub**
 
 [//]: # ()
-[![Share](https://img.shields.io/badge/share-000000?logo=x&logoColor=white)](https://x.com/intent/tweet?text=Check%20out%20Cashiro%20AI%20-%20Privacy-first%20expense-budget%20tracker%20with%20on-device%20AI:%20https://github.com/ritesh-kanwar/Cashiro%20%23Android%20%23PrivacyFirst%20%23OnDeviceAI)
+[![Share](https://img.shields.io/badge/share-000000?logo=x&logoColor=white)](https://x.com/intent/tweet?text=Check%20out%20NOrmPix%20AI%20-%20Privacy-first%20expense-budget%20tracker%20with%20on-device%20AI:%20https://github.com/ritesh-kanwar/Cashiro%20%23Android%20%23PrivacyFirst%20%23OnDeviceAI)
 [![Share](https://img.shields.io/badge/share-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/ritesh-kanwar/Cashiro)
-[![Share](https://img.shields.io/badge/share-FF4500?logo=reddit&logoColor=white)](https://www.reddit.com/submit?title=Cashiro%20AI%20-%20Privacy-first%20expense-budget%20tracker&url=https://github.com/ritesh-kanwar/Cashiro)
-[![Share](https://img.shields.io/badge/share-0088CC?logo=telegram&logoColor=white)](https://t.me/share/url?url=https://github.com/ritesh-kanwar/Cashiro&text=Check%20out%20Cashiro%20AI)
+[![Share](https://img.shields.io/badge/share-FF4500?logo=reddit&logoColor=white)](https://www.reddit.com/submit?title=NOrmPix%20AI%20-%20Privacy-first%20expense-budget%20tracker&url=https://github.com/ritesh-kanwar/Cashiro)
+[![Share](https://img.shields.io/badge/share-0088CC?logo=telegram&logoColor=white)](https://t.me/share/url?url=https://github.com/ritesh-kanwar/Cashiro&text=Check%20out%20NOrmPix%20AI)
 
 ## Overview
 
@@ -48,10 +48,10 @@ For Android users worldwide who want a comprehensive financial tracking — auto
 ### How it works
 
 1. Grant SMS permission (read‑only). No inbox changes, no messages sent OR import PDF Statements.
-2. Cashiro parses transaction SMS or PDF, extracts amount, merchant, category, and date.
+2. NOrmPix parses transaction SMS or PDF, extracts amount, merchant, category, and date.
 3. View analytics, subscriptions, and the full transaction timeline — with on-device AI assistant for insights.
 
-## Why Cashiro
+## Why NOrmPix
 
 - **🤖 Smart SMS Parsing** - Automatically extracts transaction details from 40+ banks SMS across 5 countries
 - **🗂️ Smart PDF Parsing** - Automatically extracts transaction details from GPay and PhonePe PDF UPI Statements.

@@ -60,20 +60,7 @@ object Constants {
         const val HOME = "home"
         const val TRANSACTIONS = "transactions"
         const val ANALYTICS = "analytics"
-        const val CHAT = "chat"
         const val SETTINGS = "settings"
-    }
-    
-    /**
-     * LLM Model Configuration
-     */
-    object ModelDownload {
-        const val MODEL_URL = "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.task?download=true"
-    
-        const val MODEL_FILE_NAME = "qwen2.5-1.5b-instruct.task"
-        const val MODEL_SIZE_MB = 1638L // ~1.6 GB
-        const val MODEL_SIZE_BYTES = 1_500_000_000L // 1.5 GB minimum (handles decimal/binary variance)
-        const val REQUIRED_SPACE_BYTES = 1_800_000_000L // 1.8 GB (1.1x model size for safety)
     }
 
     /**

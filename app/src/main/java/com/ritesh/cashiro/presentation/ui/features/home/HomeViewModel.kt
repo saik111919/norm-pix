@@ -24,7 +24,6 @@ import com.ritesh.cashiro.data.repository.AccountBalanceRepository
 import com.ritesh.cashiro.data.repository.BudgetRepository
 import com.ritesh.cashiro.data.repository.CategoryRepository
 import com.ritesh.cashiro.data.repository.CurrencyRepository
-import com.ritesh.cashiro.data.repository.LlmRepository
 import com.ritesh.cashiro.data.repository.SubcategoryRepository
 import com.ritesh.cashiro.data.repository.SubscriptionRepository
 import com.ritesh.cashiro.data.repository.TransactionRepository
@@ -56,7 +55,6 @@ class HomeViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val subscriptionRepository: SubscriptionRepository,
     private val accountBalanceRepository: AccountBalanceRepository,
-    private val llmRepository: LlmRepository,
     private val currencyConversionService: CurrencyConversionService,
     private val currencyRepository: CurrencyRepository,
     private val inAppUpdateManager: InAppUpdateManager,
@@ -705,15 +703,6 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun updateSystemPrompt() {
-        viewModelScope.launch {
-            try {
-                llmRepository.updateSystemPrompt()
-            } catch (e: Exception) {
-                // Handle error silently or add error state if needed
-            }
-        }
-    }
     fun hideBreakdownDialog() {
         _uiState.value = _uiState.value.copy(showBreakdownDialog = false)
     }

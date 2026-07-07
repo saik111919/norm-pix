@@ -35,9 +35,7 @@ constructor(@ApplicationContext private val context: Context) {
         val DYNAMIC_COLOR_ENABLED = booleanPreferencesKey("dynamic_color_enabled")
         val HAS_SKIPPED_SMS_PERMISSION = booleanPreferencesKey("has_skipped_sms_permission")
         val DEVELOPER_MODE_ENABLED = booleanPreferencesKey("developer_mode_enabled")
-        val SYSTEM_PROMPT = stringPreferencesKey("system_prompt")
         val HAS_SHOWN_SCAN_TUTORIAL = booleanPreferencesKey("has_shown_scan_tutorial")
-        val ACTIVE_DOWNLOAD_ID = longPreferencesKey("active_download_id")
         val SMS_SCAN_MONTHS = intPreferencesKey("sms_scan_months")
         val SMS_SCAN_ALL_TIME = booleanPreferencesKey("sms_scan_all_time")
         val LAST_SCAN_TIMESTAMP = longPreferencesKey("last_scan_timestamp")
@@ -99,9 +97,7 @@ constructor(@ApplicationContext private val context: Context) {
         // AlarmManager. Read on the next applyScheduling() so deleted times can have their
         // PendingIntents cancelled even though they're no longer present in the active settings.
         val WEBHOOK_LAST_SCHEDULED_IDS = androidx.datastore.preferences.core.stringSetPreferencesKey("webhook_last_scheduled_ids")
-        val LAST_CHAT_SESSION_ID = stringPreferencesKey("last_chat_session_id")
         val WEBHOOK_MODE_ENABLED = booleanPreferencesKey("webhook_mode_enabled")
-        val TOKEN_INFO_ENABLED = booleanPreferencesKey("token_info_enabled")
     }
 
     val userPreferences: Flow<UserPreferences> =
@@ -115,8 +111,6 @@ constructor(@ApplicationContext private val context: Context) {
                 isDeveloperModeEnabled = preferences[PreferencesKeys.DEVELOPER_MODE_ENABLED]
                     ?: false,
                 isWebhookModeEnabled = preferences[PreferencesKeys.WEBHOOK_MODE_ENABLED]
-                    ?: false,
-                isTokenInfoEnabled = preferences[PreferencesKeys.TOKEN_INFO_ENABLED]
                     ?: false,
                 hasShownScanTutorial = preferences[PreferencesKeys.HAS_SHOWN_SCAN_TUTORIAL]
                     ?: false,
@@ -383,58 +377,9 @@ constructor(@ApplicationContext private val context: Context) {
         }
     }
 
-    val isTokenInfoEnabled: Flow<Boolean> =
-        context.dataStore.data.map { preferences ->
-            preferences[PreferencesKeys.TOKEN_INFO_ENABLED] ?: false
-        }
-
-    suspend fun setTokenInfoEnabled(enabled: Boolean) {
-        context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.TOKEN_INFO_ENABLED] = enabled
-        }
-    }
-
-    suspend fun updateSystemPrompt(prompt: String) {
-        context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.SYSTEM_PROMPT] = prompt
-        }
-    }
-
-    fun getSystemPrompt(): Flow<String?> =
-            context.dataStore.data.map { preferences -> preferences[PreferencesKeys.SYSTEM_PROMPT] }
-
-    suspend fun saveLastChatSessionId(sessionId: String) {
-        context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.LAST_CHAT_SESSION_ID] = sessionId
-        }
-    }
-
-    suspend fun getLastChatSessionId(): String? {
-        return context.dataStore.data.first()[PreferencesKeys.LAST_CHAT_SESSION_ID]
-    }
-
     suspend fun markScanTutorialShown() {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.HAS_SHOWN_SCAN_TUTORIAL] = true
-        }
-    }
-
-    suspend fun saveActiveDownloadId(id: Long) {
-        context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.ACTIVE_DOWNLOAD_ID] = id
-        }
-    }
-
-    suspend fun getActiveDownloadId(): Long? {
-        return context.dataStore
-                .data
-                .map { preferences -> preferences[PreferencesKeys.ACTIVE_DOWNLOAD_ID] }
-                .first()
-    }
-
-    suspend fun clearActiveDownloadId() {
-        context.dataStore.edit { preferences ->
-            preferences.remove(PreferencesKeys.ACTIVE_DOWNLOAD_ID)
         }
     }
 
@@ -836,7 +781,6 @@ data class UserPreferences(
         val hasSkippedSmsPermission: Boolean = false,
         val isDeveloperModeEnabled: Boolean = false,
         val isWebhookModeEnabled: Boolean = false,
-        val isTokenInfoEnabled: Boolean = false,
         val hasShownScanTutorial: Boolean = false,
         val smsScanMonths: Int = 3, // Default to 3 months
         val smsScanAllTime: Boolean = true,

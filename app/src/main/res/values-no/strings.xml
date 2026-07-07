@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Konstruksjon</string>
+    <string name="app_name">NOrmPix</string>
     <!-- App shortcuts -->
     <string name="add_transaction">Legge til transaksjonen</string>
     <string name="add_subscription">Legg til abonnement</string>
@@ -323,7 +323,7 @@
     <string name="press_back_again_to_close">Trykk tilbake igjen for å lukke appen</string>
     <string name="transaction_deleted">Transaksjon slettet</string>
     <string name="undo">Angre</string>
-    <string name="cashiro_title">Konstruksjon</string>
+    <string name="cashiro_title">NOrmPix</string>
     <string name="profile">Profil</string>
     <string name="banner">Fane</string>
     <string name="recent">Siste</string>

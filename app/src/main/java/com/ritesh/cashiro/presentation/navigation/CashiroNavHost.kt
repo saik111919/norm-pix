@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -76,7 +75,6 @@ import com.ritesh.cashiro.presentation.ui.features.budgets.BudgetDetailScreen
 import com.ritesh.cashiro.presentation.ui.features.budgets.BudgetHistoryScreen
 import com.ritesh.cashiro.presentation.ui.features.budgets.BudgetsScreen
 import com.ritesh.cashiro.presentation.ui.features.categories.CategoriesScreen
-import com.ritesh.cashiro.presentation.ui.features.chat.ChatScreen
 import com.ritesh.cashiro.presentation.ui.features.home.HomeScreen
 import com.ritesh.cashiro.presentation.ui.features.home.HomeViewModel
 import com.ritesh.cashiro.presentation.ui.features.onboarding.OnBoardingScreen
@@ -104,7 +102,6 @@ import com.ritesh.cashiro.presentation.ui.features.transactions.TransactionDetai
 import com.ritesh.cashiro.presentation.ui.features.transactions.TransactionsScreen
 import com.ritesh.cashiro.presentation.ui.features.transactions.TransactionsViewModel
 import com.ritesh.cashiro.presentation.ui.icons.Iconax
-import com.ritesh.cashiro.presentation.ui.icons.AiCommentary
 import com.ritesh.cashiro.presentation.ui.icons.Search
 import com.ritesh.cashiro.presentation.ui.icons.ImportArrow01
 import com.ritesh.cashiro.presentation.ui.theme.Dimensions
@@ -219,7 +216,6 @@ fun CashiroNavHost(
                     HomeScreen(
                         navController = navController,
                         onNavigateToSettings = { navController.safeNavigate(Settings) },
-                        onNavigateToChat = { navController.safeNavigate(Chat) },
                         onNavigateToTransactions = { navController.safeNavigate(Transactions()) },
                         onNavigateToTransactionsWithSearch = {
                             navController.safeNavigate(Transactions(focusSearch = true))
@@ -263,20 +259,6 @@ fun CashiroNavHost(
                         },
                         animatedContentScope = this@composable,
                         blurEffects = themeUiState.blurEffects,
-                    )
-                }
-
-                // Chat Screen
-                composable<Chat>(
-                    enterTransition = CashiroTransitions.verticalSlideEnter,
-                    exitTransition = CashiroTransitions.verticalSlideExit,
-                    popEnterTransition = CashiroTransitions.verticalSlidePopEnter,
-                    popExitTransition = CashiroTransitions.verticalSlidePopExit
-                ) {
-                    ChatScreen(
-                        modifier = Modifier.imePadding(),
-                        onNavigateToSettings = { navController.safeNavigate(Settings) },
-                        onNavigateBack = { navController.safePopBackStack() }
                     )
                 }
 
@@ -1022,24 +1004,6 @@ fun CashiroNavHost(
                                 )
                             }
 
-                            HorizontalDivider(
-                                thickness = 1.5.dp,
-                                color = MaterialTheme.colorScheme.surface.copy(0.6f)
-                            )
-
-                            DropdownMenuItem(
-                                text = { Text(
-                                    text = "Ask AI",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                ) },
-                                onClick = {
-                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                    dismiss()
-                                    navController.safeNavigate(Chat)
-                                },
-                                leadingIcon = { Icon(Iconax.AiCommentary, contentDescription = null) }
-                            )
                         } else if (isTransactionsScreen) {
                             DropdownMenuItem(
                                 text = { Text("Export") },
@@ -1063,19 +1027,6 @@ fun CashiroNavHost(
                                     }
                                 },
                                 leadingIcon = { Icon(Iconax.Search, contentDescription = null) }
-                            )
-                            HorizontalDivider(
-                                thickness = 1.5.dp,
-                                color = MaterialTheme.colorScheme.surface.copy(0.6f)
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Ask AI") },
-                                onClick = {
-                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                    dismiss()
-                                    navController.safeNavigate(Chat)
-                                },
-                                leadingIcon = { Icon(Iconax.AiCommentary, contentDescription = null) }
                             )
                         }
                     }

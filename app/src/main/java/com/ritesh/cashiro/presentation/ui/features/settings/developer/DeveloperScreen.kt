@@ -47,7 +47,6 @@ import com.ritesh.cashiro.presentation.ui.theme.Dimensions
 import com.ritesh.cashiro.presentation.ui.theme.grey_dark
 import com.ritesh.cashiro.presentation.ui.theme.grey_light
 import androidx.compose.material.icons.rounded.Webhook
-import androidx.compose.material.icons.rounded.Code
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 
@@ -60,11 +59,6 @@ fun DeveloperScreen(
 ) {
     val isWebhookModeEnabled by
             settingsViewModel.isWebhookModeEnabled.collectAsStateWithLifecycle(
-                initialValue = false
-            )
-
-    val isTokenInfoEnabled by
-            settingsViewModel.isTokenInfoEnabled.collectAsStateWithLifecycle(
                 initialValue = false
             )
 
@@ -147,33 +141,6 @@ fun DeveloperScreen(
                     padding = PaddingValues(0.dp),
                     isSingle = false,
                     isFirst = true
-                )
-                
-                PreferenceSwitch(
-                    title = "Chat Token Info",
-                    subtitle = "Show technical information in chat",
-                    checked = isTokenInfoEnabled,
-                    onCheckedChange = { settingsViewModel.toggleTokenInfoMode(it) },
-                    leadingIcon = {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(
-                                    color = grey_light,
-                                    shape = CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Rounded.Code,
-                                contentDescription = null,
-                                tint = grey_dark
-                            )
-                        }
-                    },
-                    padding = PaddingValues(0.dp),
-                    isSingle = false,
-                    isLast = false
                 )
                 
                 PreferenceSwitch(

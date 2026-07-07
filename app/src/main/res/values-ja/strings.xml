@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Cashiro</string>
+    <string name="app_name">NOrmPix</string>
     <!-- App shortcuts -->
     <string name="add_transaction">取引を追加</string>
     <string name="add_subscription">サブスクリプションを追加</string>
@@ -323,7 +323,7 @@
     <string name="press_back_again_to_close">もう一度押してアプリを閉じる</string>
     <string name="transaction_deleted">取引が削除されました</string>
     <string name="undo">元に戻す</string>
-    <string name="cashiro_title">Cashiro</string>
+    <string name="cashiro_title">NOrmPix</string>
     <string name="profile">プロフィール</string>
     <string name="banner">バナー</string>
     <string name="recent">最近のもの</string>

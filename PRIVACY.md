@@ -4,7 +4,7 @@
 
 ## Our Commitment to Privacy
 
-Cashiro is built with privacy as the core principle. We believe your financial data should remain yours alone.
+NOrmPix is built with privacy as the core principle. We believe your financial data should remain yours alone.
 
 ## 100% On-Device Processing
 
@@ -26,7 +26,7 @@ Cashiro is built with privacy as the core principle. We believe your financial d
 ### Where It's Stored
 - All data is stored in a local SQLite database on your device
 - Database is protected by Android's app sandboxing
-- Data is only accessible to Cashiro app
+- Data is only accessible to NOrmPix app
 
 ### Data Deletion
 - Uninstalling the app completely removes all data
@@ -55,7 +55,7 @@ Cashiro is built with privacy as the core principle. We believe your financial d
 
 ## Third-Party Services
 
-Cashiro does **NOT** use:
+NOrmPix does **NOT** use:
 - ❌ Cloud services or APIs (except CDN for model download)
 - ❌ Analytics services (Google Analytics, Firebase, etc.)
 - ❌ Crash reporting services
@@ -84,14 +84,14 @@ When you export your data:
 
 ## Open Source Transparency
 
-Cashiro is fully open source:
+NOrmPix is fully open source:
 - Review our code at [GitHub](https://github.com/ritesh-kanwar/Cashiro)
 - Verify our privacy claims yourself
 - Contribute to make it even better
 
 ## Children's Privacy
 
-Cashiro is not directed at children under 13. We do not knowingly collect information from children.
+NOrmPix is not directed at children under 13. We do not knowingly collect information from children.
 
 ## Changes to Privacy Policy
 
@@ -117,4 +117,4 @@ For privacy concerns or questions:
 
 ---
 
-*Cashiro - Privacy-first expense tracking with on-device AI*
+*NOrmPix - Privacy-first expense tracking with on-device AI*

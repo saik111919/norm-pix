@@ -1,6 +1,6 @@
 # Security Policy
 
-We take the security of Cashiro seriously and appreciate responsible disclosure.
+We take the security of NOrmPix seriously and appreciate responsible disclosure.
 
 ## Reporting a Vulnerability
 

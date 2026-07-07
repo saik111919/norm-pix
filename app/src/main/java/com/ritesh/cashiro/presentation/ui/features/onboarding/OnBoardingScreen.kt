@@ -509,7 +509,7 @@ fun WelcomeStep() {
             Spacer(modifier = Modifier.height(40.dp))
             BlurredAnimatedVisibility(visible = true) {
                 Text(
-                    text = "Cashiro", // Product name, usually kept as is, but can be localized
+                    text = stringResource(R.string.app_name),
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center

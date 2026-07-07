@@ -17,7 +17,6 @@ import com.ritesh.cashiro.data.database.dao.BankNotificationDao
 import com.ritesh.cashiro.data.database.dao.BudgetDao
 import com.ritesh.cashiro.data.database.dao.CardDao
 import com.ritesh.cashiro.data.database.dao.CategoryDao
-import com.ritesh.cashiro.data.database.dao.ChatDao
 import com.ritesh.cashiro.data.database.dao.ExchangeRateDao
 import com.ritesh.cashiro.data.database.dao.MerchantMappingDao
 import com.ritesh.cashiro.data.database.dao.RuleApplicationDao
@@ -76,7 +75,8 @@ object DatabaseModule {
                     MIGRATION_52_53,
                     MIGRATION_53_54,
                     CashiroDatabase.MIGRATION_54_55,
-                    CashiroDatabase.MIGRATION_55_56
+                    CashiroDatabase.MIGRATION_55_56,
+                    CashiroDatabase.MIGRATION_56_57
                 )
 
                 // Enable auto-migrations
@@ -114,18 +114,6 @@ object DatabaseModule {
     @Singleton
     fun provideSubscriptionDao(database: CashiroDatabase): SubscriptionDao {
         return database.subscriptionDao()
-    }
-
-    /**
-     * Provides the ChatDao from the database.
-     *
-     * @param database The CashiroDatabase instance
-     * @return ChatDao for accessing chat message data
-     */
-    @Provides
-    @Singleton
-    fun provideChatDao(database: CashiroDatabase): ChatDao {
-        return database.chatDao()
     }
 
     /**
@@ -258,12 +246,6 @@ object DatabaseModule {
     @Singleton
     fun provideBankNotificationDao(database: CashiroDatabase): BankNotificationDao {
         return database.bankNotificationDao()
-    }
-
-    @Provides
-    @Singleton
-    fun provideChatSessionDao(database: CashiroDatabase): com.ritesh.cashiro.data.database.dao.ChatSessionDao {
-        return database.chatSessionDao()
     }
 }
 /** Database callback to seed initial data when database is first created */

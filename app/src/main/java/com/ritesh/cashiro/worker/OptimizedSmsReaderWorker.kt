@@ -11,7 +11,6 @@ import androidx.work.workDataOf
 import com.ritesh.cashiro.data.database.entity.UnrecognizedSmsEntity
 import com.ritesh.cashiro.data.preferences.UserPreferencesRepository
 import com.ritesh.cashiro.data.repository.AccountBalanceRepository
-import com.ritesh.cashiro.data.repository.LlmRepository
 import com.ritesh.cashiro.data.repository.SubscriptionRepository
 import com.ritesh.cashiro.data.repository.TransactionRepository
 import com.ritesh.cashiro.data.repository.UnrecognizedSmsRepository
@@ -58,7 +57,6 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
     private val transactionRepository: TransactionRepository,
     private val subscriptionRepository: SubscriptionRepository,
     private val accountBalanceRepository: AccountBalanceRepository,
-    private val llmRepository: LlmRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val unrecognizedSmsRepository: UnrecognizedSmsRepository,
     private val smsTransactionProcessor: SmsTransactionProcessor
@@ -260,16 +258,6 @@ class OptimizedSmsReaderWorker @AssistedInject constructor(
                 Log.d(TAG, "Cleaned up old unrecognized SMS entries")
             } catch (e: Exception) {
                 Log.e(TAG, "Error cleaning up unrecognized SMS: ${e.message}")
-            }
-
-            // Update system prompt with new financial data if any transactions were saved
-            if (stats.savedTransactions > 0) {
-                try {
-                    llmRepository.updateSystemPrompt()
-                    Log.d(TAG, "Updated system prompt with latest financial data")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error updating system prompt: ${e.message}")
-                }
             }
 
             // Report final progress

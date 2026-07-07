@@ -1,6 +1,6 @@
-# Contributing to Cashiro
+# Contributing to NOrmPix
 
-Thank you for your interest in contributing to Cashiro! We welcome contributions from the community.
+Thank you for your interest in contributing to NOrmPix! We welcome contributions from the community.
 
 ## How to Contribute
 
@@ -134,4 +134,4 @@ Feel free to:
 [//]: # (- Ask in our [Discord]&#40;https://discord.gg/H3xWeMWjKQ&#41;)
 - Reach out to maintainers
 
-Thank you for helping make Cashiro better! 🚀
+Thank you for helping make NOrmPix better! 🚀

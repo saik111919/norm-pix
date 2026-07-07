@@ -115,39 +115,6 @@ fun LicensesScreen(
                     "   limitations under the License.\n" +
                     "\n"),
 
-            Library("MediaPipe GenAI", 1, "" +
-                    "Apache License 2.0" +
-                    "  \nCopyright [yyyy] [name of copyright owner]\n" +
-                    "\n" +
-                    "   Licensed under the Apache License, Version 2.0 (the \"License\");\n" +
-                    "   you may not use this file except in compliance with the License.\n" +
-                    "   You may obtain a copy of the License at\n" +
-                    "\n" +
-                    "       http://www.apache.org/licenses/LICENSE-2.0\n" +
-                    "\n" +
-                    "   Unless required by applicable law or agreed to in writing, software\n" +
-                    "   distributed under the License is distributed on an \"AS IS\" BASIS,\n" +
-                    "   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n" +
-                    "   See the License for the specific language governing permissions and\n" +
-                    "   limitations under the License.\n" +
-                    "\n" +
-                    "===========================================================================\n" +
-                    "For files under tasks/cc/text/language_detector/custom_ops/utils/utf/\n" +
-                    "===========================================================================\n" +
-                    "/*\n" +
-                    " * The authors of this software are Rob Pike and Ken Thompson.\n" +
-                    " *              \nCopyright (c) 2002 by Lucent Technologies.\n" +
-                    " * Permission to use, copy, modify, and distribute this software for any\n" +
-                    " * purpose without fee is hereby granted, provided that this entire notice\n" +
-                    " * is included in all copies of any software which is or includes a copy\n" +
-                    " * or modification of this software and in all copies of the supporting\n" +
-                    " * documentation for such software.\n" +
-                    " * THIS SOFTWARE IS BEING PROVIDED \"AS IS\", WITHOUT ANY EXPRESS OR IMPLIED\n" +
-                    " * WARRANTY.  IN PARTICULAR, NEITHER THE AUTHORS NOR LUCENT TECHNOLOGIES MAKE ANY\n" +
-                    " * REPRESENTATION OR WARRANTY OF ANY KIND CONCERNING THE MERCHANTABILITY\n" +
-                    " * OF THIS SOFTWARE OR ITS FITNESS FOR ANY PARTICULAR PURPOSE.\n" +
-                    " */"),
-
             Library("Ktor", 1, "" +
                     "Apache License 2.0" +
                     "\nCopyright 2000-2023 JetBrains s.r.o.\n" +

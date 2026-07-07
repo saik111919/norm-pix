@@ -25,14 +25,12 @@ lifecycleRuntimeKtx = "2.10.0"
 activityCompose = "1.12.2"
 composeBom = "2026.03.01"
 lifecycleViewmodelCompose = "2.10.0"
-markdown = "0.7.3"
 material3 = "1.5.0-alpha12"
 navVersion = "2.9.6"
 opencsv = "5.12.0"
 review = "2.0.2"
 reviewKtx = "2.0.2"
 roomVersion = "2.8.4"
-litertlm = "0.13.1"
 visionInternalVkp = "18.2.3"
 
 workVersion = "2.11.0"
@@ -40,7 +38,6 @@ haze = "1.7.1"
 material3Version = "1.4.0"
 desugarJdkLibs = "2.1.5"
 pdfbox = "2.0.27.0"
-mikepenzMarkdownRenderer = "0.25.0"
 
 coilCompose = "3.3.0"
 coilGif = "3.3.0"
@@ -94,11 +91,9 @@ ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktorVer
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktorVersion" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktorVersion" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version = "1.10.2" }
-markdown = { module = "org.jetbrains:markdown", version.ref = "markdown" }
 opencsv = { module = "com.opencsv:opencsv", version.ref = "opencsv" }
 review = { module = "com.google.android.play:review", version.ref = "review" }
 review-ktx = { module = "com.google.android.play:review-ktx", version.ref = "reviewKtx" }
-litertlm-android = { module = "com.google.ai.edge.litertlm:litertlm-android", version.ref = "litertlm" }
 vision-internal-vkp = { group = "com.google.mlkit", name = "vision-internal-vkp", version.ref = "visionInternalVkp" }
 
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3Version" }
@@ -114,8 +109,6 @@ compose-charts = { module = "io.github.ehsannarmani:compose-charts", version.ref
 androidx-compose-animation = { group = "androidx.compose.animation", name = "animation", version.ref = "animation" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 pdfbox-android = { module = "com.tom-roush:pdfbox-android", version.ref = "pdfbox" }
-mikepenz-markdown-renderer = { module = "com.mikepenz:multiplatform-markdown-renderer", version.ref = "mikepenzMarkdownRenderer" }
-mikepenz-markdown-renderer-m3 = { module = "com.mikepenz:multiplatform-markdown-renderer-m3", version.ref = "mikepenzMarkdownRenderer" }
 appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompatVersion" }
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

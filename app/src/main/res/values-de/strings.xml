@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Barrio</string>
+    <string name="app_name">NOrmPix</string>
     <!-- App shortcuts -->
     <string name="add_transaction">Transaktion hinzufügen</string>
     <string name="add_subscription">Abonnement hinzufügen</string>
@@ -323,7 +323,7 @@
     <string name="press_back_again_to_close">Erneut zurückdrücken, um die App zu schließen</string>
     <string name="transaction_deleted">Transaktion gelöscht</string>
     <string name="undo">Rückgängig</string>
-    <string name="cashiro_title">Barrio</string>
+    <string name="cashiro_title">NOrmPix</string>
     <string name="profile">Profil</string>
     <string name="banner">Banner</string>
     <string name="recent">Neueste</string>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Cashiro</string>
+    <string name="app_name">NOrmPix</string>
     <!-- App shortcuts -->
     <string name="add_transaction">Adaugă Tranzacție</string>
     <string name="add_subscription">Adaugă Abonament</string>
@@ -323,7 +323,7 @@
     <string name="press_back_again_to_close">Apăsați înapoi din nou pentru a închide aplicația</string>
     <string name="transaction_deleted">Tranzacție ștearsă</string>
     <string name="undo">Anulează</string>
-    <string name="cashiro_title">Cashiro</string>
+    <string name="cashiro_title">NOrmPix</string>
     <string name="profile">Profil</string>
     <string name="banner">Banner</string>
     <string name="recent">Recente</string>

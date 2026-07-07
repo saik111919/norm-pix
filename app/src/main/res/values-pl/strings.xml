@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Cashiro</string>
+    <string name="app_name">NOrmPix</string>
     <!-- App shortcuts -->
     <string name="add_transaction">Dodaj transakcję</string>
     <string name="add_subscription">Dodaj subskrypcję</string>
@@ -323,7 +323,7 @@
     <string name="press_back_again_to_close">Naciśnij ponownie, aby zamknąć aplikację</string>
     <string name="transaction_deleted">Transakcja usunięta</string>
     <string name="undo">Cofnij</string>
-    <string name="cashiro_title">Cashiro</string>
+    <string name="cashiro_title">NOrmPix</string>
     <string name="profile">Profil</string>
     <string name="banner">Sztandar</string>
     <string name="recent">Najnowsze</string>

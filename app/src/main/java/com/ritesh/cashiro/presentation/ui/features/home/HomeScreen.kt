@@ -157,7 +157,6 @@ fun SharedTransitionScope.HomeScreen(
     themeViewModel: ThemeViewModel = hiltViewModel(),
     navController: NavController,
     onNavigateToSettings: () -> Unit = {},
-    onNavigateToChat: () -> Unit = {},
     onNavigateToTransactions: () -> Unit = {},
     onNavigateToTransactionsWithSearch: () -> Unit = {},
     onNavigateToSubscriptions: () -> Unit = {},

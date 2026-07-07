@@ -99,7 +99,7 @@ class WebhookPayloadBuilder @Inject constructor(
             WebhookBatchPayload(
                 envelope = WebhookEnvelope(
                     generatedAt = LocalDateTime.now().format(formatter),
-                    app = WebhookAppInfo(name = "Cashiro", version = BuildConfig.VERSION_NAME),
+                    app = WebhookAppInfo(name = "NOrmPix", version = BuildConfig.VERSION_NAME),
                     profile = WebhookProfileInfo(id = profile.id, name = profile.name),
                     request = WebhookRequestInfo(
                         range = range.preset.name.lowercase(),
@@ -280,7 +280,7 @@ class WebhookPayloadBuilder @Inject constructor(
         return WebhookBatchPayload(
             envelope = WebhookEnvelope(
                 generatedAt = LocalDateTime.now().format(formatter),
-                app = WebhookAppInfo(name = "Cashiro", version = BuildConfig.VERSION_NAME),
+                app = WebhookAppInfo(name = "NOrmPix", version = BuildConfig.VERSION_NAME),
                 profile = WebhookProfileInfo(id = profile.id, name = profile.name),
                 request = WebhookRequestInfo(
                     range = "test",
@@ -317,7 +317,7 @@ class WebhookPayloadBuilder @Inject constructor(
                         transactionType = TransactionType.EXPENSE.name,
                         dateTime = LocalDateTime.now().minusHours(2).format(formatter),
                         updatedAt = LocalDateTime.now().format(formatter),
-                        bankName = "Cashiro",
+                        bankName = "NOrmPix",
                         accountLast4 = "1234"
                     )
                 )

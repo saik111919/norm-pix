@@ -220,10 +220,6 @@ dependencies {
     implementation(libs.androidx.hilt.work)
     ksp(libs.androidx.hilt.compiler)
     
-    // LiteRT-LM for on-device LLM inference
-    implementation(libs.litertlm.android)
-
-    
     // Google Play In-App Updates (only for standard flavor)
     "standardImplementation"(libs.app.update)
     "standardImplementation"(libs.app.update.ktx)
@@ -243,11 +239,6 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-    
-    // Markdown support
-    implementation(libs.markdown)
-    implementation(libs.mikepenz.markdown.renderer)
-    implementation(libs.mikepenz.markdown.renderer.m3)
     
     // OpenCSV for CSV export
     implementation(libs.opencsv)
