@@ -100,7 +100,7 @@ jobs:
           echo "Release version: $VERSION (code: $CODE)"
       
       - name: Check if tag already exists
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run && github.event_name != 'push' }}
         run: |
           TAG_NAME="v${{ steps.next_version.outputs.version }}"
           
