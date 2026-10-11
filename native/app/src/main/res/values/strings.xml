@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NormPix</string>
+    <string name="nfc_outlet_service_desc">NormPix Card Share</string>
+</resources>

@@ -1,0 +1,229 @@
+package com.example.normpix.ui.theme
+
+import android.provider.Settings
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.shape.CornerSize
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+
+/*
+ * NormPix design tokens - the single source for spacing, shape, layout,
+ * motion, and icon sizing. Colors and typography live in the MaterialTheme
+ * (see Theme.kt); composables read those from the theme, never hard-code them.
+ */
+
+/** Blur behind sheets and dialogs, and the floating bars' glass. */
+object AppFrostedTokens {
+    /**
+     * The blur of the page behind an open sheet or dialog, so it reads as soft colour, not as shapes. CSS `blur(24px)` is a
+     * Gaussian with sigma 24px; an Android blur radius is about sqrt(3) x sigma, so the same blur here is about 40dp.
+     */
+    val blurRadius = 40.dp
+
+    /**
+     * How much of a sheet's or dialog's own colour lies over the blurred page; the rest of the page shows through it as soft
+     * colour, as in the launcher's app drawer. Only where the page is blurred - over a sharp page a sheet is solid. The
+     * glass controls floating over the top of a page are tinted as much.
+     */
+    val surfaceAlpha = 0.62f
+
+    /** The dim over the blurred page around a sheet: slight, since the blur already sets the page back. */
+    val scrimAlpha = 0.08f
+
+    /** The blur behind the floating bars: they are small, and a lighter blur keeps the page's colours readable through them. */
+    val chromeBlurRadius = 20.dp
+
+    /** Corner radius for sheet and dialog surfaces. */
+    val cornerRadius = AppRadius.xxl
+}
+
+
+/** 4dp-based spacing scale. */
+object AppSpacing {
+    val xxs = 2.dp
+    val xs = 4.dp
+    val sm = 8.dp
+    val md = 12.dp
+    val lg = 16.dp
+    val xl = 20.dp
+    val xxl = 24.dp
+    val xxxl = 32.dp
+    val x4l = 40.dp
+    val x5l = 48.dp
+
+    /** Horizontal page gutter on compact windows. */
+    val page = PaddingValues(horizontal = lg)
+}
+
+/**
+ * Corner radii mapped onto the Material 3 shape scale. Pick by role, not by
+ * look: the shape communicates what kind of surface something is.
+ */
+object AppRadius {
+    /** Extra-small - inner corners of grouped list segments, snackbars. */
+    val xs = 4.dp
+
+    /** Small - chips, tags, menus' inner items. */
+    val sm = 8.dp
+
+    /** Medium - text fields, menus, standalone list rows, small tiles. */
+    val md = 12.dp
+
+    /** Large - cards and card faces. */
+    val lg = 16.dp
+
+    /** Large-increased (M3 Expressive) - outer corners of grouped lists and the contextual status surface. */
+    val xl = 20.dp
+
+    /** Extra-large - bottom sheets and dialogs. */
+    val xxl = 28.dp
+
+    val rXs = RoundedCornerShape(xs)
+    val rSm = RoundedCornerShape(sm)
+    val rMd = RoundedCornerShape(md)
+    val rLg = RoundedCornerShape(lg)
+    val rXl = RoundedCornerShape(xl)
+    val rXxl = RoundedCornerShape(xxl)
+    val rFull = RoundedCornerShape(CornerSize(50))
+}
+
+object AppIconSizes {
+    val xs = 12.dp
+    val sm = 16.dp
+    val md = 20.dp
+    val lg = 24.dp
+    val xl = 32.dp
+    val hero = 40.dp
+}
+
+/** Material 3 window size classes. */
+enum class WindowSize {
+    /** < 600dp: phones in portrait. Bottom navigation bar. */
+    Compact,
+
+    /** 600-839dp: foldables, small tablets, phones in landscape. Rail. */
+    Medium,
+
+    /** 840-1199dp: tablets in landscape, desktop. Rail, two columns. */
+    Expanded,
+
+    /** >= 1200dp: large desktop windows. Extended rail. */
+    Large;
+
+    val isCompact: Boolean get() = this == Compact
+    val usesRail: Boolean get() = this != Compact
+
+    companion object {
+        fun fromWidth(widthDp: Int): WindowSize = when {
+            widthDp < 600 -> Compact
+            widthDp < 840 -> Medium
+            widthDp < 1200 -> Expanded
+            else -> Large
+        }
+    }
+}
+
+@Composable
+fun rememberWindowSize(): WindowSize {
+    val width = LocalConfiguration.current.screenWidthDp
+    return remember(width) { WindowSize.fromWidth(width) }
+}
+
+object AppLayout {
+    /** Max width for single-column reading content (lists, forms, settings). */
+    val maxContentWidth = 720.dp
+
+    /** Max width for multi-column dashboards on large windows. */
+    val maxWideContentWidth = 1200.dp
+
+    /** Bottom clearance so the last list item scrolls above the floating navbar. */
+    val navClearance = 100.dp
+
+    /** Bottom clearance so the last list item scrolls above a floating navbar and FAB. */
+    val fabClearance = 168.dp
+
+    /** Horizontal gutter for the given window size. */
+    fun gutter(size: WindowSize): Dp = when (size) {
+        WindowSize.Compact -> AppSpacing.lg
+        WindowSize.Medium -> AppSpacing.xxl
+        WindowSize.Expanded, WindowSize.Large -> AppSpacing.xxxl
+    }
+}
+
+/** Motion tokens (M3 durations + easing) and reduced-motion handling. */
+object AppMotion {
+    const val SHORT_MS = 200
+    const val MEDIUM_MS = 300
+    const val LONG_MS = 500
+
+    /** Elements entering the screen (M3 emphasized decelerate). */
+    val enter: Easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+
+    /** Elements leaving the screen (M3 emphasized accelerate). */
+    val exit: Easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
+
+    /** Elements changing size/shape/color in place (M3 emphasized). */
+    val standard: Easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
+
+    /** [ms], or zero when the user turned animations off system-wide. */
+    @Composable
+    fun duration(ms: Int): Int = if (rememberReducedMotion()) 0 else ms
+
+    /**
+     * Material 3 Expressive "default spatial" spring: things that move or change shape settle with a
+     * hint of overshoot, never a wobble. One spec for every such motion (tab indicator, selected
+     * segment, the navigation bar leaving), so they feel related. Instant when animations are off.
+     */
+    @Composable
+    fun <T> spatial(): FiniteAnimationSpec<T> =
+        if (rememberReducedMotion()) snap() else spring(dampingRatio = 0.8f, stiffness = 380f)
+}
+
+/** True when the OS "remove animations" / animator-scale-0 setting is on. */
+@Composable
+fun rememberReducedMotion(): Boolean {
+    val override = LocalReducedMotionOverride.current
+    if (override != null) return override
+    // Inside the app this is one value, kept up to date by [ProvideAppEnvironment]; elsewhere (a preview) it is read once.
+    LocalSystemReducedMotion.current?.let { return it }
+    val resolver = LocalContext.current.contentResolver
+    return remember(resolver) { readReducedMotion(resolver) }
+}
+
+/** The system's reduced-motion state as the app last read it (see [rememberSystemReducedMotion]); null outside the app. */
+val LocalSystemReducedMotion = compositionLocalOf<Boolean?> { null }
+
+/**
+ * Whether the system has animations removed, read now and again each time the app is resumed. The setting is changed in
+ * system settings, which the user comes back from, so a change applies at once rather than after the app is next started -
+ * until then every page and sheet would keep moving (or keep standing still) against what the phone was just told.
+ */
+@Composable
+fun rememberSystemReducedMotion(): Boolean {
+    val resolver = LocalContext.current.contentResolver
+    var reduced by remember(resolver) { mutableStateOf(readReducedMotion(resolver)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { reduced = readReducedMotion(resolver) }
+    return reduced
+}
+
+private fun readReducedMotion(resolver: android.content.ContentResolver): Boolean =
+    runCatching { Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f }.getOrDefault(false)
+
+/** Tests (and screenshot harnesses) can force reduced motion on or off. */
+val LocalReducedMotionOverride = compositionLocalOf<Boolean?> { null }
