@@ -47,6 +47,8 @@ class FinanceDatabase(
         if (oldVersion < 5) addPeople(db)
         if (oldVersion < 6) addRulePeople(db)
         if (oldVersion < 7) migrateBrandCategoryIcons(db)
+        if (oldVersion < 8) addTransactionPictures(db)
+        if (oldVersion < 9) addBillingDays(db)
     }
 
     override fun onOpen(db: SQLiteDatabase) {
@@ -56,7 +58,7 @@ class FinanceDatabase(
 
     companion object {
         const val DB_NAME = "normpix_finance.db"
-        const val VERSION = 7
+        const val VERSION = 9
 
         const val ACCOUNTS = "accounts"
         const val PEOPLE = "people"
@@ -80,7 +82,9 @@ class FinanceDatabase(
                   created_at INTEGER NOT NULL,
                   updated_at INTEGER NOT NULL,
                   bank_key TEXT,
-                  credit_limit INTEGER
+                  credit_limit INTEGER,
+                  statement_day INTEGER,
+                  due_day INTEGER
                 )
                 """.trimIndent(),
             )
@@ -149,6 +153,7 @@ class FinanceDatabase(
                   created_at INTEGER NOT NULL,
                   updated_at INTEGER NOT NULL,
                   person_id INTEGER REFERENCES $PEOPLE(id) ON DELETE SET NULL,
+                  picture TEXT,
                   CHECK (
                     (type = 'transfer' AND to_account_id IS NOT NULL
                        AND to_account_id != account_id AND category_id IS NULL)
@@ -274,6 +279,23 @@ class FinanceDatabase(
                     arrayOf<Any>(brandKey, name, brandKey),
                 )
             }
+        }
+
+        /**
+         * Version 9: a credit card can have a statement day and a payment-due day. Adds the two (empty) columns: every account
+         * stays as it was, with neither - no date is made up for a card that was never given one.
+         */
+        fun addBillingDays(db: SQLiteDatabase) {
+            db.execSQL("ALTER TABLE $ACCOUNTS ADD COLUMN statement_day INTEGER")
+            db.execSQL("ALTER TABLE $ACCOUNTS ADD COLUMN due_day INTEGER")
+        }
+
+        /**
+         * Version 8: a transaction can have a picture attached (a bill, a receipt, a payment screenshot). Adds the (empty)
+         * column for its file name: every transaction stays as it was, with none.
+         */
+        fun addTransactionPictures(db: SQLiteDatabase) {
+            db.execSQL("ALTER TABLE $TRANSACTIONS ADD COLUMN picture TEXT")
         }
 
         /** Version 4: a credit card can have a limit. Adds the (empty) column: every account stays as it was. */

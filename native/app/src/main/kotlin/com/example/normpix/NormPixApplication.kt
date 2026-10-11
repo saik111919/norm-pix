@@ -6,6 +6,7 @@ import com.example.normpix.availability.ScheduledFeature
 import com.example.normpix.availability.availabilityAt
 import com.example.normpix.finance.data.FinanceDatabase
 import com.example.normpix.finance.data.FinanceRepository
+import com.example.normpix.finance.data.TransactionPictures
 import com.example.normpix.finance.ui.FinanceController
 import com.example.normpix.finance.ui.FinanceStatus
 import com.example.normpix.reminders.AlarmReminderScheduler
@@ -145,7 +146,7 @@ class NormPixApplication : Application() {
             val host = ActivityHost()
             return AppContainer(
                 preferences = AppPreferences(prefs),
-                finance = FinanceController(FinanceRepository(FinanceDatabase(app))),
+                finance = FinanceController(FinanceRepository(FinanceDatabase(app)), TransactionPictures(app)),
                 reminders = RemindersController(ReminderDao(RemindersDatabase(app)), alarms),
                 vault = FileCardVault(File(app.filesDir, "card_vault.bin")),
                 host = host,

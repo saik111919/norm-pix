@@ -2,4 +2,5 @@
 <paths>
     <cache-path name="scan" path="scan/" />
     <cache-path name="receipts" path="receipts/" />
+    <cache-path name="pictures" path="picture-drafts/" />
 </paths>

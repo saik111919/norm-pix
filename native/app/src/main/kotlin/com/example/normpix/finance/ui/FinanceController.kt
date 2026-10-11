@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import com.example.normpix.banks.BankCatalog
 import com.example.normpix.finance.data.FinanceRepository
 import com.example.normpix.finance.data.FinanceSnapshot
+import com.example.normpix.finance.data.TransactionPictures
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.Category
 import com.example.normpix.finance.domain.CategoryType
@@ -23,10 +24,16 @@ import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.RepeatSchedule
+import java.io.File
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 enum class FinanceStatus { Loading, Ready, Failed }
 
@@ -98,9 +105,17 @@ data class FinanceState(
  * re-read from the database: one source of truth, no hand-synchronized
  * derived state.
  */
-class FinanceController(val repository: FinanceRepository) {
+class FinanceController(
+    val repository: FinanceRepository,
+    /** Where pictures attached to transactions are kept; null where pictures can't be attached (the sample data). */
+    val pictures: TransactionPictures? = null,
+) {
     private val _state = MutableStateFlow(FinanceState())
     val state: StateFlow<FinanceState> = _state.asStateFlow()
+
+    // Keeping a picture and saving the row that names it are one step as far as the sweep is concerned, which would
+    // otherwise find the file before its row and delete it.
+    private val pictureLock = Mutex()
 
     /** Records due recurring transactions, then loads reference data. */
     suspend fun load() {
@@ -111,6 +126,19 @@ class FinanceController(val repository: FinanceRepository) {
             throw e
         } catch (_: Exception) {
             _state.value = _state.value.copy(status = FinanceStatus.Failed)
+        }
+        sweepPictures()
+    }
+
+    /** Deletes the pictures no transaction names any longer (see [TransactionPictures.sweep]). Never fails a load. */
+    private suspend fun sweepPictures() {
+        val store = pictures ?: return
+        try {
+            pictureLock.withLock { store.sweep(repository.pictureNames()) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Left for the next start.
         }
     }
 
@@ -150,9 +178,42 @@ class FinanceController(val repository: FinanceRepository) {
 
     // ---------------------------------------------------------------- writes
 
-    suspend fun saveTransaction(t: FinanceTransaction): FinanceTransaction = mutate { it.saveTransaction(t) }
+    /** Saves [t], doing to its picture what [picture] says ([t]'s own `picture` is what it has now). */
+    suspend fun saveTransaction(t: FinanceTransaction, picture: PictureEdit = PictureEdit.Unchanged): FinanceTransaction =
+        withPicture(t, picture) { toSave -> mutate { it.saveTransaction(toSave) } }
 
-    suspend fun deleteTransaction(id: Long) = mutate { it.deleteTransaction(id) }
+    /**
+     * Saves [t] by [save] with its picture changed as [edit] says. A new picture is kept first, so the row can name it,
+     * and deleted again if the row isn't saved; the picture it replaces or loses is deleted only once the row is saved.
+     */
+    private suspend fun withPicture(
+        t: FinanceTransaction,
+        edit: PictureEdit,
+        save: suspend (FinanceTransaction) -> FinanceTransaction,
+    ): FinanceTransaction {
+        val store = pictures
+        if (store == null || edit == PictureEdit.Unchanged) return save(t)
+        return pictureLock.withLock {
+            val before = t.id?.let { repository.transactionById(it)?.picture }
+            val name = (edit as? PictureEdit.Attach)?.let { store.keep(it.draft) }
+            val saved = try {
+                save(t.copy(picture = name))
+            } catch (e: Throwable) {
+                withContext(NonCancellable) { store.delete(name) }
+                throw e
+            }
+            if (before != null && before != name) store.delete(before)
+            saved
+        }
+    }
+
+    /** Deletes the transaction, and the picture attached to it. */
+    suspend fun deleteTransaction(id: Long): Int {
+        val picture = if (pictures != null) repository.transactionById(id)?.picture else null
+        val deleted = mutate { it.deleteTransaction(id) }
+        pictures?.delete(picture)
+        return deleted
+    }
 
     suspend fun saveAccount(a: Account): Account = mutate { it.saveAccount(a) }
 
@@ -193,10 +254,16 @@ class FinanceController(val repository: FinanceRepository) {
     }
 
     /** Saves [t] as the first of a new repeating payment (see [FinanceRepository.saveTransactionAndRepeat]), recording any repeats already due. */
-    suspend fun saveTransactionAndRepeat(t: FinanceTransaction, schedule: RepeatSchedule): FinanceTransaction = mutate {
-        val (saved, _) = it.saveTransactionAndRepeat(t, schedule)
-        it.processRecurring()
-        saved
+    suspend fun saveTransactionAndRepeat(
+        t: FinanceTransaction,
+        schedule: RepeatSchedule,
+        picture: PictureEdit = PictureEdit.Unchanged,
+    ): FinanceTransaction = withPicture(t, picture) { toSave ->
+        mutate {
+            val (saved, _) = it.saveTransactionAndRepeat(toSave, schedule)
+            it.processRecurring()
+            saved
+        }
     }
 
     suspend fun deleteRecurringRule(id: Long) = mutate { it.deleteRecurringRule(id) }
@@ -205,9 +272,40 @@ class FinanceController(val repository: FinanceRepository) {
 
     suspend fun setDefaultAccountId(id: Long?) = mutate { it.setDefaultAccountId(id) }
 
-    suspend fun restore(snapshot: FinanceSnapshot) = mutate { it.restore(snapshot) }
+    /**
+     * Replaces everything with [snapshot]. Pictures aren't in a backup, only their names: one this phone doesn't have (a
+     * backup from another phone, or from before the picture was deleted) is left off its transaction.
+     */
+    suspend fun restore(snapshot: FinanceSnapshot) {
+        val store = pictures
+        val restorable = if (store == null) {
+            snapshot
+        } else {
+            withContext(Dispatchers.IO) {
+                snapshot.copy(transactions = snapshot.transactions.map { if (store.exists(it.picture)) it else it.copy(picture = null) })
+            }
+        }
+        mutate { it.restore(restorable) }
+        sweepPictures()
+    }
 
-    suspend fun resetAll() = mutate { it.resetAll() }
+    /** Erases everything, pictures too, and starts again from the defaults. */
+    suspend fun resetAll() {
+        mutate { it.resetAll() }
+        pictures?.deleteAll()
+    }
+}
+
+/** What saving a transaction does to its attached picture. */
+sealed interface PictureEdit {
+    /** Leaves it as the transaction has it. */
+    data object Unchanged : PictureEdit
+
+    /** Attaches [draft] (see [TransactionPictures.stage]) in place of any picture it had. */
+    data class Attach(val draft: File) : PictureEdit
+
+    /** Takes off the picture it had. */
+    data object Remove : PictureEdit
 }
 
 val LocalFinance = compositionLocalOf<FinanceController> { error("No FinanceController provided") }

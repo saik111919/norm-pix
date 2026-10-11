@@ -1,5 +1,6 @@
 package com.example.normpix.finance.ui
 
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -34,6 +35,9 @@ import com.example.normpix.finance.domain.FinanceConflictException
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.finance.domain.billingCycleSummary
+import com.example.normpix.finance.share.NoSharedPictureReader
+import com.example.normpix.finance.share.SharedPictureReader
 import com.example.normpix.finance.share.SharedStatus
 import com.example.normpix.finance.share.SharedTextReading
 import com.example.normpix.finance.share.SharedTransactionImport
@@ -50,6 +54,7 @@ import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.SheetHeader
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppSpacing
+import java.io.File
 import java.time.LocalDateTime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -82,69 +87,87 @@ class FinanceActions(
     }
 
     /**
-     * A transaction from what another app shared - a payment confirmation, a bank SMS, or a receipt picture whose text
-     * [readPicture] reads on this device: read into a draft, then the new-transaction sheet opens with what could be read
-     * and says what couldn't. Nothing is saved until the user saves. A share with nothing to read says so; a payment the
-     * message says failed, or a request, asks first.
+     * A transaction from what another app shared - a payment confirmation, a bank SMS, or a receipt [picture] whose text
+     * [reader] reads on this device: read into a draft, then the new-transaction sheet opens with what could be read, says
+     * what couldn't, and has the picture attached. Nothing is saved until the user saves. A share with nothing to read
+     * says so; a payment the message says failed, or a request, asks first.
      */
-    fun addFromShare(text: String, readPicture: (suspend () -> String?)? = null) {
+    fun addFromShare(text: String, picture: Uri? = null, reader: SharedPictureReader = NoSharedPictureReader) {
         scope.launch {
-            val fromPicture = readPicture != null
-            val pictureText = readPicture?.let {
-                snackbars.show("Reading the picture…")
-                it()
-            }
-            if (fromPicture && pictureText.isNullOrBlank() && text.isBlank()) {
-                val enter = overlays.confirm(
-                    title = "Couldn't read the picture",
-                    message = "NormPix found no text in it that it could read. You can still enter the transaction yourself.",
-                    confirmLabel = "Enter it myself",
-                )
-                if (enter) openSharedDraft(SharedTransactionPrefill.nothingRead(fromPicture = true))
-                return@launch
-            }
-            // Words that came with a picture are read together with the picture's own.
-            val shared = listOf(text, pictureText.orEmpty()).filter { it.isNotBlank() }.joinToString("\n\n")
-            val now = LocalDateTime.now()
-            when (val reading = SharedTransactionParser.read(shared, state.currency, now.toLocalDate())) {
-                SharedTextReading.Empty -> overlays.alert(
-                    title = "Nothing to add",
-                    message = "NormPix can add a transaction from the message or the receipt picture a payment or bank app " +
-                        "shares. This share had neither in it.",
-                )
-                SharedTextReading.TooLong -> overlays.alert(
-                    title = "Too long to read",
-                    message = "That's much longer than a payment message, so NormPix didn't read it. " +
-                        "Share just the payment's message, or add the transaction yourself.",
-                )
-                SharedTextReading.NotATransaction -> {
+            val fromPicture = picture != null
+            // A copy made straight away, while the sharing app still lets NormPix read the picture: the form attaches it.
+            // Whatever the form didn't keep is deleted once it closes (or here, when no form opens).
+            var staged: File? = null
+            try {
+                val read = picture?.let { uri ->
+                    snackbars.show("Reading the picture…")
+                    staged = finance.pictures?.stage(uri)
+                    // Read from the original, which is as sharp as it gets (the copy is scaled and compressed).
+                    reader.read(uri)
+                }
+                val pictureText = read?.text
+                if (fromPicture && pictureText.isNullOrBlank() && text.isBlank()) {
                     val enter = overlays.confirm(
-                        title = "No transaction found",
-                        message = "The shared text has no amount or payment in it that NormPix can read. You can still enter it yourself.",
+                        title = "Couldn't read the picture",
+                        message = "NormPix found no text in it that it could read. You can still enter the transaction yourself" +
+                            if (staged != null) ", with the picture attached." else ".",
                         confirmLabel = "Enter it myself",
                     )
-                    if (enter) openSharedDraft(SharedTransactionPrefill.nothingRead(fromPicture))
+                    if (enter) openSharedDraft(SharedTransactionPrefill.nothingRead(fromPicture = true).copy(picture = staged))
+                    return@launch
                 }
-                is SharedTextReading.Draft -> {
-                    val draft = reading.draft
-                    val goAhead = when (draft.status) {
-                        SharedStatus.Failed -> overlays.confirm(
-                            title = "This payment failed",
-                            message = "The message says it didn't go through, and a failed payment usually moves no money. " +
-                                "Add it only if money really left or reached your account.",
-                            confirmLabel = "Add anyway",
+                // Words that came with a picture are read together with the picture's own.
+                val shared = listOf(text, pictureText.orEmpty()).filter { it.isNotBlank() }.joinToString("\n\n")
+                val now = LocalDateTime.now()
+                // The picture's largest figure settles the amount where its words don't (a receipt's big "₹250").
+                when (val reading = SharedTransactionParser.read(shared, state.currency, now.toLocalDate(), headline = read?.headline)) {
+                    SharedTextReading.Empty -> overlays.alert(
+                        title = "Nothing to add",
+                        message = "NormPix can add a transaction from the message or the receipt picture a payment or bank app " +
+                            "shares. This share had neither in it.",
+                    )
+                    SharedTextReading.TooLong -> overlays.alert(
+                        title = "Too long to read",
+                        message = "That's much longer than a payment message, so NormPix didn't read it. " +
+                            "Share just the payment's message, or add the transaction yourself.",
+                    )
+                    SharedTextReading.NotATransaction -> {
+                        val enter = overlays.confirm(
+                            title = "No transaction found",
+                            message = "The shared text has no amount or payment in it that NormPix can read. You can still enter it yourself.",
+                            confirmLabel = "Enter it myself",
                         )
-                        SharedStatus.Requested -> overlays.confirm(
-                            title = "This is a payment request",
-                            message = "Nothing has been paid yet. Add it once the money has actually moved.",
-                            confirmLabel = "Add anyway",
-                        )
-                        else -> true
+                        if (enter) {
+                            openSharedDraft(SharedTransactionPrefill.nothingRead(fromPicture).copy(readText = pictureText, picture = staged))
+                        }
                     }
-                    if (goAhead) {
-                        openSharedDraft(SharedTransactionImport.prefill(draft, shared, state, finance.repository, now).copy(fromPicture = fromPicture))
+                    is SharedTextReading.Draft -> {
+                        val draft = reading.draft
+                        val goAhead = when (draft.status) {
+                            SharedStatus.Failed -> overlays.confirm(
+                                title = "This payment failed",
+                                message = "The message says it didn't go through, and a failed payment usually moves no money. " +
+                                    "Add it only if money really left or reached your account.",
+                                confirmLabel = "Add anyway",
+                            )
+                            SharedStatus.Requested -> overlays.confirm(
+                                title = "This is a payment request",
+                                message = "Nothing has been paid yet. Add it once the money has actually moved.",
+                                confirmLabel = "Add anyway",
+                            )
+                            else -> true
+                        }
+                        if (goAhead) {
+                            openSharedDraft(
+                                SharedTransactionImport.prefill(draft, shared, state, finance.repository, now)
+                                    .copy(fromPicture = fromPicture, readText = pictureText, picture = staged),
+                            )
+                        }
                     }
                 }
+            } finally {
+                // A save filed its own copy; the draft goes either way.
+                finance.pictures?.discard(staged)
             }
         }
     }
@@ -189,7 +212,8 @@ class FinanceActions(
     private suspend fun deleteTransactionNow(transaction: FinanceTransaction) {
         val confirmed = overlays.confirm(
             title = "Delete this ${transaction.type.label.lowercase()}?",
-            message = "${signedAmount(state.money, transaction.type, transaction.amount)} will be removed, and balances, " +
+            message = "${signedAmount(state.money, transaction.type, transaction.amount)}" +
+                "${if (transaction.picture != null) " and its picture" else ""} will be removed, and balances, " +
                 "totals and budgets will update. This can't be undone.",
             confirmLabel = "Delete",
             destructive = true,
@@ -251,7 +275,10 @@ class FinanceActions(
             val action = overlays.sheet<String> { dismiss ->
                 ActionListSheet(
                     title = account.name,
-                    subtitle = state.money.format(state.balanceOf(account.id!!)),
+                    subtitle = listOfNotNull(
+                        state.money.format(state.balanceOf(account.id!!)),
+                        billingCycleSummary(account.statementDay, account.dueDay),
+                    ).joinToString(" · "),
                     actions = actions,
                     onPick = dismiss,
                 )

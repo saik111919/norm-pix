@@ -3,6 +3,7 @@ package com.example.normpix.finance.data
 import com.example.normpix.banks.BankCatalog
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
+import com.example.normpix.finance.domain.BILLING_DAYS
 import com.example.normpix.finance.domain.Budget
 import com.example.normpix.finance.domain.Category
 import com.example.normpix.finance.domain.pathName
@@ -18,6 +19,7 @@ import com.example.normpix.finance.domain.RecurrenceFrequency
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.cleanPersonName
+import com.example.normpix.finance.domain.isPictureName
 import com.example.normpix.finance.domain.isSingleEmoji
 import com.example.normpix.finance.domain.minorToDecimalString
 import java.time.Instant
@@ -112,6 +114,8 @@ object FinanceBackupCodec {
                                 put("updatedAt", iso(a.updatedAt))
                                 put("bankKey", a.bankKey)
                                 put("creditLimit", a.creditLimit)
+                                put("statementDay", a.statementDay)
+                                put("dueDay", a.dueDay)
                             },
                         )
                     }
@@ -187,6 +191,7 @@ object FinanceBackupCodec {
                                 put("note", t.note)
                                 put("recurringId", t.recurringId)
                                 put("personId", t.personId)
+                                put("picture", t.picture)
                                 put("createdAt", iso(t.createdAt))
                                 put("updatedAt", iso(t.updatedAt))
                             },
@@ -292,6 +297,8 @@ object FinanceBackupCodec {
                     updatedAt = m.date("updatedAt", "account"),
                     bankKey = accountBank(m),
                     creditLimit = m.longOrNull("creditLimit", "account"),
+                    statementDay = m.dayOrNull("statementDay", "account"),
+                    dueDay = m.dayOrNull("dueDay", "account"),
                 )
             },
             banks = list("banks").map { m ->
@@ -341,6 +348,8 @@ object FinanceBackupCodec {
                     createdAt = m.date("createdAt", "transaction"),
                     updatedAt = m.date("updatedAt", "transaction"),
                     personId = m.longOrNull("personId", "transaction"),
+                    // Only a name the app could have given it: anything else is not a picture of this app's.
+                    picture = m.stringOrNull("picture")?.takeIf(::isPictureName),
                 )
             },
             budgets = list("budgets").map { m ->
@@ -423,6 +432,12 @@ object FinanceBackupCodec {
             val limit = a.creditLimit ?: continue
             if (limit <= 0) add("Account \"${a.name}\" has a credit limit that is not above zero.")
             if (a.kind != AccountKind.Card) add("Account \"${a.name}\" has a credit limit but is not a card.")
+        }
+        for (a in s.accounts) {
+            if (a.statementDay == null && a.dueDay == null) continue
+            if (a.statementDay != null && a.statementDay !in BILLING_DAYS) add("Account \"${a.name}\" has a statement date that is not a day of the month.")
+            if (a.dueDay != null && a.dueDay !in BILLING_DAYS) add("Account \"${a.name}\" has a payment due date that is not a day of the month.")
+            if (a.kind != AccountKind.Card) add("Account \"${a.name}\" has a statement or due date but is not a card.")
         }
         val bankKeys = s.banks.mapTo(mutableSetOf()) { it.key }
         if (bankKeys.size != s.banks.size) add("The backup has duplicate banks.")
@@ -578,6 +593,13 @@ object FinanceBackupCodec {
         return (value as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull
             ?: throw BackupFormatError("A $what has an invalid \"$key\".")
     }
+
+    /**
+     * A day of the month, or null where the key is missing (a backup from before cards had dates). A number that is no day
+     * is kept as one that [validate] will refuse, instead of being wrapped into range by a narrowing conversion.
+     */
+    private fun JsonObject.dayOrNull(key: String, what: String): Int? =
+        longOrNull(key, what)?.coerceIn(-1L, 100L)?.toInt()
 
     private fun JsonObject.bool(key: String): Boolean = (this[key] as? JsonPrimitive)?.booleanOrNull == true
 

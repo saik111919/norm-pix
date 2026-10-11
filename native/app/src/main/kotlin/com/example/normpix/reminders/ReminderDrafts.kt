@@ -6,6 +6,7 @@ import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.RecurrenceFrequency
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.finance.domain.nextOnDay
 import java.time.LocalDateTime
 import java.time.LocalTime
 
@@ -57,17 +58,31 @@ object ReminderDrafts {
         updatedAt = now,
     )
 
-    /** About an account: a card with something owed is a bill to pay; any other is just remembered by name. */
-    fun aboutAccount(account: Account, owed: Long, summary: String?, now: LocalDateTime): Reminder = Reminder(
-        title = if (account.kind == AccountKind.Card && owed > 0) "Pay ${account.name} bill" else account.name,
-        notes = summary,
-        category = if (account.kind == AccountKind.Card) ReminderCategory.Payments else ReminderCategory.Accounts,
-        dueAt = tomorrowMorning(now),
-        repeatRule = RepeatRule.Once,
-        link = account.id?.let(ReminderLink::account),
-        createdAt = now,
-        updatedAt = now,
-    )
+    /**
+     * About an account: a card with something owed - or one with a due day - is a bill to pay; any other is just remembered by
+     * name. A card with a due day is reminded on it every month, from the next one at nine in the morning; the rest start
+     * tomorrow morning and do not repeat.
+     */
+    fun aboutAccount(account: Account, owed: Long, summary: String?, now: LocalDateTime): Reminder {
+        val dueDay = account.dueDay?.takeIf { account.kind == AccountKind.Card }
+        val isBill = account.kind == AccountKind.Card && (owed > 0 || dueDay != null)
+        return Reminder(
+            title = if (isBill) "Pay ${account.name} bill" else account.name,
+            notes = summary,
+            category = if (account.kind == AccountKind.Card) ReminderCategory.Payments else ReminderCategory.Accounts,
+            dueAt = if (dueDay != null) nextMorningOnDay(dueDay, now) else tomorrowMorning(now),
+            repeatRule = if (dueDay != null) RepeatRule(RepeatKind.Monthly, dayOfMonth = dueDay) else RepeatRule.Once,
+            link = account.id?.let(ReminderLink::account),
+            createdAt = now,
+            updatedAt = now,
+        )
+    }
+
+    /** Nine in the morning on the next [day] of the month that is still ahead of [now] (today's, if it has not yet struck). */
+    fun nextMorningOnDay(day: Int, now: LocalDateTime): LocalDateTime {
+        val today = LocalDateTime.of(nextOnDay(day, now.toLocalDate()), LocalTime.of(9, 0))
+        return if (today.isAfter(now)) today else LocalDateTime.of(nextOnDay(day, now.toLocalDate().plusDays(1)), LocalTime.of(9, 0))
+    }
 
     /**
      * The reminder rhythm that matches [rule]'s, or [RepeatRule.Once] when there is none: a reminder repeats daily, weekly on a

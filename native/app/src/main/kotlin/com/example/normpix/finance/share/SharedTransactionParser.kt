@@ -450,9 +450,12 @@ object SharedTransactionParser {
         }
     }
 
-    /** A screen's title line: "To SWIGGY" (Google Pay's paid screen) or "From Rahul Sharma" (its received one). No colon. */
-    private val headerTo = Regex("""(?m)^[ \t]*(?:paid\s+)?to[ \t]+([^:\n][^\n]*)$""", RegexOption.IGNORE_CASE)
-    private val headerFrom = Regex("""(?m)^[ \t]*(?:received\s+)?from[ \t]+([^:\n][^\n]*)$""", RegexOption.IGNORE_CASE)
+    /**
+     * A screen's title line: "To SWIGGY" (Google Pay's paid screen) or "From Rahul Sharma" (its received one), which the
+     * recognizer may also split over two lines. No colon: "To: ..." and "From: ..." are the detail rows, which name both sides.
+     */
+    private val headerTo = Regex("""(?m)^[ \t]*(?:paid[ \t]+)?to(?:[ \t]+|[ \t]*\n[ \t]*)([^:\s][^\n]*)$""", RegexOption.IGNORE_CASE)
+    private val headerFrom = Regex("""(?m)^[ \t]*(?:received[ \t]+)?from(?:[ \t]+|[ \t]*\n[ \t]*)([^:\s][^\n]*)$""", RegexOption.IGNORE_CASE)
 
     /**
      * Payment apps that print no payment word at all title the screen with who the money went to or came from. Only a

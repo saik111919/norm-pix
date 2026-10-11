@@ -76,6 +76,14 @@ data class Account(
      * that is not a card. With it the card can say how much is left to spend (see [creditRoom]).
      */
     val creditLimit: Long? = null,
+    /**
+     * The day of the month (1-31) a credit card's bill is made up - its statement date - as the bank sets it; it comes round
+     * every month, and 29-31 mean the month's last day where it is shorter. Null where not given, and for anything that is not
+     * a card. See `BillingCycle.kt`.
+     */
+    val statementDay: Int? = null,
+    /** The day of the month (1-31) a credit card's bill must be paid by; same rules as [statementDay]. */
+    val dueDay: Int? = null,
 )
 
 /** A bank the user added, for the ones the built-in directory doesn't list. Built-in banks are not stored; they are referred to by their directory id. */

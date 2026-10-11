@@ -10,6 +10,9 @@ import com.example.normpix.finance.ui.ReceiptSharer
 import com.example.normpix.AppContainer
 import com.example.normpix.finance.data.FinanceDatabase
 import com.example.normpix.finance.data.FinanceRepository
+import com.example.normpix.finance.data.TransactionPictures
+import com.example.normpix.finance.share.NoSharedPictureReader
+import com.example.normpix.finance.share.SharedPictureReader
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.ui.FinanceController
 import com.example.normpix.navigation.AppDestination
@@ -126,6 +129,8 @@ class TestEnvironment(
     val nfc: FakeNfcTagReveal = FakeNfcTagReveal(),
     val registeredTags: RegisteredTags = RegisteredTags(),
     val receipts: RecordingReceiptSharer = RecordingReceiptSharer(),
+    /** What reads the text in pictures (ML Kit doesn't run under Robolectric). */
+    val pictures: SharedPictureReader = NoSharedPictureReader,
 ) {
     val context: Context = ApplicationProvider.getApplicationContext()
     private val financeDb = FinanceDatabase(context, name = null)
@@ -143,7 +148,10 @@ class TestEnvironment(
     init {
         container = AppContainer(
             preferences = AppPreferences(prefsStore),
-            finance = FinanceController(FinanceRepository(financeDb, dispatcher = financeThread.asCoroutineDispatcher())),
+            finance = FinanceController(
+                FinanceRepository(financeDb, dispatcher = financeThread.asCoroutineDispatcher()),
+                TransactionPictures(context),
+            ),
             reminders = RemindersController(
                 ReminderDao(remindersDb, dispatcher = remindersThread.asCoroutineDispatcher()),
                 scheduler = NoOpReminderScheduler,
@@ -155,6 +163,7 @@ class TestEnvironment(
             nfc = nfc,
             registeredTags = registeredTags,
             receipts = receipts,
+            sharedPictures = pictures,
         )
         runBlocking {
             container.finance.load()

@@ -95,6 +95,8 @@ class ShareTransactionFlowTest {
 
     private fun amountField() = compose.onNodeWithContentDescription("Amount in INR")
 
+    private fun categoryId(name: String): Long? = env.container.finance.state.value.categories.first { it.name == name }.id
+
     @Test
     fun `a shared payment opens filled in and is saved only when the user saves it`() {
         launch()
@@ -104,10 +106,11 @@ class ShareTransactionFlowTest {
         amountField().assert(hasText("250"))
         compose.onNodeWithText("SWIGGY").assertExists()
         compose.onNodeWithText("Ref 428312345678").assertExists()
+        // A merchant the app knows comes with its category.
+        compose.onNodeWithText("Food & dining › Delivery apps").assertExists()
         // Opening a draft records nothing.
         assertTrue(stored().isEmpty())
 
-        pickCategory("Food & dining")
         compose.onNodeWithText("Save expense").performClick()
         waitGone("New expense")
 
@@ -115,6 +118,7 @@ class ShareTransactionFlowTest {
         assertEquals(TransactionType.Expense, saved.type)
         assertEquals(25_000L, saved.amount)
         assertEquals("SWIGGY", saved.payee)
+        assertEquals(categoryId("Delivery apps"), saved.categoryId)
         assertEquals("Ref 428312345678", saved.note)
         assertEquals(LocalDate.of(2026, 10, 10), saved.occurredAt.toLocalDate())
         assertEquals(env.container.finance.state.value.defaultAccount?.id, saved.accountId)
@@ -293,12 +297,12 @@ class ShareTransactionFlowTest {
     // -------------------------------------------------------------- pictures
 
     /** Stands in for the on-device recognizer (ML Kit doesn't run under Robolectric): what it "reads", and what it was asked. */
-    private class FakePictures(private val text: String?) : SharedPictureReader {
+    private class FakePictures(private val text: String?, private val headline: String? = null) : SharedPictureReader {
         val asked = mutableListOf<Uri>()
 
-        override suspend fun read(picture: Uri): String? {
+        override suspend fun read(picture: Uri): PictureText? {
             asked += picture
-            return text
+            return text?.let { PictureText(it, headline) }
         }
     }
 
@@ -319,9 +323,9 @@ class ShareTransactionFlowTest {
         assertEquals(listOf(receipt), pictures.asked)
         amountField().assert(hasText("250"))
         compose.onNodeWithText("Swiggy").assertExists()
+        compose.onNodeWithText("Food & dining › Delivery apps").assertExists()
         assertTrue(stored().isEmpty())
 
-        pickCategory("Food & dining")
         compose.onNodeWithText("Save expense").performClick()
         waitGone("New expense")
         val saved = stored().single()
@@ -329,6 +333,37 @@ class ShareTransactionFlowTest {
         assertEquals("Swiggy", saved.payee)
         assertEquals("Ref 428312345678", saved.note)
         assertEquals(LocalDateTime.of(2026, 10, 10, 12, 34), saved.occurredAt)
+        assertEquals(categoryId("Delivery apps"), saved.categoryId)
+    }
+
+    @Test
+    fun `a receipt whose rupee sign was misread still gets its amount and direction`() {
+        // Google Pay's paid screen says no payment word at all: "To <payee>" over the amount, which the recognizer often
+        // reads without its rupee sign. The figure printed largest is the amount; the title says the money went out.
+        receiveWith(
+            FakePictures(
+                "To ZOMATO\nZ1,499\nCompleted\n10 Oct 2026, 8:05 pm\nUPI transaction ID\n428312345678\nTo: ZOMATO\nFrom: SAI KUMAR (HDFC Bank)",
+                headline = "Z1,499",
+            ),
+        )
+        compose.runOnUiThread { inbox.offer(text = null, picture = receipt) }
+        waitFor("Filled in from a shared picture")
+        compose.onNodeWithText("New expense").assertExists()
+        amountField().assert(hasText("1499"))
+        compose.onNodeWithText("ZOMATO").assertExists()
+        compose.onNodeWithText("Food & dining › Delivery apps").assertExists()
+    }
+
+    @Test
+    fun `the text read from a picture can be opened to check it`() {
+        val read = "₹250\nPaid to Swiggy\nUPI transaction ID\n428312345678"
+        receiveWith(FakePictures(read))
+        compose.runOnUiThread { inbox.offer(text = null, picture = receipt) }
+        waitFor("Show the text it read")
+        assertFalse(shown(read))
+        click("Show the text it read")
+        waitFor("Hide the text it read")
+        compose.onNodeWithText(read).assertExists()
     }
 
     @Test

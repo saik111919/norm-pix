@@ -45,6 +45,11 @@ internal fun Cursor.longOrNull(column: String): Long? {
     return if (isNull(index)) null else getLong(index)
 }
 
+internal fun Cursor.intOrNull(column: String): Int? {
+    val index = getColumnIndexOrThrow(column)
+    return if (isNull(index)) null else getInt(index)
+}
+
 internal fun Cursor.stringOrNull(column: String): String? {
     val index = getColumnIndexOrThrow(column)
     return if (isNull(index)) null else getString(index)
@@ -57,6 +62,10 @@ internal inline fun <T> Cursor.map(transform: (Cursor) -> T): List<T> = use {
 // ---- ContentValues ---------------------------------------------------------
 
 internal fun ContentValues.putNullable(key: String, value: Long?) {
+    if (value == null) putNull(key) else put(key, value)
+}
+
+internal fun ContentValues.putNullable(key: String, value: Int?) {
     if (value == null) putNull(key) else put(key, value)
 }
 
@@ -78,6 +87,8 @@ internal object FinanceRows {
         put("updated_at", a.updatedAt.toStorage())
         putNullable("bank_key", a.bankKey)
         putNullable("credit_limit", a.creditLimit)
+        putNullable("statement_day", a.statementDay)
+        putNullable("due_day", a.dueDay)
     }
 
     fun bank(b: CustomBank) = ContentValues().apply {
@@ -103,6 +114,8 @@ internal object FinanceRows {
         updatedAt = c.long("updated_at").toLocalDateTime(),
         bankKey = c.stringOrNull("bank_key"),
         creditLimit = c.longOrNull("credit_limit"),
+        statementDay = c.intOrNull("statement_day"),
+        dueDay = c.intOrNull("due_day"),
     )
 
     fun category(cat: Category) = ContentValues().apply {
@@ -145,6 +158,7 @@ internal object FinanceRows {
         put("created_at", t.createdAt.toStorage())
         put("updated_at", t.updatedAt.toStorage())
         putNullable("person_id", t.personId)
+        putNullable("picture", t.picture)
     }
 
     fun person(p: Person) = ContentValues().apply {
@@ -181,6 +195,7 @@ internal object FinanceRows {
         createdAt = c.long("created_at").toLocalDateTime(),
         updatedAt = c.long("updated_at").toLocalDateTime(),
         personId = c.longOrNull("person_id"),
+        picture = c.stringOrNull("picture"),
     )
 
     fun toBudget(c: Cursor) = Budget(

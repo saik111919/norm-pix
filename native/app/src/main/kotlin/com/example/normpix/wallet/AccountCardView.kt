@@ -82,6 +82,12 @@ data class AccountCardData(
     val overLimit: Boolean = false,
     /** How much of the limit is used, 0..1, drawn as a meter on the card; null for an account with no limit. */
     val creditUsed: Float? = null,
+    /** When the card's bill is due ("Due in 3 days"); null unless the card has a due day and something is owed on it. */
+    val due: String? = null,
+    /** The bill is due within a few days, so [due] is said loudly. */
+    val dueSoon: Boolean = false,
+    /** [due] in full for a screen reader: the date and how far away it is. */
+    val dueSpoken: String? = null,
 ) {
     /** The card as a screen reader reads it. */
     val spoken: String
@@ -91,6 +97,7 @@ data class AccountCardData(
             append(", balance ").append(balance)
             if (standing != null) append(", ").append(standing)
             if (creditSpoken != null) append(", ").append(creditSpoken)
+            if (dueSpoken != null) append(", ").append(dueSpoken)
             if (isDefault) append(", default account")
             if (archived) append(", archived")
             if (cards > 0) append(", ").append(cards).append(if (cards == 1) " saved card" else " saved cards")
@@ -228,6 +235,7 @@ private fun AccountFront(data: AccountCardData, theme: BankBrandTheme, bankIconS
                 data.standing?.let { standing ->
                     add(standing.uppercase() to if (standing == "In credit") CreditPill else OwedPill)
                 }
+                data.due?.let { due -> add(due.uppercase() to if (data.dueSoon) OwedPill else QuietPill) }
                 // A card with a limit says what is left of it on a meter below instead of as one more pill.
                 if (data.creditUsed == null) {
                     data.credit?.let { credit -> add(credit.uppercase() to if (data.overLimit) OwedPill else QuietPill) }

@@ -446,6 +446,8 @@ fun AccountFormSheet(
         )
     }
     var limitError by remember { mutableStateOf<String?>(null) }
+    var statementDay by remember { mutableStateOf(existing?.statementDay) }
+    var dueDay by remember { mutableStateOf(existing?.dueDay) }
     var makeDefault by remember {
         mutableStateOf(existing != null && finance.defaultAccountId == existing.id)
     }
@@ -461,9 +463,9 @@ fun AccountFormSheet(
     }
 
     val initialSnapshot = remember {
-        listOf(name, amount, kind, bank.key, owed, makeDefault, limit).joinToString("|")
+        listOf(name, amount, kind, bank.key, owed, makeDefault, limit, statementDay, dueDay).joinToString("|")
     }
-    val hasChanges = listOf(name, amount, kind, bank.key, owed, makeDefault, limit).joinToString("|") != initialSnapshot
+    val hasChanges = listOf(name, amount, kind, bank.key, owed, makeDefault, limit, statementDay, dueDay).joinToString("|") != initialSnapshot
 
     DiscardChangesGuard(
         dirty = hasChanges,
@@ -517,6 +519,8 @@ fun AccountFormSheet(
                     openingBalance = openingBalance,
                     bankKey = bankKey,
                     creditLimit = limitMinor,
+                    statementDay = statementDay.takeIf { kind == AccountKind.Card },
+                    dueDay = dueDay.takeIf { kind == AccountKind.Card },
                     updatedAt = now,
                 )
             } else {
@@ -531,6 +535,8 @@ fun AccountFormSheet(
                     updatedAt = now,
                     bankKey = bankKey,
                     creditLimit = limitMinor,
+                    statementDay = statementDay.takeIf { kind == AccountKind.Card },
+                    dueDay = dueDay.takeIf { kind == AccountKind.Card },
                 )
             }
             saving = true
@@ -627,6 +633,18 @@ fun AccountFormSheet(
                 singleLine = true,
                 shape = TonalFieldShape,
                 colors = typedFieldColors(),
+            )
+            // The two days the bank sets for the card's month; both come round every month.
+            Spacer(Modifier.height(AppSpacing.lg))
+            BillingDayField(label = "Statement date (optional)", day = statementDay, onChange = { statementDay = it })
+            Spacer(Modifier.height(AppSpacing.lg))
+            BillingDayField(label = "Payment due date (optional)", day = dueDay, onChange = { dueDay = it })
+            Text(
+                text = "The days your bank gives you, repeated every month. The Wallet then counts down to the due date while " +
+                    "something is owed, and a reminder can follow it.",
+                modifier = Modifier.padding(top = AppSpacing.sm, start = AppSpacing.lg),
+                color = scheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
             )
         }
 

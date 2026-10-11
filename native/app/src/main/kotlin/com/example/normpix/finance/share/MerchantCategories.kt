@@ -20,7 +20,7 @@ object MerchantCategories {
         // Groceries before food: the quick-commerce arms of food apps sell groceries.
         Rule("Groceries", null, "instamart", "blinkit", "zepto", "bigbasket", "bb now", "jiomart", "dmart", "avenue supermarts",
             "reliance fresh", "reliance smart", "more retail", "more supermarket", "spencers", "ratnadeep", "natures basket", "star bazaar",
-            "kirana", "supermarket", "flipkart minutes", "amazon fresh"),
+            "kirana", "supermarket", "flipkart minutes", "amazon fresh", "metro cash"),
         Rule("Groceries", "Dairy & eggs", "country delight", "milkbasket", "akshayakalpa", "milk"),
         Rule("Groceries", "Meat & fish", "licious", "freshtohome", "fresh to home"),
         Rule("Subscriptions", "Netflix", "netflix"),
@@ -43,6 +43,8 @@ object MerchantCategories {
         Rule("Food & dining", "Coffee & tea", "starbucks", "cafe coffee day", "ccd", "chaayos", "third wave", "blue tokai", "chai point"),
         Rule("Food & dining", "Desserts", "baskin robbins", "naturals ice cream", "kwality walls"),
         Rule("Food & dining", "Restaurants", "barbeque nation", "haldiram", "restaurant", "hotel saravana", "biryani", "dhaba", "cafe"),
+        // Before transport's "metro".
+        Rule("Shopping", "Footwear", "bata", "metro shoes", "puma", "nike", "adidas"),
         Rule("Transport", "Cabs & rideshare", "uber", "ola", "olacabs", "ola cabs", "rapido", "blusmart", "namma yatri", "meru"),
         Rule("Transport", "Trains", "irctc", "indian railways"),
         Rule("Transport", "Bus & metro", "redbus", "abhibus", "dmrc", "bmrcl", "metro", "bmtc", "best bus", "ksrtc", "tsrtc", "apsrtc"),
@@ -57,7 +59,7 @@ object MerchantCategories {
         Rule("Travel", null, "makemytrip", "goibibo", "cleartrip", "yatra", "ixigo", "easemytrip"),
         Rule("Bills & utilities", "DTH / cable", "tata play", "tatasky", "tata sky", "dish tv", "d2h", "sun direct", "airtel dth"),
         Rule("Bills & utilities", "Broadband", "act fibernet", "hathway", "excitel", "jiofiber", "jio fiber", "airtel xstream", "you broadband"),
-        Rule("Bills & utilities", "Mobile recharge", "airtel", "jio", "reliance jio", "vodafone", "vi", "vodafone idea", "bsnl", "mtnl"),
+        Rule("Bills & utilities", "Mobile recharge", "airtel", "jio", "reliance jio", "vodafone", "vodafone idea", "bsnl", "mtnl"),
         Rule("Bills & utilities", "Electricity", "bescom", "tneb", "tangedco", "msedcl", "mahavitaran", "tata power", "adani electricity",
             "bses", "cesc", "torrent power", "kseb", "apspdcl", "tsspdcl", "uppcl", "pspcl", "wbsedcl", "electricity"),
         Rule("Bills & utilities", "Gas / cylinder", "indane", "hp gas", "bharat gas", "bharatgas", "mahanagar gas", "igl", "gail gas", "lpg"),
@@ -77,13 +79,15 @@ object MerchantCategories {
         Rule("Entertainment", "Concerts & events", "paytm insider", "insider", "skillbox"),
         Rule("Education", "Online courses", "byjus", "byju", "unacademy", "vedantu", "physics wallah", "coursera", "udemy", "upgrad", "scaler"),
         Rule("Education", "School fees", "school", "college", "university"),
-        Rule("Shopping", "Clothing", "myntra", "ajio", "max fashion", "westside", "pantaloons", "zudio", "h m", "zara", "uniqlo", "trends"),
-        Rule("Shopping", "Footwear", "bata", "metro shoes", "puma", "nike", "adidas"),
+        Rule("Shopping", "Clothing", "myntra", "ajio", "max fashion", "westside", "pantaloons", "zudio", "zara", "uniqlo", "trends"),
         Rule("Shopping", "Cosmetics", "nykaa", "purplle", "sugar cosmetics"),
         Rule("Shopping", "Electronics", "croma", "reliance digital", "vijay sales", "apple store"),
         Rule("Shopping", "Jewelry", "tanishq", "caratlane", "kalyan jewellers", "malabar gold"),
         Rule("Shopping", "Online orders", "amazon", "flipkart", "meesho", "snapdeal", "tata cliq", "shopsy"),
     )
+
+    /** Every category a rule files into, by name: (top-level, sub-category or null). */
+    internal val targets: List<Pair<String, String?>> get() = rules.map { it.parent to it.sub }
 
     /** The words of [name], lower case, as one spaced string: "SWIGGY.IN@AXISBANK" -> " swiggy in axisbank ". */
     private fun words(name: String): String =

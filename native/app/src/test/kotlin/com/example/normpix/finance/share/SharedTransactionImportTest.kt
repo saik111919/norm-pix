@@ -160,6 +160,28 @@ class SharedTransactionImportTest {
     }
 
     @Test
+    fun `a merchant the user hasn't filed yet gets the category the app knows for it`() {
+        val text = "₹250 paid to Swiggy on 10-10-26"
+        val prefill = runBlocking { SharedTransactionImport.prefill(parse(text), text, finance.state.value, repository, now) }
+        assertEquals(category("Delivery apps").id, prefill.categoryId)
+        assertTrue(ShareNotice("Category picked for Swiggy. Change it if it doesn't fit.") in prefill.notices)
+
+        // The user's own filing of the payee wins over the app's table.
+        expense(9_900, now.minusDays(3), "Swiggy", categoryId = category("Shopping").id!!)
+        val again = runBlocking { SharedTransactionImport.prefill(parse(text), text, finance.state.value, repository, now) }
+        assertEquals(category("Shopping").id, again.categoryId)
+        assertTrue(ShareNotice("Category from your last payment to Swiggy.") in again.notices)
+    }
+
+    @Test
+    fun `money received gets no category from the table`() {
+        val text = "Swiggy sent you ₹250 on 10-10-26"
+        val prefill = runBlocking { SharedTransactionImport.prefill(parse(text), text, finance.state.value, repository, now) }
+        assertEquals(TransactionType.Income, prefill.type)
+        assertNull(prefill.categoryId)
+    }
+
+    @Test
     fun `prefill warns about a payment already recorded`() {
         expense(25_000, LocalDateTime.of(2026, 10, 10, 9, 0), "SWIGGY", note = "Ref 428312345678")
         val text = "Sent Rs.250.00 To SWIGGY On 10/10/26 Ref 428312345678"
@@ -172,7 +194,7 @@ class SharedTransactionImportTest {
     @Test
     fun `notices name what is missing first`() {
         val money = finance.state.value.money
-        fun notices(text: String) = SharedTransactionImport.notices(parse(text), money, now, null, categoryFromPayee = false, duplicate = null)
+        fun notices(text: String) = SharedTransactionImport.notices(parse(text), money, now, null, category = null, duplicate = null)
 
         assertEquals(
             listOf(

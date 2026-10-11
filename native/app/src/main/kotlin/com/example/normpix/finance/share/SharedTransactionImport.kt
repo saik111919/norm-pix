@@ -10,6 +10,7 @@ import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.ui.FinanceState
 import com.example.normpix.finance.ui.label
 import com.example.normpix.finance.ui.shortDate
+import java.io.File
 import java.time.LocalDateTime
 import kotlinx.coroutines.CancellationException
 
@@ -43,6 +44,8 @@ data class SharedTransactionPrefill(
     val fromPicture: Boolean = false,
     /** The text the phone read from the picture, which the form can show as it is (to check it, or copy it). */
     val readText: String? = null,
+    /** The shared picture, staged to be attached to the transaction (see `TransactionPictures.stage`); the form owns it. */
+    val picture: File? = null,
 ) {
     companion object {
         /** For a share nothing could be read from, which the user chose to enter by hand. */

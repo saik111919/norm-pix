@@ -35,6 +35,7 @@ import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.billPayment
 import com.example.normpix.finance.domain.halfOf
 import com.example.normpix.finance.domain.minorToInputText
+import com.example.normpix.finance.domain.nextBillDue
 import com.example.normpix.finance.domain.parseMinorUnits
 import com.example.normpix.ui.components.DiscardChangesGuard
 import com.example.normpix.ui.components.EditorSheet
@@ -136,7 +137,12 @@ fun PayBillSheet(card: Account, onDone: (Boolean?) -> Unit) {
 
     EditorSheet(
         title = "Pay ${card.name}",
-        subtitle = if (owed > 0) "${money.format(owed)} owed" else "Nothing is owed on this card right now",
+        // What is owed, and - when the card has a due day - when it falls due.
+        subtitle = if (owed > 0) {
+            listOfNotNull("${money.format(owed)} owed", nextBillDue(card.dueDay, LocalDate.now())?.line()).joinToString(" · ")
+        } else {
+            "Nothing is owed on this card right now"
+        },
         saveLabel = if (parsed != null) "Pay ${money.format(parsed)}" else "Pay bill",
         onSave = ::save,
         saving = saving,

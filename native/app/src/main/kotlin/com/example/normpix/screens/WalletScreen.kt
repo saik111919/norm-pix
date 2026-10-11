@@ -59,7 +59,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
+import com.example.normpix.finance.domain.BillDue
 import com.example.normpix.finance.domain.creditRoom
+import com.example.normpix.finance.domain.nextBillDue
+import java.time.LocalDate
 import com.example.normpix.finance.ui.ChoiceOption
 import com.example.normpix.finance.ui.ConnectedChoiceRow
 import com.example.normpix.finance.ui.FinanceStatus
@@ -554,6 +557,10 @@ private fun AddAccountRow(onClick: () -> Unit) {
     )
 }
 
+/** When a card's bill falls due, or null: it has no due day, or nothing is owed on it (a bill that is paid is not due). */
+private fun billDueOf(account: Account, balance: Long, today: LocalDate): BillDue? =
+    if (account.kind == AccountKind.Card && balance < 0) nextBillDue(account.dueDay, today) else null
+
 /** What is said under an account's amount when the amount needs saying in words, or null when it doesn't. */
 private fun accountStanding(balance: Long, kind: AccountKind): String? = when {
     balance < 0 -> if (kind == AccountKind.Card || kind == AccountKind.Other) "Owed" else "Overdrawn"
@@ -575,9 +582,11 @@ private fun AccountCards(
     val finance = rememberFinanceState()
     val actions = rememberFinanceActions()
     val navigator = LocalNavigator.current
+    val today = LocalDate.now()
     val cards = accounts.map { account ->
         val balance = finance.balanceOf(account.id!!)
         val room = creditRoom(account.creditLimit, balance)
+        val due = billDueOf(account, balance, today)
         AccountCardData(
             id = account.id,
             name = account.name,
@@ -595,6 +604,9 @@ private fun AccountCards(
             },
             overLimit = room?.overLimit == true,
             creditUsed = room?.used?.toFloat(),
+            due = due?.let { "Due ${it.inWords}" },
+            dueSoon = due?.soon == true,
+            dueSpoken = due?.let { "bill ${it.line().replaceFirstChar(Char::lowercase)}" },
         )
     }
     fun accountOf(card: AccountCardData) = accounts.first { it.id == card.id }
@@ -654,6 +666,7 @@ private fun AccountTile(account: Account, cardsPerBank: Map<String, Int>) {
     val cards = account.bankKey?.let { cardsPerBank[it] } ?: 0
     val standing = accountStanding(balance, account.kind)
     val room = creditRoom(account.creditLimit, balance)
+    val due = billDueOf(account, balance, LocalDate.now())
     val details = listOfNotNull(
         bank?.name,
         account.kind.label,
@@ -661,6 +674,7 @@ private fun AccountTile(account: Account, cardsPerBank: Map<String, Int>) {
             if (it.overLimit) "Over its ${finance.money.format(it.limit, trimZeroFraction = true)} limit"
             else "${finance.money.format(it.available, trimZeroFraction = true)} left of ${finance.money.format(it.limit, trimZeroFraction = true)}"
         },
+        due?.line(),
         if (cards > 0) "$cards ${if (cards == 1) "card" else "cards"}" else null,
         if (isDefault) "Default" else null,
         if (account.archived) "Archived" else null,

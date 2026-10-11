@@ -7,6 +7,7 @@ import com.example.normpix.banks.BankCatalog
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountFlows
 import com.example.normpix.finance.domain.AccountKind
+import com.example.normpix.finance.domain.BILLING_DAYS
 import com.example.normpix.finance.domain.Budget
 import com.example.normpix.finance.domain.BudgetOverview
 import com.example.normpix.finance.domain.BudgetStatus
@@ -16,6 +17,7 @@ import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.EMOJI_ICON_PREFIX
 import com.example.normpix.finance.domain.emojiOf
 import com.example.normpix.finance.domain.foldIntoParents
+import com.example.normpix.finance.domain.isPictureName
 import com.example.normpix.finance.domain.CurrencySpec
 import com.example.normpix.finance.domain.CustomBank
 import com.example.normpix.finance.domain.DailyTotal
@@ -185,7 +187,22 @@ class FinanceRepository(
             throw FinanceValidationException("Enter a credit limit greater than zero.")
         }
         val creditLimit = account.creditLimit?.takeIf { account.kind == AccountKind.Card }
-        val toSave = account.copy(name = name, bankKey = bankKey, creditLimit = creditLimit, updatedAt = clock())
+        // The same goes for a card's two days of the month: a day, or nothing.
+        if (account.statementDay != null && account.statementDay !in BILLING_DAYS) {
+            throw FinanceValidationException("Choose a statement date between the 1st and the 31st.")
+        }
+        if (account.dueDay != null && account.dueDay !in BILLING_DAYS) {
+            throw FinanceValidationException("Choose a payment due date between the 1st and the 31st.")
+        }
+        val isCard = account.kind == AccountKind.Card
+        val toSave = account.copy(
+            name = name,
+            bankKey = bankKey,
+            creditLimit = creditLimit,
+            statementDay = account.statementDay?.takeIf { isCard },
+            dueDay = account.dueDay?.takeIf { isCard },
+            updatedAt = clock(),
+        )
         if (account.id == null) {
             val id = insertOrThrow(FinanceDatabase.ACCOUNTS, null, FinanceRows.account(toSave))
             toSave.copy(id = id)
@@ -631,6 +648,7 @@ class FinanceRepository(
     suspend fun saveTransaction(t: FinanceTransaction): FinanceTransaction = io {
         validateShape(t.type, t.amount, t.accountId, t.toAccountId, t.categoryId)
         validatePerson(t.type, t.personId, t.id)
+        validatePicture(t.picture)
         val toSave = t.copy(payee = clean(t.payee), note = clean(t.note), updatedAt = clock())
         if (t.id == null) {
             val id = insertOrThrow(FinanceDatabase.TRANSACTIONS, null, FinanceRows.transaction(toSave))
@@ -656,10 +674,21 @@ class FinanceRepository(
             for (t in transactions) {
                 validateShape(t.type, t.amount, t.accountId, t.toAccountId, t.categoryId)
                 validatePerson(t.type, t.personId, t.id)
+                validatePicture(t.picture)
                 val toSave = t.copy(payee = clean(t.payee), note = clean(t.note), updatedAt = now)
                 insertOrThrow(FinanceDatabase.TRANSACTIONS, null, FinanceRows.transaction(toSave))
             }
         }
+    }
+
+    // The picture is only ever a file name the app made: never a path, so a row can't point outside the app's own pictures.
+    private fun validatePicture(name: String?) {
+        if (name != null && !isPictureName(name)) throw FinanceValidationException("That picture can't be attached. Attach it again.")
+    }
+
+    /** The names of every picture a transaction has attached (see `TransactionPictures`). */
+    suspend fun pictureNames(): Set<String> = io {
+        rawQuery("SELECT picture FROM ${FinanceDatabase.TRANSACTIONS} WHERE picture IS NOT NULL", null).map { it.string("picture") }.toSet()
     }
 
     suspend fun deleteTransaction(id: Long) = io {
@@ -1048,6 +1077,7 @@ class FinanceRepository(
     suspend fun saveTransactionAndRepeat(t: FinanceTransaction, schedule: RepeatSchedule): Pair<FinanceTransaction, RecurringRule> = io {
         validateShape(t.type, t.amount, t.accountId, t.toAccountId, t.categoryId)
         validatePerson(t.type, t.personId, t.id)
+        validatePicture(t.picture)
         if (t.recurringId != null) throw FinanceValidationException("This is already part of a repeating payment.")
         if (schedule.interval < 1) throw FinanceValidationException("Repeat at least every 1.")
         if (schedule.endDate != null && schedule.endDate.isBefore(startOfDay(t.occurredAt))) {
