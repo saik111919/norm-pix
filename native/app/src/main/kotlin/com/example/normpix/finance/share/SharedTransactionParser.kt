@@ -56,6 +56,8 @@ data class ParsedTransactionDraft(
     /** A UPI reference, UTR or app transaction id - letters and digits only. */
     val reference: String? = null,
     val instrument: SharedInstrument? = null,
+    /** The account or card numbers the message shows partly hidden, as the digits it does show; used to find which account it was. */
+    val maskedNumbers: List<MaskedNumber> = emptyList(),
 ) {
     /** A short description for the note: what kind of entry this is, and its reference. Null when there is nothing to say. */
     val note: String?
@@ -68,6 +70,12 @@ data class ParsedTransactionDraft(
             reference?.let { "Ref $it" },
         ).joinToString(" · ").ifEmpty { null }
 }
+
+/**
+ * A number a message shows partly hidden: "XXXXXXXXXX3588" shows only the [suffix] "3588"; a RuPay card on UPI,
+ * "652850XXXXXXXX55", shows a [prefix] "652850" as well. Digits only; either may be empty, but never both.
+ */
+data class MaskedNumber(val prefix: String, val suffix: String)
 
 /** One line of a picture's text, as the recognizer found it, and how tall it is on the picture in pixels. */
 data class PictureLine(val text: String, val height: Int)
@@ -133,7 +141,9 @@ object SharedTransactionParser {
         val body = if (all.isEmpty()) text else text.substring(0, footerStart(text, after = all.minOf { it.start }))
         val candidates = all.filter { it.start < body.length }
         val words = chooseAmount(body, candidates, ledger)
+        // A payment app that prints the amount no larger than its other text has no headline: then it is the figure alone on a line.
         val printed = headlineAmount(headline, ledger.decimals)
+            ?: if (movementCue.containsMatchIn(body)) figureAmount(body, ledger.decimals) else null
         // The printed figure settles it only where the words don't: no amount, or several of which it is one.
         val choice = if (words.amount == null && words.foreign == null && printed != null && (words.ambiguous.isEmpty() || printed in words.ambiguous)) {
             AmountChoice(printed, emptyList(), null, null)
@@ -172,6 +182,7 @@ object SharedTransactionParser {
             else -> SharedKind.Unknown
         }
         val when_ = dateIn(body, today)
+        val masks = maskedNumbers(body)
         return SharedTextReading.Draft(
             ParsedTransactionDraft(
                 amount = choice.amount,
@@ -185,7 +196,8 @@ object SharedTransactionParser {
                 time = when_.time,
                 dateUnreadable = when_.unreadable,
                 reference = reference,
-                instrument = instrument(body),
+                instrument = instrument(body, masks),
+                maskedNumbers = masks,
             ),
         )
     }
@@ -377,6 +389,34 @@ object SharedTransactionParser {
         return if (rival) null else tallest.text
     }
 
+    /** [headlineShape] again, but only with something in front of the figure: a rupee sign, or what the recognizer made of one. */
+    private val markedFigureShape = Regex(
+        """^\s*(?:₹|rs\.?|inr|[zr]|[^\p{L}\p{N}\s]{1,2})\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(?:/-)?\s*$""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val bareFigureShape = Regex("""^\s*(\d[\d,]*(?:\.\d{1,2})?)\s*$""")
+
+    /** Longest whole part taken from a line on its own: a figure of more digits is an id, not an amount. */
+    private const val MAX_FIGURE_DIGITS = 7
+
+    /**
+     * The amount of a payment app's receipt that prints it no larger than its other text (PhonePe shows `₹10` on the
+     * payee's row and again on the account's), so no line is a [headline]: the figure alone on a line behind a rupee sign
+     * or what the recognizer made of one (`Z10`) - or, when no line has such a mark, one written the same on two lines.
+     * Null when there is none, or when different figures compete.
+     */
+    internal fun figureAmount(text: String, decimals: Int): Long? {
+        val lines = text.lineSequence().toList()
+        fun figures(shape: Regex): List<Long> = lines.mapNotNull { line ->
+            val number = shape.matchEntire(line)?.groupValues?.get(1) ?: return@mapNotNull null
+            if (number.substringBefore('.').replace(",", "").length > MAX_FIGURE_DIGITS) return@mapNotNull null
+            if (shape === bareFigureShape && yearLike.matches(number)) return@mapNotNull null
+            toMinor(number, decimals)
+        }
+        figures(markedFigureShape).distinct().let { marked -> if (marked.isNotEmpty()) return marked.singleOrNull() }
+        return figures(bareFigureShape).groupingBy { it }.eachCount().filterValues { it >= 2 }.keys.singleOrNull()
+    }
+
     private val movementCue = Regex(
         """\b(?:debited|credited|paid|sent|spent|received|refund(?:ed)?|revers(?:ed|al)|transferred|withdrawn|withdrawal|""" +
             """deposited|purchase|payment|txn|transaction|amount|amt)\b|डेबिट|क्रेडिट|भुगतान|प्राप्त|जमा""",
@@ -524,10 +564,17 @@ object SharedTransactionParser {
         Regex("""\b(?:by|linked\s+to)\s+(?:vpa\s+)?([\w.\-]{2,64}@[a-z]{2,64})\b""", RegexOption.IGNORE_CASE),
     )
 
-    /** What a name can't be: the user's own account or card, a masked number, a phone number. */
+    /**
+     * What a name can't be: the user's own account or card, a masked number, a phone number - or a line of the receipt that
+     * is not a name at all: its status ("Transaction Successful"), its section titles and labels ("Payment Details",
+     * "PhonePe Transaction ID", "Powered by"), which sit right below a bare "Paid to".
+     */
     private val notAName = Regex(
         """^(?:your|you|yours|self|me|my|own|beneficiary|vpa|upi|merchant)\b|\b(?:a/?c|acct|account|card|wallet)\b|""" +
-            """^[x*]+\d|\b[x*]{2,}\d|\d{6,}""",
+            """^[x*]+\d|\b[x*]{2,}\d|\d{6,}|""" +
+            """^(?:transaction|payment|transfer|txn)(?:\s+(?:successful(?:ly)?|completed|failed|pending|processing|details?|summary|status|id))?$|""" +
+            """^(?:successful(?:ly)?|completed|success|failed|pending|processing|amount|date|time|status|details?)$|^(?:paid|debited|credited|powered)\b|""" +
+            """\b(?:transaction|txn|utr|upi)\s*(?:id|ref|no|number)\b""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -539,10 +586,30 @@ object SharedTransactionParser {
         return name
     }
 
+    /** "Paid to" / "Received from" alone on a line (PhonePe): the name is below it, past the status and the time. */
+    private val headingTo = Regex("""(?im)^[ \t]*(?:paid[ \t]+|sent[ \t]+)?to[ \t]*:?[ \t]*$""")
+    private val headingFrom = Regex("""(?im)^[ \t]*(?:received[ \t]+from|money[ \t]+received[ \t]+from|paid[ \t]+by|from)[ \t]*:?[ \t]*$""")
+
+    /** How many lines below its heading a name is looked for. */
+    private const val HEADING_REACH = 4
+
+    private fun nameBelow(text: String, heading: Regex): String? {
+        for (m in heading.findAll(text)) {
+            val below = text.substring(m.range.last + 1).lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.take(HEADING_REACH)
+            for (line in below) cleanName(line)?.let { return it }
+        }
+        return null
+    }
+
     private fun counterparty(text: String, type: TransactionType?): String? {
         upiPath.find(text)?.let { m ->
             cleanName(m.groupValues[2].substringBefore(" Not ").substringBefore("  "))?.let { return it }
         }
+        when (type) {
+            TransactionType.Income -> nameBelow(text, headingFrom)
+            TransactionType.Expense -> nameBelow(text, headingTo)
+            else -> nameBelow(text, headingTo) ?: nameBelow(text, headingFrom)
+        }?.let { return it }
         val rules = when (type) {
             TransactionType.Income -> payerRules
             TransactionType.Expense -> payeeRules
@@ -563,10 +630,75 @@ object SharedTransactionParser {
         RegexOption.IGNORE_CASE,
     )
 
+    /** The bank's own reference - the one its SMS carries too, so a payment found twice is recognized - not an app's id for it. */
+    private val bankReferenceCue = Regex("""^(?:utr|rrn|upi|ref)""", RegexOption.IGNORE_CASE)
+
+    /** A UPI / bank reference's label, wherever its number is. */
+    private val bankReferenceLabel = Regex("""\b(?:utr|rrn|upi\s*(?:transaction|txn|ref(?:erence)?)\s*(?:id|no|number)?)\b""", RegexOption.IGNORE_CASE)
+
+    /** A line that is nothing but a UPI reference's twelve digits. */
+    private val loneReference = Regex("""(?m)^[ \t]*(\d{12})[ \t]*$""")
+
     private fun reference(text: String): String? {
         upiPath.find(text)?.let { return it.groupValues[1] }
-        return referenceCue.findAll(text).map { it.groupValues[1] }.firstOrNull { token -> token.count(Char::isDigit) >= 6 }
+        val found = referenceCue.findAll(text).filter { m -> m.groupValues[1].count(Char::isDigit) >= 6 }.toList()
+        // PhonePe prints its own "Transaction ID" (T2610...) above the "UTR" the bank knows the payment by.
+        found.firstOrNull { bankReferenceCue.containsMatchIn(it.value.trimStart()) }?.let { return it.groupValues[1] }
+        // A picture's text is not always in reading order: Google Pay's "UPI transaction ID" can come out two lines away from
+        // its number. A label with no number beside it, and one line that is only twelve digits: that is the reference.
+        if (bankReferenceLabel.containsMatchIn(text)) {
+            loneReference.findAll(text).map { it.groupValues[1] }.distinct().toList().singleOrNull()?.let { return it }
+        }
+        return found.firstOrNull()?.groupValues?.get(1)
     }
+
+    // -------------------------------------------------------- masked numbers
+
+    private const val MASK_CHARS = "xX*•●·"
+
+    /** One run of digits and mask characters, as printed: "XXXXXXXXXX3588", "652850XXXXXXXX55", "****1234". */
+    private val maskedRun = Regex(
+        """(?<![\p{L}\d@+.,/\-$MASK_CHARS])([\d$MASK_CHARS]{4,24})(?![\p{L}\d@\-]|\s?@|\.\d)""",
+    )
+
+    /** A card printed in groups of four: "5282 XXXX XXXX 1234". */
+    private val maskedGroups = Regex(
+        """(?<![\p{L}\d@+.,/\-$MASK_CHARS])((?:[\d$MASK_CHARS]{4}[ \-]){3}[\d$MASK_CHARS]{4})(?![\p{L}\d@\-]|\s?@)""",
+    )
+
+    /** "ending 1234", "ends with 1234", "last 4 digits: 1234" - the digits are all that is said. */
+    private val endingCue = Regex(
+        """\b(?:end(?:s|ing|ed)(?:\s+(?:with|in|at|on))?|last\s+(?:4|four)\s+digits(?:\s+(?:is|are|of\s+[\p{L}\s]{1,30}?))?)\s*:?\s*(?<![\d])(\d{3,6})(?!\d)""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private val maskedShape = Regex("""^(\d{0,8})([$MASK_CHARS]+)(\d{2,8})$""")
+
+    /**
+     * The account and card numbers a message shows partly hidden. A UPI id (`••••5486@ybl`) and a masked phone number
+     * (`+91 98XXXXXX10`) are not numbers of the user's; neither is anything with a digit hidden in the middle of its digits.
+     */
+    internal fun maskedNumbers(text: String): List<MaskedNumber> {
+        val found = mutableListOf<MaskedNumber>()
+        fun add(number: MaskedNumber) {
+            if (number !in found) found += number
+        }
+        fun add(token: MatchResult) {
+            val group = token.groups[1]!!
+            val shape = maskedShape.matchEntire(group.value.replace(" ", "").replace("-", "")) ?: return
+            val (prefix, mask, suffix) = shape.destructured
+            // A phone number: after a "+91" or "mobile", or ten characters with digits in front ("98XXXXXX10").
+            if (phoneCue.containsMatchIn(text.substring(maxOf(0, group.range.first - 12), group.range.first))) return
+            if (prefix.isNotEmpty() && prefix.length + mask.length + suffix.length == 10) return
+            add(MaskedNumber(prefix, suffix))
+        }
+        maskedGroups.findAll(text).forEach { add(it) }
+        maskedRun.findAll(text).forEach { add(it) }
+        endingCue.findAll(text).forEach { add(MaskedNumber("", it.groupValues[1])) }
+        return found
+    }
+
+    private val phoneCue = Regex("""(?:\+\d{1,3}[ \-]?|\b(?:mobile|mob|phone|ph|contact|tel)\b[ .:\-no]*)$""", RegexOption.IGNORE_CASE)
 
     // ------------------------------------------------------------ instrument
 
@@ -579,7 +711,20 @@ object SharedTransactionParser {
         SharedInstrument.Upi to Regex("""\bupi\b""", RegexOption.IGNORE_CASE),
     )
 
-    private fun instrument(text: String): SharedInstrument? = instrumentCues.firstOrNull { it.second.containsMatchIn(text) }?.first
+    /** The other side's account, as a receipt words it ("deposit of money to Mr AKBAR's bank account"): not what the user paid with. */
+    private val otherSideAccount = Regex(
+        """\b(?:receiver|beneficiary|recipient|payee)(?:'s|s'|’s)?\s+(?:bank|a/?c|account)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private fun instrument(text: String, masks: List<MaskedNumber>): SharedInstrument? {
+        val own = text.lineSequence().filterNot { otherSideAccount.containsMatchIn(it) }.joinToString("\n")
+        val found = instrumentCues.firstOrNull { it.second.containsMatchIn(own) }?.first
+        // A number printed with its first digits is a card's - an account's is printed by its last ones - so a UPI payment
+        // from "652850XXXXXXXX55" was made with a card, whatever else the receipt says of accounts.
+        val cardShown = masks.any { it.prefix.length >= 4 }
+        return if (cardShown && (found == null || found == SharedInstrument.BankAccount || found == SharedInstrument.Upi)) SharedInstrument.Card else found
+    }
 
     // ------------------------------------------------------------------ date
 

@@ -505,7 +505,12 @@ private fun AccountButton() {
         },
         modifier = Modifier.size(40.dp).semantics { contentDescription = accountButtonLabel(target) },
     ) {
-        ProfileAvatar(name = prefs?.profileName.orEmpty(), emoji = prefs?.profileEmoji.orEmpty(), size = 32.dp)
+        ProfileAvatar(
+            name = prefs?.profileName.orEmpty(),
+            emoji = prefs?.profileEmoji.orEmpty(),
+            size = 32.dp,
+            photo = prefs?.profilePhoto.orEmpty(),
+        )
     }
 }
 

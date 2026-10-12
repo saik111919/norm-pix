@@ -23,6 +23,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -54,6 +55,7 @@ import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.SheetHeader
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppSpacing
+import com.example.normpix.wallet.CardsController
 import java.io.File
 import java.time.LocalDateTime
 import kotlinx.coroutines.CoroutineScope
@@ -74,6 +76,8 @@ class FinanceActions(
     private val scope: CoroutineScope,
     /** Starts a reminder about something in the ledger; null where reminders are not available (then none is offered). */
     private val reminders: ReminderLauncher? = null,
+    /** The Wallet's cards, whose numbers tell a shared receipt's account; null where there is no Wallet. */
+    private val cards: CardsController? = null,
 ) {
     private val state get() = finance.state.value
 
@@ -100,10 +104,16 @@ class FinanceActions(
             var staged: File? = null
             try {
                 val read = picture?.let { uri ->
-                    snackbars.show("Reading the picture…")
-                    staged = finance.pictures?.stage(uri)
-                    // Read from the original, which is as sharp as it gets (the copy is scaled and compressed).
-                    reader.read(uri)
+                    val reading = "Reading the picture…"
+                    snackbars.show(reading)
+                    try {
+                        staged = finance.pictures?.stage(uri)
+                        // Read from the original, which is as sharp as it gets (the copy is scaled and compressed).
+                        reader.read(uri)
+                    } finally {
+                        // Read: what comes next (the form, or a question) says the rest, and would cover this.
+                        snackbars.dismiss(reading)
+                    }
                 }
                 val pictureText = read?.text
                 if (fromPicture && pictureText.isNullOrBlank() && text.isBlank()) {
@@ -159,7 +169,7 @@ class FinanceActions(
                         }
                         if (goAhead) {
                             openSharedDraft(
-                                SharedTransactionImport.prefill(draft, shared, state, finance.repository, now)
+                                SharedTransactionImport.prefill(draft, shared, state, finance.repository, now, cards?.cards.orEmpty())
                                     .copy(fromPicture = fromPicture, readText = pictureText, picture = staged),
                             )
                         }
@@ -481,6 +491,9 @@ class FinanceActions(
     }
 }
 
+/** The Wallet's cards, for the account form's card choice and for putting a shared receipt on the right account; null where there is no Wallet. */
+val LocalWalletCards = staticCompositionLocalOf<CardsController?> { null }
+
 @Composable
 fun rememberFinanceActions(): FinanceActions {
     val finance = LocalFinance.current
@@ -490,8 +503,9 @@ fun rememberFinanceActions(): FinanceActions {
     val haptics = rememberAppHaptics()
     val scope = LocalAppScope.current
     val reminders = LocalReminderLauncher.current
-    return remember(finance, overlays, snackbars, navigator, haptics, scope, reminders) {
-        FinanceActions(finance, overlays, snackbars, navigator, haptics, scope, reminders)
+    val cards = LocalWalletCards.current
+    return remember(finance, overlays, snackbars, navigator, haptics, scope, reminders, cards) {
+        FinanceActions(finance, overlays, snackbars, navigator, haptics, scope, reminders, cards)
     }
 }
 

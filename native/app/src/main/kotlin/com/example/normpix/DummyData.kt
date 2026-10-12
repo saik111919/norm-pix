@@ -146,7 +146,7 @@ class DummyData private constructor(
             val cash = repo.accounts().first()
             repo.saveAccount(cash.copy(openingBalance = rupees(2_500)))
             val bank = repo.account("HDFC Savings", AccountKind.Bank, opening = rupees(1_48_000), order = 1)
-            val card = repo.account("ICICI Credit Card", AccountKind.Card, opening = -rupees(8_450), order = 2)
+            val card = repo.account("ICICI Credit Card", AccountKind.Card, opening = -rupees(8_450), order = 2, statementDay = 5, dueDay = 20)
             val upi = repo.account("Paytm Wallet", AccountKind.Wallet, opening = rupees(1_200), order = 3)
             repo.setDefaultAccountId(bank)
 
@@ -292,13 +292,22 @@ class DummyData private constructor(
         private suspend fun FinanceRepository.person(name: String, emoji: String?, color: Int): Long =
             savePerson(Person(name = name, emoji = emoji, color = color, createdAt = start, updatedAt = start)).id!!
 
-        private suspend fun FinanceRepository.account(name: String, kind: AccountKind, opening: Long, order: Int): Long =
+        private suspend fun FinanceRepository.account(
+            name: String,
+            kind: AccountKind,
+            opening: Long,
+            order: Int,
+            statementDay: Int? = null,
+            dueDay: Int? = null,
+        ): Long =
             saveAccount(
                 Account(
                     name = name,
                     kind = kind,
                     openingBalance = opening,
                     sortOrder = order,
+                    statementDay = statementDay,
+                    dueDay = dueDay,
                     createdAt = start,
                     updatedAt = start,
                     // "HDFC Savings" belongs to HDFC Bank, as the app's own migration would link it.

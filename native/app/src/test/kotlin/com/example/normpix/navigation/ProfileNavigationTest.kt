@@ -9,6 +9,7 @@ import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.example.normpix.AppContainer
 import com.example.normpix.finance.data.FinanceDatabase
@@ -75,7 +76,7 @@ class ProfileNavigationTest {
         compose.waitForIdle()
         assertTrue(on("Add your name"), "the circle opened the Profile")
 
-        compose.onNode(hasText("Settings") and hasClickAction() and !isSelectable()).performClick()
+        compose.onNode(hasText("Settings") and hasClickAction() and !isSelectable()).performScrollTo().performClick()
         compose.waitForIdle()
         assertTrue(on("Search settings") && !on("Add your name"), "and its Settings row opened Settings")
 

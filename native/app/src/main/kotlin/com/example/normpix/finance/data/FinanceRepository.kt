@@ -26,6 +26,7 @@ import com.example.normpix.finance.domain.FinanceConflictException
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.FinanceValidationException
 import com.example.normpix.finance.domain.MAX_PERSON_NAME
+import com.example.normpix.finance.domain.NUMBER_ENDING_LENGTH
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.MonthTotals
 import com.example.normpix.finance.domain.PeopleSpending
@@ -34,6 +35,7 @@ import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.PersonTotal
 import com.example.normpix.finance.domain.cleanPersonName
 import com.example.normpix.finance.domain.isSingleEmoji
+import com.example.normpix.finance.domain.numberEndingOrNull
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.RepeatSchedule
 import com.example.normpix.finance.domain.TransactionType
@@ -195,12 +197,29 @@ class FinanceRepository(
             throw FinanceValidationException("Choose a payment due date between the 1st and the 31st.")
         }
         val isCard = account.kind == AccountKind.Card
+        // The number's ending is its last four digits or nothing; cash has no number and no card. A Wallet card is the card of
+        // one account at most (the form offers only the unlinked ones; this is for anything that gets past it).
+        val typedEnding = account.numberEnding?.trim()?.takeIf { it.isNotEmpty() }
+        if (typedEnding != null && numberEndingOrNull(typedEnding) == null) {
+            throw FinanceValidationException("Enter the last $NUMBER_ENDING_LENGTH digits of the number, or leave it empty.")
+        }
+        val hasNumber = account.kind != AccountKind.Cash
+        val cardId = account.cardId?.takeIf { it.isNotBlank() && hasNumber }
+        if (cardId != null) {
+            val holder = rawQuery(
+                "SELECT name FROM ${FinanceDatabase.ACCOUNTS} WHERE card_id = ? AND id != ? AND archived = 0 LIMIT 1",
+                arrayOf(cardId, (account.id ?: -1L).toString()),
+            ).map { it.string("name") }.firstOrNull()
+            if (holder != null) throw FinanceValidationException("That card is already the card of \"$holder\".")
+        }
         val toSave = account.copy(
             name = name,
             bankKey = bankKey,
             creditLimit = creditLimit,
             statementDay = account.statementDay?.takeIf { isCard },
             dueDay = account.dueDay?.takeIf { isCard },
+            numberEnding = typedEnding?.takeIf { hasNumber },
+            cardId = cardId,
             updatedAt = clock(),
         )
         if (account.id == null) {

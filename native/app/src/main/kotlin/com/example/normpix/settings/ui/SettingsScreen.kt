@@ -105,6 +105,7 @@ fun SettingsScreen() {
                                 ProfileSettingsRow(
                                     name = prefs.profileName,
                                     emoji = prefs.profileEmoji,
+                                    photo = prefs.profilePhoto,
                                     accountButtonLeadsToProfile = prefs.accountButtonTarget == AccountButtonTarget.Profile,
                                     onClick = navigator::openProfile,
                                 )

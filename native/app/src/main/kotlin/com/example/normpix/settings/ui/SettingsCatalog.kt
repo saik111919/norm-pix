@@ -46,7 +46,7 @@ enum class SettingsSpecial { Profile, Categories, People, Reset, About, DemoData
 object SettingsCatalog {
     val entries: List<SettingsEntry> = listOf(
         // Profile
-        SettingsEntry("Profile", null, listOf("profile", "name", "picture", "photo", "avatar", "emoji", "initial", "about me"), special = SettingsSpecial.Profile),
+        SettingsEntry("Profile", null, listOf("profile", "name", "picture", "photo", "image", "gallery", "avatar", "emoji", "initial", "about me"), special = SettingsSpecial.Profile),
         SettingsEntry("Account button", null, listOf("account button", "account", "circle", "header", "profile"), special = SettingsSpecial.Profile),
 
         // Appearance

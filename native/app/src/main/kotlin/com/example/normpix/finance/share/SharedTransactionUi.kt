@@ -29,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -80,9 +81,10 @@ fun ReceiveSharedTransactions(inbox: SharedTextInbox, pictures: SharedPictureRea
 }
 
 /**
- * The top of a form filled in from a share: where the values came from (text, or a picture read on the phone, which can
- * be misread), that nothing is saved until the user saves, and what to check. Each point has its own icon - a warning
- * sign for what needs attention - so none of it rests on colour alone.
+ * The top of a form filled in from a share - or from a picture attached in the form, with its own [title], [body] and
+ * [icon]: where the values came from (text, or a picture read on the phone, which can be misread), that nothing is
+ * saved until the user saves, and what to check. Each point has its own icon - a warning sign for what needs attention -
+ * so none of it rests on colour alone.
  */
 @Composable
 fun SharedDraftNotice(
@@ -91,6 +93,13 @@ fun SharedDraftNotice(
     fromPicture: Boolean = false,
     /** The text read from the picture, which the user can open to check it or copy it. */
     readText: String? = null,
+    title: String = if (fromPicture) "Filled in from a shared picture" else "Filled in from shared text",
+    body: String = if (fromPicture) {
+        "Read from the picture on this phone, which can get things wrong. Check each detail, then save."
+    } else {
+        "Check the details, then save. Nothing is saved until you do."
+    },
+    icon: ImageVector = Icons.Outlined.MoveToInbox,
 ) {
     val scheme = MaterialTheme.colorScheme
     val text = MaterialTheme.typography
@@ -98,23 +107,11 @@ fun SharedDraftNotice(
     Surface(modifier.fillMaxWidth(), color = scheme.surfaceContainerHigh, shape = AppRadius.rXl) {
         Column(Modifier.padding(AppSpacing.lg)) {
             Row(Modifier.semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.MoveToInbox, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(AppIconSizes.lg))
+                Icon(icon, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(AppIconSizes.lg))
                 Spacer(Modifier.width(AppSpacing.md))
                 Column(Modifier.weight(1f)) {
-                    Text(
-                        if (fromPicture) "Filled in from a shared picture" else "Filled in from shared text",
-                        style = text.titleSmall,
-                        color = scheme.onSurface,
-                    )
-                    Text(
-                        if (fromPicture) {
-                            "Read from the picture on this phone, which can get things wrong. Check each detail, then save."
-                        } else {
-                            "Check the details, then save. Nothing is saved until you do."
-                        },
-                        style = text.bodySmall,
-                        color = scheme.onSurfaceVariant,
-                    )
+                    Text(title, style = text.titleSmall, color = scheme.onSurface)
+                    Text(body, style = text.bodySmall, color = scheme.onSurfaceVariant)
                 }
             }
             for (notice in notices) {

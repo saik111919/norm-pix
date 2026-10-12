@@ -28,6 +28,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -54,6 +55,7 @@ import com.example.normpix.banks.ui.BankChoice
 import com.example.normpix.banks.ui.BankSelector
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
+import com.example.normpix.finance.domain.NUMBER_ENDING_LENGTH
 import com.example.normpix.finance.domain.Category
 import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.FinanceConflictException
@@ -61,6 +63,7 @@ import com.example.normpix.finance.domain.FinanceValidationException
 import com.example.normpix.finance.domain.emojiIcon
 import com.example.normpix.finance.domain.emojiOf
 import com.example.normpix.finance.domain.minorToInputText
+import com.example.normpix.finance.domain.numberEndingOrNull
 import com.example.normpix.finance.domain.parseMinorUnits
 import com.example.normpix.ui.components.AppHaptics
 import com.example.normpix.ui.components.AppPrimaryTabs
@@ -71,6 +74,7 @@ import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.StatusColorRole
+import com.example.normpix.wallet.CardsState
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import kotlin.math.abs
@@ -448,6 +452,14 @@ fun AccountFormSheet(
     var limitError by remember { mutableStateOf<String?>(null) }
     var statementDay by remember { mutableStateOf(existing?.statementDay) }
     var dueDay by remember { mutableStateOf(existing?.dueDay) }
+    // What tells a shared receipt which account this is: the number's last digits, and the Wallet card (if any) it is.
+    var numberEnding by remember { mutableStateOf(existing?.numberEnding.orEmpty()) }
+    var numberError by remember { mutableStateOf<String?>(null) }
+    var cardId by remember { mutableStateOf(existing?.cardId) }
+    val cardsState = LocalWalletCards.current?.state?.collectAsState()?.value
+    val walletCards = (cardsState as? CardsState.Ready)?.cards.orEmpty()
+    // A link to a card since deleted shows as none, and is dropped on save - but only once the Wallet has really loaded.
+    val shownCardId = cardId?.takeIf { id -> walletCards.any { it.id == id } }
     var makeDefault by remember {
         mutableStateOf(existing != null && finance.defaultAccountId == existing.id)
     }
@@ -463,9 +475,10 @@ fun AccountFormSheet(
     }
 
     val initialSnapshot = remember {
-        listOf(name, amount, kind, bank.key, owed, makeDefault, limit, statementDay, dueDay).joinToString("|")
+        listOf(name, amount, kind, bank.key, owed, makeDefault, limit, statementDay, dueDay, numberEnding, cardId).joinToString("|")
     }
-    val hasChanges = listOf(name, amount, kind, bank.key, owed, makeDefault, limit, statementDay, dueDay).joinToString("|") != initialSnapshot
+    val hasChanges = listOf(name, amount, kind, bank.key, owed, makeDefault, limit, statementDay, dueDay, numberEnding, cardId)
+        .joinToString("|") != initialSnapshot
 
     DiscardChangesGuard(
         dirty = hasChanges,
@@ -508,10 +521,19 @@ fun AccountFormSheet(
             null
         }
 
-        if (nameError == null && amountError == null && bankError == null && limitError == null && parsed != null) {
+        val endingText = numberEnding.trim()
+        numberError = if (hasBank && endingText.isNotEmpty() && numberEndingOrNull(endingText) == null) {
+            "Enter all $NUMBER_ENDING_LENGTH digits, or leave it empty"
+        } else {
+            null
+        }
+
+        if (nameError == null && amountError == null && bankError == null && limitError == null && numberError == null && parsed != null) {
             val now = LocalDateTime.now()
             val openingBalance = if (owed) -parsed else parsed
             val bankKey = if (hasBank) bank.key else null
+            val savedEnding = endingText.takeIf { hasBank && it.isNotEmpty() }
+            val savedCard = (if (cardsState is CardsState.Ready) shownCardId else cardId).takeIf { hasBank }
             val draft = if (existing != null) {
                 existing.copy(
                     name = name,
@@ -521,6 +543,8 @@ fun AccountFormSheet(
                     creditLimit = limitMinor,
                     statementDay = statementDay.takeIf { kind == AccountKind.Card },
                     dueDay = dueDay.takeIf { kind == AccountKind.Card },
+                    numberEnding = savedEnding,
+                    cardId = savedCard,
                     updatedAt = now,
                 )
             } else {
@@ -537,6 +561,8 @@ fun AccountFormSheet(
                     creditLimit = limitMinor,
                     statementDay = statementDay.takeIf { kind == AccountKind.Card },
                     dueDay = dueDay.takeIf { kind == AccountKind.Card },
+                    numberEnding = savedEnding,
+                    cardId = savedCard,
                 )
             }
             saving = true
@@ -605,6 +631,19 @@ fun AccountFormSheet(
                 },
                 optional = true,
                 errorText = bankError,
+            )
+            Spacer(Modifier.height(AppSpacing.lg))
+            AccountNumberFields(
+                kind = kind,
+                numberEnding = numberEnding,
+                onNumberEnding = {
+                    numberEnding = it
+                    numberError = null
+                },
+                numberError = numberError,
+                cards = linkableCards(walletCards, finance.accounts, existing),
+                cardId = shownCardId,
+                onCardId = { cardId = it },
             )
         }
 

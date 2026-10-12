@@ -1,7 +1,6 @@
 package com.example.normpix.finance.ui
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,7 +25,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.drawWithContent
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -110,14 +108,7 @@ fun TransactionDetailsSheet(
         )
         if (attached != null) {
             Spacer(Modifier.height(AppSpacing.lg))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                PictureThumbnail(attached, onClick = { viewingAttached = true })
-                Spacer(Modifier.width(AppSpacing.md))
-                Column(Modifier.weight(1f)) {
-                    Text("Picture", style = MaterialTheme.typography.titleSmall, color = scheme.onSurface)
-                    Text("Kept with this transaction. Tap it to see it whole.", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
-                }
-            }
+            PictureCard(attached, label = "Picture", value = "Kept with this transaction", onView = { viewingAttached = true })
             if (viewingAttached) PictureViewer(attached, onDismiss = { viewingAttached = false })
         }
         Spacer(Modifier.height(AppSpacing.lg))

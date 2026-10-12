@@ -16,9 +16,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.AlertDialog
@@ -40,6 +43,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -69,6 +73,7 @@ import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.creditRoom
 import com.example.normpix.finance.domain.minorToInputText
 import com.example.normpix.finance.domain.parseMinorUnits
+import com.example.normpix.finance.share.ShareNotice
 import com.example.normpix.finance.share.SharedDraftNotice
 import com.example.normpix.finance.share.SharedTextReading
 import com.example.normpix.finance.share.SharedTransactionImport
@@ -80,6 +85,7 @@ import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.DiscardChangesGuard
 import com.example.normpix.ui.components.EditorSheet
 import com.example.normpix.ui.components.RevealVisibility
+import com.example.normpix.ui.components.politeLiveRegion
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppSpacing
@@ -183,10 +189,13 @@ private fun TransactionEditor(
                 ?: initialPersonId?.takeIf { id -> initialType == TransactionType.Expense && finance.activePeople.any { it.id == id } },
         )
     }
+    // A shared receipt that shows an account's number, which none of the user's accounts is known by, starts with no account
+    // chosen: the default one would be a guess about which account the money moved through.
     val startAccountId = existing?.accountId
         ?: (prefill?.accountId ?: initialAccountId)?.takeIf { id -> finance.activeAccounts.any { it.id == id } }
-        ?: finance.defaultAccount?.id
+        ?: finance.defaultAccount?.id?.takeIf { prefill?.accountNeedsChoice != true }
     var accountId by remember { mutableStateOf(startAccountId) }
+    val walletCards = LocalWalletCards.current
     var toAccountId by remember {
         mutableStateOf(
             existing?.toAccountId
@@ -224,6 +233,12 @@ private fun TransactionEditor(
     // A payment read from an attached picture is looked for among those already recorded, as a shared one is.
     var readFromPicture by remember { mutableStateOf(false) }
     var pictureReference by remember { mutableStateOf<String?>(null) }
+    // What reading a picture attached here came to, said at the top of the form (kept while it hides, to ease it out),
+    // and what went wrong getting one, said under the picture field: a snackbar would sit under this sheet.
+    var pictureNote by remember { mutableStateOf<PictureNote?>(null) }
+    var pictureNoteShown by remember { mutableStateOf(false) }
+    var picturesRead by remember { mutableIntStateOf(0) }
+    var pictureProblem by remember { mutableStateOf<String?>(null) }
     // What the user set themselves, which a picture read later never changes.
     var typeTouched by remember { mutableStateOf(false) }
     var dateTouched by remember { mutableStateOf(false) }
@@ -380,21 +395,34 @@ private fun TransactionEditor(
     fun attachPicture(draft: File) {
         pictureStore?.discard(draftPicture)
         draftPicture = draft
+        pictureProblem = null
         readingPicture = true
+        // In place of what the last picture said, if anything.
+        fun say(note: PictureNote) {
+            pictureNote = note
+            pictureNoteShown = true
+            picturesRead++
+        }
         scope.launch {
             try {
                 val read = pictureReader.read(Uri.fromFile(draft))
                 if (read == null) {
-                    snackbars.show("Picture attached. No text could be read from it.")
+                    say(PictureNote("Picture attached", "No text could be read from it, so nothing was filled in."))
                     return@launch
                 }
                 val now = LocalDateTime.now()
                 val reading = SharedTransactionParser.read(read.text, finance.currency, now.toLocalDate(), headline = read.headline)
                 if (reading !is SharedTextReading.Draft) {
-                    snackbars.show("Picture attached. It doesn't look like a payment, so nothing was filled in.")
+                    say(
+                        PictureNote(
+                            "Picture attached",
+                            "It doesn't look like a payment, so nothing was filled in.",
+                            readText = read.text,
+                        ),
+                    )
                     return@launch
                 }
-                val found = SharedTransactionImport.prefill(reading.draft, read.text, finance, controller.repository, now)
+                val found = SharedTransactionImport.prefill(reading.draft, read.text, finance, controller.repository, now, walletCards?.cards.orEmpty())
                 val fill = pictureFill(
                     found,
                     FormGaps(
@@ -439,11 +467,35 @@ private fun TransactionEditor(
                     accountId = it
                     accountError = null
                 }
+                // A number nothing matches: the account the form started with is a guess; it is the user's to choose.
+                if (fill.chooseAccount) {
+                    accountId = null
+                    accountError = null
+                }
                 readFromPicture = true
                 pictureReference = found.reference
-                snackbars.show(
-                    fill.summary?.let { "Filled in $it from the picture. Check them before saving." }
-                        ?: "Picture attached. What it shows is already filled in.",
+                val summary = fill.summary
+                val accountNotice = found.accountNotice.takeIf { fill.chooseAccount }
+                say(
+                    if (summary != null) {
+                        PictureNote(
+                            "Filled in from the picture",
+                            "Read on this phone, which can get things wrong. Check each detail, then save.",
+                            notices = listOfNotNull(
+                                ShareNotice("Filled in $summary."),
+                                ShareNotice("Anything already filled in stays as it was.").takeIf { fill.kept },
+                                accountNotice,
+                            ),
+                            readText = read.text,
+                        )
+                    } else {
+                        PictureNote(
+                            "Picture attached",
+                            "What it shows is already filled in.",
+                            notices = listOfNotNull(accountNotice),
+                            readText = read.text,
+                        )
+                    },
                 )
             } finally {
                 readingPicture = false
@@ -468,6 +520,8 @@ private fun TransactionEditor(
     val amountFocus = remember { FocusRequester() }
     // A shared draft that already has its amount opens for reading, without the keyboard covering it.
     LaunchedEffect(Unit) { if (!isEditing && prefill?.amount == null) runCatching { amountFocus.requestFocus() } }
+    val topOfForm = remember { BringIntoViewRequester() }
+    LaunchedEffect(picturesRead) { if (picturesRead > 0) topOfForm.bringIntoView() }
     val (dateShape, timeShape) = remember { connectedFieldShapes() }
     val reduced = rememberReducedMotion()
     val is24Hour = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
@@ -479,20 +533,43 @@ private fun TransactionEditor(
         saving = saving,
         saveColors = ButtonDefaults.buttonColors(containerColor = role.color, contentColor = role.onColor),
     ) {
-        prefill?.let {
-            SharedDraftNotice(it.notices, fromPicture = it.fromPicture, readText = it.readText)
-            Spacer(Modifier.height(AppSpacing.lg))
+        // The form's notices sit at its top: a share's, or - in its place - what a picture attached here was read to say,
+        // brought into view as it comes, with the top of the form it filled in.
+        Column(Modifier.bringIntoViewRequester(topOfForm)) {
+            prefill?.let {
+                RevealVisibility(!pictureNoteShown) {
+                    Column {
+                        SharedDraftNotice(it.notices, fromPicture = it.fromPicture, readText = it.readText)
+                        Spacer(Modifier.height(AppSpacing.lg))
+                    }
+                }
+            }
+            pictureNote?.let { note ->
+                RevealVisibility(pictureNoteShown) {
+                    Column {
+                        SharedDraftNotice(
+                            note.notices,
+                            Modifier.politeLiveRegion(),
+                            readText = note.readText,
+                            title = note.title,
+                            body = note.body,
+                            icon = Icons.Outlined.Image,
+                        )
+                        Spacer(Modifier.height(AppSpacing.lg))
+                    }
+                }
+            }
+            TransactionTypeSelector(
+                type = if (typeChosen) type else null,
+                onSelect = {
+                    typeChosen = true
+                    typeTouched = true
+                    typeError = null
+                    setType(it)
+                },
+            )
+            FieldError(typeError)
         }
-        TransactionTypeSelector(
-            type = if (typeChosen) type else null,
-            onSelect = {
-                typeChosen = true
-                typeTouched = true
-                typeError = null
-                setType(it)
-            },
-        )
-        FieldError(typeError)
         Spacer(Modifier.height(AppSpacing.xxl))
         HeroAmountField(
             value = amount,
@@ -667,14 +744,17 @@ private fun TransactionEditor(
                     pictureStore,
                     onBusy = { stagingPicture = it },
                     onPicked = ::attachPicture,
-                    onProblem = { snackbars.show(it) },
+                    onProblem = { pictureProblem = it },
                 ),
                 onView = { viewingPicture = true },
                 onRemove = {
                     pictureStore.discard(draftPicture)
                     draftPicture = null
                     keptPicture = null
+                    pictureNoteShown = false
+                    pictureProblem = null
                 },
+                errorText = pictureProblem,
             )
         }
         formError?.let {

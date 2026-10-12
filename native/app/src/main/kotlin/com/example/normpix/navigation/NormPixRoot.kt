@@ -63,6 +63,7 @@ import com.example.normpix.finance.ui.FinanceStatus
 import com.example.normpix.finance.ui.LocalCategoryIconStyle
 import com.example.normpix.finance.ui.LocalFinance
 import com.example.normpix.finance.ui.LocalReminderLauncher
+import com.example.normpix.finance.ui.LocalWalletCards
 import com.example.normpix.reminders.rememberReminderFlows
 import com.example.normpix.finance.ui.PeoplePage
 import com.example.normpix.finance.ui.PersonDetailPage
@@ -263,6 +264,7 @@ fun ProvideAppEnvironment(container: AppContainer, content: @Composable () -> Un
         LocalPermissions provides permissions,
         LocalReminders provides container.reminders,
         LocalFinance provides container.finance,
+        LocalWalletCards provides container.cards,
         LocalOverlays provides overlays,
         LocalSnackbars provides snackbars,
         LocalAppScope provides scope,

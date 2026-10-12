@@ -6,10 +6,12 @@ import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.MoneyFormatter
+import com.example.normpix.finance.domain.NUMBER_ENDING_LENGTH
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.ui.FinanceState
 import com.example.normpix.finance.ui.label
 import com.example.normpix.finance.ui.shortDate
+import com.example.normpix.wallet.StoredCard
 import java.io.File
 import java.time.LocalDateTime
 import kotlinx.coroutines.CancellationException
@@ -35,6 +37,13 @@ data class SharedTransactionPrefill(
     /** The message's date couldn't be read, so the date has to be chosen before saving. */
     val dateNeedsChoice: Boolean = false,
     val accountId: Long? = null,
+    /**
+     * The message shows an account's number and none of the user's accounts (of several) is that one, or more than one is: the
+     * form starts with no account chosen, rather than the default one, which would be a guess.
+     */
+    val accountNeedsChoice: Boolean = false,
+    /** What to say about it when [accountNeedsChoice]: which number the message shows, and that the account is the user's to choose. */
+    val accountNotice: ShareNotice? = null,
     val categoryId: Long? = null,
     /** What to tell the user, things to check first. */
     val notices: List<ShareNotice> = emptyList(),
@@ -74,9 +83,12 @@ object SharedTransactionImport {
         state: FinanceState,
         repository: FinanceRepository,
         now: LocalDateTime,
+        /** The Wallet's cards, whose numbers say which account a receipt's partly hidden number is (see [Account.cardId]). */
+        cards: List<StoredCard> = emptyList(),
     ): SharedTransactionPrefill {
         val occurredAt = draft.date?.let { LocalDateTime.of(it, draft.time ?: now.toLocalTime().withSecond(0).withNano(0)) }
-        val account = matchAccount(text, draft.counterparty, draft.instrument, state.activeAccounts, state.catalog)
+        val match = findAccount(text, draft.counterparty, draft.instrument, state.activeAccounts, state.catalog, draft.maskedNumbers, cards)
+        val account = match.account
         val payee = draft.counterparty
         // The user's own filing of this payee first; a merchant the app knows only for a payee they haven't filed yet.
         val fromHistory = if (draft.type != null && payee != null) quietly { repository.lastCategoryForPayee(payee, draft.type) } else null
@@ -90,6 +102,8 @@ object SharedTransactionImport {
         val duplicate = quietly {
             repository.possibleDuplicates(draft.type, draft.amount, occurredAt ?: now, payee, draft.reference, limit = 1).firstOrNull()
         }
+        // With one account there is nothing to choose between.
+        val needsChoice = account == null && draft.maskedNumbers.isNotEmpty() && state.activeAccounts.size > 1
         return SharedTransactionPrefill(
             type = draft.type,
             amount = draft.amount,
@@ -98,8 +112,10 @@ object SharedTransactionImport {
             occurredAt = occurredAt,
             dateNeedsChoice = draft.dateUnreadable,
             accountId = account?.id,
+            accountNeedsChoice = needsChoice,
+            accountNotice = accountNotice(draft, account, match.fitting).takeIf { needsChoice },
             categoryId = categoryId,
-            notices = notices(draft, state.money, now, account, categoryOrigin, duplicate = duplicate),
+            notices = notices(draft, state.money, now, account, categoryOrigin, duplicate = duplicate, accountByNumber = match.byNumber, accountsFit = match.fitting),
             reference = draft.reference,
         )
     }
@@ -114,27 +130,96 @@ object SharedTransactionImport {
     }
 
     /**
-     * The one active account the message's bank (and kind of card or account) points to, or null when it names no bank
-     * the user has an account with, or more than one account fits. The payee's name is left out first, so "Paid to
-     * Airtel" is not read as Airtel Payments Bank.
+     * Which account a message is about, and how that was found: [account] is null when it can't be told - the message names no
+     * account, or more than one fits.
      */
+    class AccountMatch(
+        val account: Account?,
+        /** The digits the message shows chose it, not just its bank. */
+        val byNumber: Boolean = false,
+        /** How many accounts those digits fit: more than one means they could not choose between them. */
+        val fitting: Int = 0,
+    )
+
+    /** [findAccount]'s answer, for a caller that has no use for how it was found. */
     fun matchAccount(
         text: String,
         counterparty: String?,
         instrument: SharedInstrument?,
         accounts: List<Account>,
         catalog: BankCatalog,
-    ): Account? {
-        val scrubbed = if (counterparty.isNullOrBlank()) text else text.replace(counterparty, " ", ignoreCase = true)
-        val bank = catalog.resolve(scrubbed) ?: return null
-        val ofBank = accounts.filter { !it.archived && it.bankKey == bank.key }
-        val fitting = when (instrument) {
+        maskedNumbers: List<MaskedNumber> = emptyList(),
+        cards: List<StoredCard> = emptyList(),
+    ): Account? = findAccount(text, counterparty, instrument, accounts, catalog, maskedNumbers, cards).account
+
+    /**
+     * The one active account the message points to. First by its number: the digits it shows ([maskedNumbers]) against each
+     * account's own last digits and the number of its Wallet [cards] - when exactly one account has them. Otherwise by bank
+     * (and kind of card or account), when it names one the user has exactly one fitting account with; an account whose
+     * number is known and different from the one shown is not one of those. The payee's name and the "Powered by" bank a
+     * UPI app prints are left out first, so "Paid to Airtel" is not read as Airtel Payments Bank.
+     */
+    fun findAccount(
+        text: String,
+        counterparty: String?,
+        instrument: SharedInstrument?,
+        accounts: List<Account>,
+        catalog: BankCatalog,
+        maskedNumbers: List<MaskedNumber> = emptyList(),
+        cards: List<StoredCard> = emptyList(),
+    ): AccountMatch {
+        val active = accounts.filter { !it.archived }
+        val fits = active.associateWith { AccountNumbers.fit(it, maskedNumbers, cards) }
+        val ofBank = bankFitting(text, counterparty, instrument, active, catalog)
+        val byNumber = active.filter { fits[it] == NumberFit.Match }
+        if (byNumber.size == 1) return AccountMatch(byNumber.single(), byNumber = true, fitting = 1)
+        if (byNumber.size > 1) {
+            // Two accounts end the same way (at different banks, say): the message's bank may tell them apart.
+            val narrowed = byNumber.filter { it in ofBank }.singleOrNull()
+            return AccountMatch(narrowed, byNumber = narrowed != null, fitting = byNumber.size)
+        }
+        return AccountMatch(ofBank.filter { fits[it] != NumberFit.Contradicts }.singleOrNull())
+    }
+
+    /** What the receipt's own wording says about the user's bank: not its payee, not the bank that "powers" the UPI app. */
+    private val poweredBy = Regex("""(?i)\bpowered\s+by\b[^\n]*(?:\n[^\n]{0,40})?""")
+
+    private fun bankFitting(
+        text: String,
+        counterparty: String?,
+        instrument: SharedInstrument?,
+        accounts: List<Account>,
+        catalog: BankCatalog,
+    ): List<Account> {
+        val withoutPayee = if (counterparty.isNullOrBlank()) text else text.replace(counterparty, " ", ignoreCase = true)
+        val bank = catalog.resolve(poweredBy.replace(withoutPayee, " ")) ?: return emptyList()
+        val ofBank = accounts.filter { it.bankKey == bank.key }
+        return when (instrument) {
             SharedInstrument.CreditCard -> ofBank.filter { it.kind == AccountKind.Card }
             SharedInstrument.DebitCard, SharedInstrument.BankAccount, SharedInstrument.Upi -> ofBank.filter { it.kind != AccountKind.Card }
             SharedInstrument.Wallet -> ofBank.filter { it.kind == AccountKind.Wallet }
             SharedInstrument.Card, null -> ofBank
         }
-        return fitting.singleOrNull()
+    }
+
+    /**
+     * A number is shown and no account is chosen by it: the account is the user's to pick, not the default's to be assumed.
+     * Null when an account was chosen, or the message shows no number.
+     */
+    fun accountNotice(draft: ParsedTransactionDraft, account: Account?, accountsFit: Int): ShareNotice? {
+        if (account != null || draft.maskedNumbers.isEmpty()) return null
+        val shown = draft.maskedNumbers.first().let {
+            if (it.prefix.isEmpty()) "ending ${it.suffix}" else "starting ${it.prefix} and ending ${it.suffix}"
+        }
+        // A number printed with its first digits is a card's: its Wallet card can be linked as well.
+        val isCard = draft.maskedNumbers.first().prefix.isNotEmpty()
+        val text = if (accountsFit > 1) {
+            "The message shows a number $shown, which fits more than one of your accounts. Choose the right one."
+        } else {
+            "The message shows a number $shown, but none of your accounts has it. Choose the account, and add the last " +
+                "$NUMBER_ENDING_LENGTH digits${if (isCard) " (or its card from the Wallet)" else ""} to it so it's picked next time."
+        }
+        return ShareNotice(text, attention = true)
     }
 
     /** What the form says about a draft, what needs attention first. */
@@ -145,6 +230,10 @@ object SharedTransactionImport {
         account: Account?,
         category: CategoryOrigin?,
         duplicate: FinanceTransaction?,
+        /** [account] was chosen by the digits the message shows, not just by its bank. */
+        accountByNumber: Boolean = false,
+        /** How many accounts the digits the message shows fit. */
+        accountsFit: Int = 0,
     ): List<ShareNotice> {
         val attention = buildList {
             duplicate?.let { add("You may have recorded this already: ${describe(it, money, now)}.") }
@@ -163,6 +252,7 @@ object SharedTransactionImport {
                 else -> add("No amount found in the message. Enter it.")
             }
             if (draft.type == null) add("Couldn't tell whether money went out or came in. Choose Expense or Income.")
+            accountNotice(draft, account, accountsFit)?.let { add(it.text) }
             when {
                 draft.dateUnreadable -> add("The message's date couldn't be read. Choose the date.")
                 draft.date != null && draft.date.isAfter(now.toLocalDate()) -> add("The message's date is in the future. Check it.")
@@ -182,7 +272,9 @@ object SharedTransactionImport {
                 CategoryOrigin.Merchant -> draft.counterparty?.let { add("Category picked for $it. Change it if it doesn't fit.") }
                 null -> Unit
             }
-            account?.let { add("Account from the bank in the message: ${it.name}.") }
+            account?.let {
+                add(if (accountByNumber) "Account from the number in the message: ${it.name}." else "Account from the bank in the message: ${it.name}.")
+            }
         }
         return attention.map { ShareNotice(it, attention = true) } + info.map { ShareNotice(it) }
     }

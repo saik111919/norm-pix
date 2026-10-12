@@ -375,6 +375,63 @@ class SharedTransactionParserTest {
         assertEquals(SharedTextReading.NotATransaction, read("See you at 7 tomorrow!"))
     }
 
+    // ------------------------------------------------------- masked numbers
+
+    private fun masked(text: String) = SharedTransactionParser.maskedNumbers(SharedTransactionParser.normalize(text))
+
+    @Test
+    fun `the digits a bank message shows of an account or card`() {
+        assertEquals(listOf(MaskedNumber("", "1234")), masked("Rs 250 debited from A/c XX1234 on 10-10-26"))
+        assertEquals(listOf(MaskedNumber("", "1234")), masked("Sent from HDFC Bank A/C *1234"))
+        assertEquals(listOf(MaskedNumber("", "4455")), masked("spent on ICICI Bank Card XX4455"))
+        assertEquals(listOf(MaskedNumber("", "4455")), masked("Card ****4455 used"))
+        assertEquals(listOf(MaskedNumber("", "4455")), masked("Card ••••4455 used"))
+        assertEquals(listOf(MaskedNumber("", "3588")), masked("Debited from XXXXXXXXXX3588"))
+        assertEquals(listOf(MaskedNumber("652850", "55")), masked("HDFC Bank 652850XXXXXXXX55"))
+        assertEquals(listOf(MaskedNumber("5282", "1234")), masked("Card 5282 XXXX XXXX 1234"))
+        assertEquals(listOf(MaskedNumber("5282", "1234")), masked("Card 5282-XXXX-XXXX-1234"))
+    }
+
+    @Test
+    fun `digits said in words`() {
+        assertEquals(listOf(MaskedNumber("", "4455")), masked("Your card ending 4455 was used"))
+        assertEquals(listOf(MaskedNumber("", "4455")), masked("account ending with 4455"))
+        assertEquals(listOf(MaskedNumber("", "4455")), masked("Card ending in 4455."))
+        assertEquals(listOf(MaskedNumber("", "4455")), masked("the last 4 digits of your card: 4455"))
+        // Other things that end: an offer, a time.
+        assertEquals(emptyList(), masked("Offer ending soon. Ends tomorrow"))
+    }
+
+    @Test
+    fun `things that are not the user's account number`() {
+        // A UPI id's hidden part, with or without a space before the @.
+        assertEquals(emptyList(), masked("To: Mr AKBAR ••••5486@ybl on PhonePe"))
+        assertEquals(emptyList(), masked("Q505076279 @ybl\n••••5486 @ybl"))
+        assertEquals(emptyList(), masked("From: SAI ••••10-5@okhdfcbank on Google Pay"))
+        // A masked mobile number, whichever way it is written.
+        assertEquals(emptyList(), masked("Rahul Sharma\n+91 98XXXXXX10"))
+        assertEquals(emptyList(), masked("+91 XXXXXX3210"))
+        assertEquals(emptyList(), masked("Mobile: XXXXXX3210"))
+        assertEquals(emptyList(), masked("98XXXXXX10"))
+        // Whole numbers - references, amounts, dates - and words.
+        assertEquals(emptyList(), masked("UTR: 225197484310 Rs 250.00 on 10-10-2026 at 12:34 pm"))
+        assertEquals(emptyList(), masked("MAXX1234 and xxxx and ****"))
+    }
+
+    @Test
+    fun `several masked numbers are all reported once`() {
+        assertEquals(
+            listOf(MaskedNumber("", "1234"), MaskedNumber("", "5678")),
+            masked("Rs 250 debited from A/c XX1234 and credited to A/c XX5678. A/c XX1234"),
+        )
+    }
+
+    @Test
+    fun `a draft carries the masked numbers`() {
+        val d = draft("Rs 250.00 debited from A/c XX1234 on 10-10-26. UPI Ref 428312345678")
+        assertEquals(listOf(MaskedNumber("", "1234")), d.maskedNumbers)
+    }
+
     @Test
     fun `hostile input stays fast`() {
         // Long runs that could make a careless pattern backtrack for ages.
@@ -383,6 +440,13 @@ class SharedTransactionParserTest {
             "to " + "a ".repeat(1_900),
             "1".repeat(3_999),
             "Rs.".repeat(1_300),
+            "X".repeat(3_999),
+            "••••".repeat(990),
+            "1X".repeat(1_990),
+            "ending ".repeat(560),
+            "last 4 digits of ".repeat(230),
+            "\n".repeat(3_999),
+            "to\n".repeat(1_300),
         )
         for (text in texts) {
             val started = System.nanoTime()

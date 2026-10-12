@@ -9,6 +9,7 @@ import com.example.normpix.testing.TestEnvironment
 import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -221,5 +222,98 @@ class SharedTransactionImportTest {
             notices("Your payment of ₹250 to Swiggy failed on 10-10-26").first(),
         )
         assertTrue(ShareNotice("A refund is money coming back, so it's recorded as income.") in notices("Refund of Rs 499 credited on 10-10-26"))
+    }
+
+    // ------------------------------------------------- the number a receipt shows
+
+    private fun numbered(name: String, kind: AccountKind, bankKey: String?, ending: String? = null, cardId: String? = null): Account = runBlocking {
+        finance.saveAccount(
+            Account(name = name, kind = kind, bankKey = bankKey, numberEnding = ending, cardId = cardId, createdAt = now, updatedAt = now),
+        )
+    }
+
+    private val phonePe = "Paid to\nTransaction Successful\n11:34 am on 05 Oct 2026\nSuman Sharma\nQ505076279 @ybl\nPayment Details\n" +
+        "PhonePe Transaction ID\nT2610051134004403220212\nDebited from\nXXXXXXXXXX3588\nUTR: 225197484310\nPowered by\nUPI AXIS BANK\nZ10\n10"
+
+    private fun prefillOf(text: String, cards: List<com.example.normpix.wallet.StoredCard> = emptyList()) =
+        runBlocking { SharedTransactionImport.prefill(parse(text), text, finance.state.value, repository, now, cards) }
+
+    @Test
+    fun `the digits a receipt shows put it on the account that has them`() {
+        val salary = numbered("HDFC Salary", AccountKind.Bank, "hdfc", ending = "3588")
+        numbered("HDFC Spending", AccountKind.Bank, "hdfc", ending = "7001")
+        val prefill = prefillOf(phonePe)
+
+        assertEquals(salary.id, prefill.accountId)
+        assertFalse(prefill.accountNeedsChoice)
+        assertTrue(ShareNotice("Account from the number in the message: HDFC Salary.") in prefill.notices)
+        // And what else the receipt says is read right, with no amount printed larger than the rest.
+        assertEquals(1_000L, prefill.amount)
+        assertEquals("Suman Sharma", prefill.payee)
+        assertEquals("Ref 225197484310", prefill.note)
+    }
+
+    @Test
+    fun `digits no account has leave the account to the user`() {
+        numbered("HDFC Salary", AccountKind.Bank, "hdfc", ending = "1111")
+        numbered("HDFC Spending", AccountKind.Bank, "hdfc")
+        val prefill = prefillOf(phonePe)
+
+        assertNull(prefill.accountId)
+        assertTrue(prefill.accountNeedsChoice)
+        val notice = prefill.notices.first { "ending 3588" in it.text }
+        assertTrue(notice.attention)
+        assertTrue("none of your accounts has it" in notice.text, notice.text)
+        // The same words are there for the picture flow, which has no notice list of its own.
+        assertEquals(notice, prefill.accountNotice)
+    }
+
+    @Test
+    fun `digits that fit two accounts leave the account to the user, and say so`() {
+        numbered("HDFC Salary", AccountKind.Bank, "hdfc", ending = "3588")
+        numbered("ICICI Salary", AccountKind.Bank, "icici", ending = "3588")
+        val prefill = prefillOf(phonePe)
+
+        assertNull(prefill.accountId)
+        assertTrue(prefill.accountNeedsChoice)
+        assertTrue(prefill.notices.any { "fits more than one of your accounts" in it.text })
+    }
+
+    @Test
+    fun `with one account there is nothing to choose between`() {
+        // Only the Cash account every ledger starts with.
+        val prefill = prefillOf(phonePe)
+        assertNull(prefill.accountId)
+        assertFalse(prefill.accountNeedsChoice)
+    }
+
+    @Test
+    fun `a message that shows no number never asks for the account`() {
+        numbered("HDFC Salary", AccountKind.Bank, "hdfc")
+        numbered("ICICI Salary", AccountKind.Bank, "icici")
+        val prefill = prefillOf("₹250 paid to Swiggy on 10-10-26")
+        assertFalse(prefill.accountNeedsChoice)
+        assertTrue(prefill.notices.none { "none of your accounts" in it.text })
+    }
+
+    @Test
+    fun `a Wallet card's number puts a receipt on the account it was linked to`() {
+        val cards = listOf(
+            com.example.normpix.wallet.StoredCard("rupay", "HDFC Bank", "THE USER", "6528505555554455", "08", "29", "123", com.example.normpix.wallet.CardKind.Credit, now),
+        )
+        val rupay = numbered("HDFC RuPay", AccountKind.Card, "hdfc", cardId = "rupay")
+        numbered("HDFC Savings", AccountKind.Bank, "hdfc")
+        val googlePay = "To Mr AKBAR\n₹10\nCompleted\n10 Oct 2026, 10:07pm\nHDFC Bank\n652850XXXXXXXX55\nPayment of ₹10 completed\n" +
+            "Receiver's bank has confirmed deposit of money to Mr AKBAR's bank account\nUPI transaction ID\n131074460564\nTo: Mr AKBAR\n" +
+            "••••5486@ybl on PhonePe\nFrom: KUSUMANCHI SAI (HDFC Bank)\n••••10-5@okhdfcbank on Google Pay\nGoogle transaction ID\nCICAgLimuefacA"
+        val prefill = prefillOf(googlePay, cards)
+
+        assertEquals(rupay.id, prefill.accountId)
+        assertEquals(TransactionType.Expense, prefill.type)
+        assertEquals(1_000L, prefill.amount)
+        assertEquals("Mr AKBAR", prefill.payee)
+        assertEquals("Ref 131074460564", prefill.note)
+        // Without the Wallet's cards, the same receipt cannot say which: two HDFC accounts, neither with digits.
+        assertNull(prefillOf(googlePay).accountId)
     }
 }

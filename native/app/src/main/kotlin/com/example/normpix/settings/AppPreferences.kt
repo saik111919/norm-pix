@@ -179,6 +179,8 @@ data class AppPrefsState(
     val profileName: String = "",
     /** One emoji for the profile picture, or empty for the name's initials. */
     val profileEmoji: String = "",
+    /** The file name of the user's own photo for the profile picture (see [ProfilePhotos]), or empty when they have none. It wins over the emoji and the initial. */
+    val profilePhoto: String = "",
     /** Where the account button at the top of each tab leads. Settings, as it always has; Profile is the user's to choose. */
     val accountButtonTarget: AccountButtonTarget = AccountButtonTarget.Settings,
 ) {
@@ -221,6 +223,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
             categoryIconStyle = prefs.enum(K_CATEGORY_ICON_STYLE, defaults.categoryIconStyle),
             profileName = prefs.getString(K_PROFILE_NAME, defaults.profileName).orEmpty(),
             profileEmoji = prefs.getString(K_PROFILE_EMOJI, defaults.profileEmoji).orEmpty(),
+            profilePhoto = prefs.getString(K_PROFILE_PHOTO, defaults.profilePhoto).orEmpty().takeIf(::isProfilePhotoName).orEmpty(),
             accountButtonTarget = prefs.enum(K_ACCOUNT_BUTTON, defaults.accountButtonTarget),
             // Only features the user has configured; the rest read as the default (always on) through availabilityOf.
             availability = ScheduledFeature.entries.filter { prefs.contains(it.key("mode")) }.associateWith { prefs.readRule(it) },
@@ -317,6 +320,12 @@ class AppPreferences(private val prefs: SharedPreferences) {
         }
     }
 
+    /** Saves the file name of the user's profile photo ([name] from [ProfilePhotos.save]); anything else - "" included - means no photo. */
+    fun setProfilePhoto(name: String) {
+        val clean = name.takeIf(::isProfilePhotoName).orEmpty()
+        change({ copy(profilePhoto = clean) }) { putString(K_PROFILE_PHOTO, clean) }
+    }
+
     fun setAccountButtonTarget(target: AccountButtonTarget) =
         change({ copy(accountButtonTarget = target) }) { putString(K_ACCOUNT_BUTTON, target.name) }
 
@@ -337,8 +346,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
      * and neither is the profile: a name and a picture are who the user is, not a setting.
      */
     fun resetToDefaults() {
-        val keep = setOf(K_EXACT_ALARM_PROMPTED, K_PROFILE_NAME, K_PROFILE_EMOJI)
-        _state.update { AppPrefsState(profileName = it.profileName, profileEmoji = it.profileEmoji) }
+        val keep = setOf(K_EXACT_ALARM_PROMPTED, K_PROFILE_NAME, K_PROFILE_EMOJI, K_PROFILE_PHOTO)
+        _state.update { AppPrefsState(profileName = it.profileName, profileEmoji = it.profileEmoji, profilePhoto = it.profilePhoto) }
         prefs.edit().apply {
             // Everything except the one-time system-prompt marker and the profile.
             prefs.all.keys.filter { it !in keep }.forEach { remove(it) }
@@ -376,6 +385,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_CATEGORY_ICON_STYLE = "category_icon_style"
         const val K_PROFILE_NAME = "profile_name"
         const val K_PROFILE_EMOJI = "profile_emoji"
+        const val K_PROFILE_PHOTO = "profile_photo"
         const val K_ACCOUNT_BUTTON = "account_button_target"
 
         fun ScheduledFeature.key(field: String) = "availability_${name.lowercase()}_$field"

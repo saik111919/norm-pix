@@ -23,6 +23,8 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import com.example.normpix.finance.data.TransactionQuery
+import com.example.normpix.finance.domain.Account
+import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.navigation.NormPixRoot
@@ -77,7 +79,8 @@ class ShareTransactionFlowTest {
     private fun waitGone(text: String) =
         compose.waitUntil(timeoutMillis = 10_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isEmpty() }
 
-    private fun shown(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+    private fun shown(text: String, substring: Boolean = false) =
+        compose.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty()
 
     private fun stored(): List<FinanceTransaction> =
         runBlocking { env.container.finance.repository.transactions(TransactionQuery(), limit = 10).items }
@@ -425,5 +428,60 @@ class ShareTransactionFlowTest {
         assertTrue(env.preferences.state.value.dummyDataEnabled)
         assertTrue(inbox.waiting.value.isEmpty())
         assertFalse(shown("Filled in from shared text"))
+    }
+
+    // ------------------------------------------------- the number a receipt shows
+
+    private val phonePe = "Paid to\nTransaction Successful\n11:34 am on 05 Oct 2026\nSuman Sharma\nQ505076279 @ybl\nPayment Details\n" +
+        "PhonePe Transaction ID\nT2610051134004403220212\nDebited from\nXXXXXXXXXX3588\nUTR: 225197484310\nPowered by\nUPI AXIS BANK\nZ10\n10"
+
+    private fun account(name: String, bankKey: String, ending: String?): Account = runBlocking {
+        val at = LocalDateTime.of(2026, 10, 12, 9, 0)
+        env.container.finance.saveAccount(
+            Account(name = name, kind = AccountKind.Bank, bankKey = bankKey, numberEnding = ending, createdAt = at, updatedAt = at),
+        )
+    }
+
+    @Test
+    fun `a receipt that shows an account number nothing matches leaves the account to choose`() {
+        val salary = account("HDFC Salary", "hdfc", "1111")
+        account("ICICI Savings", "icici", "2222")
+        launch()
+        share(phonePe)
+        waitFor("Filled in from shared text")
+
+        // What the receipt says is read right: the amount is the figure alone on a line, the payee is below "Paid to".
+        amountField().assert(hasText("10"))
+        compose.onNodeWithText("Suman Sharma").assertExists()
+        compose.onNodeWithText("Ref 225197484310").assertExists()
+        assertTrue(shown("The message shows a number ending 3588, but none of your accounts has it.", substring = true))
+
+        // No account was chosen for the user: saving asks for one.
+        pickCategory("Food & dining")
+        compose.onNodeWithText("Save expense").performClick()
+        waitFor("Choose an account")
+        assertTrue(stored().isEmpty())
+
+        click("Paid from")
+        compose.onNodeWithText("HDFC Salary").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Save expense").performClick()
+        waitGone("New expense")
+        assertEquals(salary.id, stored().single().accountId)
+    }
+
+    @Test
+    fun `a receipt that shows an account number picks the account that has it`() {
+        val salary = account("HDFC Salary", "hdfc", "3588")
+        account("ICICI Savings", "icici", "2222")
+        launch()
+        share(phonePe)
+        waitFor("Filled in from shared text")
+
+        assertTrue(shown("Account from the number in the message: HDFC Salary."))
+        pickCategory("Food & dining")
+        compose.onNodeWithText("Save expense").performClick()
+        waitGone("New expense")
+        assertEquals(salary.id, stored().single().accountId)
     }
 }

@@ -92,11 +92,18 @@ fun SettingsRow(
  * Profile page. Says where the account button goes while that is not Settings, since this is where it would be looked for.
  */
 @Composable
-fun ProfileSettingsRow(name: String, emoji: String, accountButtonLeadsToProfile: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun ProfileSettingsRow(
+    name: String,
+    emoji: String,
+    accountButtonLeadsToProfile: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    photo: String = "",
+) {
     ListItem(
         modifier = modifier.clickable(onClick = onClick),
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        leadingContent = { ProfileAvatar(name = name, emoji = emoji, size = 44.dp) },
+        leadingContent = { ProfileAvatar(name = name, emoji = emoji, size = 44.dp, photo = photo) },
         headlineContent = {
             Text(name.ifBlank { "Set up your profile" }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         },

@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
@@ -400,12 +401,23 @@ class AppSnackbars(val hostState: SnackbarHostState, private val scope: Coroutin
     /** Space the current screen reserves at the bottom (e.g. the navigation bar). */
     var bottomInset: Dp by mutableStateOf(0.dp)
 
+    private var latest: Pair<String, Job>? = null
+
     fun show(message: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
-        scope.launch {
+        latest = message to scope.launch {
             hostState.currentSnackbarData?.dismiss()
             val result = hostState.showSnackbar(message, actionLabel, withDismissAction = false, duration = SnackbarDuration.Short)
             if (result == SnackbarResult.ActionPerformed) onAction?.invoke()
         }
+    }
+
+    /**
+     * Takes [message] away if it is still showing (or about to show), and nothing else: one about something still going
+     * on ("Reading the picture…") once it is over - before a sheet opens, say, which would cover it while it stayed.
+     */
+    fun dismiss(message: String) {
+        latest?.let { (shown, job) -> if (shown == message) job.cancel() }
+        hostState.currentSnackbarData?.takeIf { it.visuals.message == message }?.dismiss()
     }
 }
 

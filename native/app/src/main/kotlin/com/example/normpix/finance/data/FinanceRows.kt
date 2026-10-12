@@ -89,6 +89,8 @@ internal object FinanceRows {
         putNullable("credit_limit", a.creditLimit)
         putNullable("statement_day", a.statementDay)
         putNullable("due_day", a.dueDay)
+        putNullable("number_ending", a.numberEnding)
+        putNullable("card_id", a.cardId)
     }
 
     fun bank(b: CustomBank) = ContentValues().apply {
@@ -116,6 +118,8 @@ internal object FinanceRows {
         creditLimit = c.longOrNull("credit_limit"),
         statementDay = c.intOrNull("statement_day"),
         dueDay = c.intOrNull("due_day"),
+        numberEnding = c.stringOrNull("number_ending"),
+        cardId = c.stringOrNull("card_id"),
     )
 
     fun category(cat: Category) = ContentValues().apply {

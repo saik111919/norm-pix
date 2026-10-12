@@ -49,6 +49,7 @@ class FinanceDatabase(
         if (oldVersion < 7) migrateBrandCategoryIcons(db)
         if (oldVersion < 8) addTransactionPictures(db)
         if (oldVersion < 9) addBillingDays(db)
+        if (oldVersion < 10) addAccountNumbers(db)
     }
 
     override fun onOpen(db: SQLiteDatabase) {
@@ -58,7 +59,7 @@ class FinanceDatabase(
 
     companion object {
         const val DB_NAME = "normpix_finance.db"
-        const val VERSION = 9
+        const val VERSION = 10
 
         const val ACCOUNTS = "accounts"
         const val PEOPLE = "people"
@@ -84,7 +85,9 @@ class FinanceDatabase(
                   bank_key TEXT,
                   credit_limit INTEGER,
                   statement_day INTEGER,
-                  due_day INTEGER
+                  due_day INTEGER,
+                  number_ending TEXT,
+                  card_id TEXT
                 )
                 """.trimIndent(),
             )
@@ -279,6 +282,16 @@ class FinanceDatabase(
                     arrayOf<Any>(brandKey, name, brandKey),
                 )
             }
+        }
+
+        /**
+         * Version 10: an account can say what its number ends with and which Wallet card is its card, so a shared receipt that
+         * shows those digits is put on the right account. Adds the two (empty) columns: every account stays as it was, with
+         * neither - nothing is worked out for an account that was never told.
+         */
+        fun addAccountNumbers(db: SQLiteDatabase) {
+            db.execSQL("ALTER TABLE $ACCOUNTS ADD COLUMN number_ending TEXT")
+            db.execSQL("ALTER TABLE $ACCOUNTS ADD COLUMN card_id TEXT")
         }
 
         /**
