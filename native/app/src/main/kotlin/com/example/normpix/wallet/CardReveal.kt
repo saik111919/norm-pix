@@ -16,6 +16,7 @@ import com.example.normpix.ui.components.AppOverlays
 import com.example.normpix.ui.components.AppSnackbars
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
+import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.wallet.clipboard.CardField
 import com.example.normpix.wallet.nfc.NfcTapSheet
@@ -72,7 +73,7 @@ class CardReveal internal constructor(
      * snackbar waits until the sheet has gone - a notice that comes up over it.
      */
     private suspend fun cantReveal(title: String, message: String) {
-        if (overlays.isOpen) overlays.alert(title, "$message.") else snackbars.show(message)
+        if (overlays.isOpen) overlays.alert(title, "$message.") else snackbars.show(message, SnackbarKind.Warning)
     }
 
     /** Shows or hides [id]'s number and CVV; showing goes through the NFC step when that is on. */
@@ -88,9 +89,9 @@ class CardReveal internal constructor(
 
     /**
      * Copying a detail is as much a reveal as showing it, so it goes through the same gate - without showing the card.
-     * [say] gets the confirmation (a snackbar by default).
+     * [say] gets the confirmation (a snackbar when it is null).
      */
-    fun copy(card: StoredCard, field: CardField?, say: (String) -> Unit = { snackbars.show(it) }) {
+    fun copy(card: StoredCard, field: CardField?, say: ((String) -> Unit)? = null) {
         scope.launch {
             if (prefs.nfcTagRevealEnabled && card.id !in revealed && !passedNfcGate()) return@launch
             if (field == null) flows.copyDetails(card) else flows.copyFieldAndSay(card, field, say)

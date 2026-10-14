@@ -43,6 +43,7 @@ import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.RadioRow
 import com.example.normpix.ui.components.RevealVisibility
 import com.example.normpix.ui.components.SheetHeader
+import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.SwitchRow
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppSpacing
@@ -79,7 +80,7 @@ fun FinanceSettingsPage() {
             } catch (e: FinanceValidationException) {
                 overlays.alert("Can't switch to this currency", e.message)
             } catch (_: Exception) {
-                snackbars.show("Couldn't change the currency. Try again.")
+                snackbars.show("Couldn't change the currency. Try again.", SnackbarKind.Error)
             }
         }
     }
@@ -96,7 +97,7 @@ fun FinanceSettingsPage() {
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                snackbars.show("Couldn't change the default account. Try again.")
+                snackbars.show("Couldn't change the default account. Try again.", SnackbarKind.Error)
             }
         }
     }

@@ -41,6 +41,7 @@ import com.example.normpix.ui.components.LocalPermissions
 import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.PermissionRequester
 import com.example.normpix.ui.components.SheetHeader
+import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.wallet.clipboard.CardCopySheet
@@ -77,7 +78,7 @@ class CardFlows(
     suspend fun addAndSave(tapped: PaymentCardInfo? = null): StoredCard? {
         val card = overlays.sheet<StoredCard> { dismiss -> AddCardSheet(initial = null, onDone = dismiss, tapped = tapped) } ?: return null
         if (!cards.add(card)) {
-            snackbars.show("Couldn't save to the card vault. Try again.")
+            snackbars.show("Couldn't save to the card vault. Try again.", SnackbarKind.Error)
             return null
         }
         haptics.success()
@@ -95,7 +96,7 @@ class CardFlows(
                 haptics.success()
                 snackbars.show("Card updated")
             } else {
-                snackbars.show("Couldn't update the card")
+                snackbars.show("Couldn't update the card", SnackbarKind.Error)
             }
         }
     }
@@ -112,14 +113,16 @@ class CardFlows(
     }
 
     /**
-     * [copyField] with the confirmation said by [say] - a snackbar unless told otherwise - for copies that don't happen
-     * inside the copy sheet. A snackbar sits under any open sheet, so a sheet that copies says it itself.
+     * [copyField] with the confirmation said by [say] - a snackbar when it is null - for copies that don't happen inside
+     * the copy sheet. A snackbar sits under any open sheet, so a sheet that copies says it itself.
      */
-    fun copyFieldAndSay(card: StoredCard, field: CardField, say: (String) -> Unit = { snackbars.show(it) }) {
+    fun copyFieldAndSay(card: StoredCard, field: CardField, say: ((String) -> Unit)? = null) {
         if (copyField(card, field)) {
-            say(copiedMessage(field, container.preferences.state.value.clipboardTimeout))
+            val message = copiedMessage(field, container.preferences.state.value.clipboardTimeout)
+            if (say != null) say(message) else snackbars.show(message)
         } else {
-            say("Couldn't copy to the clipboard.")
+            val message = "Couldn't copy to the clipboard."
+            if (say != null) say(message) else snackbars.show(message, SnackbarKind.Error)
         }
     }
 
@@ -169,7 +172,7 @@ class CardFlows(
             if (!confirmed) return@launch
             if (cards.delete(card.id)) {
                 haptics.success()
-                snackbars.show("Card deleted")
+                snackbars.show("Card deleted", SnackbarKind.Deleted)
             }
         }
     }

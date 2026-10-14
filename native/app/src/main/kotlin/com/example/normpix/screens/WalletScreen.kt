@@ -96,6 +96,7 @@ import com.example.normpix.ui.components.SectionHeader
 import com.example.normpix.ui.components.SectionSubheader
 import com.example.normpix.ui.components.RevealVisibility
 import com.example.normpix.ui.components.SheetHeader
+import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppIconSizes
 import com.example.normpix.ui.theme.AppLayout
@@ -172,7 +173,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
             if (container.lock.authenticate("Unlock your wallet")) {
                 autoPrompted = false
             } else {
-                snackbars.show("Couldn't unlock. Try again.")
+                snackbars.show("Couldn't unlock. Try again.", SnackbarKind.Error)
             }
         }
     }

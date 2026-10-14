@@ -76,7 +76,7 @@ object AppSpacing {
  * look: the shape communicates what kind of surface something is.
  */
 object AppRadius {
-    /** Extra-small - inner corners of grouped list segments, snackbars. */
+    /** Extra-small - inner corners of grouped list segments. */
     val xs = 4.dp
 
     /** Small - chips, tags, menus' inner items. */
@@ -88,7 +88,7 @@ object AppRadius {
     /** Large - cards and card faces. */
     val lg = 16.dp
 
-    /** Large-increased (M3 Expressive) - outer corners of grouped lists and the contextual status surface. */
+    /** Large-increased (M3 Expressive) - outer corners of grouped lists, the contextual status surface, snackbars. */
     val xl = 20.dp
 
     /** Extra-large - bottom sheets and dialogs. */

@@ -31,6 +31,7 @@ import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
+import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppSpacing
 import java.nio.ByteBuffer
@@ -86,7 +87,7 @@ fun DataSettingsPage() {
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                snackbars.show("Something went wrong. Nothing was changed.")
+                snackbars.show("Something went wrong. Nothing was changed.", SnackbarKind.Error)
             } finally {
                 busy = null
             }
@@ -102,7 +103,7 @@ fun DataSettingsPage() {
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            snackbars.show("Couldn't save the backup there. Try another location.")
+            snackbars.show("Couldn't save the backup there. Try another location.", SnackbarKind.Error)
             return@run
         }
         if (saved) {
@@ -120,7 +121,7 @@ fun DataSettingsPage() {
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            snackbars.show("Couldn't save the file there. Try another location.")
+            snackbars.show("Couldn't save the file there. Try another location.", SnackbarKind.Error)
             return@run
         }
         if (saved) {
@@ -195,7 +196,7 @@ fun DataSettingsPage() {
         )
         if (!confirmed) return@run
         finance.resetAll()
-        snackbars.show("Finance data deleted")
+        snackbars.show("Finance data deleted", SnackbarKind.Deleted)
     }
 
     @Composable

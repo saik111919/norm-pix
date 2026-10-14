@@ -24,6 +24,7 @@ import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalPermissions
 import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.PermissionRequester
+import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.wallet.StoredCard
 import java.time.Duration
@@ -173,7 +174,7 @@ class ReminderFlows(
             )
             if (!confirmed) return@launch
             controller.deleteReminder(reminder.id!!)
-            snackbars.show("Reminder deleted")
+            snackbars.show("Reminder deleted", SnackbarKind.Deleted)
         }
     }
 }

@@ -54,6 +54,7 @@ import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.SheetHeader
+import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.wallet.CardsController
@@ -232,7 +233,7 @@ class FinanceActions(
         if (!confirmed) return
         finance.deleteTransaction(transaction.id!!)
         haptics.success()
-        snackbars.show("Transaction deleted")
+        snackbars.show("Transaction deleted", SnackbarKind.Deleted)
     }
 
     // --------------------------------------------------------------- recurring
@@ -318,7 +319,7 @@ class FinanceActions(
                     if (!confirmed) return@launch
                     try {
                         finance.deleteAccount(account.id!!)
-                        snackbars.show("Account deleted")
+                        snackbars.show("Account deleted", SnackbarKind.Deleted)
                     } catch (e: FinanceConflictException) {
                         overlays.alert("Can't delete", e.message)
                     }
@@ -399,6 +400,7 @@ class FinanceActions(
                     haptics.success()
                     snackbars.show(
                         if (kept == 0) "${person.name} deleted" else "${person.name} deleted. $kept ${if (kept == 1) "expense" else "expenses"} kept.",
+                        SnackbarKind.Deleted,
                     )
                     onDeleted()
                 }
@@ -430,9 +432,11 @@ class FinanceActions(
         scope.launch {
             val added = finance.addSuggestedSubCategories()
             haptics.success()
-            snackbars.show(
-                if (added == 0) "You already have all the suggested sub-categories" else "Added $added sub-categor${if (added == 1) "y" else "ies"}",
-            )
+            if (added == 0) {
+                snackbars.show("You already have all the suggested sub-categories", SnackbarKind.Info)
+            } else {
+                snackbars.show("Added $added sub-categor${if (added == 1) "y" else "ies"}")
+            }
         }
     }
 
@@ -481,7 +485,7 @@ class FinanceActions(
                     if (!confirmed) return@launch
                     try {
                         finance.deleteCategory(category.id!!)
-                        snackbars.show("Category deleted")
+                        snackbars.show("Category deleted", SnackbarKind.Deleted)
                     } catch (e: FinanceConflictException) {
                         overlays.alert("Can't delete", e.message)
                     }

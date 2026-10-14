@@ -79,6 +79,7 @@ import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.reminders.LocalReminders
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalPermissions
+import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.rememberPermissionRequester
 import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.OverlayHost
@@ -240,7 +241,7 @@ fun ProvideAppEnvironment(container: AppContainer, content: @Composable () -> Un
     val scope = remember {
         CoroutineScope(
             SupervisorJob() + Dispatchers.Main.immediate + CoroutineExceptionHandler { _, _ ->
-                snackbarsRef[0]?.show("Something went wrong. Try again.")
+                snackbarsRef[0]?.show("Something went wrong. Try again.", SnackbarKind.Error)
             },
         )
     }

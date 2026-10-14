@@ -39,6 +39,7 @@ import com.example.normpix.finance.ui.rememberFinanceActions
 import com.example.normpix.navigation.LocalAppPreferences
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
+import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.theme.AppIconSizes
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
@@ -72,7 +73,7 @@ fun ReceiveSharedTransactions(inbox: SharedTextInbox, pictures: SharedPictureRea
             if (switch && preferences != null) {
                 preferences.setDummyDataEnabled(false)
             } else if (inbox.take(share)) {
-                snackbars.show("Shared transaction not added")
+                snackbars.show("Shared transaction not added", SnackbarKind.Info)
             }
             return@LaunchedEffect
         }

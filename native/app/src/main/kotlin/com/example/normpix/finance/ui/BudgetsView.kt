@@ -52,6 +52,7 @@ import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
+import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.StatusTag
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppSpacing
@@ -262,13 +263,11 @@ class BudgetActions(
             } else {
                 "${state.category(result.categoryId)?.name ?: "Category"} budget"
             }
-            snackbars.show(
-                if (result.amount == null) {
-                    "$target removed from ${monthLabel(month)} on"
-                } else {
-                    "$target set to ${state.money.format(result.amount, trimZeroFraction = true)}"
-                },
-            )
+            if (result.amount == null) {
+                snackbars.show("$target removed from ${monthLabel(month)} on", SnackbarKind.Deleted)
+            } else {
+                snackbars.show("$target set to ${state.money.format(result.amount, trimZeroFraction = true)}")
+            }
         }
     }
 }

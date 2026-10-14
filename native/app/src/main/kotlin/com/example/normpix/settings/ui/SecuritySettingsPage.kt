@@ -36,6 +36,7 @@ import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.RadioRow
+import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.StatusSurface
 import com.example.normpix.ui.components.SwitchRow
 import com.example.normpix.ui.components.rememberAppHaptics
@@ -90,7 +91,7 @@ fun SecuritySettingsPage() {
                 haptics.selection()
                 change()
             } else {
-                snackbars.show("Not changed - couldn't confirm it's you")
+                snackbars.show("Not changed - couldn't confirm it's you", SnackbarKind.Error)
             }
         }
     }
@@ -99,7 +100,7 @@ fun SecuritySettingsPage() {
     fun registerTag(then: () -> Unit = {}) {
         scope.launch {
             if (container.nfc.availability() != NfcAvailability.Available) {
-                snackbars.show("Turn on NFC in system settings to register a tag")
+                snackbars.show("Turn on NFC in system settings to register a tag", SnackbarKind.Warning)
                 return@launch
             }
             when (registerNfcTag(container, overlays)) {
@@ -109,11 +110,11 @@ fun SecuritySettingsPage() {
                     then()
                 }
                 TagRegistration.AlreadyRegistered -> {
-                    snackbars.show("That tag is already registered")
+                    snackbars.show("That tag is already registered", SnackbarKind.Info)
                     then()
                 }
-                TagRegistration.LimitReached -> snackbars.show("You can register up to ${container.registeredTags.limit} tags")
-                TagRegistration.Unavailable -> snackbars.show("Couldn't save the tag securely on this device")
+                TagRegistration.LimitReached -> snackbars.show("You can register up to ${container.registeredTags.limit} tags", SnackbarKind.Warning)
+                TagRegistration.Unavailable -> snackbars.show("Couldn't save the tag securely on this device", SnackbarKind.Error)
                 TagRegistration.ChangesEveryTap, null -> Unit
             }
         }
@@ -288,7 +289,7 @@ fun SecuritySettingsPage() {
                                                 withIdentity("Confirm it's you to remove your tags") {
                                                     container.registeredTags.clear()
                                                     preferences.setNfcRevealRegisteredOnly(false)
-                                                    snackbars.show("Registered tags removed")
+                                                    snackbars.show("Registered tags removed", SnackbarKind.Deleted)
                                                 }
                                             }
                                         }

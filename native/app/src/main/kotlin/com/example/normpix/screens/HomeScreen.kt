@@ -101,6 +101,7 @@ import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.SectionHeader
+import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.wallet.CardStack
@@ -243,7 +244,7 @@ internal fun CardsOnHome() {
                     leading = { LeadingIcon(Icons.Outlined.Lock) },
                     onClick = {
                         scope.launch {
-                            if (!container.lock.authenticate("Unlock your wallet")) snackbars.show("Couldn't unlock. Try again.")
+                            if (!container.lock.authenticate("Unlock your wallet")) snackbars.show("Couldn't unlock. Try again.", SnackbarKind.Error)
                         }
                     },
                 )

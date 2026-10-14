@@ -34,6 +34,7 @@ import com.example.normpix.ui.components.Banner
 import com.example.normpix.ui.components.BannerStack
 import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.SectionHeader
+import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.StatusAction
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppSpacing
@@ -149,7 +150,7 @@ private fun cardExpiryBanners(): List<Banner> {
     if (container.lock.isWalletLocked(prefs)) {
         val unlock: () -> Unit = {
             scope.launch {
-                if (!container.lock.authenticate("Unlock your wallet")) snackbars.show("Couldn't unlock. Try again.")
+                if (!container.lock.authenticate("Unlock your wallet")) snackbars.show("Couldn't unlock. Try again.", SnackbarKind.Error)
             }
         }
         return listOf(
