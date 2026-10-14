@@ -20,15 +20,26 @@ android {
     }
 
     signingConfigs {
-        // CI signs every release with one fixed key (the keystore comes from repository secrets), so each new APK installs
-        // over the last and keeps the user's data. Without NORMPIX_KEYSTORE_FILE a release is signed with the debug key.
-        val keystore = providers.environmentVariable("NORMPIX_KEYSTORE_FILE").orNull
+        // Debug and qa builds have a key of their own, kept here so every machine signs them alike. It is never the
+        // release key: a debug build can't install over the real app, nor a release over a debug build.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+        // Every release is signed with one fixed key, so each new APK installs over the last and keeps the user's data.
+        // CI reads it from repository secrets (the NORMPIX_* variables); a machine of its own from the normpix* Gradle
+        // properties (~/.gradle/gradle.properties). Without either, a release is signed with the debug key above.
+        fun setting(variable: String, property: String): String? =
+            providers.environmentVariable(variable).orNull ?: providers.gradleProperty(property).orNull
+        val keystore = setting("NORMPIX_KEYSTORE_FILE", "normpixKeystoreFile")
         if (keystore != null) {
             create("release") {
                 storeFile = file(keystore)
-                storePassword = providers.environmentVariable("NORMPIX_KEYSTORE_PASSWORD").orNull
-                keyAlias = providers.environmentVariable("NORMPIX_KEY_ALIAS").orNull
-                keyPassword = providers.environmentVariable("NORMPIX_KEY_PASSWORD").orNull
+                storePassword = setting("NORMPIX_KEYSTORE_PASSWORD", "normpixKeystorePassword")
+                keyAlias = setting("NORMPIX_KEY_ALIAS", "normpixKeyAlias")
+                keyPassword = setting("NORMPIX_KEY_PASSWORD", "normpixKeyPassword")
             }
         }
     }

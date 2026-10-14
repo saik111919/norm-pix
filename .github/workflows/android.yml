@@ -99,7 +99,7 @@ jobs:
             echo "NORMPIX_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
             echo "signed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning title=No release key::RELEASE_KEYSTORE_BASE64 is not set, so this APK is signed with a throwaway debug key and won't install over an earlier build. See README.md, Releases."
+            echo "::warning title=No release key::RELEASE_KEYSTORE_BASE64 is not set, so this APK is signed with the debug key and won't install over the app. See README.md, Signing key."
             echo "signed=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -113,6 +113,9 @@ jobs:
       - name: Collect the APK
         env:
           APK: ${{ steps.version.outputs.apk }}
+          SIGNED: ${{ steps.key.outputs.signed }}
+          # The release key's certificate (README.md, Signing key): the one the installed app carries.
+          RELEASE_CERT_SHA256: 96b30aae17b879b4854337043b458c2ce6f22ed67b7966384374e7bbb95a3488
         run: |
           built=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
           if [ -z "$built" ]; then
@@ -124,7 +127,13 @@ jobs:
           cd "$GITHUB_WORKSPACE/dist"
           sha256sum "$APK" > "$APK.sha256"
           apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
-          "$apksigner" verify --print-certs "$APK"
+          certs=$("$apksigner" verify --print-certs "$APK")
+          echo "$certs"
+          # An APK signed with any other key would not install over the app, so it is never published as the release.
+          if [ "$SIGNED" = "true" ] && ! echo "$certs" | grep -q "certificate SHA-256 digest: $RELEASE_CERT_SHA256"; then
+            echo "::error title=Wrong signing key::The APK is not signed with the release key ($RELEASE_CERT_SHA256). Check the RELEASE_KEYSTORE_* secrets."
+            exit 1
+          fi
 
       - name: Upload the APK
         uses: actions/upload-artifact@v4
@@ -166,7 +175,7 @@ jobs:
             notes="Signed with the NormPix release key: installs over the previous release and keeps your data."
           else
             notes="> [!WARNING]
-          > Signed with a throwaway debug key: it won't install over an earlier build. Set the release-key secrets (README.md, Releases) for updates that keep your data."
+          > Signed with the debug key: it won't install over the app. Set the release-key secrets (README.md, Signing key) for updates that keep your data."
           fi
           gh release create "$TAG" dist/* \
             --repo "$GITHUB_REPOSITORY" \

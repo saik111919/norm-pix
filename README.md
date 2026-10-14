@@ -35,7 +35,7 @@ cd native
 
 ### Signing key
 
-Android installs an update only if it is signed with the same key as the app already on the phone. Add these repository secrets (Settings → Secrets and variables → Actions) so every release is signed with one fixed key:
+Android installs an update only if it is signed with the same key as the app already on the phone. Every release is signed with one fixed key, the **release key**: the key the installed NormPix has always carried (it began as this machine's `~/.android/debug.keystore`; alias `androiddebugkey`, both passwords `android`; certificate SHA-256 `96:B3:0A:AE:…:5A:34:88`). CI reads it from these repository secrets (Settings → Secrets and variables → Actions):
 
 | Secret | Value |
 |---|---|
@@ -44,8 +44,17 @@ Android installs an update only if it is signed with the same key as the app alr
 | `RELEASE_KEY_ALIAS` | The key's alias |
 | `RELEASE_KEY_PASSWORD` | The key's password |
 
-Release builds made on your own machine are signed with its debug key (`~/.android/debug.keystore`; alias `androiddebugkey`, both passwords `android`). Using that keystore for the secrets lets the CI releases install over the app you already have, without losing its data. To use a new key instead, create one with `keytool -genkeypair -v -keystore release.jks -keyalg RSA -keysize 4096 -validity 10000 -alias normpix`; the first install signed with it needs the old app uninstalled.
+The release job checks the APK's certificate against the release key's fingerprint (`RELEASE_CERT_SHA256` in the workflow) and publishes nothing signed with any other key. Without the secrets the workflow still publishes, but each APK is signed with the debug key and won't install over the app.
 
-Without the secrets the workflow still publishes, but each APK is signed with a throwaway key and won't install over an earlier one.
+A release built on your own machine is signed with the same key when Gradle knows where it is, from `~/.gradle/gradle.properties`:
 
-The same variables sign a local release build: set `NORMPIX_KEYSTORE_FILE` (path to the keystore), `NORMPIX_KEYSTORE_PASSWORD`, `NORMPIX_KEY_ALIAS` and `NORMPIX_KEY_PASSWORD` before `./gradlew assembleRelease`.
+```properties
+normpixKeystoreFile=C:/Users/<you>/.android/normpix-release.jks
+normpixKeystorePassword=android
+normpixKeyAlias=androiddebugkey
+normpixKeyPassword=android
+```
+
+(or the environment variables `NORMPIX_KEYSTORE_FILE`, `NORMPIX_KEYSTORE_PASSWORD`, `NORMPIX_KEY_ALIAS`, `NORMPIX_KEY_PASSWORD`, which CI uses). Keep a backup of that keystore: without it no later APK can update the app.
+
+**Debug and qa builds** are signed with a key of their own, `native/app/debug.keystore` (in the repository; alias `androiddebugkey`, passwords `android`), so every machine signs them alike and they can never install over the real app. A debug build installed before this key existed has to be uninstalled once.
