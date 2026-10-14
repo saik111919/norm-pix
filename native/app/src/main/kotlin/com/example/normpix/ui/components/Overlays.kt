@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -160,28 +161,40 @@ class AppOverlays {
      * open at the time. It closes by itself when the work is done and gives back what it returned (or throws what it
      * threw). Cancel, a swipe, the scrim or back stop the work and give back null. A quick job keeps it up for
      * [LOADING_MIN_MS], so it doesn't flash.
+     *
+     * The work is the caller's, not the sheet's: however the sheet closes, the work has ended by the time this returns. So
+     * whatever the work left behind (a picture it copied) is all there for the caller to keep or clean up - even when
+     * the work finished in the moment between Cancel and the sheet going.
      */
-    suspend fun <T : Any> loading(title: String, message: String? = null, work: suspend () -> T): T? {
-        val outcome = sheet<Outcome<T>> { done ->
-            LoadingSheetContent(title, message, onCancel = { done(null) })
-            LaunchedEffect(Unit) {
-                val result = coroutineScope {
-                    val shown = launch { delay(LOADING_MIN_MS) }
-                    val result = try {
-                        Outcome(work())
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Outcome(failure = e)
-                    }
-                    shown.join()
-                    result
-                }
-                done(result)
+    suspend fun <T : Any> loading(title: String, message: String? = null, work: suspend () -> T): T? = coroutineScope {
+        val running = async {
+            try {
+                Outcome(work())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Outcome(failure = e)
             }
         }
+        val outcome = try {
+            sheet<Outcome<T>> { done ->
+                LoadingSheetContent(title, message, onCancel = { done(null) })
+                LaunchedEffect(Unit) {
+                    val result = coroutineScope {
+                        val shown = launch { delay(LOADING_MIN_MS) }
+                        val result = running.await()
+                        shown.join()
+                        result
+                    }
+                    done(result)
+                }
+            }
+        } finally {
+            // Closed by Cancel, a swipe, the scrim or back: stop the work. This scope waits for it to end either way.
+            running.cancel()
+        }
         outcome?.failure?.let { throw it }
-        return outcome?.value
+        outcome?.value
     }
 
     private class Outcome<T : Any>(val value: T? = null, val failure: Exception? = null)

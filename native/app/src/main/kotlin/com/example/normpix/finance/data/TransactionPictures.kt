@@ -47,31 +47,45 @@ class TransactionPictures(
     /**
      * The picture at [source] as a draft ready to attach, or null when it isn't a picture that can be opened. Reads it
      * once; [source] can be another app's (a shared or picked picture) or a capture target.
+     *
+     * Cancelled (the user stopped the reading), it leaves nothing behind: a draft it had already written is deleted, since
+     * nobody is given it to attach or to discard.
      */
-    suspend fun stage(source: Uri): File? = withContext(Dispatchers.IO) {
+    suspend fun stage(source: Uri): File? {
+        var written: File? = null
         try {
-            val decoded = decodePicture(context.contentResolver, source, MAX_SIDE) ?: return@withContext null
-            // A screenshot with transparency would turn black where it is see-through: put it on white first.
-            val opaque = if (decoded.hasAlpha()) onWhite(decoded).also { decoded.recycle() } else decoded
-            drafts.mkdirs()
-            val draft = File(drafts, "draft-${UUID.randomUUID()}.jpg")
-            try {
-                draft.outputStream().use { out ->
-                    if (!opaque.compress(Bitmap.CompressFormat.JPEG, QUALITY, out)) throw IOException("not encoded")
+            return withContext(Dispatchers.IO) {
+                try {
+                    val decoded = decodePicture(context.contentResolver, source, MAX_SIDE) ?: return@withContext null
+                    // A screenshot with transparency would turn black where it is see-through: put it on white first.
+                    val opaque = if (decoded.hasAlpha()) onWhite(decoded).also { decoded.recycle() } else decoded
+                    drafts.mkdirs()
+                    val draft = File(drafts, "draft-${UUID.randomUUID()}.jpg")
+                    try {
+                        draft.outputStream().use { out ->
+                            if (!opaque.compress(Bitmap.CompressFormat.JPEG, QUALITY, out)) throw IOException("not encoded")
+                        }
+                        written = draft
+                        draft
+                    } catch (e: Exception) {
+                        draft.delete()
+                        throw e
+                    } finally {
+                        opaque.recycle()
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                } catch (_: OutOfMemoryError) {
+                    null
                 }
-                draft
-            } catch (e: Exception) {
-                draft.delete()
-                throw e
-            } finally {
-                opaque.recycle()
             }
         } catch (e: CancellationException) {
+            // The copy runs to the end even when cancelled half way, and a cancelled withContext throws on its way back
+            // instead of handing over what it made: delete the draft here, or it waits a day for the sweep.
+            written?.delete()
             throw e
-        } catch (_: Exception) {
-            null
-        } catch (_: OutOfMemoryError) {
-            null
         }
     }
 
