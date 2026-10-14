@@ -22,14 +22,17 @@ enum class ThemeMode(val label: String) {
 /** Source of the color palette: the device's wallpaper-derived colors, or a curated [AccentColor]. */
 enum class ColorSource { System, Custom }
 
-/** Route transition style for pushed pages. */
+/**
+ * How the app moves between places: pushed pages, tabs, a screen's sections, and the back gesture's preview all follow
+ * the one chosen. [LinuxWindow] is the default.
+ */
 enum class PageAnimationType(val label: String, val description: String) {
+    LinuxWindow("Linux window", "Pages open like a window growing into focus and close quicker, shrinking away"),
     System("System default", "Native Android transition with predictive back preview"),
     SlideHorizontal("Slide", "New pages slide in from the side"),
     FadeThrough("Fade through", "Pages fade and scale gently into place"),
     SharedAxis("Shared axis", "Pages glide a short distance while crossfading"),
     ScaleAndFade("Scale and fade", "Pages grow into place as they fade in"),
-    LinuxWindow("Linux window", "Window naturally expands into focus on open and contracts away on close"),
 }
 
 /** Style and placement of a page's back button - and, in the floating style, of its whole header. */
@@ -112,7 +115,7 @@ enum class AccentColor(val seed: Color, val label: String) {
 
 /** How the Wallet lays out the accounts. */
 enum class AccountsLayout(val label: String, val description: String) {
-    Stack("Stacked cards", "One account in front as a card, the others tucked behind it. Swipe to bring the next one forward"),
+    Stack("Stacked cards", "One account in front as a card, the others tucked behind it. Swipe to bring the next one forward, hold to spread them out"),
     Cards("Card list", "Every account as a card, one under another"),
     Rows("Compact list", "One line for each account: bank, kind and balance"),
 }
@@ -149,7 +152,7 @@ data class AppPrefsState(
     val mode: ThemeMode = ThemeMode.System,
     val colorSource: ColorSource = ColorSource.System,
     val accent: AccentColor = AccentColor.Green,
-    val pageAnimation: PageAnimationType = PageAnimationType.System,
+    val pageAnimation: PageAnimationType = PageAnimationType.LinuxWindow,
     val walletCardActionStyle: WalletCardActionStyle = WalletCardActionStyle.Bar,
     val bankIconStyle: BankIconStyle = BankIconStyle.Full,
     val accountsLayout: AccountsLayout = AccountsLayout.Stack,

@@ -232,7 +232,8 @@ fun AppearanceSettingsPage() {
                 }
                 ListSection(
                     title = "Page transitions",
-                    footer = "When animations are turned off in system settings, pages change without animating.",
+                    footer = "Pages, tabs, a screen's sections and the back gesture's preview all move in the style you pick. " +
+                        "When animations are turned off in system settings, they change without animating.",
                     modifier = Modifier.selectableGroup(),
                 ) {
                     for (type in PageAnimationType.entries) {

@@ -67,6 +67,7 @@ import com.example.normpix.availability.ScheduledFeature
 import com.example.normpix.availability.rememberAvailability
 import com.example.normpix.availability.ui.FeatureUnavailablePanel
 import com.example.normpix.navigation.LocalAppContainer
+import com.example.normpix.navigation.LocalPageAnimation
 import com.example.normpix.ui.components.AppPrimaryTabs
 import com.example.normpix.ui.components.AppTab
 import com.example.normpix.ui.components.SheetHeader
@@ -205,10 +206,13 @@ private fun NfcExchangeContent(
         Spacer(Modifier.height(AppSpacing.lg))
 
         val reduced = rememberReducedMotion()
+        val style = LocalPageAnimation.current
         val shift = with(androidx.compose.ui.platform.LocalDensity.current) { 24.dp.roundToPx() }
         AnimatedContent(
             targetState = currentTab,
-            transitionSpec = { sectionTransition(forward = targetState.ordinal > initialState.ordinal, reduced = reduced, shiftPx = shift) },
+            transitionSpec = {
+                sectionTransition(forward = targetState.ordinal > initialState.ordinal, reduced = reduced, shiftPx = shift, style = style)
+            },
             label = "nfc_exchange_mode",
         ) { tab ->
             Column {

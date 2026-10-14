@@ -1,6 +1,7 @@
 package com.example.normpix.wallet
 
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
@@ -10,6 +11,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -129,15 +131,39 @@ class AccountCardsTest {
     }
 
     @Test
-    fun pressingAndHoldingTheFrontAccountOffersToManageIt() {
+    fun pressingAndHoldingTheStackSpreadsEveryAccountOut_asTheSavedCardsDo() {
         showWallet()
         val front = accountCards().single()
 
         compose.onNode(hasContentDescription(front)).performTouchInput { longClick() }
+        compose.waitUntil(10_000) { accountCards().size == 3 }
+
+        compose.onNodeWithContentDescription("Stack them again").performClick()
+        compose.waitUntil(10_000) { accountCards().size == 1 }
+        assertEquals(front, accountCards().single(), "the same account is in front again")
+    }
+
+    @Test
+    fun holdingASpreadOutAccountOffersToManageIt() {
+        showWallet()
+        compose.onNode(hasContentDescription(accountCards().single())).performTouchInput { longClick() }
+        compose.waitUntil(10_000) { accountCards().size == 3 }
+
+        card("HDFC Savings").performTouchInput { longClick() }
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Archive").fetchSemanticsNodes().isNotEmpty() }
 
         compose.onNodeWithText("Archive").assertIsDisplayed()
         compose.onNodeWithText("Delete").assertIsDisplayed()
+    }
+
+    @Test
+    fun theStackedFrontAccountCanStillBeManagedWithAScreenReader() {
+        showWallet()
+        val front = accountCards().single()
+
+        val actions = compose.onNode(hasContentDescription(front)).fetchSemanticsNode().config[SemanticsActions.CustomActions]
+        compose.runOnIdle { actions.single { it.label == "Manage account" }.action() }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Archive").fetchSemanticsNodes().isNotEmpty() }
     }
 
     // ------------------------------------------------------------ the card list

@@ -1,6 +1,24 @@
 package com.example.normpix.navigation
 
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.core.animateDp
+import androidx.compose.animation.core.snap
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NamedNavArgument
+import androidx.navigation.NavGraphBuilder
+import androidx.navigation.compose.composable
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
@@ -20,7 +38,9 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.navigation.NavBackStackEntry
 import com.example.normpix.settings.PageAnimationType
+import com.example.normpix.ui.theme.AppFrostedTokens
 import com.example.normpix.ui.theme.AppMotion
+import com.example.normpix.ui.theme.rememberReducedMotion
 
 /**
  * Route transitions for the user's [PageAnimationType] preference.
@@ -147,7 +167,7 @@ class PageTransitions(type: PageAnimationType, reduced: Boolean) {
 }
 
 /** The user's chosen [PageAnimationType], for the pieces that move pages without the navigation graph (tab switches). */
-val LocalPageAnimation = staticCompositionLocalOf { PageAnimationType.System }
+val LocalPageAnimation = staticCompositionLocalOf { PageAnimationType.LinuxWindow }
 
 /**
  * What a top-level tab does as it comes forward - the same family of motion as a pushed page in the user's
@@ -170,4 +190,50 @@ internal object TabMotion {
 
     fun origin(type: PageAnimationType): TransformOrigin =
         if (type == PageAnimationType.LinuxWindow) TransformOrigin(0.5f, 1f) else TransformOrigin.Center
+}
+
+/** How round a page's corners are while it moves: a window's, the same as a sheet's. */
+internal val PageCornerRadius = AppFrostedTokens.cornerRadius
+
+/** How quickly a leaving page's corners round: well inside the shortest exit, so it never makes one last longer. */
+private const val CORNERS_ROUND_MS = 90
+
+/** How quickly an arriving page's corners square up: inside the shortest arrival, for the same reason. */
+private const val CORNERS_SETTLE_MS = 180
+
+/**
+ * [composable], with the page drawn as a window while it moves ([PageWindow]).
+ */
+internal fun NavGraphBuilder.page(
+    route: String,
+    arguments: List<NamedNavArgument> = emptyList(),
+    content: @Composable (NavBackStackEntry) -> Unit,
+) = composable(route, arguments) { entry -> PageWindow { content(entry) } }
+
+/**
+ * A page drawn as a window while it moves: its corners round as soon as it starts to leave - or to be previewed by the
+ * back gesture, which plays the same transition under the finger - and square up again as it settles, so a page that
+ * shrinks, slides or grows never shows the hard corners of a cut-out rectangle. At rest it is a plain full-screen page.
+ */
+@OptIn(ExperimentalAnimationApi::class)
+@Composable
+private fun AnimatedVisibilityScope.PageWindow(content: @Composable () -> Unit) {
+    val reduced = rememberReducedMotion()
+    val radius by transition.animateDp(
+        transitionSpec = {
+            when {
+                reduced -> snap<Dp>()
+                targetState == EnterExitState.Visible -> tween<Dp>(CORNERS_SETTLE_MS, easing = AppMotion.standard)
+                else -> tween<Dp>(CORNERS_ROUND_MS, easing = AppMotion.standard)
+            }
+        },
+        label = "page_corners",
+    ) { state -> if (state == EnterExitState.Visible) 0.dp else PageCornerRadius }
+    Box(
+        Modifier.fillMaxSize().graphicsLayer {
+            val corner = radius.toPx()
+            clip = corner > 0f
+            shape = if (corner > 0f) RoundedCornerShape(corner) else RectangleShape
+        },
+    ) { content() }
 }

@@ -6,12 +6,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material.icons.outlined.TableView
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.SaveAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.data.FinanceBackupCodec
 import com.example.normpix.finance.data.FinanceSnapshot
 import com.example.normpix.finance.ui.LocalFinance
+import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.ui.components.AppLoadingIndicator
 import com.example.normpix.ui.components.AppSubPage
@@ -59,6 +62,8 @@ private const val PROBLEMS_SHOWN = 5
 @Composable
 fun DataSettingsPage() {
     val navigator = LocalNavigator.current
+    val container = LocalAppContainer.current
+    val prefs by container.preferences.state.collectAsState()
     val finance = LocalFinance.current
     val overlays = LocalOverlays.current
     val snackbars = LocalSnackbars.current
@@ -221,6 +226,23 @@ fun DataSettingsPage() {
     AppSubPage(title = "Data & backup", onBack = navigator::back) {
         item(key = "body") {
             Column(Modifier.padding(AppSpacing.page)) {
+                // First, because it decides which data everything under it works on.
+                ListSection(
+                    title = "Try NormPix",
+                    footer = "Your own data is kept aside, untouched, while sample data is on. Backing up, restoring and " +
+                        "erasing here then work on the sample set, which is thrown away when you turn it off.",
+                ) {
+                    item {
+                        SettingsSwitchRow(
+                            checked = prefs.dummyDataEnabled,
+                            onCheckedChange = { enabled -> container.preferences.setDummyDataEnabled(enabled) },
+                            headline = "Sample data",
+                            supporting = "Explore NormPix with realistic sample accounts and transactions",
+                            icon = Icons.Outlined.Science,
+                            hue = 6,
+                        )
+                    }
+                }
                 ListSection(
                     title = "Back up",
                     footer = "Backups include accounts, categories, transactions, budgets and recurring payments. " +

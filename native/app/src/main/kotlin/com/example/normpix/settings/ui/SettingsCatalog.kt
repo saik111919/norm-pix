@@ -41,7 +41,7 @@ data class SettingsEntry(
     val icon: ImageVector get() = if (special != null) SettingsCatalog.iconFor(special) else SettingsCatalog.iconFor(page)
 }
 
-enum class SettingsSpecial { Profile, Categories, People, Reset, About, DemoData, DummyData }
+enum class SettingsSpecial { Profile, Categories, People, Reset, About }
 
 object SettingsCatalog {
     val entries: List<SettingsEntry> = listOf(
@@ -67,8 +67,8 @@ object SettingsCatalog {
         SettingsEntry("Swipe actions", SettingsPage.Finance, listOf("swipe", "edit", "delete", "gesture", "list")),
         SettingsEntry("Financial year start", SettingsPage.Finance, listOf("financial year", "fiscal", "april", "january")),
 
-        // Data & Testing
-        SettingsEntry("Sample data", null, listOf("sample data", "dummy data", "test", "mock", "demo"), special = SettingsSpecial.DummyData),
+        // Data & backup
+        SettingsEntry("Sample data", SettingsPage.Data, listOf("sample data", "dummy data", "test", "mock", "demo")),
         SettingsEntry("Export backup", SettingsPage.Data, listOf("backup", "export", "json", "save")),
         SettingsEntry("Import backup", SettingsPage.Data, listOf("restore", "import", "load", "recover")),
 
@@ -117,7 +117,6 @@ object SettingsCatalog {
         SettingsSpecial.Profile -> Icons.Outlined.AccountCircle
         SettingsSpecial.Categories -> Icons.Outlined.Payments
         SettingsSpecial.People -> Icons.Outlined.Groups
-        SettingsSpecial.DummyData, SettingsSpecial.DemoData -> Icons.Outlined.Storage
         SettingsSpecial.Reset -> Icons.Outlined.DeleteOutline
         SettingsSpecial.About -> Icons.Outlined.Info
         null -> Icons.Outlined.Tune
@@ -141,7 +140,6 @@ fun rememberSettingsActivator(): SettingsActivator {
                 entry.special == SettingsSpecial.Profile -> navigator.openProfile()
                 entry.special == SettingsSpecial.Categories -> navigator.openCategories()
                 entry.special == SettingsSpecial.People -> navigator.openPeople()
-                entry.special == SettingsSpecial.DummyData -> navigator.openSettings()
                 entry.special == SettingsSpecial.Reset -> system.resetSettings()
                 entry.special == SettingsSpecial.About -> system.showAbout()
                 else -> navigator.openSettings()

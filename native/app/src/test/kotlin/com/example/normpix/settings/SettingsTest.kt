@@ -32,8 +32,12 @@ class SettingsCatalogTest {
     fun specialEntriesKeepTheirActions() {
         assertEquals(SettingsSpecial.Categories, SettingsCatalog.search("categories").single { it.title == "Categories" }.special)
         assertEquals(SettingsSpecial.Reset, SettingsCatalog.search("defaults").single().special)
+    }
+
+    @Test
+    fun sampleDataLivesUnderDataAndBackup() {
         for (query in listOf("dummy", "sample data", "demo")) {
-            assertEquals(SettingsSpecial.DummyData, SettingsCatalog.search(query).single().special, query)
+            assertEquals(SettingsPage.Data, SettingsCatalog.search(query).single().page, query)
         }
     }
 }

@@ -420,3 +420,24 @@ Asked for (2026-10-14): "When loading an image show proper loading sheet instead
   - `DummyDataTest` (+2): a sample set attaches and keeps pictures in its own folder, its sweep and reset leave the user's alone, and they go with it; left-over folders are cleared
 - [x] Checks (2026-10-14, `--no-build-cache`): full suite **1148 tests, 0 failures, 0 skipped** (152 fresh result files). Lint 0 errors; the one warning in a changed file (`UseKtx` on `Bitmap.createBitmap` in `TransactionPictures`) was already there. `assembleQa` builds
 - [ ] Not verified on a phone: ZD222PM2MR dropped off adb while the qa build was installing, and the emulators are off limits. To see there: the loading sheet over the form and for a share, Cancel, "Changes saved" after the form closes, the picture field with Sample data on, and a photo taken in sample mode
+
+## Phase 40 - Accounts spread out like cards, a month switcher in the app's family, sample data under Data & backup, motion that follows the chosen style
+
+- [x] Wallet > Accounts as a stack: press and hold spreads every account out as cards, with "Stack" to gather them, exactly as the saved cards do. Holding a spread-out account (or the only one) opens Manage; a screen reader keeps "Manage account" as an action on the stacked front account (`DeckStack.onItemLongPress`)
+- [x] Month switcher redesigned (`MonthSwitcher.kt`): one connected control in the split-button family - step back, the month (tonal, "This month" / "Last month" / "N months ago" under it, sliding in from the side it came from), step forward - 56dp like the search bar, inner corners opening under a finger. The month picker is a sheet (year stepper, 3x4 month tiles: the shown month a filled pill, this month ringed, future months off, "Go to this month"), not a dialog. History's "All time" is a pill beside it, and the all-time state is the same control (`AllTimeSwitcher`)
+- [x] Settings > Sample data moved to Settings > Data & backup (first section: it decides which data the backups and erase under it work on). Search finds it there
+- [x] Motion: Linux window is the default page style (listed first). Plans' sections and the NFC sheet's modes now follow the chosen style like tabs do (grow in place for window / scale / fade through, slide for the others); the style is provided above sheets too
+- [x] Preview: a pushed page is drawn as a window while it moves - its corners round as it starts to leave (or is previewed by the back gesture) and square up as it settles (`PageWindow`). The shell's own back preview rounds its corners, lifts with a shadow, shrinks towards where the chosen style closes a page, and eases back instead of snapping when the gesture is let go
+- [ ] Checks: CI (tests, lint, release build) on the PR; not tried on a phone
+
+## Backlog - to come back to
+
+- [ ] **Reminders that behave like Samsung Reminder** (asked 2026-10-14, parked until we return to it). Today a reminder
+  that comes due only posts a notification; the in-app `ReminderAlertScreen` shows only when NormPix is open or the
+  notification is tapped. To decide and build when we pick it up:
+  - Alarm-style alert when due: a full-screen intent over the lock screen with sound and vibration until acted on,
+    instead of a plain notification (needs `USE_FULL_SCREEN_INTENT`; on Android 14+ the user grants it in settings)
+  - Act from the alert itself: Complete, Snooze (with the usual choices), Edit, and a repeat moving on to its next time
+  - A reminder stays in front until it is handled (re-alerts, an ongoing notification) rather than one notification
+    that can be swiped away and forgotten
+  - Check against Samsung Reminder's own flow on a phone before designing the screens
