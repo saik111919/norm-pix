@@ -228,7 +228,7 @@ fun DataSettingsPage() {
             Column(Modifier.padding(AppSpacing.page)) {
                 // First, because it decides which data everything under it works on.
                 ListSection(
-                    title = "Sample data",
+                    title = "Try NormPix",
                     footer = "Your own data is kept aside, untouched, while sample data is on. Backing up, restoring and " +
                         "erasing here then work on the sample set, which is thrown away when you turn it off.",
                 ) {
