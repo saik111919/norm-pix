@@ -42,6 +42,18 @@ class PaymentAppReceiptsTest {
         assertEquals(PictureLine("Asha Verma", 213, 311, 510, 342), splitAtGaps(words).first())
     }
 
+    @Test
+    fun `a letter far from the text beside it is an avatar's or an icon's, a piece of its own`() {
+        // As the phone read PhonePe's "G" avatar beside "Google", and the icon before "Payment Details".
+        val avatar = listOf(line("G", 103, 326, 127, 356), line("Google", 211, 316, 348, 363))
+        assertEquals(listOf("G", "Google"), splitAtGaps(avatar).map { it.text })
+        val icon = listOf(line("E", 72, 506, 118, 550), line("Payment", 172, 506, 320, 550), line("Details", 334, 506, 450, 550))
+        assertEquals(listOf("E", "Payment Details"), splitAtGaps(icon).map { it.text })
+        // An initial in a name is a space away from it.
+        val initial = listOf(line("S", 211, 316, 232, 363), line("Suresh", 246, 316, 380, 363))
+        assertEquals(listOf("S Suresh"), splitAtGaps(initial).map { it.text })
+    }
+
     // ------------------------------------------------------------ layout
 
     @Test

@@ -46,9 +46,12 @@ internal object PhonePeReceipt : PaymentAppReceipt {
         """(?i)^\W*(?:transaction|payment|transfer)\s+(successful|success|completed|failed|declined|pending|processing|in\s+progress)\b.*""",
     )
 
-    /** The rows that start the receipt's next part: the other side's part ends at the first of them. */
+    /**
+     * The rows that start the receipt's next part: the other side's part ends at the first of them. Its icon can come out
+     * as a letter in front ("E Payment Details").
+     */
     private val partTitle = Regex(
-        """(?i)^\W*(?:(?:payment|transfer|transaction)\s+details|(?:phone\s?pe\s+)?transaction\s+id|message|banking\s+name|""" +
+        """(?i)^\W*(?:\p{Lu}\)?\s+)?(?:(?:payment|transfer|transaction)\s+details|(?:phone\s?pe\s+)?transaction\s+id|message|banking\s+name|""" +
             """(?:debited|paid)\s+from|credited\s+to|utr\b.*|powered\s+by)\W*$""",
     )
 
@@ -58,14 +61,12 @@ internal object PhonePeReceipt : PaymentAppReceipt {
     /** How many rows below "Debited from" belong to the account. */
     private const val ACCOUNT_REACH = 2
 
-    override fun signature(receipt: ReceiptLayout): Int {
-        var weight = 0
-        if (receipt.rows.any { brand.containsMatchIn(it.text) && !otherSidesApp.containsMatchIn(it.text) }) weight += 2
-        if (receipt.rows.any { row -> row.cells.any { ownId.matches(it.text.trim()) } }) weight += 2
-        if (receipt.rows.any { it.has(debitedFrom) || it.has(creditedTo) }) weight += 1
-        if (receipt.rows.any { it.has(paidTo) || it.has(receivedFrom) }) weight += 1
-        return weight
-    }
+    override val tells = listOf(
+        Tell(2) { receipt -> receipt.rows.any { brand.containsMatchIn(it.text) && !otherSidesApp.containsMatchIn(it.text) } },
+        Tell(2) { receipt -> receipt.rows.any { row -> row.cells.any { ownId.matches(it.text.trim()) } } },
+        Tell(1) { receipt -> receipt.rows.any { it.has(debitedFrom) || it.has(creditedTo) } },
+        Tell(1) { receipt -> receipt.rows.any { it.has(paidTo) || it.has(receivedFrom) } },
+    )
 
     override fun read(receipt: ReceiptLayout, ledger: CurrencySpec, today: LocalDate): ParsedTransactionDraft {
         val rows = receipt.rows

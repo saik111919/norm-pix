@@ -589,7 +589,9 @@ object SharedTransactionParser {
             """^[x*]+\d|\b[x*]{2,}\d|\d{6,}|""" +
             """^(?:transaction|payment|transfer|txn)(?:\s+(?:successful(?:ly)?|completed|failed|pending|processing|details?|summary|status|id))?$|""" +
             """^(?:successful(?:ly)?|completed|success|failed|pending|processing|amount|date|time|status|details?)$|^(?:paid|debited|credited|powered)\b|""" +
-            """\b(?:transaction|txn|utr|upi)\s*(?:id|ref|no|number)\b""",
+            """\b(?:transaction|txn|utr|upi)\s*(?:id|ref|no|number)\b|""" +
+            // "amount credited to recipient's bank": the other side's account, not their name.
+            """\b(?:recipient|receiver|beneficiary|payee)(?:'s|s'|’s)?\s+(?:bank|a/?c|account)\b""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -755,7 +757,8 @@ object SharedTransactionParser {
 
     private val isoDate = Regex("""(?<![\d/.-])(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)""")
     private val numericDate = Regex("""(?<![\d/.:,-])(\d{1,2})([-/.])(\d{1,2})\2(\d{4}|\d{2})(?![\d])""")
-    private val dayMonthDate = Regex("""(?<!\d)(\d{1,2})(?:st|nd|rd|th)?[\s-]?$MONTH(?:[\s,-]*(\d{4}|\d{2})(?![\d:]))?""", RegexOption.IGNORE_CASE)
+    // "14 Oct '26", "23rd sep'26": a two-digit year can have an apostrophe in front.
+    private val dayMonthDate = Regex("""(?<!\d)(\d{1,2})(?:st|nd|rd|th)?[\s-]?$MONTH(?:[\s,'’-]*(\d{4}|\d{2})(?![\d:]))?""", RegexOption.IGNORE_CASE)
     private val monthDayDate = Regex("""\b$MONTH\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})(?![\d:])""", RegexOption.IGNORE_CASE)
     private val relativeDay = Regex("""\b(today|yesterday)\b""", RegexOption.IGNORE_CASE)
     private val time = Regex("""(?<![\d.])(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([ap])\.?\s?m\b\.?)?""", RegexOption.IGNORE_CASE)

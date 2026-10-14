@@ -8,15 +8,19 @@ import java.time.LocalDate
 /**
  * A payment app whose receipt NormPix reads by that app's own layout - which line is the payee, which figure the amount,
  * which part the user's own account - instead of by the rules [SharedTransactionParser] applies to any message. Each app
- * has a reader of its own, in a file of its own ([PhonePeReceipt], [GooglePayReceipt]); another app is added by writing
- * its reader and listing it in [PaymentAppReceipts.readers].
+ * has a reader of its own ([PhonePeReceipt], [GooglePayReceipt], [MutualFundOrderReceipt]), or - where its layout is the
+ * common one - a [LabelledReceipt] that knows it by its [tells]; what they all share is in ReceiptVocabulary.kt. Another app
+ * is added by listing its reader in [PaymentAppReceipts.readers].
  */
 internal interface PaymentAppReceipt {
     /** The app's name, as the form says it: "Read as a PhonePe receipt". */
     val name: String
 
-    /** How strongly [receipt] looks like this app's: the weight of the tell-tale lines it has; 0 when it has none. */
-    fun signature(receipt: ReceiptLayout): Int
+    /** The lines that tell this app's receipt apart, each with how much it counts. */
+    val tells: List<Tell>
+
+    /** How strongly [receipt] looks like this app's: the weight of the [tells] it has; 0 when it has none. */
+    fun signature(receipt: ReceiptLayout): Int = tells.sumOf { if (it.found(receipt)) it.weight else 0 }
 
     /** What [receipt] says. A field it doesn't show, or shows in a way that can't be read with confidence, is null. */
     fun read(receipt: ReceiptLayout, ledger: CurrencySpec, today: LocalDate): ParsedTransactionDraft
@@ -25,7 +29,8 @@ internal interface PaymentAppReceipt {
 /** Reads what was shared: a payment app's receipt by that app's reader, anything else by [SharedTransactionParser]. */
 object PaymentAppReceipts {
     /** The apps with a reader of their own. */
-    internal val readers: List<PaymentAppReceipt> = listOf(PhonePeReceipt, GooglePayReceipt)
+    internal val readers: List<PaymentAppReceipt> =
+        listOf(PhonePeReceipt, GooglePayReceipt, CredReceipt, PayZappReceipt, SbiReceipt, MutualFundOrderReceipt) + BrandedReceipts.all
 
     /** Below this, a picture only looks a little like an app's receipt: one tell-tale line another app could print too. */
     private const val MIN_SIGNATURE = 2
@@ -110,7 +115,7 @@ class ReceiptLayout internal constructor(
     val text: String = rows.joinToString("\n") { it.text }
 
     /** Every piece on a line of its own, in reading order. */
-    val readingText: String get() = rows.flatMap { it.cells }.joinToString("\n") { it.text.trim() }
+    val readingText: String by lazy { rows.flatMap { it.cells }.joinToString("\n") { it.text.trim() } }
 
     /** The first row at or after [from] that [test] accepts, or -1. */
     internal fun indexOf(from: Int = 0, test: (ReceiptRow) -> Boolean): Int {
@@ -260,9 +265,9 @@ private val trailingFigure = Regex("""^(.*\S)\s+(\S+)$""")
 /** An avatar's initials beside a name ("UL"): not a name. */
 private val initials = Regex("""^\p{Lu}{1,2}$""")
 
-/** [piece] as a person's or business's name, or null: no UPI id, phone number, label or initials. */
+/** [piece] as a person's or business's name, or null: no UPI id, phone number ("+91 ••••• •6411"), label or initials. */
 internal fun nameIn(piece: String): String? {
-    if ('@' in piece || initials.matches(piece.trim())) return null
+    if ('@' in piece || initials.matches(piece.trim()) || piece.count(Char::isDigit) > piece.count(Char::isLetter)) return null
     return SharedTransactionParser.cleanName(piece)
 }
 
@@ -279,9 +284,9 @@ internal fun ReceiptLayout.nameBelow(heading: Int, reach: Int, stop: (ReceiptRow
     val below = rows.drop(heading + 1).take(reach).takeWhile { !stop(it) }
     for ((i, row) in below.withIndex()) {
         val (amount, rest) = amountAtEnd(row)
-        val at = rest.indexOfFirst { nameIn(it) != null }
+        val at = rest.indexOfFirst { partyName(it) != null }
         if (at < 0) continue
-        var name = nameIn(rest[at])!!
+        var name = partyName(rest[at])!!
         val first = row.cells.getOrNull(at)
         if (placed && first != null) {
             var last: PictureLine = first

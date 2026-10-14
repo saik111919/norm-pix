@@ -140,12 +140,25 @@ internal fun rupeeRestored(word: String, sure: List<Float>): String {
 /** Wider than this many times the text's height, a gap between two words parts them into pieces: a name, and far right, the amount. */
 private const val WORD_GAP = 2
 
+/**
+ * Wider than this many times the text's height, the gap after a lone letter or two parts them from what follows: an
+ * avatar's letter in its circle ("G", left of "Google") or an icon read as one ("E", left of "Payment Details") - where
+ * an initial in a name ("S Suresh") is a space away.
+ */
+private const val ICON_GAP = 1
+
+private val iconLetters = Regex("""^\p{L}{1,2}\)?$""")
+
 /** A recognized line's words as pieces: the words run together again, apart where a wide gap parts them. */
 internal fun splitAtGaps(words: List<PictureLine>): List<PictureLine> {
     val pieces = mutableListOf<MutableList<PictureLine>>()
     for (word in words.sortedBy { it.left }) {
-        val last = pieces.lastOrNull()?.last()
-        if (last != null && word.left - last.right <= WORD_GAP * maxOf(last.height, word.height)) pieces.last() += word else pieces += mutableListOf(word)
+        val piece = pieces.lastOrNull()
+        val last = piece?.last()
+        val height = maxOf(last?.height ?: 0, word.height)
+        val gap = word.left - (last?.right ?: 0)
+        val icon = piece?.size == 1 && iconLetters.matches(last!!.text) && gap > ICON_GAP * height
+        if (last != null && gap <= WORD_GAP * height && !icon) piece += word else pieces += mutableListOf(word)
     }
     return pieces.map { piece ->
         PictureLine(piece.joinToString(" ") { it.text }, piece.minOf { it.left }, piece.minOf { it.top }, piece.maxOf { it.right }, piece.maxOf { it.bottom })

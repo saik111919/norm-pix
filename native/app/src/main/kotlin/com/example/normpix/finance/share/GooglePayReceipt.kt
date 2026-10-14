@@ -66,15 +66,13 @@ internal object GooglePayReceipt : PaymentAppReceipt {
     /** How many rows below the title its amount is looked for, when no figure stands out by size. */
     private const val AMOUNT_REACH = 3
 
-    override fun signature(receipt: ReceiptLayout): Int {
-        var weight = 0
-        if (receipt.rows.any { googleId.containsMatchIn(it.text) }) weight += 2
-        if (receipt.rows.any { onGooglePay.containsMatchIn(it.text) }) weight += 2
-        if (receipt.rows.any { it.has(logo) }) weight += 2
-        if (receipt.name?.let { fileName.matches(it.trim()) } == true) weight += 3
-        if (receipt.rows.any { upiIdLabel.containsMatchIn(it.text) }) weight += 1
-        return weight
-    }
+    override val tells = listOf(
+        Tell.row(2, googleId),
+        Tell.row(2, onGooglePay),
+        Tell.piece(2, logo),
+        Tell(3) { receipt -> receipt.name?.let { fileName.matches(it.trim()) } == true },
+        Tell.row(1, upiIdLabel),
+    )
 
     override fun read(receipt: ReceiptLayout, ledger: CurrencySpec, today: LocalDate): ParsedTransactionDraft {
         val rows = receipt.rows

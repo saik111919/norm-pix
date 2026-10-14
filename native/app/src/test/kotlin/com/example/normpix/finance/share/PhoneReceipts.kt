@@ -147,6 +147,152 @@ object PhoneReceipts {
         line("G Pay", 514, 2684, 606, 2744),
     )
 
+    // ---------------------------------------------------------------- 2026-10-14
+    // Read on the same phone from the pictures the owner shared (some sent through WhatsApp, so smaller than a screenshot),
+    // with an avatar's or an icon's letter parted from the text beside it (splitAtGaps).
+
+    /** PhonePe's Share of ₹40 received from a person: their masked phone number below the name, and their banking name. */
+    val phonePeReceived = listOf(
+        line("Transaction Successful", 191, 37, 651, 70),
+        line("01:23 am on 11 Oct 2026", 191, 86, 556, 110),
+        line("Received from", 65, 207, 336, 238),
+        line("Ravi Kumar", 214, 310, 566, 348),
+        // "+91 ••••• •6411", the dots read as letters.
+        line("+91 ee 0000", 226, 369, 491, 400),
+        line("Banking Name", 65, 492, 280, 530),
+        line(": Ravi Kumar", 354, 493, 648, 529),
+        line("Transfer Details", 191, 629, 443, 667),
+        line("PhonePe Transaction ID", 66, 725, 423, 750),
+        line("T2610110123000000000005", 65, 782, 550, 810),
+        line("Credited to", 65, 867, 227, 892),
+        line("XXXXXXXXXX1234", 212, 943, 600, 973),
+        line("UTR: 323456789012", 214, 1031, 588, 1060),
+        line("Powered by", 452, 1177, 628, 1209),
+        line("UrIDAXIS BANK", 420, 1233, 676, 1265),
+        line("₹40", 938, 310, 1014, 342),
+        line("₹40", 941, 940, 1013, 972),
+    )
+
+    /** PhonePe's Share of a ₹89 UPI AutoPay to Google: the avatar's "G", an icon read as "E", the AUTOPAY badge. */
+    val phonePeAutopay = listOf(
+        line("Paid to", 65, 205, 189, 238),
+        line("Transaction Successful", 191, 37, 651, 70),
+        line("02:14 pm on 05 Oct 2026", 191, 86, 572, 115),
+        line("G", 103, 326, 127, 356),
+        line("Google", 211, 316, 348, 363),
+        line("E", 72, 506, 118, 550),
+        line("Payment Details", 172, 506, 450, 550),
+        line("Message", 66, 608, 200, 638),
+        line("MandateExecute", 66, 663, 354, 691),
+        line("PhonePe Transaction ID", 66, 748, 423, 773),
+        line("OLEX2610051414000000000006", 65, 805, 628, 833),
+        line("Debited from", 66, 890, 259, 915),
+        line("XXXXXXXXXX1234", 212, 966, 599, 996),
+        line("UTR: 423456789012", 213, 1054, 587, 1083),
+        line("Powered by", 453, 1225, 628, 1256),
+        line("UFIAUTOPAYAXIS BANK", 331, 1272, 750, 1314),
+        line("₹89", 940, 322, 1016, 354),
+        line("A) AUTOPAY", 908, 384, 1004, 403),
+        line("₹89", 944, 965, 1013, 996),
+    )
+
+    /** CRED's screen of a ₹43 payment to a person: the name at the top with no label, "SUCCESSFUL" in mixed case. */
+    val cred = listOf(
+        line("X", 78, 59, 95, 77),
+        // Read "743", the 7 scored 0.07.
+        line("₹43", 96, 390, 157, 418),
+        line("Imran Ali", 200, 238, 413, 257),
+        line("02:00pm, 23rd sep'26", 96, 447, 347, 470),
+        line("Paid via CRED", 115, 523, 269, 539),
+        line("HDFC BANK LTD", 200, 642, 374, 659),
+        line("XXXXXXXXXX1234 LIFI»", 200, 685, 500, 704),
+        line("Check balance", 250, 761, 403, 776),
+        line("payment initiated from your HDFC BANK LTD", 155, 870, 645, 890),
+        line("account", 154, 905, 244, 920),
+        line("bank details of imran ali have been", 155, 952, 637, 969),
+        line("authenticated by NPCI", 154, 988, 405, 1008),
+        line("amount deducted from Asha's bank", 154, 1037, 529, 1053),
+        line("amount credited to recipient's bank", 154, 1086, 550, 1105),
+        line("paying them again?", 59, 1234, 379, 1264),
+        line("send money to Imran Ali instantly", 58, 1287, 553, 1310),
+        line("Pay again", 123, 1381, 245, 1406),
+        line("SUcCEsSFUL", 585, 398, 692, 409),
+        line("CRED transaction ID", 58, 1551, 300, 1569),
+    )
+
+    /** PayZapp's receipt of a ₹5,679.30 credit card bill paid by UPI: the card's badge read as an "O", the id run on to a second line. */
+    val payZapp = listOf(
+        line("Paid to HDFC Bank Credit Card", 267, 476, 813, 505),
+        line("PAID TO", 244, 803, 342, 822),
+        line("₹5679.3", 374, 366, 705, 429),
+        line("30 SEPT 2026 , 02:31 PM", 317, 542, 763, 576),
+        line("HDFC Bank Credit CardO", 244, 851, 692, 881),
+        line("Transaction Details", 64, 1072, 454, 1106),
+        line("Paid using", 70, 1481, 245, 1519),
+        line("HDFC Bank Credit Card Number", 71, 1203, 631, 1232),
+        line("Transaction ID", 70, 1342, 318, 1370),
+        // The PayZapp logo.
+        line("EPAY", 149, 1617, 294, 1697),
+        line("APP", 251, 1616, 405, 1695),
+        line("XXXX-5511", 811, 1204, 1010, 1231),
+        line("txn_1a2b3c4d-1111-4222-a333-4", 420, 1332, 1011, 1363),
+        line("44455566677", 764, 1378, 1009, 1405),
+        line("HDFC BANK LTD UPI", 650, 1483, 1022, 1517),
+        line("POWERED BY", 726, 1627, 893, 1646),
+        line("UPID", 781, 1660, 879, 1706),
+        line("UNIFIED PAYMENTS INTERFACE", 745, 1705, 865, 1712),
+    )
+
+    /** SBI's transaction details of a ₹25 UPI payment: a table, then the narration over two lines. */
+    val sbi = listOf(
+        // The logo: its keyhole read as an "O".
+        line("OSBI", 114, 25, 224, 86),
+        line("Account Number:", 60, 250, 244, 273),
+        line("Amount:", 60, 311, 148, 330),
+        line("Mode of Transfer:", 62, 364, 250, 383),
+        line("Transaction Date:", 61, 417, 250, 435),
+        line("Narration", 57, 510, 153, 531),
+        line("TRANSACTION DETAILS", 499, 176, 733, 191),
+        line("XXXXXXX4321", 490, 255, 683, 275),
+        // "₹ 25.00", the ₹ read as a "z".
+        line("z 25.00", 490, 309, 583, 337),
+        line("UPI", 491, 366, 534, 386),
+        line("14/10/2026", 491, 412, 630, 433),
+        // "UPI/DR/" read as "UP/DRI".
+        line("TRANSFER TO XXXXXXXXX9876 UP/DRIXXXXXXXX0001/Kiran", 59, 561, 926, 582),
+        line("/SBIN/kirankumar/Payme", 58, 590, 371, 621),
+    )
+
+    /** Groww's order details of a ₹500 SIP instalment: a full screenshot, its status bar too. */
+    val mutualFundSip = listOf(
+        line("10:35 S 6 mins", 93, 46, 390, 80),
+        // Read "F500.00", the F scored 0.15.
+        line("₹500.00", 45, 446, 278, 493),
+        line("New SIP • Completed", 44, 531, 357, 560),
+        line("Order details", 179, 175, 420, 218),
+        line("Example Small Cap Fund Direct Growth >", 43, 618, 725, 648),
+        line("Completed on", 44, 794, 231, 823),
+        line("14 Oct '26 O", 46, 850, 282, 884),
+        line("Status", 42, 1037, 173, 1075),
+        line("Order approved by exchange", 150, 1140, 601, 1174),
+        line("08 Oct '26, 10:37 AM", 150, 1198, 431, 1225),
+        line("Auto-payment confirmed", 149, 1306, 549, 1339),
+        line("12 Oct '26, 12:00 AM", 151, 1364, 433, 1392),
+        line("Units allocated", 150, 1472, 387, 1498),
+        line("14 Oct '26, 1:28 PM", 154, 1527, 413, 1556),
+        line("Details", 45, 1740, 187, 1775),
+        line("Placed On", 44, 1839, 200, 1868),
+        line("Paid via", 45, 1932, 163, 1958),
+        line("Folio no", 61, 2016, 162, 2053),
+        line("HDFC BANK XX", 329, 1932, 571, 1958),
+        line("NAV date", 608, 795, 730, 817),
+        line("08 Oct '26 10:37 AM", 328, 1841, 645, 1867),
+        line("One-time", 197, 2216, 363, 2246),
+        line("3 !!! 67", 784, 44, 973, 81),
+        line("12 Oct '26", 622, 850, 795, 885),
+        line("Start SIP", 720, 2216, 880, 2246),
+    )
+
     /** [lines] with [text] read [asRead] instead: how a line came out before the ₹ was put back. */
     fun raw(lines: List<PictureLine>, text: String, asRead: String) = lines.map { if (it.text == text) it.copy(text = asRead) else it }
 }

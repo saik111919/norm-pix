@@ -53,6 +53,30 @@ class PhonePeReceiptTest {
     }
 
     @Test
+    fun `a real PhonePe receipt of money received names the sender, not their phone number below`() {
+        val d = read(PhoneReceipts.phonePeReceived)
+        assertEquals(TransactionType.Income, d.type)
+        assertEquals("Ravi Kumar", d.counterparty)
+        assertEquals(4_000L, d.amount)
+        assertEquals(LocalDate.of(2026, 10, 11), d.date)
+        assertEquals(LocalTime.of(1, 23), d.time)
+        assertEquals("323456789012", d.reference)
+        assertEquals(listOf(MaskedNumber("", "1234")), d.maskedNumbers)
+    }
+
+    @Test
+    fun `a real PhonePe AutoPay names the payee without its avatar's letter`() {
+        val d = read(PhoneReceipts.phonePeAutopay)
+        assertEquals(TransactionType.Expense, d.type)
+        assertEquals("Google", d.counterparty)
+        assertEquals(8_900L, d.amount)
+        assertEquals(LocalTime.of(14, 14), d.time)
+        assertEquals("423456789012", d.reference)
+        assertEquals(listOf(MaskedNumber("", "1234")), d.maskedNumbers)
+        assertEquals("XXXXXXXXXX1234", d.accountText)
+    }
+
+    @Test
     fun `the amount is what both of its places agree on`() {
         // A ₹ read as a "7" in one place only: the other place settles it.
         val oneMisread = PhoneReceipts.raw(PhoneReceipts.phonePeTen, "₹10", "710")
