@@ -39,7 +39,9 @@ jobs:
       - name: Unit and Robolectric UI tests
         run: ./gradlew testDebugUnitTest
 
+      # Runs even when a test fails, so one run reports both.
       - name: Android Lint
+        if: ${{ !cancelled() }}
         run: ./gradlew lintDebug
 
       - name: Upload test and lint reports
