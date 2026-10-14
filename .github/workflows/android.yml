@@ -1,0 +1,177 @@
+name: Android
+
+# Pull requests into main are tested and built; every push to main (and a manual run on main) also publishes the
+# release APK as a GitHub release.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # A newer push to a pull request replaces its running checks; runs on main always finish, so no release is skipped.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Tests and lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v5
+
+      # The Gradle daemon asks for JDK 25 (gradle/gradle-daemon-jvm.properties).
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit and Robolectric UI tests
+        run: ./gradlew testDebugUnitTest
+
+      # Runs even when a test fails, so one run reports both.
+      - name: Android Lint
+        if: ${{ !cancelled() }}
+        run: ./gradlew lintDebug
+
+      - name: Upload test and lint reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: |
+            native/app/build/reports/
+            native/app/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  build:
+    name: Release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: native
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      signed: ${{ steps.key.outputs.signed }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Read the app version
+        id: version
+        run: |
+          version=$(sed -n 's/^ *versionName = "\(.*\)"$/\1/p' app/build.gradle.kts)
+          if [ -z "$version" ]; then
+            echo "::error::versionName not found in app/build.gradle.kts"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version-build.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "apk=NormPix-$version-build.$GITHUB_RUN_NUMBER.apk" >> "$GITHUB_OUTPUT"
+
+      # Every release has to be signed with the same key, or a new APK won't install over the one on the phone.
+      - name: Load the signing key
+        id: key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+            echo "NORMPIX_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=No release key::RELEASE_KEYSTORE_BASE64 is not set, so this APK is signed with a throwaway debug key and won't install over an earlier build. See README.md, Releases."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the release APK
+        env:
+          NORMPIX_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          NORMPIX_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          NORMPIX_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+
+      - name: Collect the APK
+        env:
+          APK: ${{ steps.version.outputs.apk }}
+        run: |
+          built=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
+          if [ -z "$built" ]; then
+            echo "::error::No release APK was built"
+            exit 1
+          fi
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp "$built" "$GITHUB_WORKSPACE/dist/$APK"
+          cd "$GITHUB_WORKSPACE/dist"
+          sha256sum "$APK" > "$APK.sha256"
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
+          "$apksigner" verify --print-certs "$APK"
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: dist/
+          if-no-files-found: error
+
+      # R8's mapping turns an obfuscated stack trace from this build back into readable code.
+      - name: Upload the R8 mapping
+        uses: actions/upload-artifact@v4
+        with:
+          name: r8-mapping
+          path: native/app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: warn
+
+  release:
+    name: GitHub release
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk
+          path: dist
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.tag }}
+          VERSION: ${{ needs.build.outputs.version }}
+          SIGNED: ${{ needs.build.outputs.signed }}
+        run: |
+          if [ "$SIGNED" = "true" ]; then
+            notes="Signed with the NormPix release key: installs over the previous release and keeps your data."
+          else
+            notes="> [!WARNING]
+          > Signed with a throwaway debug key: it won't install over an earlier build. Set the release-key secrets (README.md, Releases) for updates that keep your data."
+          fi
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "NormPix $VERSION (build $GITHUB_RUN_NUMBER)" \
+            --notes "$notes" \
+            --generate-notes \
+            --latest

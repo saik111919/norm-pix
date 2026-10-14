@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SheetState
@@ -435,9 +434,9 @@ fun OverlayHost(overlays: AppOverlays) {
 }
 
 /**
- * Short, non-blocking confirmation of something that just happened ("Card
- * added"): a floating snackbar that clears the navigation bar and FAB, can be
- * swiped away, and is announced by TalkBack.
+ * Short, non-blocking news of something that just happened ("Card added", "Couldn't unlock"): an [AppSnackbar] that
+ * floats clear of the navigation bar, says with its badge what kind of news it is ([SnackbarKind]), can be swiped away,
+ * and is announced by TalkBack.
  *
  * Never under a sheet or a decision ([heldBack]), where the scrim would dim it and the sheet cover it. One asked for while
  * one is open - a form's "Changes saved", said as it closes - shows once it has gone. One already up when a sheet opens
@@ -452,11 +451,16 @@ class AppSnackbars(
     /** Space the current screen reserves at the bottom (e.g. the navigation bar). */
     var bottomInset: Dp by mutableStateOf(0.dp)
 
-    fun show(message: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
+    fun show(
+        message: String,
+        kind: SnackbarKind = SnackbarKind.Done,
+        actionLabel: String? = null,
+        onAction: (() -> Unit)? = null,
+    ) {
         scope.launch {
             snapshotFlow(heldBack).first { held -> !held }
             hostState.currentSnackbarData?.dismiss()
-            val result = hostState.showSnackbar(message, actionLabel, withDismissAction = false, duration = SnackbarDuration.Short)
+            val result = hostState.showSnackbar(AppSnackbarVisuals(message, actionLabel, kind))
             if (result == SnackbarResult.ActionPerformed) onAction?.invoke()
         }
     }
@@ -474,6 +478,7 @@ fun SnackbarOverlay(snackbars: AppSnackbars, modifier: Modifier = Modifier) {
         SnackbarHost(
             hostState = snackbars.hostState,
             modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars).padding(bottom = snackbars.bottomInset),
+            snackbar = { data -> AppSnackbar(data) },
         )
     }
 }

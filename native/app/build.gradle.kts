@@ -19,12 +19,26 @@ android {
         buildConfigField("boolean", "SECURE_WINDOW", "false")
     }
 
+    signingConfigs {
+        // CI signs every release with one fixed key (the keystore comes from repository secrets), so each new APK installs
+        // over the last and keeps the user's data. Without NORMPIX_KEYSTORE_FILE a release is signed with the debug key.
+        val keystore = providers.environmentVariable("NORMPIX_KEYSTORE_FILE").orNull
+        if (keystore != null) {
+            create("release") {
+                storeFile = file(keystore)
+                storePassword = providers.environmentVariable("NORMPIX_KEYSTORE_PASSWORD").orNull
+                keyAlias = providers.environmentVariable("NORMPIX_KEY_ALIAS").orNull
+                keyPassword = providers.environmentVariable("NORMPIX_KEY_PASSWORD").orNull
+            }
+        }
+    }
+
     buildTypes {
         release {
             // R8: drops unused code (most of the icon set, unused library classes) and the resources only it referenced.
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             buildConfigField("boolean", "SECURE_WINDOW", "true")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

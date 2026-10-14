@@ -57,6 +57,7 @@ import com.example.normpix.ui.components.AppEmptyState
 import com.example.normpix.ui.components.AppLoadingState
 import com.example.normpix.ui.components.BankGlyph
 import com.example.normpix.ui.components.LocalOverlays
+import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.StatusTag
 import com.example.normpix.ui.theme.AppIconSizes
 import com.example.normpix.ui.theme.AppRadius
@@ -129,7 +130,7 @@ fun ReminderAlertScreen(reminderId: Long) {
                 throw e
             } catch (_: Exception) {
                 busy = false
-                snackbars.show("Couldn't update the reminder. Try again.")
+                snackbars.show("Couldn't update the reminder. Try again.", SnackbarKind.Error)
                 return@launch
             }
             navigator.back()

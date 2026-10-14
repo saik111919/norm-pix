@@ -80,6 +80,7 @@ import com.example.normpix.ui.components.EditorSheet
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.RevealVisibility
+import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppIconSizes
 import com.example.normpix.ui.theme.AppMotion
@@ -259,7 +260,7 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
             )
             if (!confirmed) return@launch
             controller.deleteRecurringRule(existing!!.id!!)
-            snackbars.show("Recurring payment deleted")
+            snackbars.show("Recurring payment deleted", SnackbarKind.Deleted)
             onDone(true)
         }
     }

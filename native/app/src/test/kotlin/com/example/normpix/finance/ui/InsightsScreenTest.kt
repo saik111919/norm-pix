@@ -119,8 +119,8 @@ class InsightsScreenTest {
 
         compose.onNodeWithText("Spent this month").assertIsDisplayed()
         compose.onNodeWithText("₹1,500.00").assertIsDisplayed()
-        // 1,500 against 1,300 over the same days: more, by 200 - and the sentence says what it is compared with.
-        compose.onNodeWithText("₹200.00 more than the same days of ${monthLabel(lastMonth)}.").assertIsDisplayed()
+        // 1,500 against 1,300 over the same days: 15% more - and the hero's pill says what it is compared with.
+        compose.onNodeWithText("15% more than this time last month").assertIsDisplayed()
         compose.onNode(hasText("Amounts in Indian rupee", substring = true)).assertIsDisplayed()
     }
 
