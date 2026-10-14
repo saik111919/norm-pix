@@ -6,14 +6,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -36,7 +34,6 @@ import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.SearchField
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.AppTheme
-import kotlinx.coroutines.launch
 
 val SettingsGroups = SettingsPage.entries
 
@@ -65,7 +62,6 @@ fun SettingsScreen() {
     val finance = rememberFinanceState()
     val activator = rememberSettingsActivator()
     val system = rememberSettingsSystemActions()
-    val scope = rememberCoroutineScope()
     val is24Hour = android.text.format.DateFormat.is24HourFormat(androidx.compose.ui.platform.LocalContext.current)
     var query by rememberSaveable { mutableStateOf("") }
     val searching = query.isNotBlank()
@@ -125,20 +121,6 @@ fun SettingsScreen() {
                                 }
                             }
                         }
-                        ListSection(title = "Sample Data") {
-                            item {
-                                SettingsSwitchRow(
-                                    checked = prefs.dummyDataEnabled,
-                                    onCheckedChange = { enabled ->
-                                        scope.launch { container.preferences.setDummyDataEnabled(enabled) }
-                                    },
-                                    headline = "Sample data",
-                                    supporting = "Explore NormPix with realistic sample accounts and transactions without affecting your personal data.",
-                                    icon = Icons.Outlined.Science,
-                                    hue = 6,
-                                )
-                            }
-                        }
                         ListSection(title = "System") {
                             item {
                                 SettingsRow(
@@ -179,7 +161,7 @@ private fun summary(group: SettingsPage, prefs: AppPrefsState, finance: FinanceS
         finance.defaultAccount?.let { add("Default: ${it.name}") }
         add("Categories")
     }.joinToString(" · ")
-    SettingsPage.Data -> "Export, restore, erase"
+    SettingsPage.Data -> if (prefs.dummyDataEnabled) "Sample data on · Export, restore, erase" else "Sample data, export, restore, erase"
     SettingsPage.Security ->
         if (prefs.walletLockEnabled) {
             "Locked · ${if (prefs.appLockScope == AppLockScope.EntireApp) "Entire app" else "Wallet only"}"

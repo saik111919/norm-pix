@@ -171,7 +171,7 @@ class ShellNavigationTest {
         compose.onNodeWithText("Cash").assertIsDisplayed()
         assertTrue(compose.onAllNodesWithText("HDFC Savings").fetchSemanticsNodes().isEmpty())
 
-        // Turn Dummy data on from Settings; you stay on Settings while the sample set loads.
+        // Turn Dummy data on from Settings > Data & backup; you stay on that page while the sample set loads.
         setDummyData(on = true)
         assertTrue(container.preferences.state.value.dummyDataEnabled)
 
@@ -203,6 +203,8 @@ class ShellNavigationTest {
         compose.waitForIdle()
         compose.onNodeWithContentDescription("Settings").performClick()
         compose.waitForIdle()
+        compose.onNodeWithText("Data & Backup").performScrollTo().performClick()
+        compose.waitForIdle()
         compose.onNodeWithText("Sample data").performScrollTo().performClick()
         // The swap rebuilds the screens under Settings; wait for the page to settle back.
         compose.waitUntil(timeoutMillis = 10_000) {
@@ -213,5 +215,8 @@ class ShellNavigationTest {
             compose.onNodeWithText("Sample data").performClick()
             compose.waitForIdle()
         }
+        // Back from Data & backup to Settings, where the caller goes on.
+        compose.onNode(hasContentDescription("Back", substring = true)).performClick()
+        compose.waitForIdle()
     }
 }

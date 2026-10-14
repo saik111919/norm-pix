@@ -40,7 +40,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +49,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -86,6 +87,7 @@ import com.example.normpix.ui.theme.rememberWindowSize
 import com.example.normpix.wallet.rememberCardFlows
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 val AppDestination.icon: ImageVector
     get() = when (this) {
@@ -107,6 +109,12 @@ val AppDestination.selectedIcon: ImageVector
 private const val BACK_SCALE = 0.05f
 private const val BACK_DIM = 0.25f
 
+/** How far into the back gesture (0..1) the previewed content's corners are fully round. */
+private const val BACK_CORNERS_BY = 0.25f
+
+/** The shadow under the previewed content at the end of the gesture. */
+private val BACK_LIFT = 8.dp
+
 /**
  * The app frame: the top-level destinations with a floating navigation bar on
  * phones and a navigation rail on larger windows - each also holding the one
@@ -123,6 +131,7 @@ fun AppShell(
 ) {
     val navigator = LocalNavigator.current
     val snackbars = LocalSnackbars.current
+    val pageAnimation = LocalPageAnimation.current
 
     val current = AppDestination.entries[shell.selected.coerceIn(0, AppDestination.entries.lastIndex)]
     val size = rememberWindowSize()
@@ -146,7 +155,8 @@ fun AppShell(
     // The gesture tracks the system predictive-back progress and scales the content back slightly;
     // releasing early animates back to rest without navigating.
     val tabHistory = remember { mutableStateListOf(shell.selected) }
-    val backProgressState = remember { mutableFloatStateOf(0f) }
+    val backProgress = remember { Animatable(0f) }
+    val backSettle = tween<Float>(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.standard)
 
     // Inside Plans back steps up first - section to Budgets, then to the transaction history - and only then
     // falls back to the previous tab. The steps live on ShellState so the rule has one definition.
@@ -162,10 +172,10 @@ fun AppShell(
     PredictiveBackHandler(enabled = handlesBack) { progress ->
         try {
             progress.collect { backEvent ->
-                backProgressState.floatValue = backEvent.progress
+                backProgress.snapTo(backEvent.progress)
             }
-            // Gesture completed: carry out the navigation.
-            backProgressState.floatValue = 0f
+            // Gesture completed: carry out the navigation, while the content eases back to full size under it.
+            scope.launch { backProgress.animateTo(0f, backSettle) }
             if (canClimbWithinTab()) {
                 climbWithinTab()
             } else if (hasHistory) {
@@ -173,8 +183,8 @@ fun AppShell(
                 shell.selected = tabHistory.last()
             }
         } catch (_: CancellationException) {
-            // Finger dragged back to the edge and released: cancel cleanly.
-            backProgressState.floatValue = 0f
+            // Finger dragged back to the edge and released: the content eases back to rest instead of jumping.
+            scope.launch { backProgress.animateTo(0f, backSettle) }
         }
     }
 
@@ -358,11 +368,19 @@ fun AppShell(
                 .fillMaxSize()
                 .nestedScroll(barScroll.connection)
                 .graphicsLayer {
-                    // Back gesture feedback: content shrinks and dims as you pull.
-                    val scale = 1f - backProgressState.floatValue * BACK_SCALE
+                    // Back gesture feedback: the content is previewed as a window, in the chosen style - it shrinks
+                    // (towards where that style closes a page) and dims as you pull, its corners rounding and a shadow
+                    // lifting it off the background, as a pushed page's do.
+                    val progress = backProgress.value
+                    val scale = 1f - progress * BACK_SCALE
                     scaleX = scale
                     scaleY = scale
-                    alpha = 1f - backProgressState.floatValue * BACK_DIM
+                    alpha = 1f - progress * BACK_DIM
+                    transformOrigin = TabMotion.origin(pageAnimation)
+                    val corner = PageCornerRadius.toPx() * (progress / BACK_CORNERS_BY).coerceAtMost(1f)
+                    clip = corner > 0f
+                    shape = if (corner > 0f) RoundedCornerShape(corner) else RectangleShape
+                    shadowElevation = progress * BACK_LIFT.toPx()
                 },
         ) {
             if (visited.contains(0)) {

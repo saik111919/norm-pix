@@ -3,8 +3,6 @@ package com.example.normpix.finance.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,34 +16,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.rounded.ArrowDropDown
-import androidx.compose.material.icons.rounded.ChevronLeft
-import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
-import com.example.normpix.navigation.LocalAppPreferences
 import com.example.normpix.ui.components.AppLinearProgress
-import com.example.normpix.ui.components.DialogBackdropBlur
-import com.example.normpix.ui.components.rememberDialogSurface
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -60,7 +44,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,112 +52,12 @@ import com.example.normpix.finance.domain.BudgetStatus
 import com.example.normpix.finance.domain.CurrencySpec
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.MoneyFormatter
-import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.pathName
-import com.example.normpix.ui.components.rememberAppHaptics
-import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.StatusTone
 import com.example.normpix.ui.theme.resolve
 import kotlin.math.roundToInt
-
-/**
- * "< September 2026 >" - steps between months; tapping the label opens a
- * month picker. [latest] caps forward navigation. [trailing] sits after the
- * arrows (the history's way out of the month into everything).
- */
-@Composable
-fun MonthSwitcher(
-    month: MonthKey,
-    latest: MonthKey,
-    onChanged: (MonthKey) -> Unit,
-    modifier: Modifier = Modifier,
-    trailing: (@Composable () -> Unit)? = null,
-) {
-    val haptics = rememberAppHaptics()
-    var picking by remember { mutableStateOf(false) }
-    val go = { next: MonthKey ->
-        haptics.selection()
-        onChanged(next)
-    }
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = { go(month.previous) }) {
-            Icon(Icons.Rounded.ChevronLeft, contentDescription = "Previous month")
-        }
-        TextButton(
-            onClick = { picking = true },
-            modifier = Modifier
-                .weight(1f)
-                .semantics { contentDescription = "${monthLabelFull(month)}, choose month" },
-        ) {
-            Text(monthLabel(month), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Icon(Icons.Rounded.ArrowDropDown, contentDescription = null)
-        }
-        IconButton(onClick = { go(month.next) }, enabled = month.isBefore(latest)) {
-            Icon(Icons.Rounded.ChevronRight, contentDescription = "Next month")
-        }
-        trailing?.invoke()
-    }
-    if (picking) {
-        MonthPickerDialog(
-            initial = month,
-            latest = latest,
-            onPicked = { picked ->
-                picking = false
-                if (picked != month) go(picked)
-            },
-            onDismiss = { picking = false },
-        )
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun MonthPickerDialog(initial: MonthKey, latest: MonthKey, onPicked: (MonthKey) -> Unit, onDismiss: () -> Unit) {
-    var year by remember { mutableIntStateOf(initial.year) }
-    val preferences = LocalAppPreferences.current
-    val prefsState = preferences?.state?.collectAsState()
-    val sheetBlurEnabled = prefsState?.value?.sheetBlurEnabled ?: true
-    val surface = rememberDialogSurface(enabled = sheetBlurEnabled)
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = surface.container,
-        shape = surface.shape,
-        title = {
-            DialogBackdropBlur(surface.blurBehind)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { year-- }) { Icon(Icons.Rounded.ChevronLeft, contentDescription = "Previous year") }
-                Text("$year", Modifier.weight(1f), textAlign = TextAlign.Center)
-                IconButton(onClick = { year++ }, enabled = year < latest.year) {
-                    Icon(Icons.Rounded.ChevronRight, contentDescription = "Next year")
-                }
-            }
-        },
-        text = {
-            FlowRow(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm, Alignment.CenterHorizontally),
-                verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
-            ) {
-                for (m in 1..12) {
-                    val key = MonthKey(year, m)
-                    val enabled = !key.isAfter(latest)
-                    if (key == initial) {
-                        Button(onClick = { onPicked(key) }, modifier = Modifier.width(88.dp)) { Text(monthShort(key)) }
-                    } else {
-                        TextButton(onClick = { onPicked(key) }, enabled = enabled, modifier = Modifier.width(88.dp)) {
-                            Text(monthShort(key))
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
-}
 
 /**
  * One transaction in a list: what (category or payee), where (account), and

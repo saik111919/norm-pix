@@ -357,8 +357,9 @@ fun AccountCardView(
 }
 
 /**
- * The accounts as a stack, as Home's cards are: the first in front, printed in full, the rest a hair of colour behind it.
- * A tap on the front one calls [onOpen], a press and hold [onManage], a swipe brings the next forward (see [DeckStack]).
+ * The accounts as a stack, as the saved cards are: the first in front, printed in full, the rest a hair of colour behind it.
+ * A tap on the front one calls [onOpen], a swipe brings the next forward, and a press and hold spreads them all out as
+ * cards, just as the saved cards do; holding one of those (or the only account) calls [onManage] (see [DeckStack]).
  */
 @Composable
 fun AccountStack(
@@ -377,8 +378,8 @@ fun AccountStack(
         },
         onOpen = onOpen,
         modifier = modifier,
-        onLongPress = onManage,
-        longPressLabel = "Manage account",
+        onItemLongPress = onManage,
+        itemLongPressLabel = "Manage account",
         plate = { AccountCardPlate(it) },
         face = { AccountCardFacePreview(it, bankIconStyle = bankIconStyle) },
     )

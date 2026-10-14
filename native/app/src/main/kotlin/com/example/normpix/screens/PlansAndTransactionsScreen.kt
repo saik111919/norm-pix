@@ -1,17 +1,6 @@
 package com.example.normpix.screens
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +22,7 @@ import com.example.normpix.finance.ui.BudgetsView
 import com.example.normpix.finance.ui.RecurringView
 import com.example.normpix.finance.ui.TransactionHistory
 import com.example.normpix.navigation.AppDestination
+import com.example.normpix.navigation.LocalPageAnimation
 import com.example.normpix.navigation.LocalShellState
 import com.example.normpix.navigation.PlanSection
 import com.example.normpix.navigation.PlansAndTransactionsTab
@@ -46,8 +36,8 @@ import com.example.normpix.ui.components.AppPrimaryTabs
 import com.example.normpix.ui.components.AppSecondaryTabs
 import com.example.normpix.ui.components.AppTab
 import com.example.normpix.ui.components.RevealVisibility
+import com.example.normpix.ui.components.sectionTransition
 import com.example.normpix.ui.theme.AppLayout
-import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.rememberReducedMotion
 
@@ -203,26 +193,18 @@ private fun Plans(listState: LazyListState, switch: @Composable () -> Unit) {
     }
 }
 
-/** The section's content; moving to a later section brings it in from the right, to an earlier one from the left. */
+/**
+ * The section's content, arriving in the user's page style ([sectionTransition]): in the sliding styles a later section
+ * comes in from the right and an earlier one from the left; in the others it grows into place.
+ */
 @Composable
 private fun PlanSectionContent(section: PlanSection) {
     val reduced = rememberReducedMotion()
+    val style = LocalPageAnimation.current
     val shift = with(LocalDensity.current) { SectionShift.roundToPx() }
     AnimatedContent(
         targetState = section,
-        transitionSpec = {
-            if (reduced) {
-                EnterTransition.None togetherWith ExitTransition.None
-            } else {
-                val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                val enter = fadeIn(tween(AppMotion.SHORT_MS, delayMillis = 60, easing = AppMotion.enter)) +
-                    slideInHorizontally(tween(AppMotion.SHORT_MS, delayMillis = 60, easing = AppMotion.enter)) { direction * shift }
-                val exit = fadeOut(tween(SECTION_EXIT_MS, easing = LinearEasing)) +
-                    slideOutHorizontally(tween(SECTION_EXIT_MS, easing = LinearEasing)) { -direction * shift }
-                // The list item takes the new section's height at once; the old one just slides away.
-                (enter togetherWith exit) using SizeTransform(clip = false) { _, _ -> snap() }
-            }
-        },
+        transitionSpec = { sectionTransition(forward = targetState.ordinal > initialState.ordinal, reduced = reduced, shiftPx = shift, style = style) },
         label = "plan_section",
     ) { target ->
         Column {
@@ -236,4 +218,3 @@ private fun PlanSectionContent(section: PlanSection) {
 }
 
 private val SectionShift = 24.dp
-private const val SECTION_EXIT_MS = 90

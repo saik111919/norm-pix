@@ -15,7 +15,6 @@ import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -99,11 +98,16 @@ private const val DRAG_LEAN = 8f
  * button above them that gathers them into the stack again. A caller with a long press of its own ([onLongPress], called with the
  * front item and offered to a screen reader as [longPressLabel]) keeps it, and the stack does not unfold.
  *
+ * [onItemLongPress] is a long press on one item that leaves the unfolding alone: it is what holding an item laid out in the
+ * column does (and holding the only item, which has nothing to unfold), offered to a screen reader as [itemLongPressLabel] -
+ * on the front item of the stack too, as an action.
+ *
  * An item with buttons of its own passes them as [extraActions]: its inner buttons are hidden from a screen reader (the item is
  * one thing to read), so the actions are offered on the item instead.
  *
  * @param shape the outline of an item, so the darkening of the ones behind follows its corners.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun <T> DeckStack(
     items: List<T>,
@@ -115,6 +119,8 @@ fun <T> DeckStack(
     maxWidth: Dp = 440.dp,
     onLongPress: ((T) -> Unit)? = null,
     longPressLabel: String = "Shows more options",
+    onItemLongPress: ((T) -> Unit)? = null,
+    itemLongPressLabel: String = "Shows more options",
     extraActions: (T) -> List<CustomAccessibilityAction> = { emptyList() },
     plate: @Composable (T) -> Unit,
     face: @Composable (T) -> Unit,
@@ -125,11 +131,21 @@ fun <T> DeckStack(
     var unfolded by remember { mutableStateOf(false) }
     val count = items.size
     val unfolds = onLongPress == null && count > 1
-    val holdLabel = if (unfolds) "Shows all of them" else longPressLabel
+    val holdLabel = when {
+        onLongPress != null -> longPressLabel
+        unfolds -> "Shows all of them"
+        else -> itemLongPressLabel
+    }
     val hold: ((T) -> Unit)? = onLongPress ?: if (unfolds) ({ _: T ->
         haptics.strong()
         unfolded = true
-    }) else null
+    }) else onItemLongPress
+    // Holding the front item unfolds the stack, so what holding one item does is offered to a screen reader as an action.
+    fun stackedActions(item: T): List<CustomAccessibilityAction> {
+        val extra = extraActions(item)
+        val press = onItemLongPress ?: return extra
+        return if (unfolds) extra + CustomAccessibilityAction(itemLongPressLabel) { press(item); true } else extra
+    }
     // Until one is brought forward - or once the one in front is gone - the first item leads.
     val front = items.indexOfFirst { itemKey(it) == frontKey }.coerceAtLeast(0)
 
@@ -164,14 +180,21 @@ fun <T> DeckStack(
                         key(itemKey(item)) {
                             val spoken = description(item, index, count)
                             val extra = extraActions(item)
+                            val press = onItemLongPress
                             Box(
                                 Modifier
                                     .fillMaxWidth()
-                                    .clickable(onClickLabel = "Opens the details") { onOpen(item) }
+                                    .combinedClickable(
+                                        onClickLabel = "Opens the details",
+                                        onLongClickLabel = if (press != null) itemLongPressLabel else null,
+                                        onLongClick = press?.let { held -> { held(item) } },
+                                        onClick = { onOpen(item) },
+                                    )
                                     .clearAndSetSemantics {
                                         contentDescription = spoken
                                         role = Role.Button
                                         onClick(label = "Opens the details") { onOpen(item); true }
+                                        if (press != null) onLongClick(label = itemLongPressLabel) { press(item); true }
                                         if (extra.isNotEmpty()) customActions = extra
                                     },
                             ) { face(item) }
@@ -192,7 +215,7 @@ fun <T> DeckStack(
                                 onOpen = { onOpen(item) },
                                 onLongPress = hold?.let { press -> { press(item) } },
                                 longPressLabel = holdLabel,
-                                extra = extraActions(item),
+                                extra = stackedActions(item),
                                 onBringForward = { bringForward(index) },
                                 onNext = { bringForward(front + 1) },
                                 onPrevious = { bringForward(front - 1) },

@@ -38,7 +38,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -329,14 +328,14 @@ fun TransactionHistory(
                 )
                 if (!searching && filters.range == null) {
                     if (showAll) {
-                        AllTimeBar(onByMonth = { setAllTime(false) }, modifier = Modifier.padding(top = AppSpacing.sm))
+                        AllTimeSwitcher(onByMonth = { setAllTime(false) }, modifier = Modifier.padding(top = AppSpacing.sm))
                     } else {
                         MonthSwitcher(
                             month = month,
                             latest = MonthKey.of(today),
                             onChanged = { month = it },
                             modifier = Modifier.padding(top = AppSpacing.sm),
-                            trailing = { TextButton(onClick = { setAllTime(true) }) { Text("All time") } },
+                            trailing = { MonthScopeButton("All time", onClick = { setAllTime(true) }) },
                         )
                     }
                 } else {
@@ -428,15 +427,6 @@ fun TransactionHistory(
             }
         }
     }
-    }
-}
-
-/** What replaces the month switcher while every month is shown: where you are, and the way back to one month. */
-@Composable
-private fun AllTimeBar(onByMonth: () -> Unit, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth().padding(start = AppSpacing.md), verticalAlignment = Alignment.CenterVertically) {
-        Text("All time", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).semantics { heading() })
-        TextButton(onClick = onByMonth) { Text("By month") }
     }
 }
 

@@ -15,9 +15,12 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import com.example.normpix.navigation.TabMotion
+import com.example.normpix.settings.PageAnimationType
 import com.example.normpix.ui.theme.AppMotion
 
 /**
@@ -37,13 +40,25 @@ fun RevealVisibility(visible: Boolean, modifier: Modifier = Modifier, content: @
 }
 
 /**
- * The transition between sibling sections of one screen (Plans' sections, the NFC Receive / Share modes):
- * the old one fades and slides a short way off, the new one fades and slides in from the side it sits on
- * - [forward] meaning "to a later tab". The new section takes its height at once, so nothing jumps.
- * With [reduced] it is an instant swap.
+ * The transition between sibling sections of one screen (Plans' sections, the NFC Receive / Share modes), in the family of
+ * the user's [style] - as the tabs are: the old one fades a short way off, and the new one either fades and slides in from
+ * the side it sits on ([forward] meaning "to a later tab") or, in the styles that grow pages in place (a Linux window,
+ * scale, fade through), grows in from where that style grows a page. The new section takes its height at once, so
+ * nothing jumps. With [reduced] it is an instant swap.
  */
-fun <S> AnimatedContentTransitionScope<S>.sectionTransition(forward: Boolean, reduced: Boolean, shiftPx: Int): ContentTransform {
+fun <S> AnimatedContentTransitionScope<S>.sectionTransition(
+    forward: Boolean,
+    reduced: Boolean,
+    shiftPx: Int,
+    style: PageAnimationType = PageAnimationType.SharedAxis,
+): ContentTransform {
     if (reduced) return EnterTransition.None togetherWith ExitTransition.None
+    if (!TabMotion.slides(style)) {
+        val arrive = tween<Float>(AppMotion.MEDIUM_MS, delayMillis = 60, easing = AppMotion.enter)
+        val enter = fadeIn(arrive) + scaleIn(arrive, initialScale = TabMotion.scale(style, 0f), transformOrigin = TabMotion.origin(style))
+        val exit = fadeOut(tween(SECTION_EXIT_MS, easing = LinearEasing))
+        return (enter togetherWith exit) using SizeTransform(clip = false) { _, _ -> snap() }
+    }
     val direction = if (forward) 1 else -1
     val enter = fadeIn(tween(AppMotion.SHORT_MS, delayMillis = 60, easing = AppMotion.enter)) +
         slideInHorizontally(tween(AppMotion.SHORT_MS, delayMillis = 60, easing = AppMotion.enter)) { direction * shiftPx }

@@ -49,7 +49,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.normpix.AppContainer
@@ -260,6 +259,8 @@ fun ProvideAppEnvironment(container: AppContainer, content: @Composable () -> Un
 
     CompositionLocalProvider(
         LocalSystemReducedMotion provides systemReducedMotion,
+        // Here, above the sheets as well as the pages, so a sheet's own sections move in the chosen style too.
+        LocalPageAnimation provides prefs.pageAnimation,
         LocalAppContainer provides container,
         LocalAppPreferences provides container.preferences,
         LocalPermissions provides permissions,
@@ -379,15 +380,15 @@ private fun AppNavigation(
             popEnterTransition = transitions.popEnter,
             popExitTransition = transitions.popExit,
         ) {
-            composable(Routes.MAIN) { AppShell(container, shell) }
-            composable(Routes.CATEGORIES) { CategoriesPage() }
-            composable(Routes.BUDGET_HISTORY) { BudgetHistoryPage() }
-            composable(Routes.PEOPLE) { PeoplePage() }
-            composable(
+            page(Routes.MAIN) { AppShell(container, shell) }
+            page(Routes.CATEGORIES) { CategoriesPage() }
+            page(Routes.BUDGET_HISTORY) { BudgetHistoryPage() }
+            page(Routes.PEOPLE) { PeoplePage() }
+            page(
                 Routes.PERSON,
                 arguments = listOf(navArgument("personId") { type = NavType.LongType }),
             ) { entry -> PersonDetailPage(entry.arguments!!.getLong("personId")) }
-            composable(
+            page(
                 Routes.CATEGORY_HISTORY,
                 arguments = listOf(
                     navArgument("categoryId") { type = NavType.LongType },
@@ -399,12 +400,12 @@ private fun AppNavigation(
                     month = MonthKey.fromInt(entry.arguments!!.getInt("month")),
                 )
             }
-            composable(
+            page(
                 Routes.ACCOUNT_HISTORY,
                 arguments = listOf(navArgument("accountId") { type = NavType.LongType }),
             ) { entry -> AccountHistoryPage(entry.arguments!!.getLong("accountId")) }
-            composable(Routes.SETTINGS) { SettingsScreen() }
-            composable(
+            page(Routes.SETTINGS) { SettingsScreen() }
+            page(
                 Routes.SETTINGS_PAGE,
                 arguments = listOf(navArgument("page") { type = NavType.StringType }),
             ) { entry ->
@@ -418,9 +419,9 @@ private fun AppNavigation(
                     null -> SettingsScreen()
                 }
             }
-            composable(Routes.PROFILE) { ProfilePage() }
-            composable(Routes.SEARCH) { AppSearchPage() }
-            composable(
+            page(Routes.PROFILE) { ProfilePage() }
+            page(Routes.SEARCH) { AppSearchPage() }
+            page(
                 Routes.REMINDER_ALERT,
                 arguments = listOf(navArgument("reminderId") { type = NavType.LongType }),
             ) { entry -> ReminderAlertScreen(entry.arguments!!.getLong("reminderId")) }
