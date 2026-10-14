@@ -14,7 +14,11 @@ import com.example.normpix.finance.domain.TransactionType
  * Add a merchant by adding its name to a rule. More specific rules come first ("swiggy instamart" before "swiggy").
  */
 object MerchantCategories {
-    private class Rule(val parent: String, val sub: String?, vararg val names: String)
+    /**
+     * Payments to any of [names] go in [parent] › [sub] (or [parent] itself without a sub). [olderHome] is where they went
+     * before [parent] was one of the app's categories, for an install from then that doesn't have it.
+     */
+    private class Rule(val parent: String, val sub: String?, vararg val names: String, val olderHome: Pair<String, String?>? = null)
 
     private val rules = listOf(
         // Groceries before food: the quick-commerce arms of food apps sell groceries.
@@ -65,7 +69,8 @@ object MerchantCategories {
         Rule("Bills & utilities", "Gas / cylinder", "indane", "hp gas", "bharat gas", "bharatgas", "mahanagar gas", "igl", "gail gas", "lpg"),
         Rule("Bills & utilities", "Water", "bwssb", "water board", "jal board"),
         Rule("Bills & utilities", "Society maintenance", "mygate", "nobrokerhood", "adda", "maintenance"),
-        Rule("Bills & utilities", "Insurance premium", "lic", "life insurance", "insurance", "policybazaar", "acko", "digit insurance"),
+        Rule("Insurance", null, "lic", "life insurance", "insurance", "policybazaar", "acko", "digit insurance",
+            olderHome = "Bills & utilities" to "Insurance premium"),
         Rule("Rent & housing", "Rent", "nobroker", "rent", "house rent"),
         Rule("Rent & housing", "Furniture", "ikea", "pepperfry", "urban ladder", "wakefit"),
         Rule("Rent & housing", "Repairs", "urban company", "urbanclap"),
@@ -108,8 +113,13 @@ object MerchantCategories {
             }
         } ?: return null
         val usable = categories.filter { it.type == CategoryType.Expense && !it.archived }
-        val parent = usable.firstOrNull { it.parentId == null && it.name.equals(rule.parent, ignoreCase = true) } ?: return null
-        val sub = rule.sub?.let { wanted -> usable.firstOrNull { it.parentId == parent.id && it.name.equals(wanted, ignoreCase = true) } }
-        return (sub ?: parent).id
+        return idOf(rule.parent, rule.sub, usable) ?: rule.olderHome?.let { (parent, sub) -> idOf(parent, sub, usable) }
+    }
+
+    /** The id of [sub] under the top-level [parent] among [usable], else of [parent]; null when there is no [parent]. */
+    private fun idOf(parent: String, sub: String?, usable: List<Category>): Long? {
+        val top = usable.firstOrNull { it.parentId == null && it.name.equals(parent, ignoreCase = true) } ?: return null
+        val child = sub?.let { wanted -> usable.firstOrNull { it.parentId == top.id && it.name.equals(wanted, ignoreCase = true) } }
+        return (child ?: top).id
     }
 }

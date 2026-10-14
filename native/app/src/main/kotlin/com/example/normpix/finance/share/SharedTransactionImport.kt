@@ -11,6 +11,7 @@ import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.ui.FinanceState
 import com.example.normpix.finance.ui.label
 import com.example.normpix.finance.ui.shortDate
+import com.example.normpix.finance.ui.timeLabel
 import com.example.normpix.wallet.StoredCard
 import java.io.File
 import java.time.LocalDateTime
@@ -55,6 +56,8 @@ data class SharedTransactionPrefill(
     val readText: String? = null,
     /** The shared picture, staged to be attached to the transaction (see `TransactionPictures.stage`); the form owns it. */
     val picture: File? = null,
+    /** The payment app whose receipt it was read as, by that app's own reader (see [PaymentAppReceipts]). */
+    val app: String? = null,
 ) {
     companion object {
         /** For a share nothing could be read from, which the user chose to enter by hand. */
@@ -87,7 +90,9 @@ object SharedTransactionImport {
         cards: List<StoredCard> = emptyList(),
     ): SharedTransactionPrefill {
         val occurredAt = draft.date?.let { LocalDateTime.of(it, draft.time ?: now.toLocalTime().withSecond(0).withNano(0)) }
-        val match = findAccount(text, draft.counterparty, draft.instrument, state.activeAccounts, state.catalog, draft.maskedNumbers, cards)
+        // An app's receipt says which part is the user's account; the rest of it is the other side's, and the app's bank.
+        val ownSide = draft.accountText ?: text
+        val match = findAccount(ownSide, draft.counterparty, draft.instrument, state.activeAccounts, state.catalog, draft.maskedNumbers, cards)
         val account = match.account
         val payee = draft.counterparty
         // The user's own filing of this payee first; a merchant the app knows only for a payee they haven't filed yet.
@@ -100,7 +105,9 @@ object SharedTransactionImport {
             else -> null
         }
         val duplicate = quietly {
-            repository.possibleDuplicates(draft.type, draft.amount, occurredAt ?: now, payee, draft.reference, limit = 1).firstOrNull()
+            repository.possibleDuplicates(
+                draft.type, draft.amount, occurredAt ?: now, payee, draft.reference, limit = 1, timeKnown = draft.date != null && draft.time != null,
+            ).firstOrNull()
         }
         // With one account there is nothing to choose between.
         val needsChoice = account == null && draft.maskedNumbers.isNotEmpty() && state.activeAccounts.size > 1
@@ -117,6 +124,7 @@ object SharedTransactionImport {
             categoryId = categoryId,
             notices = notices(draft, state.money, now, account, categoryOrigin, duplicate = duplicate, accountByNumber = match.byNumber, accountsFit = match.fitting),
             reference = draft.reference,
+            app = draft.app,
         )
     }
 
@@ -259,6 +267,7 @@ object SharedTransactionImport {
             }
         }
         val info = buildList {
+            draft.app?.let { add("Read as a $it receipt.") }
             when (draft.kind) {
                 SharedKind.Refund -> add("A refund is money coming back, so it's recorded as income.")
                 SharedKind.Reversal -> add("A reversal returns money from a payment that didn't go through. Save it only if you recorded that payment.")
@@ -279,11 +288,14 @@ object SharedTransactionImport {
         return attention.map { ShareNotice(it, attention = true) } + info.map { ShareNotice(it) }
     }
 
-    /** "an expense of ₹250.00 to Swiggy on 10 Oct" - one already recorded, for a duplicate warning. */
-    fun describe(t: FinanceTransaction, money: MoneyFormatter, now: LocalDateTime): String {
+    /**
+     * "an expense of ₹250.00 to Swiggy on 10 Oct at 9:05 AM" - one already recorded, for a duplicate warning. The time
+     * says which of the day's payments it is (the morning cab, not the evening one).
+     */
+    fun describe(t: FinanceTransaction, money: MoneyFormatter, now: LocalDateTime, is24Hour: Boolean = false): String {
         val party = t.payee?.let { if (t.type == TransactionType.Income) " from $it" else " to $it" }.orEmpty()
         val noun = t.type.label.lowercase()
         val article = if (noun.first() in "aeiou") "an" else "a"
-        return "$article $noun of ${money.format(t.amount)}$party on ${shortDate(t.occurredAt, now)}"
+        return "$article $noun of ${money.format(t.amount)}$party on ${shortDate(t.occurredAt, now)} at ${timeLabel(t.occurredAt, is24Hour)}"
     }
 }

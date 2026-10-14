@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The launcher icon as one colour, for Android 13+ themed icons: a stack of three cards, the front one with its
+     chip, stripe and lock cut out. Each card behind is clipped clear of the one in front, so the stack reads as
+     separate cards when the launcher tints it. Shared by every icon the user can pick. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.8"
+        android:scaleY="0.8">
+        <group
+            android:translateX="4"
+            android:translateY="-1">
+            <group>
+                <!-- Everything but the front card and a gap around it. -->
+                <clip-path android:pathData="M0,0 H108 V108 H0 Z M27,45.5 A7.5,7.5 0 0 0 19.5,53 V71 A7.5,7.5 0 0 0 27,78.5 H59 A7.5,7.5 0 0 0 66.5,71 V53 A7.5,7.5 0 0 0 59,45.5 Z" />
+                <path
+                    android:fillColor="#FFFFFFFF"
+                    android:pathData="M34,41 H66 A5,5 0 0 1 71,46 V64 A5,5 0 0 1 66,69 H34 A5,5 0 0 1 29,64 V46 A5,5 0 0 1 34,41 Z" />
+                <group>
+                    <!-- And clear of the middle card. -->
+                    <clip-path android:pathData="M0,0 H108 V108 H0 Z M34,38.5 A7.5,7.5 0 0 0 26.5,46 V64 A7.5,7.5 0 0 0 34,71.5 H66 A7.5,7.5 0 0 0 73.5,64 V46 A7.5,7.5 0 0 0 66,38.5 Z" />
+                    <path
+                        android:fillColor="#FFFFFFFF"
+                        android:pathData="M41,34 H73 A5,5 0 0 1 78,39 V57 A5,5 0 0 1 73,62 H41 A5,5 0 0 1 36,57 V39 A5,5 0 0 1 41,34 Z" />
+                </group>
+            </group>
+            <path
+                android:fillColor="#FFFFFFFF"
+                android:fillType="evenOdd"
+                android:pathData="M27,48 H59 A5,5 0 0 1 64,53 V71 A5,5 0 0 1 59,76 H27 A5,5 0 0 1 22,71 V53 A5,5 0 0 1 27,48 Z M28.5,54 H34.5 A1.5,1.5 0 0 1 36,55.5 V59.5 A1.5,1.5 0 0 1 34.5,61 H28.5 A1.5,1.5 0 0 1 27,59.5 V55.5 A1.5,1.5 0 0 1 28.5,54 Z M28.5,68 H41.5 A1.5,1.5 0 0 1 41.5,71 H28.5 A1.5,1.5 0 0 1 28.5,68 Z M52.2,62 H57.8 A1.2,1.2 0 0 1 59,63.2 V67.8 A1.2,1.2 0 0 1 57.8,69 H52.2 A1.2,1.2 0 0 1 51,67.8 V63.2 A1.2,1.2 0 0 1 52.2,62 Z M52,62 V59.5 A3,3 0 0 1 58,59.5 V62 H56.6 V59.5 A1.6,1.6 0 0 0 53.4,59.5 V62 Z" />
+        </group>
+    </group>
+</vector>

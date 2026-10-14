@@ -5,6 +5,7 @@ import android.util.Log
 import com.example.normpix.banks.BankCatalog
 import com.example.normpix.finance.data.FinanceDatabase
 import com.example.normpix.finance.data.FinanceRepository
+import com.example.normpix.finance.data.TransactionPictures
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.FinanceTransaction
@@ -25,15 +26,19 @@ import com.example.normpix.reminders.RepeatRule
 import com.example.normpix.wallet.CardKind
 import com.example.normpix.wallet.CardVault
 import com.example.normpix.wallet.StoredCard
+import java.io.File
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.util.UUID
 import kotlin.random.Random
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Dummy data: a realistic sample set - accounts, about three months of
@@ -43,9 +48,10 @@ import kotlinx.coroutines.cancel
  * It lives only in private in-memory stores (SQLite databases with no file
  * behind them, and an in-memory card vault), so nothing shown or changed in
  * this mode can reach the user's data, and switching it off simply drops the
- * set. Services that aren't data (preferences, app lock, NFC, camera) are
- * shared with the real container; sample reminders never schedule
- * notifications.
+ * set. Pictures attached to sample transactions are files, so they go to a
+ * folder of the set's own in the app's cache, deleted with it. Services that
+ * aren't data (preferences, app lock, NFC, camera) are shared with the real
+ * container; sample reminders never schedule notifications.
  */
 class DummyData private constructor(
     context: Context,
@@ -56,9 +62,16 @@ class DummyData private constructor(
     private val remindersDatabase = RemindersDatabase(context, name = null)
     private val remindersScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /** This set's pictures, apart from the user's: its own folder, so its sweep never sees theirs (or another set's). */
+    private val picturesDir = File(File(context.cacheDir, SAMPLE_PICTURES_DIR), UUID.randomUUID().toString())
+        .also { synchronized(openSets) { openSets += it.name } }
+
     val container = AppContainer(
         preferences = real.preferences,
-        finance = FinanceController(FinanceRepository(financeDatabase, clock = clock)),
+        finance = FinanceController(
+            FinanceRepository(financeDatabase, clock = clock),
+            TransactionPictures(context, kept = File(picturesDir, "kept"), drafts = File(picturesDir, "drafts")),
+        ),
         reminders = RemindersController(ReminderDao(remindersDatabase), NoOpReminderScheduler, clock = clock, scope = remindersScope),
         vault = InMemoryCardVault(),
         lock = real.lock,
@@ -75,12 +88,14 @@ class DummyData private constructor(
         sharedPictures = real.sharedPictures,
     )
 
-    /** Drops the sample set and frees its stores. */
+    /** Drops the sample set and frees its stores, its pictures too. */
     fun close() {
         container.reminders.close()
         remindersScope.cancel()
         financeDatabase.close()
         remindersDatabase.close()
+        synchronized(openSets) { openSets -= picturesDir.name }
+        CoroutineScope(Dispatchers.IO).launch { picturesDir.deleteRecursively() }
     }
 
     companion object {
@@ -89,11 +104,23 @@ class DummyData private constructor(
 
         private const val TAG = "NormPixDummyData"
 
+        /** Under the app's cache: the folders of the sample sets' pictures, one per set (see `res/xml/scan_file_paths.xml`). */
+        internal const val SAMPLE_PICTURES_DIR = "sample-pictures"
+
+        /** The sample sets open in this process, by the name of their pictures' folder. */
+        private val openSets = mutableSetOf<String>()
+
         /** Builds and loads a fresh sample set, dated so that it ends at [clock]. */
         suspend fun open(context: Context, real: AppContainer, clock: () -> LocalDateTime = { LocalDateTime.now() }): DummyData {
             val now = clock()
             val data = DummyData(context.applicationContext, real, clock)
             try {
+                // Pictures of a set that was never closed (the app was stopped while it showed) go now.
+                withContext(Dispatchers.IO) {
+                    File(context.applicationContext.cacheDir, SAMPLE_PICTURES_DIR).listFiles()
+                        ?.filter { synchronized(openSets) { it.name !in openSets } }
+                        ?.forEach { it.deleteRecursively() }
+                }
                 try {
                     SampleSet(now).writeTo(data)
                 } catch (e: CancellationException) {

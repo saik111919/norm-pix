@@ -46,6 +46,7 @@ import androidx.compose.material.icons.outlined.FaceRetouchingNatural
 import androidx.compose.material.icons.outlined.FamilyRestroom
 import androidx.compose.material.icons.outlined.Fastfood
 import androidx.compose.material.icons.outlined.Gavel
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Handshake
 import androidx.compose.material.icons.outlined.Handyman
 import androidx.compose.material.icons.outlined.Healing
@@ -205,6 +206,7 @@ internal val extraCategoryIcons: List<Pair<String, CategoryIconSpec>> = listOf(
     "toys" to CategoryIconSpec(Icons.Outlined.Toys, "Toys", "🧸"),
     "childcare" to CategoryIconSpec(Icons.Outlined.FamilyRestroom, "Childcare", "🍼"),
     "wedding" to CategoryIconSpec(Icons.Outlined.Church, "Wedding", "💍"),
+    "family" to CategoryIconSpec(Icons.Outlined.Groups, "Family", "🫂"),
 
     // Money
     "bank_fees" to CategoryIconSpec(Icons.Outlined.Receipt, "Bank Fees", "🏦"),

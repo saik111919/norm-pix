@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The QA build is installed beside the real app: its own name tells the two apart, in the share sheet above all. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application android:label="NormPix QA" tools:replace="android:label" />
+</manifest>

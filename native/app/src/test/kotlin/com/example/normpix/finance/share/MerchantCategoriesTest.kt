@@ -81,4 +81,14 @@ class MerchantCategoriesTest {
             }
         }
     }
+
+    @Test
+    fun `insurance goes in Insurance, or for an install from before it, where it went then`() {
+        val insurance = category("Insurance")
+        val premium = category("Insurance premium", bills)
+        assertEquals(insurance.id, of("LIC of India", categories = all + insurance + premium))
+        assertEquals(premium.id, of("LIC of India", categories = all + premium))
+        assertEquals(bills.id, of("Acko General Insurance"), "an older install without the sub-category: its parent")
+        assertNull(of("Acko", categories = listOf(food)))
+    }
 }

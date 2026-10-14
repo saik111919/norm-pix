@@ -2,6 +2,7 @@ package com.example.normpix.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,15 +32,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Surface
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
 import com.example.normpix.finance.domain.MoneyFormatter
-import com.example.normpix.ui.components.AppLinearProgress
 import com.example.normpix.ui.theme.resolve
 import com.example.normpix.finance.data.FinanceRepository
 import com.example.normpix.finance.data.TransactionQuery
@@ -53,6 +50,7 @@ import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.PeriodSummary
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.finance.domain.comparisonRange
 import com.example.normpix.finance.domain.relativeChange
 import com.example.normpix.finance.domain.shareOf
 import com.example.normpix.finance.domain.upcomingOccurrences
@@ -61,15 +59,21 @@ import com.example.normpix.finance.ui.CategoryAvatar
 import com.example.normpix.finance.ui.CategorySpend
 import com.example.normpix.finance.ui.CategorySpendSheet
 import com.example.normpix.finance.ui.CategoryStack
-import com.example.normpix.finance.ui.HeroShape
-import com.example.normpix.finance.ui.HeroStats
-import com.example.normpix.finance.ui.SummaryStat
+import com.example.normpix.finance.ui.Hero
+import com.example.normpix.finance.ui.HeroAmount
+import com.example.normpix.finance.ui.HeroChangePill
+import com.example.normpix.finance.ui.HeroEyebrow
+import com.example.normpix.finance.ui.HeroFigure
+import com.example.normpix.finance.ui.HeroSlot
+import com.example.normpix.finance.ui.HeroTile
+import com.example.normpix.finance.ui.HeroTone
+import com.example.normpix.finance.ui.ProgressRing
+import com.example.normpix.finance.ui.comparedWith
+import com.example.normpix.finance.ui.trendIcon
 import com.example.normpix.finance.ui.SwipeableTransactionSection
-import com.example.normpix.finance.ui.TABULAR_FIGURES
 import com.example.normpix.finance.ui.TransactionAmount
 import com.example.normpix.finance.ui.TransactionTile
 import com.example.normpix.finance.ui.TransferAvatar
-import com.example.normpix.finance.ui.budgetIcon
 import com.example.normpix.finance.ui.budgetTone
 import com.example.normpix.finance.ui.dayHeading
 import com.example.normpix.finance.ui.icon
@@ -78,7 +82,6 @@ import com.example.normpix.finance.ui.monthLabel
 import com.example.normpix.finance.ui.rememberFinanceActions
 import com.example.normpix.finance.ui.rememberFinanceQuery
 import com.example.normpix.finance.ui.rememberFinanceState
-import com.example.normpix.finance.ui.spendingComparison
 import com.example.normpix.navigation.AppDestination
 import com.example.normpix.navigation.AppSearchButton
 import com.example.normpix.navigation.LocalAppContainer
@@ -86,7 +89,6 @@ import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.navigation.PlanSection
 import com.example.normpix.reminders.LocalReminders
 import com.example.normpix.reminders.Reminder
-import com.example.normpix.reminders.formatOverdueBy
 import com.example.normpix.reminders.icon
 import com.example.normpix.reminders.reminderDueText
 import com.example.normpix.reminders.rememberReminderFlows
@@ -99,12 +101,8 @@ import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.SectionHeader
-import com.example.normpix.ui.components.StatusAction
-import com.example.normpix.ui.components.StatusSurface
 import com.example.normpix.ui.theme.AppLayout
-import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
-import com.example.normpix.ui.theme.StatusTone
 import com.example.normpix.wallet.CardStack
 import com.example.normpix.wallet.CardsState
 import com.example.normpix.wallet.rememberCardFlows
@@ -119,10 +117,22 @@ private const val COMING_UP_MAX = 5
 /** How many categories the Top spending stack holds. */
 private const val TOP_SPENDING = 5
 
+/**
+ * Where every section on Home starts: its header sits one step below whatever is above it, so the sections keep one rhythm
+ * whatever they hold (a stack ends on its front item, a list on its last row). Same start as the default header.
+ */
+internal val HomeSectionPadding = PaddingValues(
+    start = AppSpacing.lg + AppSpacing.xs,
+    top = AppSpacing.xxl,
+    end = AppSpacing.sm,
+    bottom = AppSpacing.sm,
+)
+
 /** What Home shows, read in one pass whenever finance data changes. */
 private class HomeData(
     val month: MonthKey,
     val summary: PeriodSummary,
+    /** The same days of the month before (all of it once this month is over), for "more or less than this time last month". */
     val previous: PeriodSummary,
     val recent: List<FinanceTransaction>,
     val topSpending: List<CategoryTotal>,
@@ -146,7 +156,7 @@ private class HomeData(
             return HomeData(
                 month = month,
                 summary = repo.summary(month.range),
-                previous = repo.summary(month.previous.range),
+                previous = repo.summary(comparisonRange(month, now.toLocalDate())),
                 recent = repo.transactions(TransactionQuery(), limit = 5).items,
                 topSpending = rollUpToParents(repo.categoryTotals(month.range, TransactionType.Expense), parents).take(TOP_SPENDING),
                 previousSpending = rollUpToParents(repo.categoryTotals(month.previous.range, TransactionType.Expense), parents)
@@ -159,8 +169,8 @@ private class HomeData(
 }
 
 /**
- * Home: this month at a glance, whatever needs attention, recent activity and
- * what's coming up - each block links to the tab that owns it.
+ * Home: this month at a glance and the quick adds, then whatever needs attention (a stack of banners for each kind), then
+ * sections for the cards, recent activity, top spending and what's coming up - each links to the tab that owns it.
  */
 @Composable
 fun HomeScreen(listState: LazyListState = rememberLazyListState()) {
@@ -184,13 +194,11 @@ fun HomeScreen(listState: LazyListState = rememberLazyListState()) {
                     )
                     is AsyncValue.Data -> {
                         val data = value.value
-                        Attention(
-                            budgets = data.budgets,
-                            onOpenBudgets = { navigator.openPlans(PlanSection.Budgets) },
-                        )
-                        CardsOnHome()
+                        // The month first, then whatever needs attention (stacked by kind), then the rest in sections.
                         MonthOverview(data, onClick = { navigator.go(AppDestination.Insights) })
                         QuickAdd()
+                        NeedsAttention(data.budgets)
+                        CardsOnHome()
                         Recent(data.recent, onSeeAll = navigator::openTransactions)
                         if (data.topSpending.isNotEmpty()) {
                             TopSpending(data, onSeeAll = { navigator.go(AppDestination.Insights) })
@@ -201,69 +209,6 @@ fun HomeScreen(listState: LazyListState = rememberLazyListState()) {
             }
         }
     }
-}
-
-/**
- * The one thing that most needs attention right now, if anything: an overdue
- * reminder first, then a budget that's over or nearly used.
- */
-@Composable
-private fun Attention(budgets: BudgetOverview, onOpenBudgets: () -> Unit) {
-    val finance = rememberFinanceState()
-    val remindersState by LocalReminders.current.state.collectAsState()
-    val flows = rememberReminderFlows()
-    val navigator = LocalNavigator.current
-    val overdue = remindersState.overdue()
-
-    if (overdue.isNotEmpty()) {
-        val r = overdue.first()
-        val late = formatOverdueBy(r.effectiveDueAt)
-        StatusSurface(
-            tone = StatusTone.Error,
-            icon = r.category.icon,
-            eyebrow = if (overdue.size == 1) late else "$late · ${overdue.size - 1} more overdue",
-            title = r.title,
-            onClick = { flows.edit(r) },
-            actions = buildList {
-                if (overdue.size > 1) add(StatusAction("View all ${overdue.size}", onClick = { navigator.openPlans(PlanSection.Reminders) }))
-                add(StatusAction("Snooze", onClick = { flows.snooze(r) }))
-                add(StatusAction("Mark as done", onClick = { flows.complete(r) }, isPrimary = true))
-            },
-            modifier = Modifier.padding(bottom = AppSpacing.lg),
-        )
-        return
-    }
-
-    // Worst budget first: exceeded before approaching, then most used.
-    val candidates = buildList<Pair<String, BudgetStatus>> {
-        budgets.overall?.let { add("Monthly budget" to it) }
-        for ((id, status) in budgets.categories) add("${finance.category(id)?.name ?: "Category"} budget" to status)
-    }.filter { it.second.health != BudgetHealth.Healthy }.sortedByDescending { it.second.utilization }
-    if (candidates.isEmpty()) return
-
-    val (name, status) = candidates.first()
-    val over = status.health == BudgetHealth.Exceeded
-    val others = candidates.size - 1
-    val message = buildList {
-        add(
-            if (over) {
-                "${finance.money.format(-status.remaining)} over for ${monthLabel(budgets.month)}"
-            } else {
-                "${finance.money.format(status.remaining)} left for ${monthLabel(budgets.month)}"
-            },
-        )
-        if (others > 0) add("$others other ${if (others == 1) "budget needs" else "budgets need"} a look")
-    }.joinToString(". ")
-    StatusSurface(
-        tone = budgetTone(status.health),
-        icon = budgetIcon(status.health),
-        eyebrow = if (over) "Over budget" else "Nearly used",
-        title = name,
-        message = message,
-        onClick = onOpenBudgets,
-        actions = listOf(StatusAction("View budgets", onClick = onOpenBudgets)),
-        modifier = Modifier.padding(bottom = AppSpacing.lg),
-    )
 }
 
 /**
@@ -288,8 +233,9 @@ internal fun CardsOnHome() {
 
     @Suppress("UNUSED_EXPRESSION")
     lockVersion // re-evaluate the lock whenever it may have changed
+    SectionHeader(title = "Cards", padding = HomeSectionPadding)
     if (container.lock.isWalletLocked(prefs)) {
-        ListSection(Modifier.padding(bottom = AppSpacing.lg)) {
+        ListSection {
             item {
                 ListRow(
                     headline = "Cards are locked",
@@ -305,130 +251,79 @@ internal fun CardsOnHome() {
         }
         return
     }
-    CardStack(
-        cards = cards,
-        onOpen = flows::showCard,
-        modifier = Modifier.padding(bottom = AppSpacing.lg),
-        bankIconStyle = prefs.bankIconStyle,
-    )
+    CardStack(cards = cards, onOpen = flows::showCard, bankIconStyle = prefs.bankIconStyle)
 }
 
 /**
- * Where this month stands, as the one expressive object on Home: a large tonal surface with an
- * asymmetric (diagonal) corner shape, the month's spending as the loudest number on the screen,
- * a thick progress bar for the budget, and - on a quieter inner surface - the supporting figures:
- * what's left, what came in, what you have in total.
+ * Where this month stands, as the hero group. The main card: what has gone out so far as the loudest number on the screen
+ * and a pill saying how that compares with the same point last month; it opens Insights. Under it, two tiles with one
+ * figure each: what is left of the budget (it opens Budgets) - or, without a budget, what came in - and what you hold in
+ * total (it opens the Wallet).
  */
 @Composable
 private fun MonthOverview(data: HomeData, onClick: () -> Unit) {
     val finance = rememberFinanceState()
+    val navigator = LocalNavigator.current
     val money = finance.money
-    val scheme = MaterialTheme.colorScheme
-    val type = MaterialTheme.typography
     val s = data.summary
-    val comparison = spendingComparison(relativeChange(s.expense, data.previous.expense), data.month.previous)
+    val change = relativeChange(s.expense, data.previous.expense)
     val budget = data.budgets.headline
-    val onHero = scheme.onPrimaryContainer
 
-    Surface(
+    Hero(
         onClick = onClick,
-        color = scheme.primaryContainer,
-        contentColor = onHero,
-        shape = HeroShape,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(Modifier.padding(start = AppSpacing.xxl, top = AppSpacing.xxl, end = AppSpacing.xxl, bottom = AppSpacing.xl)) {
-            Column(Modifier.semantics(mergeDescendants = true) {}) {
-                Text("Spent in ${monthLabel(data.month)}", style = type.titleMedium, color = onHero.copy(alpha = 0.8f))
-                Spacer(Modifier.height(AppSpacing.xs))
-                Text(
-                    money.format(s.expense),
-                    style = type.displayMedium.copy(fontFeatureSettings = TABULAR_FIGURES, fontWeight = FontWeight.SemiBold),
-                    maxLines = 1,
-                    softWrap = false,
-                    autoSize = TextAutoSize.StepBased(minFontSize = 24.sp, maxFontSize = type.displayMedium.fontSize),
-                )
-                if (comparison != null) {
-                    Spacer(Modifier.height(AppSpacing.xs))
-                    Text(comparison, style = type.bodyMedium, color = onHero.copy(alpha = 0.8f))
+        tiles = listOf(
+            { slot ->
+                if (budget != null) {
+                    BudgetTile(slot, budget, money, onClick = { navigator.openPlans(PlanSection.Budgets) })
+                } else {
+                    HeroTile(slot, HeroTone.Secondary) { HeroFigure(label = "Income", value = money.format(s.income)) }
                 }
-            }
-            if (budget != null) {
-                Spacer(Modifier.height(AppSpacing.xl))
-                HeroBudgetBar(budget, money)
-            }
-            Spacer(Modifier.height(AppSpacing.xl))
-            // Supporting figures sit on the page surface, so the hero keeps one idea: this month's spending.
-            Surface(color = scheme.surface, shape = AppRadius.rXl, modifier = Modifier.fillMaxWidth()) {
-                HeroStats(
-                    modifier = Modifier.padding(horizontal = AppSpacing.lg, vertical = AppSpacing.md),
-                    stats = listOfNotNull<@Composable (Modifier) -> Unit>(
-                        if (budget != null) {
-                            { m: Modifier ->
-                                val over = budget.health == BudgetHealth.Exceeded
-                                SummaryStat(
-                                    label = if (over) "Over by" else "Left",
-                                    value = money.format(if (over) -budget.remaining else budget.remaining),
-                                    valueStyle = type.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                    color = if (over) scheme.error else null,
-                                    modifier = m,
-                                )
-                            }
-                        } else {
-                            null
-                        },
-                        { m: Modifier ->
-                            SummaryStat(
-                                label = "Income",
-                                value = money.format(s.income),
-                                valueStyle = type.titleMedium,
-                                modifier = m,
-                            )
-                        },
-                        { m: Modifier ->
-                            SummaryStat(
-                                label = "Total balance",
-                                value = money.format(finance.totalBalance),
-                                valueStyle = type.titleMedium,
-                                modifier = m,
-                            )
-                        },
-                    ),
-                )
-            }
+            },
+            { slot ->
+                HeroTile(slot, if (budget != null) HeroTone.Secondary else HeroTone.Tertiary, onClick = { navigator.go(AppDestination.Wallet) }) {
+                    HeroFigure(label = "Total balance", value = money.format(finance.totalBalance))
+                }
+            },
+        ),
+    ) {
+        Column(Modifier.semantics(mergeDescendants = true) {}) {
+            HeroEyebrow("Spent in ${monthLabel(data.month)}")
+            HeroAmount(money.format(s.expense))
+        }
+        if (change != null) {
+            Spacer(Modifier.height(AppSpacing.sm))
+            HeroChangePill(trendIcon(change), comparedWith(change, "this time last month"))
         }
     }
 }
 
-/** The budget as a thick bar with "N% used" and the total underneath; words carry the state, color only reinforces it. */
+/**
+ * The month's budget as a tile of the hero: a ring showing how much is used, and beside it what is left (or how far over).
+ * Words carry the state; the ring's color only reinforces it.
+ */
 @Composable
-private fun HeroBudgetBar(status: BudgetStatus, money: MoneyFormatter) {
+private fun BudgetTile(slot: HeroSlot, status: BudgetStatus, money: MoneyFormatter, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
-    val type = MaterialTheme.typography
     val percent = (status.utilization * 100).roundToInt()
-    val tone = if (status.health == BudgetHealth.Healthy) scheme.primary else budgetTone(status.health).resolve().color
-    val spoken = "Budget ${money.format(status.allocated)}, spent ${money.format(status.spent)}, $percent% used"
-    Column(Modifier.clearAndSetSemantics { contentDescription = spoken }) {
-        AppLinearProgress(
-            progress = { status.utilization.toFloat().coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth(),
-            thickness = 12.dp,
-            color = tone,
-            trackColor = scheme.onPrimaryContainer.copy(alpha = 0.14f),
-        )
-        Spacer(Modifier.height(AppSpacing.sm))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (status.health != BudgetHealth.Healthy) {
-                Icon(budgetIcon(status.health), contentDescription = null, tint = tone, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(AppSpacing.xs))
-            }
-            Text("$percent% used", style = type.labelLarge.copy(fontFeatureSettings = TABULAR_FIGURES), fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.weight(1f))
-            Text(
-                "of ${money.format(status.allocated, trimZeroFraction = true)}",
-                style = type.labelLarge.copy(fontFeatureSettings = TABULAR_FIGURES),
-                color = scheme.onPrimaryContainer.copy(alpha = 0.8f),
+    val over = status.health == BudgetHealth.Exceeded
+    val tone = if (status.health == BudgetHealth.Healthy) scheme.tertiary else budgetTone(status.health).resolve().color
+    val label = if (over) "Over budget by" else "Left in budget"
+    val value = money.format(if (over) -status.remaining else status.remaining)
+
+    HeroTile(slot, HeroTone.Tertiary, onClick = onClick) {
+        Row(
+            Modifier.clearAndSetSemantics { contentDescription = "$label $value, $percent% of ${money.format(status.allocated)} used" },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ProgressRing(
+                progress = status.utilization.toFloat(),
+                color = tone,
+                trackColor = LocalContentColor.current.copy(alpha = 0.16f),
+                size = 44.dp,
+                thickness = 5.dp,
             )
+            Spacer(Modifier.width(AppSpacing.md))
+            HeroFigure(label = label, value = value)
         }
     }
 }
@@ -470,7 +365,7 @@ private fun QuickAdd() {
 private fun Recent(transactions: List<FinanceTransaction>, onSeeAll: () -> Unit) {
     val actions = rememberFinanceActions()
     if (transactions.isEmpty()) {
-        SectionHeader(title = "Recent")
+        SectionHeader(title = "Recent", padding = HomeSectionPadding)
         ListSection {
             item {
                 ListRow(
@@ -483,7 +378,7 @@ private fun Recent(transactions: List<FinanceTransaction>, onSeeAll: () -> Unit)
         }
         return
     }
-    SectionHeader(title = "Recent", actionLabel = "See all", onAction = onSeeAll)
+    SectionHeader(title = "Recent", actionLabel = "See all", onAction = onSeeAll, padding = HomeSectionPadding)
     SwipeableTransactionSection(transactions)
 }
 
@@ -516,7 +411,7 @@ internal fun TopSpendingStack(spends: List<CategorySpend>, onSeeAll: () -> Unit)
     val overlays = LocalOverlays.current
     val navigator = LocalNavigator.current
     val scope = rememberCoroutineScope()
-    SectionHeader(title = "Top spending", actionLabel = "Insights", onAction = onSeeAll)
+    SectionHeader(title = "Top spending", actionLabel = "Insights", onAction = onSeeAll, padding = HomeSectionPadding)
     CategoryStack(
         spends = spends,
         onOpen = { spend ->
@@ -528,7 +423,7 @@ internal fun TopSpendingStack(spends: List<CategorySpend>, onSeeAll: () -> Unit)
                 if (seeAll == true) navigator.openCategoryHistory(spend.categoryId, spend.month)
             }
         },
-        modifier = Modifier.padding(top = AppSpacing.xs, bottom = AppSpacing.lg),
+        modifier = Modifier.padding(top = AppSpacing.xs),
     )
 }
 
@@ -580,6 +475,7 @@ private fun ComingUp(recurring: List<Pair<LocalDateTime, RecurringRule>>, onSeeA
         title = "Next 7 days",
         actionLabel = "Plans",
         onAction = { onSeeAll(if (recurring.isNotEmpty()) PlanSection.Recurring else PlanSection.Reminders) },
+        padding = HomeSectionPadding,
     )
     ListSection {
         for ((_, row) in items.take(COMING_UP_MAX)) item { row() }

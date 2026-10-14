@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -127,6 +128,38 @@ fun ConfirmSheetContent(
             TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().height(56.dp)) {
                 Text(cancelLabel, style = MaterialTheme.typography.titleMedium)
             }
+        }
+    }
+}
+
+/**
+ * What a sheet shows while something takes a moment ("Reading the picture"), laid out like a decision: the app's loading
+ * indicator where a decision has its icon, what is going on as a heading (announced as it comes), what it means, and
+ * Cancel at thumb height. See [AppOverlays.loading].
+ */
+@Composable
+fun LoadingSheetContent(title: String, message: String?, onCancel: () -> Unit, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(start = AppSpacing.xxl, top = AppSpacing.xs, end = AppSpacing.xxl, bottom = AppSpacing.md),
+    ) {
+        AppLoadingIndicator(Modifier.size(48.dp))
+        Spacer(Modifier.height(AppSpacing.lg))
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            color = scheme.onSurface,
+            modifier = Modifier.semantics { heading() }.politeLiveRegion(),
+        )
+        if (message != null) {
+            Spacer(Modifier.height(AppSpacing.sm))
+            Text(message, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.height(AppSpacing.xl))
+        TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+            Text("Cancel", style = MaterialTheme.typography.titleMedium)
         }
     }
 }

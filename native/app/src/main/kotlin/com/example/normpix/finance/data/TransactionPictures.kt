@@ -25,10 +25,17 @@ import kotlinx.coroutines.withContext
  * also drops whatever else the file carried, such as where and when a photo was taken - into a draft in the cache. The
  * form shows the draft; only saving the transaction keeps it ([keep]). A draft nobody saved is deleted with the form, or
  * by [sweep] a day later at the latest.
+ *
+ * [kept] and [drafts] are the user's own folders unless given: the sample data keeps its pictures apart (see
+ * [com.example.normpix.DummyData]), where its [sweep] can't reach the user's. Drafts have to be where the camera app is
+ * let write (`res/xml/scan_file_paths.xml`).
  */
-class TransactionPictures(private val context: Context, private val clock: () -> Long = System::currentTimeMillis) {
-    private val kept = File(context.filesDir, KEPT_DIR)
-    private val drafts = File(context.cacheDir, DRAFTS_DIR)
+class TransactionPictures(
+    private val context: Context,
+    private val clock: () -> Long = System::currentTimeMillis,
+    private val kept: File = File(context.filesDir, KEPT_DIR),
+    private val drafts: File = File(context.cacheDir, DRAFTS_DIR),
+) {
 
     /** A new, empty file for the camera app to write a photo into, and the content URI to hand it. */
     fun newCaptureTarget(): Pair<File, Uri> {

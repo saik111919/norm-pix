@@ -47,7 +47,7 @@ class CardReveal internal constructor(
         NfcAvailability.Available -> {
             val registeredOnly = prefs.nfcRevealRegisteredOnly
             if (registeredOnly && container.registeredTags.count.value == 0) {
-                snackbars.show("No tag is registered yet - register one in Settings > Security & privacy")
+                cantReveal("No tag registered", "No tag is registered yet - register one in Settings > Security & privacy")
                 false
             } else {
                 val tagged = overlays.sheet<Boolean> { dismiss ->
@@ -58,13 +58,21 @@ class CardReveal internal constructor(
             }
         }
         NfcAvailability.Disabled -> {
-            snackbars.show("Turn on NFC in system settings to reveal cards")
+            cantReveal("NFC is off", "Turn on NFC in system settings to reveal cards")
             false
         }
         NfcAvailability.Unsupported -> {
-            snackbars.show("NFC isn't available on this device")
+            cantReveal("No NFC", "NFC isn't available on this device")
             false
         }
+    }
+
+    /**
+     * Says why a card can't be revealed: a snackbar on a page, or - over a sheet (the card's own, on Home), where a
+     * snackbar waits until the sheet has gone - a notice that comes up over it.
+     */
+    private suspend fun cantReveal(title: String, message: String) {
+        if (overlays.isOpen) overlays.alert(title, "$message.") else snackbars.show(message)
     }
 
     /** Shows or hides [id]'s number and CVV; showing goes through the NFC step when that is on. */

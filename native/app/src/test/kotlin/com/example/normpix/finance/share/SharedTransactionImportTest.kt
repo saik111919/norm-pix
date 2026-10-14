@@ -3,6 +3,7 @@ package com.example.normpix.finance.share
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.Category
+import com.example.normpix.finance.domain.CurrencySpec
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.testing.TestEnvironment
@@ -87,20 +88,80 @@ class SharedTransactionImportTest {
     }
 
     @Test
-    fun `same amount on the same day matches unless the payees differ`() {
+    fun `same amount near the same time matches unless the payees differ`() {
         val day = LocalDateTime.of(2026, 10, 10, 13, 0)
         val swiggy = expense(25_000, day, "Swiggy")
         expense(25_000, day.minusDays(1), "Swiggy")
         expense(25_100, day, "Swiggy")
         runBlocking {
-            assertEquals(listOf(swiggy.id), repository.possibleDuplicates(TransactionType.Expense, 25_000, day.withHour(20), "swiggy", null).map { it.id })
-            // No payee on the new one: amount and day are enough to ask.
+            assertEquals(listOf(swiggy.id), repository.possibleDuplicates(TransactionType.Expense, 25_000, day.withHour(15), "swiggy", null).map { it.id })
+            // No payee on the new one: amount and time are enough to ask.
             assertEquals(listOf(swiggy.id), repository.possibleDuplicates(TransactionType.Expense, 25_000, day, null, null).map { it.id })
-            // Two different shops for the same money on the same day are two payments.
+            // Two different shops for the same money at the same time are two payments.
             assertTrue(repository.possibleDuplicates(TransactionType.Expense, 25_000, day, "Zomato", null).isEmpty())
             assertTrue(repository.possibleDuplicates(TransactionType.Income, 25_000, day, "Swiggy", null).isEmpty())
             // Without a type or an amount there is nothing to compare but a reference.
             assertTrue(repository.possibleDuplicates(null, 25_000, day, "Swiggy", null).isEmpty())
+            // Hours apart on the same day: another order.
+            assertTrue(repository.possibleDuplicates(TransactionType.Expense, 25_000, day.withHour(20), "Swiggy", null).isEmpty())
+            // A message that gives only the day: anything that day may be it.
+            assertEquals(
+                listOf(swiggy.id),
+                repository.possibleDuplicates(TransactionType.Expense, 25_000, day.withHour(20), "Swiggy", null, timeKnown = false).map { it.id },
+            )
+        }
+    }
+
+    @Test
+    fun `the same ride twice in a day is two payments, each with its own reference`() {
+        val morning = LocalDateTime.of(2026, 10, 12, 9, 5)
+        expense(3_000, morning, "UBER INDIA SYSTEMS PRIVATE LIMITED", note = "Ref 131182715090")
+        runBlocking {
+            // The evening ride: same amount, same payee, same day - and its own reference.
+            assertTrue(
+                repository.possibleDuplicates(TransactionType.Expense, 3_000, morning.withHour(20), "UBER INDIA SYSTEMS PRIVATE LIMITED", "899354336109").isEmpty(),
+            )
+            // Even minutes apart: a different reference is a different payment.
+            assertTrue(
+                repository.possibleDuplicates(TransactionType.Expense, 3_000, morning.plusMinutes(10), "UBER INDIA SYSTEMS PRIVATE LIMITED", "899354336109").isEmpty(),
+            )
+            // The morning ride shared again is still found, whenever it says it was.
+            assertEquals(1, repository.possibleDuplicates(TransactionType.Expense, 3_000, morning, "UBER INDIA SYSTEMS PRIVATE LIMITED", "131182715090").size)
+        }
+    }
+
+    @Test
+    fun `an app's receipt finds the account from its own part of it, and says which app it was read as`() {
+        // PhonePe prints "Powered by UPI AXIS BANK" - its bank, not the user's - and the user's account only as a logo and digits.
+        account("Axis Savings", AccountKind.Bank, "axis")
+        val hdfc = runBlocking {
+            finance.saveAccount(Account(name = "HDFC Salary", kind = AccountKind.Bank, bankKey = "hdfc", numberEnding = "1234", createdAt = now, updatedAt = now))
+        }
+        val picture = PhoneReceipts.picture(PhoneReceipts.phonePeTen)
+        val draft = assertIs<SharedTextReading.Draft>(PaymentAppReceipts.read("", picture, CurrencySpec.INR, now.toLocalDate())).draft
+        val prefill = runBlocking { SharedTransactionImport.prefill(draft, picture.text, finance.state.value, repository, now) }
+        assertEquals(hdfc.id, prefill.accountId)
+        assertEquals("PhonePe", prefill.app)
+        assertTrue(prefill.notices.any { it.text == "Read as a PhonePe receipt." && !it.attention })
+
+        // Without the digits on any account, the Axis account is still not taken for it.
+        runBlocking { finance.saveAccount(hdfc.copy(numberEnding = null)) }
+        val unmatched = runBlocking { SharedTransactionImport.prefill(draft, picture.text, finance.state.value, repository, now) }
+        assertNull(unmatched.accountId)
+    }
+
+    @Test
+    fun `an entry typed in by hand is matched only around the time it was paid`() {
+        // Typed in just after the morning ride: no reference to tell it apart by.
+        val typed = expense(3_000, LocalDateTime.of(2026, 10, 12, 9, 20), "Uber")
+        runBlocking {
+            // The morning ride's receipt, shared later: probably that one.
+            assertEquals(
+                listOf(typed.id),
+                repository.possibleDuplicates(TransactionType.Expense, 3_000, LocalDateTime.of(2026, 10, 12, 9, 5), "Uber", "131182715090").map { it.id },
+            )
+            // The evening ride's receipt: not that one.
+            assertTrue(repository.possibleDuplicates(TransactionType.Expense, 3_000, LocalDateTime.of(2026, 10, 12, 19, 40), "Uber", "899354336109").isEmpty())
         }
     }
 
@@ -189,7 +250,7 @@ class SharedTransactionImportTest {
         val prefill = runBlocking { SharedTransactionImport.prefill(parse(text), text, finance.state.value, repository, now) }
         val first = prefill.notices.first()
         assertTrue(first.attention)
-        assertEquals("You may have recorded this already: an expense of ₹250.00 to SWIGGY on 10 Oct.", first.text)
+        assertEquals("You may have recorded this already: an expense of ₹250.00 to SWIGGY on 10 Oct at 9:00 AM.", first.text)
     }
 
     @Test

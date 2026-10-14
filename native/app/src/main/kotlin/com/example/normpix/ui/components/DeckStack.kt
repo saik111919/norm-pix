@@ -99,6 +99,9 @@ private const val DRAG_LEAN = 8f
  * button above them that gathers them into the stack again. A caller with a long press of its own ([onLongPress], called with the
  * front item and offered to a screen reader as [longPressLabel]) keeps it, and the stack does not unfold.
  *
+ * An item with buttons of its own passes them as [extraActions]: its inner buttons are hidden from a screen reader (the item is
+ * one thing to read), so the actions are offered on the item instead.
+ *
  * @param shape the outline of an item, so the darkening of the ones behind follows its corners.
  */
 @Composable
@@ -112,6 +115,7 @@ fun <T> DeckStack(
     maxWidth: Dp = 440.dp,
     onLongPress: ((T) -> Unit)? = null,
     longPressLabel: String = "Shows more options",
+    extraActions: (T) -> List<CustomAccessibilityAction> = { emptyList() },
     plate: @Composable (T) -> Unit,
     face: @Composable (T) -> Unit,
 ) {
@@ -159,6 +163,7 @@ fun <T> DeckStack(
                     items.forEachIndexed { index, item ->
                         key(itemKey(item)) {
                             val spoken = description(item, index, count)
+                            val extra = extraActions(item)
                             Box(
                                 Modifier
                                     .fillMaxWidth()
@@ -167,6 +172,7 @@ fun <T> DeckStack(
                                         contentDescription = spoken
                                         role = Role.Button
                                         onClick(label = "Opens the details") { onOpen(item); true }
+                                        if (extra.isNotEmpty()) customActions = extra
                                     },
                             ) { face(item) }
                         }
@@ -186,6 +192,7 @@ fun <T> DeckStack(
                                 onOpen = { onOpen(item) },
                                 onLongPress = hold?.let { press -> { press(item) } },
                                 longPressLabel = holdLabel,
+                                extra = extraActions(item),
                                 onBringForward = { bringForward(index) },
                                 onNext = { bringForward(front + 1) },
                                 onPrevious = { bringForward(front - 1) },
@@ -233,6 +240,7 @@ private fun DeckItem(
     onOpen: () -> Unit,
     onLongPress: (() -> Unit)?,
     longPressLabel: String,
+    extra: List<CustomAccessibilityAction>,
     onBringForward: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -315,12 +323,15 @@ private fun DeckItem(
                         role = Role.Button
                         onClick(label = "Opens the details") { onOpen(); true }
                         if (onLongPress != null) onLongClick(label = longPressLabel) { onLongPress(); true }
-                        if (count > 1) {
-                            customActions = listOf(
+                        val actions = if (count > 1) {
+                            listOf(
                                 CustomAccessibilityAction("Show next") { onNext(); true },
                                 CustomAccessibilityAction("Show previous") { onPrevious(); true },
-                            )
+                            ) + extra
+                        } else {
+                            extra
                         }
+                        if (actions.isNotEmpty()) customActions = actions
                     }
                 },
         ) {

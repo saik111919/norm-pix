@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SmartDisplay
 import androidx.compose.material.icons.outlined.SportsEsports
+import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material.icons.outlined.VideoCall
 import androidx.compose.material.icons.outlined.VideogameAsset
@@ -87,11 +88,34 @@ val brandCategoryIcons: Map<String, CategoryIconSpec> = mapOf(
     "medium" to CategoryIconSpec(Icons.Outlined.Article, "Medium", "📰", "brands/medium.svg"),
 )
 
+/**
+ * The brands known only by their logo (most of those in [brandLogoLabels]), as icons. Their outlined icon and emoji are a
+ * generic shop's: those only show if the logo can't, or in the Outline style, which has no logos.
+ */
+internal val brandLogoCategoryIcons: Map<String, CategoryIconSpec> = brandLogoLabels
+    .filterKeys { it !in brandCategoryIcons }
+    .mapValues { (_, label) -> CategoryIconSpec(Icons.Outlined.Storefront, label, "🏪") }
+
 /** Returns the local asset path (e.g. `brands/netflix.svg`) if [icon] represents a brand vector. */
 fun brandAsset(icon: String): String? {
     val clean = icon.removePrefix("brand:")
     return brandCategoryIcons[clean]?.brandAsset
 }
+
+/** The brand's logo picture (`brandlogos/<key>.webp`, round and full-colour) if [icon] is a brand that has one. */
+fun brandLogo(icon: String): String? {
+    val clean = icon.removePrefix("brand:")
+    return if (clean in brandLogoLabels) "brandlogos/$clean.webp" else null
+}
+
+/** The brand [icon] stands for (its key, without a "brand:" prefix), or null when it isn't a brand. */
+fun brandKey(icon: String): String? {
+    val clean = icon.removePrefix("brand:")
+    return clean.takeIf { it in brandCategoryIcons || it in brandLogoLabels }
+}
+
+/** Whether [icon] is a brand's, by its mark or its logo. */
+fun isBrandIcon(icon: String): Boolean = brandKey(icon) != null
 
 /** Mapping from category name variants (case-insensitive) to their brand icon key. */
 val brandNamesToKey: Map<String, String> = mapOf(
@@ -163,10 +187,14 @@ val brandNamesToKey: Map<String, String> = mapOf(
     "medium" to "medium",
 )
 
-/** Resolves a category name to its brand key if recognized, or null otherwise. */
-fun brandKeyForName(name: String): String? =
-    brandNamesToKey[name.trim().lowercase()]
-
-/** Resolves a category name to its offline brand SVG asset path if recognized. */
-fun brandAssetForName(name: String): String? =
-    brandKeyForName(name)?.let(::brandAsset)
+/**
+ * Resolves a category name to its brand key if recognized, or null otherwise: one of the names in [brandNamesToKey], or a
+ * brand's key written out with any spacing or punctuation ("Swiggy", "Amazon Pay", "PhonePe") - except for brands whose name
+ * is also an everyday word ([brandWordNames]), which a category is more likely to mean.
+ */
+fun brandKeyForName(name: String): String? {
+    val wanted = name.trim().lowercase()
+    brandNamesToKey[wanted]?.let { return it }
+    val compact = wanted.filter { it.isLetterOrDigit() }
+    return compact.takeIf { (it in brandCategoryIcons || it in brandLogoLabels) && it !in brandWordNames }
+}

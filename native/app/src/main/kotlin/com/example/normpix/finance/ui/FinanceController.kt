@@ -107,7 +107,7 @@ data class FinanceState(
  */
 class FinanceController(
     val repository: FinanceRepository,
-    /** Where pictures attached to transactions are kept; null where pictures can't be attached (the sample data). */
+    /** Where pictures attached to transactions are kept; null where pictures can't be attached (tests that leave them out). */
     val pictures: TransactionPictures? = null,
 ) {
     private val _state = MutableStateFlow(FinanceState())

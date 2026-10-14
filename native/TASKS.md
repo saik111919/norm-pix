@@ -337,3 +337,86 @@ Asked for (2026-10-12, with the owner's real PhonePe and Google Pay screenshots)
 - [x] Checks (2026-10-12, `--no-build-cache`): full suite **1081 tests, 0 failures, 0 skipped**; lint 0 errors, nothing in the changed files; `assembleQa` builds. Along the way single tests timed out only under whole-suite load (`ShareTransactionFlowTest`, `ProfilePhotoFlowTest`) and passed alone; an earlier run's `R.jar` file lock skipped the tests altogether until it was re-run without the build cache
 - [ ] Not verified on a phone: the real receipts were read on the emulator's ML Kit, not the owner's phone; the camera round trip; other payment apps' real screens (Paytm, CRED, bank apps) - fixtures for those are still illustrative
 - [ ] Not built: matching by account number for **transfers**, an account's last digits shown on its Wallet card or row, "link this card" from the card's own screen, several digit groups per account (a replaced card keeps the old ending only if the user adds it)
+
+## Phase 37 - One reader per payment app (PhonePe, Google Pay), the ₹ read as a 7, and two rides in one day
+Asked for (2026-10-13, with the owner's PhonePe and Google Pay screenshots on their phone): "create each service it's own function so we don't have confuse the function" (BHIM, CRED and others later); "these images are just reference"; "when decimal points are there it's not reading well and some times eg: for 30 it reading 730"; "i made UBER ride morning and evening when adding the entry it's saying entry is there. Find best solution"; "keep the old parser function for fallback if service function is not available"
+- [x] Found on the owner's phone (the qa build, a real share from Google Photos, the phone's own recognizer): the ₹ glyph is read as `7` (or `Z`, or dropped), so `₹30` became `730`. The recognizer itself scores that character at 0.07-0.12, while real digits score 0.6-0.95 (a ₹ merged into a real digit still scores 0.29 or more). ML Kit's line order is not reading order, and long names wrap onto a second line, so "Paid to" lost its name. The form's own picker read a half-size staged copy instead of the picture
+- [x] Layout (`ReceiptLayout`): ML Kit's words and their boxes are put back into rows by vertical overlap, left to right. A line splits where the gap between words is wider than twice their height (the name on the left, the amount on the right). The ₹ is restored from the recognizer's own per-character confidence (`rupeeRestored`: a first character in front of a figure, scored below 0.25 and below half the rest). Every rule reads the rows in reading order
+- [x] One reader per app (`PaymentAppReceipt`: `signature` + `read`). `PaymentAppReceipts` picks the reader from what is printed, never from values:
+  - `PhonePeReceipt`: its name as a brand row, a `T` + 18-digit id, "Debited from", "Paid to / Received from"
+  - `GooglePayReceipt`: "Google transaction ID", "on Google Pay", the G Pay logo row, the shared file's name
+  - A score of 2 is needed; a tie means no app
+  - Each reader reads its own layout: the payee below its heading (wrapped lines joined, the avatar's initials skipped); the amount from every place it is printed; the masked number and the bank only from the user's own part of the receipt (`accountText`); the bank's reference (UTR / UPI transaction ID) before the app's own id; the status
+- [x] Fallback (as asked): a picture from no known app goes to the general parser (`SharedTransactionParser`) as before. So does one whose reader finds neither an amount nor a payee (e.g. a PhonePe recharge screen). Shared words fill in only what the receipt didn't show
+- [x] Amounts (`amountSighting` + `settle`): each place an amount is printed is a sighting. Each sighting is read as printed, without a leading 7/2 when no ₹ was seen, and with a lost decimal point put back. The amount is the value every sighting can be:
+  - `730` + `₹30` -> 30; a real `750` stays 750
+  - sightings that can't agree -> no amount; the user picks
+  - figures: `45,50` / `45 50` / `45.5` are 45.50; `1.250` / `1 250` are 1,250; `O` for `0`; `+₹500`
+- [x] Google Pay names its shared file `<id> - 30.00 To <payee> on Google Pay.png`. When present, that name (`OpenableColumns.DISPLAY_NAME`, read on the phone and not stored) is taken as the amount, the payee and the direction
+- [x] In the form, a gallery picture is read from the original, not the staged copy (`TransactionPictureUi` passes the picked `Uri`). The note says which app it was read as ("Read on this phone as a PhonePe receipt, ..."); the share's notice says "Read as a PhonePe receipt."
+- [x] Duplicates (`FinanceRepository.possibleDuplicates`): a payment with a reference is never matched to one with a different reference, so two Uber rides in a day are two payments. Without that, entries match only within 3 hours either side (`SAME_PAYMENT_WINDOW`) when the receipt shows a time, and on the same day when it doesn't. The warning now says when the earlier entry was ("... on 12 Oct at 8:55 pm", following the phone's 12/24-hour setting)
+- [x] Verified on the owner's phone (the qa build, labelled "NormPix QA"; the real app and its data were not touched):
+  - PhonePe Uber -> ₹30, UBER INDIA SYSTEMS PRIVATE LIMITED, the UTR, date and time
+  - Google Pay Uber -> ₹30, the payee, the reference, the account found by its number
+  - Google Pay Swiggy -> ₹360, SWIGGY, the RuPay card's number
+  - Google Pay to a person -> ₹10
+  - The form's own picker with the PhonePe receipt gave the same result
+  - Duplicates: the Google Pay ride saved; the PhonePe ride from the same day (different reference) saved with no warning; sharing the Google Pay ride again warned, with its date and time
+- [x] Tests:
+  - `PhonePeReceiptTest` (9), `GooglePayReceiptTest` (10)
+  - `PaymentAppReceiptsTest` (9: the ₹ from confidence, gaps, rows, sightings, settling, the fallback)
+  - fixtures in `PhoneReceipts.kt` (the phone's real word boxes, personal details replaced with stand-ins)
+  - `SharedTransactionImportTest` (19: two rides, a hand-typed entry matched only near its time, the account from the receipt's own part)
+  - Changed: the warning text in `ShareTransactionFlowTest` and `SharedTransactionImportTest` (now with the time); `PaymentAppPictureTest` (`PictureLine` now carries its box)
+- [x] Checks (2026-10-13, `--no-build-cache`): full suite **1112 tests, 0 failures, 0 skipped**; lint 0 errors, and no warnings in the changed files; `assembleQa` builds. QA only: `app/src/qa/AndroidManifest.xml` labels the qa app "NormPix QA" so it can't be mistaken for the real app in the share sheet
+- [ ] Not verified on the phone: a receipt with paise (decimals are covered only by tests; none of the phone's receipts had them); money received (only payments were shared); a receipt in dark theme; a name that wraps onto three lines
+- [ ] Not built: readers for BHIM, CRED, Paytm and bank apps (they use the general parser for now; next, with the owner's screenshots); the camera path still reads the staged photo (there is no original)
+
+## Phase 38 - A new app icon, and nine other styles of it to pick from
+Asked for (2026-10-14): an icon prompt for Gemini, then two of its pictures: the realistic emerald stack of cards with a shield lock ("Default image for the app") and a 3 x 3 grid of the same symbol in other styles ("Use this for default variants"). More shades may follow
+- [x] The launcher icon is the realistic stack. Its background and foreground layers are cut from the picture and written at every density (`drawable-*dpi/ic_launcher_background|foreground.png`). The pre-Android 8 `mipmap-*dpi/ic_launcher.png` files are deleted: minSdk is 26, so they could never be used, and lint flagged them (IconXmlAndPng). The old 16% inset and the `ic_launcher_background` colour are gone. The icon moved to `mipmap-anydpi` (minSdk is 26)
+- [x] Themed icons (Android 13+): `drawable/ic_launcher_monochrome.xml`, a one-colour stack of three cards with the chip, stripe and lock cut out of the front one, shared by every icon
+- [x] Nine other icons: glossy, comic, minimal, flat, glass, clay, pixel, paper, neon (`mipmap-anydpi/ic_launcher_<name>.xml`, layers in `drawable-nodpi`, about 600 KB together)
+  - Each symbol is scaled to the same size inside the 66 dp safe zone
+  - The tiles' frames are dropped (the launcher draws its own shape)
+  - Paper keeps its cream sheet as the background
+  - The generator's sparkle watermark was measured on the default picture and taken out of both
+- [x] Choosing one: Settings > Appearance > App icon shows the ten as a round launcher would. A tap asks first ("Use the Comic icon?"). The choice is an `<activity-alias>` per icon (`.Icon<Name>`, opening `MainActivity`); `AppIcons.use` enables the chosen alias before disabling the rest, and going back to Default leaves no overrides. Android keeps the choice, so the app stores nothing. `MainActivity` is no longer a launcher entry itself; shares, notifications and reminders still open it directly. Settings search finds it ("app icon", "launcher", "home screen", "logo", the style names)
+- [x] The generator is kept in `design/app-icon/` (the two pictures, `specs.ps1`, `preview.ps1`, `build.ps1`, `IconKit.cs`, a README on adding a shade). It needs only Windows PowerShell
+- [x] Tests:
+  - `AppIconsTest` (6): every alias opens MainActivity with its own icon; only Default is in the launcher to start with; choosing one swaps the launcher entry; going back to Default clears every override; every layer loads; search
+  - `AppIconSettingsTest` (3): all ten offered with the current one picked, the earlier choice picked on opening, and Cancel versus "Change icon"
+- [x] Checks (2026-10-14, `--no-build-cache`): full suite **1135 tests, 0 failures, 0 skipped**; lint 0 errors, and no warnings in the changed files (ObsoleteSdkInt, MonochromeLauncherIcon and IconXmlAndPng are gone); `assembleQa` builds, and its manifest has `.IconDefault` enabled and the nine others disabled. After the PNGs were deleted, the incremental resource merge for qa dropped `mipmap/ic_launcher` as well. `mergeQaResources --rerun` (and the same for release) fixed it
+- [ ] Not verified on a phone: the owner's phone (ZD222PM2MR) wasn't connected, and the emulator is off limits. Still to see: the icon in the launcher, themed icons, and switching
+- [ ] Known Android behaviour, told to the user in the page's footer and the question:
+  - Switching may close the app (Android removes the task opened from the old entry)
+  - Some home screens drop a shortcut to the old entry
+  - The first update to this build moves the launcher entry from `MainActivity` to `.IconDefault`, so a home-screen shortcut may need adding again once
+- [ ] Not built: "Reset all settings" leaves the icon as it is (changing it closes the app); other shades wait for the owner's pictures
+
+## Phase 39 - A loading sheet while a picture is read, no snackbars under sheets, and pictures in the sample data
+Asked for (2026-10-14): "When loading an image show proper loading sheet instead of toast. also when add/edit is open and a toast appears on change it is not looking good." Then: "please check add/edit image upload is missing and also see what else is missing"
+- [x] A loading sheet (`AppOverlays.loading(title, message) { work }`, `LoadingSheetContent` in `Sheets.kt`), laid out like a decision. It has the app's loading indicator, the heading (announced), what is going on, and Cancel.
+  - It closes by itself when the work is done and gives back the result, or throws what the work threw.
+  - Cancel, a swipe, the scrim or back stop the work and give back null.
+  - It stays up at least 600 ms (`LOADING_MIN_MS`), so a quick read doesn't flash it.
+- [x] A shared picture: the "Reading the picture…" snackbar is replaced by the loading sheet. The form, or a question, opens once it goes. Cancel opens nothing, and the copy of the picture is deleted
+- [x] A picture picked or taken in add/edit: the line and progress bar under the field are replaced by the loading sheet, over the form.
+  - The picture is copied and read under the sheet (`rememberPictureInput`, `TransactionEditor.readPicture`). The form doesn't change until the sheet has gone: attaching and filling in happen after.
+  - Cancel leaves the form as it was and deletes the copy
+  - A picture that can't be opened still says so under the field
+- [x] Snackbars never show under a sheet or decision.
+  - `AppSnackbars(heldBack = { overlays.isOpen })` holds one asked for while any is open (a form's "Changes saved", said as it closes) until all have gone
+  - `SnackbarOverlay` hides one already up while a sheet is open; it comes back with its whole time once the sheet has closed
+  - The old "working…" snackbar API (`AppSnackbars.dismiss`) is gone
+- [x] The card sheet on Home: "Turn on NFC…", "NFC isn't available…" and "No tag is registered…" would now have waited for the sheet to close. Over a sheet they are a notice that comes up over it (`CardReveal.cantReveal`); on a page they stay snackbars. Other snackbars asked for from inside a sheet ("Card updated" after editing from the card sheet) now show once the sheet is closed
+- [x] Pictures in the sample data. With Settings > Sample data on, add/edit had no picture field and details showed no picture: the sample container built its `FinanceController` without `TransactionPictures`.
+  - Each sample set now has its own store under the cache (`sample-pictures/<id>/kept|drafts`, also in `scan_file_paths.xml` for the camera), so its sweep can never reach the user's `pictures/`
+  - The store is deleted when the set closes; folders left by a set that was never closed go when the next one opens
+  - Nothing else was missing from the sample container: reminders that don't ring and an inert card-expiry tracker are deliberate
+- [x] Tests:
+  - `LoadingSheetTest` (6): what the sheet shows, closing with the result, Cancel stopping the work, an error coming back, and snackbars held under a sheet or decision and coming back
+  - `PictureAttachmentFlowTest` (+5): the form's reading under the sheet with the form unchanged until it goes, Cancel in the form, a share read under the sheet, Cancel on a share, and "Changes saved" only once the form has gone
+  - `DummyDataTest` (+2): a sample set attaches and keeps pictures in its own folder, its sweep and reset leave the user's alone, and they go with it; left-over folders are cleared
+- [x] Checks (2026-10-14, `--no-build-cache`): full suite **1148 tests, 0 failures, 0 skipped** (152 fresh result files). Lint 0 errors; the one warning in a changed file (`UseKtx` on `Bitmap.createBitmap` in `TransactionPictures`) was already there. `assembleQa` builds
+- [ ] Not verified on a phone: ZD222PM2MR dropped off adb while the qa build was installing, and the emulators are off limits. To see there: the loading sheet over the form and for a share, Cancel, "Changes saved" after the form closes, the picture field with Sample data on, and a photo taken in sample mode

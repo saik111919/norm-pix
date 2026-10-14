@@ -53,6 +53,7 @@ object SettingsCatalog {
         SettingsEntry("Theme", SettingsPage.Appearance, listOf("dark", "light", "system", "theme", "mode")),
         SettingsEntry("Color source & palette", SettingsPage.Appearance, listOf("color", "dynamic", "material", "wallpaper", "monochrome")),
         SettingsEntry("Accent color", SettingsPage.Appearance, listOf("accent", "emerald", "ocean", "amber", "rose", "violet", "tint")),
+        SettingsEntry("App icon", SettingsPage.Appearance, listOf("app icon", "launcher", "home screen", "logo", "glossy", "comic", "minimal", "flat", "glass", "clay", "pixel", "paper", "neon")),
         SettingsEntry("Progress indicators", SettingsPage.Appearance, listOf("progress", "loading", "wavy", "flat", "bar", "spinner", "loader", "indicator", "expressive")),
         SettingsEntry("Background blur", SettingsPage.Appearance, listOf("sheet", "dialog", "blur", "frosted", "glass", "background", "overlay", "dock", "footer")),
         SettingsEntry("Category icons", SettingsPage.Appearance, listOf("category", "icons", "emoji", "outline", "outlined", "glyph", "avatar", "style")),

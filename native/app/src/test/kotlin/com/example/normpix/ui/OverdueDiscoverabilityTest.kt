@@ -2,12 +2,14 @@ package com.example.normpix.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import com.example.normpix.navigation.PlanSection
 import com.example.normpix.reminders.Reminder
 import com.example.normpix.reminders.RepeatKind
@@ -115,15 +117,27 @@ class OverdueDiscoverabilityTest {
     }
 
     @Test
-    fun homeOffersAViewAllWhenSeveralAreOverdue() {
+    fun homeStacksSeveralOverdueAndLongPressLaysThemAllOut() {
         addReminder("Rent", LocalDateTime.now().minusDays(2))
         addReminder("Phone bill", LocalDateTime.now().minusHours(5))
         compose.setContent { env.Content { HomeScreen() } }
         // The reminders reach the screen from a background write; wait for them rather than racing it.
-        compose.waitUntil(timeoutMillis = 15_000) { compose.onAllNodesWithText("View all 2").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(timeoutMillis = 15_000) {
+            compose.waitForIdle()
+            compose.onAllNodesWithContentDescription("1 of 2", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
 
-        compose.onNodeWithText("View all 2").performClick()
+        // One stack under the month, the longest overdue in front; the other waits behind it.
+        compose.onNodeWithText("Needs attention").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Rent", substring = true).assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("Phone bill", substring = true).assertCountEquals(0)
 
-        assertEquals(listOf<PlanSection?>(PlanSection.Reminders), env.navigator.plansSections)
+        compose.onNodeWithContentDescription("1 of 2", substring = true).performTouchInput { longClick() }
+        compose.waitForIdle()
+
+        // Laid out, each overdue reminder is there to read and open.
+        compose.onNodeWithContentDescription("Rent", substring = true).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Phone bill", substring = true).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Stack them again").assertIsDisplayed()
     }
 }

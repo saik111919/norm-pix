@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
@@ -308,9 +307,6 @@ fun AmountField(
         shape = TonalFieldShape,
     )
 }
-
-/** Large outer corners on one diagonal, small on the other: the hero is the only surface shaped like this (Home, Insights). */
-val HeroShape = RoundedCornerShape(topStart = 40.dp, topEnd = 16.dp, bottomEnd = 40.dp, bottomStart = 16.dp)
 
 /** A labelled amount in a summary row ("Spent Rs 24,500"). */
 @Composable

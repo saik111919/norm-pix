@@ -71,7 +71,8 @@ import com.example.normpix.finance.share.SharedTransactionPrefill
 import com.example.normpix.finance.share.decodePicture
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.ui.components.AppLinearProgress
-import com.example.normpix.ui.components.politeLiveRegion
+import com.example.normpix.ui.components.AppOverlays
+import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.solidColorScheme
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
@@ -87,36 +88,69 @@ import kotlinx.coroutines.withContext
 /** The two ways to get a picture to attach: [takePhoto] with the camera app, or [choose] one already on the phone. */
 class PictureInput internal constructor(val takePhoto: () -> Unit, val choose: () -> Unit)
 
+/** What the loading sheet says while a picture is prepared and read, for the form or for a share. */
+internal const val READING_PICTURE = "Reading the picture"
+internal const val READING_PICTURE_MESSAGE = "NormPix is reading it on this phone to fill in the transaction."
+
+/** What a picked picture came to under the loading sheet: one that couldn't be opened, or one read and ready to attach. */
+private sealed interface PickedPicture {
+    data object Unreadable : PickedPicture
+    class Ready(val attach: () -> Unit) : PickedPicture
+}
+
 /**
- * Starts the camera app or the system's photo picker, then stages what comes back ([TransactionPictures.stage]) and
- * hands the draft to [onPicked]. The camera writes into the app's own cache, so no camera permission is needed, and
- * the picker shows only what the user picks, so no storage permission either. [onBusy] is true while a picture is
- * being prepared; [onProblem] says what went wrong, in words for the user.
+ * Starts the camera app or the system's photo picker, then - under a loading sheet ([AppOverlays.loading]) - stages
+ * what comes back ([TransactionPictures.stage]) and hands the draft to [onPicked]. The camera writes into the app's own
+ * cache, so no camera permission is needed, and the picker shows only what the user picks, so no storage permission
+ * either. [onProblem] says what went wrong, in words for the user.
  */
 @Composable
 fun rememberPictureInput(
     store: TransactionPictures,
-    onBusy: (Boolean) -> Unit,
-    onPicked: (File) -> Unit,
+    /**
+     * Reads the draft - and the picture it was made from, when that stays readable (the photo picker's; not the camera's,
+     * which goes) - while the loading sheet is up, and gives back what attaching it does to the form, which is done once the
+     * sheet has gone. It changes nothing itself: the sheet can be cancelled at any point until then, leaving the form as it was.
+     */
+    onPicked: suspend (draft: File, original: Uri?) -> (() -> Unit),
     onProblem: (String) -> Unit,
 ): PictureInput {
     val lock = LocalAppContainer.current.lock
+    val overlays = LocalOverlays.current
     val scope = rememberCoroutineScope()
     val picked by rememberUpdatedState(onPicked)
     val problem by rememberUpdatedState(onProblem)
-    val busy by rememberUpdatedState(onBusy)
     // Where the camera app is writing, kept across the trip in case NormPix's screen is rebuilt meanwhile.
     var capturePath by rememberSaveable { mutableStateOf<String?>(null) }
 
-    fun stage(uri: Uri, afterwards: () -> Unit = {}) {
+    fun stage(uri: Uri, original: Uri?, afterwards: () -> Unit = {}) {
         scope.launch {
-            busy(true)
+            // The draft until the form takes it: a cancelled or failed reading deletes it again.
+            var draft: File? = null
             try {
-                val draft = store.stage(uri)
-                if (draft != null) picked(draft) else problem("Couldn't open that picture. Try another one.")
+                val outcome = try {
+                    overlays.loading<PickedPicture>(READING_PICTURE, READING_PICTURE_MESSAGE) {
+                        val staged = store.stage(uri) ?: return@loading PickedPicture.Unreadable
+                        draft = staged
+                        PickedPicture.Ready(picked(staged, original))
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    PickedPicture.Unreadable
+                }
+                when (outcome) {
+                    // Cancelled: the form stays as it was.
+                    null -> Unit
+                    PickedPicture.Unreadable -> problem("Couldn't open that picture. Try another one.")
+                    is PickedPicture.Ready -> {
+                        outcome.attach()
+                        draft = null
+                    }
+                }
             } finally {
+                store.discard(draft)
                 afterwards()
-                busy(false)
             }
         }
     }
@@ -126,10 +160,10 @@ fun rememberPictureInput(
         capturePath = null
         if (capture == null) return@rememberLauncherForActivityResult
         // Cancelled in the camera app: nothing to say.
-        if (taken) stage(Uri.fromFile(capture)) { store.discard(capture) } else store.discard(capture)
+        if (taken) stage(Uri.fromFile(capture), original = null) { store.discard(capture) } else store.discard(capture)
     }
     val chooser = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) stage(uri)
+        if (uri != null) stage(uri, original = uri)
     }
     return remember(store) {
         PictureInput(
@@ -185,13 +219,12 @@ fun rememberPictureBitmap(file: File?, maxSide: Int): ImageBitmap? {
 /**
  * The form's picture field, in the form's own tonal style. Without a picture: "Take a photo" and "Choose one" as one
  * split pill, like the date and time. With one: a [PictureCard] (which opens it whole) with Replace - the camera or a
- * picture, from the app's menu - and Remove at its end. [busy] shows that a picture is being prepared and read;
- * [errorText] says what went wrong getting one, under the field like any field's error.
+ * picture, from the app's menu - and Remove at its end. While a picture is prepared and read, a loading sheet is up
+ * ([rememberPictureInput]); [errorText] says what went wrong getting one, under the field like any field's error.
  */
 @Composable
 fun TransactionPictureField(
     picture: File?,
-    busy: Boolean,
     input: PictureInput,
     onView: () -> Unit,
     onRemove: () -> Unit,
@@ -207,7 +240,7 @@ fun TransactionPictureField(
                     label = "Picture",
                     value = "Take a photo",
                     icon = Icons.Outlined.PhotoCamera,
-                    onClick = { if (!busy) input.takePhoto() },
+                    onClick = input.takePhoto,
                     modifier = Modifier.weight(1f),
                     shape = left,
                 )
@@ -215,29 +248,20 @@ fun TransactionPictureField(
                     label = "Picture",
                     value = "Choose one",
                     icon = Icons.Outlined.Image,
-                    onClick = { if (!busy) input.choose() },
+                    onClick = input.choose,
                     modifier = Modifier.weight(1f),
                     shape = right,
                 )
             }
         } else {
             PictureCard(picture, label = "Picture", value = "Attached", onView = onView) {
-                ReplacePictureButton(input, enabled = !busy)
-                IconButton(onClick = onRemove, enabled = !busy) {
+                ReplacePictureButton(input)
+                IconButton(onClick = onRemove) {
                     Icon(Icons.Outlined.DeleteOutline, contentDescription = "Remove picture")
                 }
             }
         }
         when {
-            busy -> {
-                Text(
-                    "Reading the picture…",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = scheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = AppSpacing.sm, bottom = AppSpacing.xs).politeLiveRegion(),
-                )
-                AppLinearProgress(Modifier.fillMaxWidth())
-            }
             errorText != null -> FieldError(errorText)
             picture == null -> Text(
                 "A bill, receipt or payment screenshot. NormPix reads it on this phone to fill in what's still empty.",
@@ -298,10 +322,10 @@ fun PictureCard(
 
 /** Replace: a new photo or another picture, from the app's menu (solid, as nothing behind a popup is blurred). */
 @Composable
-private fun ReplacePictureButton(input: PictureInput, enabled: Boolean) {
+private fun ReplacePictureButton(input: PictureInput) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { open = true }, enabled = enabled) {
+        IconButton(onClick = { open = true }) {
             Icon(Icons.Outlined.SwapHoriz, contentDescription = "Replace picture")
         }
         DropdownMenu(

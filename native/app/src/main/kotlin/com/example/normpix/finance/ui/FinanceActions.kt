@@ -38,11 +38,12 @@ import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.billingCycleSummary
 import com.example.normpix.finance.share.NoSharedPictureReader
+import com.example.normpix.finance.share.PaymentAppReceipts
+import com.example.normpix.finance.share.PictureText
 import com.example.normpix.finance.share.SharedPictureReader
 import com.example.normpix.finance.share.SharedStatus
 import com.example.normpix.finance.share.SharedTextReading
 import com.example.normpix.finance.share.SharedTransactionImport
-import com.example.normpix.finance.share.SharedTransactionParser
 import com.example.normpix.finance.share.SharedTransactionPrefill
 import com.example.normpix.navigation.AppNavigator
 import com.example.normpix.navigation.LocalNavigator
@@ -103,17 +104,16 @@ class FinanceActions(
             // Whatever the form didn't keep is deleted once it closes (or here, when no form opens).
             var staged: File? = null
             try {
-                val read = picture?.let { uri ->
-                    val reading = "Reading the picture…"
-                    snackbars.show(reading)
-                    try {
-                        staged = finance.pictures?.stage(uri)
+                // A sheet says it is being read, and the form (or a question) comes up once it goes. Cancelled: nothing opens.
+                val read = if (picture == null) {
+                    null
+                } else {
+                    val pictureRead = overlays.loading(READING_PICTURE, READING_PICTURE_MESSAGE) {
+                        staged = finance.pictures?.stage(picture)
                         // Read from the original, which is as sharp as it gets (the copy is scaled and compressed).
-                        reader.read(uri)
-                    } finally {
-                        // Read: what comes next (the form, or a question) says the rest, and would cover this.
-                        snackbars.dismiss(reading)
-                    }
+                        PictureRead(reader.read(picture))
+                    } ?: return@launch
+                    pictureRead.text
                 }
                 val pictureText = read?.text
                 if (fromPicture && pictureText.isNullOrBlank() && text.isBlank()) {
@@ -129,8 +129,8 @@ class FinanceActions(
                 // Words that came with a picture are read together with the picture's own.
                 val shared = listOf(text, pictureText.orEmpty()).filter { it.isNotBlank() }.joinToString("\n\n")
                 val now = LocalDateTime.now()
-                // The picture's largest figure settles the amount where its words don't (a receipt's big "₹250").
-                when (val reading = SharedTransactionParser.read(shared, state.currency, now.toLocalDate(), headline = read?.headline)) {
+                // A payment app's receipt is read by that app's own reader; anything else by the general rules.
+                when (val reading = PaymentAppReceipts.read(text, read, state.currency, now.toLocalDate())) {
                     SharedTextReading.Empty -> overlays.alert(
                         title = "Nothing to add",
                         message = "NormPix can add a transaction from the message or the receipt picture a payment or bank app " +
@@ -529,3 +529,7 @@ fun ActionListSheet(title: String, subtitle: String?, actions: List<SheetAction>
         Spacer(Modifier.height(AppSpacing.sm))
     }
 }
+
+/** What reading a shared picture came to, null when no text could be read: the loading sheet gives back null only when cancelled. */
+private class PictureRead(val text: PictureText?)
+

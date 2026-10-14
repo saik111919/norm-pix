@@ -400,13 +400,13 @@ class PaymentAppPictureTest {
         )
         assertEquals("Z250", SharedTransactionParser.headline(screen))
         // Nothing much taller than the rest: no headline.
-        assertNull(SharedTransactionParser.headline(screen.map { it.copy(height = 34) }))
+        assertNull(SharedTransactionParser.headline(screen.map { it.copy(top = 0, bottom = 34) }))
         // Two different figures about as large: can't tell which.
         assertNull(SharedTransactionParser.headline(screen + PictureLine("₹1,200", 120)))
         // The same figure twice is still that figure.
         assertEquals("Z250", SharedTransactionParser.headline(screen + PictureLine("₹250", 120)))
         // No sizes at all (an older recognizer): no headline.
-        assertNull(SharedTransactionParser.headline(screen.map { it.copy(height = 0) }))
+        assertNull(SharedTransactionParser.headline(screen.map { it.copy(top = 0, bottom = 0) }))
         assertNull(SharedTransactionParser.headline(emptyList()))
     }
 

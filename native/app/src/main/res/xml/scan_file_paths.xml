@@ -3,4 +3,6 @@
     <cache-path name="scan" path="scan/" />
     <cache-path name="receipts" path="receipts/" />
     <cache-path name="pictures" path="picture-drafts/" />
+    <!-- The sample data's pictures (DummyData): a photo taken while it shows is written here. -->
+    <cache-path name="sample-pictures" path="sample-pictures/" />
 </paths>

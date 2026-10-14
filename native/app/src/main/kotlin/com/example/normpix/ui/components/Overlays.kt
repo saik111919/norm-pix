@@ -27,6 +27,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import com.example.normpix.navigation.LocalAppPreferences
@@ -39,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TileMode
@@ -54,10 +56,16 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+
+/** The least time a [AppOverlays.loading] sheet stays up, so a quick job doesn't flash it up and down. */
+internal const val LOADING_MIN_MS = 600L
 
 /**
  * Imperative entry points for the app's transient surfaces - bottom sheets
@@ -92,6 +100,9 @@ class AppOverlays {
 
     internal val sheets = mutableStateListOf<SheetRequest>()
     internal val dialogs = mutableStateListOf<DialogRequest>()
+
+    /** Whether any sheet or decision is open (or still closing); [AppSnackbars] waits for none to be. */
+    val isOpen: Boolean get() = sheets.isNotEmpty() || dialogs.isNotEmpty()
 
     private val blurShares = mutableStateMapOf<Any, Float>()
 
@@ -144,6 +155,37 @@ class AppOverlays {
             sheets -= request
         }
     }
+
+    /**
+     * A sheet that says what is going on ([title], [message]) while [work] runs, where a snackbar would sit under any sheet
+     * open at the time. It closes by itself when the work is done and gives back what it returned (or throws what it
+     * threw). Cancel, a swipe, the scrim or back stop the work and give back null. A quick job keeps it up for
+     * [LOADING_MIN_MS], so it doesn't flash.
+     */
+    suspend fun <T : Any> loading(title: String, message: String? = null, work: suspend () -> T): T? {
+        val outcome = sheet<Outcome<T>> { done ->
+            LoadingSheetContent(title, message, onCancel = { done(null) })
+            LaunchedEffect(Unit) {
+                val result = coroutineScope {
+                    val shown = launch { delay(LOADING_MIN_MS) }
+                    val result = try {
+                        Outcome(work())
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Outcome(failure = e)
+                    }
+                    shown.join()
+                    result
+                }
+                done(result)
+            }
+        }
+        outcome?.failure?.let { throw it }
+        return outcome?.value
+    }
+
+    private class Outcome<T : Any>(val value: T? = null, val failure: Exception? = null)
 
     /** A yes/no decision. Resolves true only when the confirm button is pressed. */
     suspend fun confirm(
@@ -396,28 +438,27 @@ fun OverlayHost(overlays: AppOverlays) {
  * Short, non-blocking confirmation of something that just happened ("Card
  * added"): a floating snackbar that clears the navigation bar and FAB, can be
  * swiped away, and is announced by TalkBack.
+ *
+ * Never under a sheet or a decision ([heldBack]), where the scrim would dim it and the sheet cover it. One asked for while
+ * one is open - a form's "Changes saved", said as it closes - shows once it has gone. One already up when a sheet opens
+ * waits under it, paused, and comes back when it closes.
  */
-class AppSnackbars(val hostState: SnackbarHostState, private val scope: CoroutineScope) {
+class AppSnackbars(
+    val hostState: SnackbarHostState,
+    private val scope: CoroutineScope,
+    /** True while a sheet or decision is open ([AppOverlays.isOpen]). */
+    val heldBack: () -> Boolean = { false },
+) {
     /** Space the current screen reserves at the bottom (e.g. the navigation bar). */
     var bottomInset: Dp by mutableStateOf(0.dp)
 
-    private var latest: Pair<String, Job>? = null
-
     fun show(message: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
-        latest = message to scope.launch {
+        scope.launch {
+            snapshotFlow(heldBack).first { held -> !held }
             hostState.currentSnackbarData?.dismiss()
             val result = hostState.showSnackbar(message, actionLabel, withDismissAction = false, duration = SnackbarDuration.Short)
             if (result == SnackbarResult.ActionPerformed) onAction?.invoke()
         }
-    }
-
-    /**
-     * Takes [message] away if it is still showing (or about to show), and nothing else: one about something still going
-     * on ("Reading the picture…") once it is over - before a sheet opens, say, which would cover it while it stayed.
-     */
-    fun dismiss(message: String) {
-        latest?.let { (shown, job) -> if (shown == message) job.cancel() }
-        hostState.currentSnackbarData?.takeIf { it.visuals.message == message }?.dismiss()
     }
 }
 
@@ -425,6 +466,9 @@ val LocalSnackbars = compositionLocalOf<AppSnackbars> { error("No AppSnackbars p
 
 @Composable
 fun SnackbarOverlay(snackbars: AppSnackbars, modifier: Modifier = Modifier) {
+    // Gone while a sheet or decision is open. The host times what it shows, so a snackbar it was showing isn't used up
+    // unseen under the sheet: it comes back, for its whole time, once the sheet has closed.
+    if (snackbars.heldBack()) return
     // Full size so BottomCenter means the bottom of the screen (it has no input handlers, so touches pass through).
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
         SnackbarHost(

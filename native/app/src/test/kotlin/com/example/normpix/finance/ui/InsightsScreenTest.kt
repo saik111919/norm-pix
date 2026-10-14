@@ -125,7 +125,7 @@ class InsightsScreenTest {
     }
 
     @Test
-    fun theHeroShowsBothPeriodsAsBarsOnOneScale() {
+    fun theHeroChartsBothPeriodsOnOneScale() {
         val seed = seed()
         val lastMonth = MonthKey.of(now).previous
         record(seed, TransactionType.Expense, seed.food, 150_000, LocalDate.now().atStartOfDay().plusMinutes(1))
@@ -133,7 +133,7 @@ class InsightsScreenTest {
         show()
         compose.waitForIdle()
 
-        // One element speaks both bars, so a screen reader hears the comparison rather than two loose amounts.
+        // One element speaks both lines of the pace chart, so a screen reader hears the comparison rather than two loose amounts.
         compose.onNodeWithContentDescription("This month ₹1,500.00, Same days of ${monthLabel(lastMonth)} ₹1,300.00").assertIsDisplayed()
     }
 

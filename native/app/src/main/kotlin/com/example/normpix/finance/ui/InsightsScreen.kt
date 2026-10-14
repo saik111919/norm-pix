@@ -1,23 +1,17 @@
 package com.example.normpix.finance.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.Groups
@@ -26,21 +20,18 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.TrendingDown
-import androidx.compose.material.icons.rounded.TrendingFlat
 import androidx.compose.material.icons.rounded.TrendingUp
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -49,10 +40,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.normpix.finance.data.FinanceRepository
 import com.example.normpix.finance.domain.CategoryChange
 import com.example.normpix.finance.domain.CategoryTotal
@@ -81,12 +69,8 @@ import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.RevealVisibility
-import com.example.normpix.ui.theme.AppIconSizes
 import com.example.normpix.ui.theme.AppLayout
-import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
-import com.example.normpix.ui.theme.StatusTone
-import com.example.normpix.ui.theme.resolve
 import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlin.math.abs
@@ -103,6 +87,8 @@ private class InsightsData(
     val expenses: List<CategoryTotal>,
     val income: List<CategoryTotal>,
     val daily: List<DailyTotal>,
+    /** What went out on each day of the whole previous month: the hero's reference line. */
+    val previousDaily: List<DailyTotal>,
     val trend: List<MonthTotals>,
     val hasAnyData: Boolean,
     /** What the month's spending came to on each person; nothing when no expense names one. */
@@ -123,6 +109,7 @@ private class InsightsData(
             expenses = rollUpToParents(repo.categoryTotals(month.range, TransactionType.Expense), parents),
             income = rollUpToParents(repo.categoryTotals(month.range, TransactionType.Income), parents),
             daily = repo.dailyTotals(month.range, TransactionType.Expense),
+            previousDaily = repo.dailyTotals(month.previous.range, TransactionType.Expense),
             trend = repo.monthlyTotals(month.addMonths(-5), month),
             hasAnyData = repo.firstActiveMonth() != null,
             people = repo.peopleSpending(month.range),
@@ -250,22 +237,9 @@ private fun comparisonBasis(data: InsightsData): String =
     if (data.inProgress) "the same days of ${monthLabel(data.month.previous)}" else monthLabel(data.month.previous)
 
 /**
- * "₹1,200 less than the same days of September" - how much more or less, and what it is compared with; or why there is
- * nothing to compare with.
- */
-private fun spendingChangeSentence(data: InsightsData, money: MoneyFormatter): String {
-    val basis = comparisonBasis(data)
-    val previous = data.previous.expense
-    if (previous == 0L) return "No spending in $basis to compare with."
-    val delta = data.summary.expense - previous
-    if (delta == 0L) return "The same as $basis."
-    return "${money.format(abs(delta))} ${if (delta < 0) "less" else "more"} than $basis."
-}
-
-/**
- * The one answer the screen exists for: how much went out this month and whether that is more or less than usual,
- * as a single hero (the same shape and tones as Home's) - the amount, one sentence saying how it compares and with
- * what, a pair of bars that show it, and the supporting figures quietly underneath.
+ * The one answer the screen exists for, as the hero (the same group as Home's): how much went out, a pill saying whether
+ * that is more or less than last month, and the month building up day by day against the one before. Under it, what came
+ * in and what was left over.
  */
 @Composable
 private fun Snapshot(data: InsightsData) {
@@ -273,117 +247,97 @@ private fun Snapshot(data: InsightsData) {
     val money = finance.money
     val s = data.summary
     val net = s.net
-    val days = elapsedDays(data.month)
-    val perDay = average(s.expense, days)
     val change = relativeChange(s.expense, data.previous.expense)
-    val scheme = MaterialTheme.colorScheme
-    val type = MaterialTheme.typography
-    val onHero = scheme.onPrimaryContainer
-    val eyebrow = if (data.inProgress) "Spent this month" else "Spent in ${monthLabel(data.month)}"
 
-    Surface(color = scheme.primaryContainer, contentColor = onHero, shape = HeroShape, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(start = AppSpacing.xxl, top = AppSpacing.xxl, end = AppSpacing.xxl, bottom = AppSpacing.xl)) {
-            Column(Modifier.semantics(mergeDescendants = true) {}) {
-                Text(eyebrow, style = type.titleMedium, color = onHero.copy(alpha = 0.8f))
-                Spacer(Modifier.height(AppSpacing.xs))
-                Text(
-                    money.format(s.expense),
-                    style = type.displayMedium.copy(fontFeatureSettings = TABULAR_FIGURES, fontWeight = FontWeight.SemiBold),
-                    maxLines = 1,
-                    softWrap = false,
-                    autoSize = TextAutoSize.StepBased(minFontSize = 24.sp, maxFontSize = type.displayMedium.fontSize),
-                )
-            }
-            Spacer(Modifier.height(AppSpacing.sm))
-            Row(verticalAlignment = Alignment.Top, modifier = Modifier.semantics(mergeDescendants = true) {}) {
-                Icon(
-                    when {
-                        change == null || change == 0.0 -> Icons.Rounded.TrendingFlat
-                        change < 0 -> Icons.Rounded.TrendingDown
-                        else -> Icons.Rounded.TrendingUp
-                    },
-                    contentDescription = null,
-                    tint = onHero,
-                    modifier = Modifier.padding(top = 2.dp).size(AppIconSizes.md),
-                )
-                Spacer(Modifier.width(AppSpacing.sm))
-                Text(spendingChangeSentence(data, money), style = type.bodyLarge, color = onHero)
-            }
-            if (data.previous.expense > 0) {
-                Spacer(Modifier.height(AppSpacing.lg))
-                CompareBars(
-                    now = s.expense,
-                    before = data.previous.expense,
-                    nowLabel = if (data.inProgress) "This month" else monthLabel(data.month),
-                    beforeLabel = if (data.inProgress) "Same days of ${monthLabel(data.month.previous)}" else monthLabel(data.month.previous),
-                    money = money,
-                )
-            }
-            Spacer(Modifier.height(AppSpacing.xl))
-            // Supporting figures sit on the page surface, so the hero keeps one idea: this month's spending.
-            Surface(color = scheme.surface, shape = AppRadius.rXl, modifier = Modifier.fillMaxWidth()) {
-                HeroStats(
-                    modifier = Modifier.padding(horizontal = AppSpacing.lg, vertical = AppSpacing.md),
-                    stats = listOf<@Composable (Modifier) -> Unit>(
-                        { m: Modifier ->
-                            SummaryStat(
-                                label = "Income",
-                                value = money.format(s.income),
-                                valueStyle = type.titleMedium,
-                                modifier = m,
-                            )
-                        },
-                        { m: Modifier ->
-                            SummaryStat(
-                                label = if (net < 0) "Overspent" else "Saved",
-                                value = money.format(abs(net)),
-                                valueStyle = type.titleMedium,
-                                color = if (net < 0) scheme.error else null,
-                                modifier = m,
-                            )
-                        },
-                        { m: Modifier ->
-                            SummaryStat(
-                                label = if (data.inProgress) "Per day so far" else "Per day",
-                                value = money.format(perDay, trimZeroFraction = true),
-                                valueStyle = type.titleMedium,
-                                modifier = m,
-                            )
-                        },
-                    ),
-                )
-            }
+    Hero(
+        tiles = listOf(
+            { slot ->
+                HeroTile(slot, HeroTone.Secondary) { HeroFigure(label = "Income", value = money.format(s.income)) }
+            },
+            { slot ->
+                HeroTile(slot, HeroTone.Tertiary) {
+                    HeroFigure(label = if (net < 0) "Overspent" else "Saved", value = money.format(abs(net)))
+                }
+            },
+        ),
+    ) {
+        Column(Modifier.semantics(mergeDescendants = true) {}) {
+            HeroEyebrow(if (data.inProgress) "Spent this month" else "Spent in ${monthLabel(data.month)}")
+            HeroAmount(money.format(s.expense))
         }
+        if (change != null) {
+            Spacer(Modifier.height(AppSpacing.sm))
+            HeroChangePill(
+                trendIcon(change),
+                comparedWith(change, if (data.inProgress) "this time last month" else monthLabel(data.month.previous)),
+            )
+        }
+        SpendingPace(data, money)
     }
 }
 
-/** This period's spending against the comparable one, as two bars on one scale: bigger or smaller is visible at a glance. */
+/**
+ * The hero's chart: the month's spending building up day by day, the month before dashed behind it, so "more or less than
+ * usual" is a gap you can see on any day. A key under it names the two lines; touching the chart reads the day there
+ * instead. Nothing when the month has nothing to draw.
+ */
 @Composable
-private fun CompareBars(now: Long, before: Long, nowLabel: String, beforeLabel: String, money: MoneyFormatter) {
+private fun SpendingPace(data: InsightsData, money: MoneyFormatter) {
     val scheme = MaterialTheme.colorScheme
-    val scale = maxOf(now, before).coerceAtLeast(1L).toFloat()
-    val spoken = "$nowLabel ${money.format(now)}, $beforeLabel ${money.format(before)}"
+    val onHero = LocalContentColor.current
+    val month = data.month
+    val before = month.previous
+    // Up to today in a month still going (or to the latest day anything is dated, if later); all of a finished one.
+    val shown = maxOf(elapsedDays(month), data.daily.maxOfOrNull { it.day.dayOfMonth } ?: 0)
+    val current = remember(data) { runningTotals(data.daily, shown) }
+    val previous = remember(data) { if (data.previousDaily.isEmpty()) emptyList() else runningTotals(data.previousDaily, before.dayCount) }
+    if ((current.lastOrNull() ?: 0L) <= 0L) return
+    var day by remember(data) { mutableStateOf<Int?>(null) }
 
-    @Composable
-    fun Bar(label: String, value: Long, color: Color) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(label, style = MaterialTheme.typography.labelLarge, color = scheme.onPrimaryContainer, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                money.format(value),
-                style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = TABULAR_FIGURES),
-                color = scheme.onPrimaryContainer,
+    val nowLabel = if (data.inProgress) "This month" else monthLabel(month)
+    val spokenBefore = if (data.inProgress) "Same days of ${monthLabel(before)}" else monthLabel(before)
+    val spoken = buildString {
+        append("$nowLabel ${money.format(data.summary.expense)}")
+        if (previous.isNotEmpty()) append(", $spokenBefore ${money.format(data.previous.expense)}")
+    }
+    val reference = onHero.copy(alpha = 0.55f)
+    val keyText = onHero.copy(alpha = 0.85f)
+
+    Spacer(Modifier.height(AppSpacing.xl))
+    PaceChart(
+        current = current,
+        previous = previous,
+        days = maxOf(month.dayCount, before.dayCount),
+        semanticsLabel = spoken,
+        lineColor = onHero,
+        referenceColor = reference,
+        guideColor = onHero.copy(alpha = 0.3f),
+        ringColor = scheme.primary,
+        scrubDay = day,
+        onScrub = { day = it },
+    )
+    Spacer(Modifier.height(AppSpacing.md))
+    // The chart already says this to a screen reader; the key is for the eye.
+    Row(Modifier.fillMaxWidth().clearAndSetSemantics {}, horizontalArrangement = Arrangement.spacedBy(AppSpacing.lg)) {
+        val d = day
+        ChartKey(
+            color = onHero,
+            label = if (d == null) nowLabel else "${shortDate(month.start.plusDays(d - 1L))} · ${money.compact(current[d - 1])}",
+            textColor = keyText,
+        )
+        if (previous.isNotEmpty()) {
+            val sameDay = d?.coerceAtMost(previous.size)
+            ChartKey(
+                color = reference,
+                label = when {
+                    sameDay != null -> "${shortDate(before.start.plusDays(sameDay - 1L))} · ${money.compact(previous[sameDay - 1])}"
+                    data.inProgress -> "Last month"
+                    else -> monthLabel(before)
+                },
+                dashed = true,
+                textColor = keyText,
             )
         }
-        Spacer(Modifier.height(AppSpacing.xs))
-        Box(Modifier.fillMaxWidth().height(8.dp).clip(AppRadius.rFull).background(scheme.onPrimaryContainer.copy(alpha = 0.12f))) {
-            Box(Modifier.fillMaxWidth((value / scale).coerceIn(0.01f, 1f)).height(8.dp).clip(AppRadius.rFull).background(color))
-        }
-    }
-
-    Column(Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = spoken }) {
-        Bar(nowLabel, now, scheme.onPrimaryContainer)
-        Spacer(Modifier.height(AppSpacing.md))
-        Bar(beforeLabel, before, scheme.onPrimaryContainer.copy(alpha = 0.4f))
     }
 }
 
@@ -564,13 +518,15 @@ private fun ByPerson(data: InsightsData) {
 private const val PEOPLE_ROWS = 3
 
 /**
- * Spending month by month, from the first month with any: one series, this month emphasised, so "am I spending more
- * than usual?" is one look. Months before there was anything are left out rather than drawn as empty space; with fewer
- * than two months there is no trend to show.
+ * Spending month by month, from the first month with any: one series with the month on screen emphasised and the usual
+ * month dashed across it, so "am I spending more than usual?" is one look. Touching a bar reads that month above the
+ * chart. Months before there was anything are left out rather than drawn as empty space; with fewer than two months there
+ * is no trend to show.
  */
 @Composable
 private fun Trend(data: InsightsData) {
     val money = rememberFinanceState().money
+    val scheme = MaterialTheme.colorScheme
     val first = data.trend.indexOfFirst { it.expense > 0 }
     if (first < 0) return
     val months = data.trend.drop(first)
@@ -581,7 +537,11 @@ private fun Trend(data: InsightsData) {
     val label = buildList {
         add("Spending by month, last ${months.size} months")
         for (m in months) add("${monthLabelFull(m.month)}: ${money.format(m.expense)}")
+        if (usual > 0) add("Usual month: ${money.format(usual)}")
     }.joinToString(". ")
+    var selected by remember(data.month, months.size) { mutableIntStateOf(months.lastIndex) }
+    val pick = months[selected.coerceIn(0, months.lastIndex)]
+    val stillGoing = data.inProgress && pick.month == data.month
 
     Panel(
         title = "Spending by month",
@@ -589,14 +549,29 @@ private fun Trend(data: InsightsData) {
             if (usual > 0) append("You usually spend about ${money.format(usual, trimZeroFraction = true)} a month. ")
             append("The last bar is ${monthLabelFull(data.month)}")
             if (data.inProgress) append(" so far")
-            append(".")
+            append(". Tap a bar to see its month.")
         },
     ) {
-        GroupedBarChart(
-            groups = months.map { BarGroup(monthShort(it.month), listOf(it.expense)) },
-            colors = listOf(MaterialTheme.colorScheme.primary),
-            highlight = months.lastIndex,
+        // The chart says all of this to a screen reader already.
+        ChartReadout(
+            label = if (stillGoing) "${monthLabelFull(pick.month)} so far" else monthLabelFull(pick.month),
+            value = money.format(pick.expense),
+            modifier = Modifier.clearAndSetSemantics {},
+            key = if (usual > 0) {
+                { ChartKey(color = scheme.onSurfaceVariant, label = "Usual", dashed = true) }
+            } else {
+                null
+            },
+        )
+        Spacer(Modifier.height(AppSpacing.lg))
+        BarChart(
+            values = months.map { it.expense },
+            money = money,
             semanticsLabel = label,
+            labels = months.indices.associateWith { monthShort(months[it].month) },
+            selected = selected,
+            onSelect = { it?.let { index -> selected = index } },
+            reference = usual.takeIf { it > 0 },
         )
     }
 }
@@ -625,7 +600,10 @@ private fun MoreDetail(data: InsightsData) {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Each day of the month as a column, the daily average dashed across them. Above the chart it reads the average until a
+ * day is touched, then that day (touching it again goes back). Days still to come are dots on the baseline.
+ */
 @Composable
 private fun DailySpending(data: InsightsData) {
     val money = rememberFinanceState().money
@@ -633,29 +611,40 @@ private fun DailySpending(data: InsightsData) {
     val values = MutableList(month.dayCount) { 0L }
     for (d in data.daily) values[d.day.dayOfMonth - 1] = d.amount
     val elapsed = elapsedDays(month)
+    // A day dated later in the month than today is drawn too: it is part of the month's total.
+    val drawn = maxOf(elapsed, data.daily.maxOf { it.day.dayOfMonth })
     val average = average(data.summary.expense, elapsed)
     val peak = data.daily.maxBy { it.amount }
     val spendDays = data.daily.size
     val scheme = MaterialTheme.colorScheme
+    var selected by remember(data.month) { mutableStateOf<Int?>(null) }
+    val last = month.dayCount
 
     Panel(
         title = "Day by day",
         footer = "Spent on $spendDays of $elapsed days. Biggest day: ${shortDate(peak.day.atStartOfDay())}, ${money.format(peak.amount)}.",
     ) {
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(AppSpacing.lg),
-            verticalArrangement = Arrangement.spacedBy(AppSpacing.xs),
-        ) {
-            LegendItem(scheme.primary, "Spent that day")
-            LegendItem(scheme.outline, "Daily average ${money.format(average, trimZeroFraction = true)}")
-        }
-        Spacer(Modifier.height(AppSpacing.md))
-        DailyBarChart(
+        val day = selected
+        ChartReadout(
+            label = if (day == null) "Daily average" else shortDate(month.start.plusDays(day.toLong())),
+            value = if (day == null) money.format(average, trimZeroFraction = true) else money.format(values[day]),
+            modifier = Modifier.clearAndSetSemantics {},
+            key = { ChartKey(color = scheme.onSurfaceVariant, label = "Average", dashed = true) },
+        )
+        Spacer(Modifier.height(AppSpacing.lg))
+        BarChart(
             values = values,
-            color = scheme.primary,
-            average = average,
+            money = money,
             semanticsLabel = "Spending per day in ${monthLabelFull(month)}. Daily average ${money.format(average)}. " +
                 "Biggest day ${shortDate(peak.day.atStartOfDay())}, ${money.format(peak.amount)}.",
+            labels = listOf(0, 7, 14, 21, last - 1).associateWith { "${it + 1}" },
+            selected = selected,
+            onSelect = { selected = it },
+            clearable = true,
+            reference = average,
+            elapsed = drawn,
+            maxBarWidth = 12.dp,
+            height = 148.dp,
         )
     }
 }

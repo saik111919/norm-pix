@@ -3,13 +3,17 @@ package com.example.normpix.finance.ui
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import com.example.normpix.finance.domain.Category
@@ -148,8 +152,14 @@ class CategoryFormTest {
     }
 
     /** A family on the Categories page is folded until it is tapped (the page opens on a long, ready-made tree). */
-    private fun openFamily(parent: String) {
+    /**
+     * Opens [parent]'s family, and brings its [last] sub-category into view: the test's family comes after all the categories
+     * a new install starts with, so it can open below the bottom of the screen.
+     */
+    private fun openFamily(parent: String, last: String) {
         compose.onNodeWithText(parent, useUnmergedTree = true).performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onAllNodes(hasScrollToNodeAction()).onFirst().performScrollToNode(hasText(last))
         compose.waitForIdle()
     }
 
@@ -163,7 +173,7 @@ class CategoryFormTest {
         compose.waitForIdle()
 
         compose.onNodeWithText("2 sub-categories").assertExists()
-        openFamily("Eating out")
+        openFamily("Eating out", last = "Burgers")
         // Opened, its sub-categories sit in a card of their own just below it, in the same text column.
         val parent = compose.onNodeWithText("Eating out", useUnmergedTree = true).getBoundsInRoot()
         val pizzeria = compose.onNodeWithText("Pizzeria", useUnmergedTree = true).getBoundsInRoot()
@@ -180,7 +190,7 @@ class CategoryFormTest {
         compose.setContent { env.Content { CategoriesPage() } }
         compose.waitForIdle()
 
-        openFamily("Eating out")
+        openFamily("Eating out", last = "Pizzeria")
         // The open family has an "Add sub-category" row of its own; what is asked is that the sub-category's options add no second one.
         val onThePage = compose.onAllNodesWithText("Add sub-category").fetchSemanticsNodes().size
         compose.onNodeWithContentDescription("Options for Pizzeria").performClick()

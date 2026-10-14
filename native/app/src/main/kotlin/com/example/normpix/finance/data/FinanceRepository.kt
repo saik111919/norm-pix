@@ -46,6 +46,7 @@ import com.example.normpix.finance.domain.nextRecurrence
 import com.example.normpix.finance.domain.resolveBudgets
 import com.example.normpix.finance.domain.startOfDay
 import com.example.normpix.wallet.BankLogoResolver
+import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.concurrent.Executors
@@ -851,9 +852,13 @@ class FinanceRepository(
 
     /**
      * Transactions already recorded that may be the one described here entered again - for an entry made from a shared
-     * payment message, which can be shared twice. A note that names the same [reference] matches whatever else differs;
-     * otherwise the same [type] and [amount] on the same day as [occurredAt], with the same payee where both have one.
-     * Only finds them, newest first: whether to save anyway is the user's call (two coffees on one day are both real).
+     * payment message, which can be shared twice. A note that names the same [reference] matches whatever else differs.
+     * Otherwise the same [type] and [amount], with the same payee where both have one, near [occurredAt]: within
+     * [SAME_PAYMENT_WINDOW] of it, or on the same day when only the day is known ([timeKnown] false).
+     *
+     * A payment's reference is its own, so one recorded with a different reference is a different payment, however alike
+     * otherwise: the same cab ride taken in the morning and again in the evening is two rides. Only finds them, newest
+     * first: whether to save anyway is the user's call (two coffees within the hour are both real).
      */
     suspend fun possibleDuplicates(
         type: TransactionType?,
@@ -862,10 +867,12 @@ class FinanceRepository(
         payee: String?,
         reference: String?,
         limit: Int = 3,
+        /** False when [occurredAt]'s time of day stands in for one the message didn't give. */
+        timeKnown: Boolean = true,
     ): List<FinanceTransaction> = io {
         val found = LinkedHashMap<Long, FinanceTransaction>()
-        val ref = reference?.trim()
-        if (!ref.isNullOrEmpty()) {
+        val ref = reference?.trim()?.takeIf { it.isNotEmpty() }
+        if (ref != null) {
             val pattern = "%" + ref.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
             rawQuery(
                 "SELECT * FROM ${FinanceDatabase.TRANSACTIONS} WHERE note LIKE ? ESCAPE '\\' ORDER BY occurred_at DESC, id DESC LIMIT $limit",
@@ -873,19 +880,26 @@ class FinanceRepository(
             ).map(FinanceRows::toTransaction).forEach { found[it.id!!] = it }
         }
         if (type != null && amount != null) {
-            val day = startOfDay(occurredAt)
+            val from = if (timeKnown) occurredAt.minus(SAME_PAYMENT_WINDOW) else startOfDay(occurredAt)
+            val until = if (timeKnown) occurredAt.plus(SAME_PAYMENT_WINDOW) else startOfDay(occurredAt).plusDays(1)
             val name = payee?.trim()?.takeIf { it.isNotEmpty() }
             rawQuery(
                 "SELECT * FROM ${FinanceDatabase.TRANSACTIONS} WHERE type = ? AND amount = $amount " +
-                    "AND occurred_at >= ${day.toStorage()} AND occurred_at < ${day.plusDays(1).toStorage()} " +
+                    "AND occurred_at >= ${from.toStorage()} AND occurred_at ${if (timeKnown) "<=" else "<"} ${until.toStorage()} " +
                     "ORDER BY occurred_at DESC, id DESC",
                 arrayOf(type.key),
             ).map(FinanceRows::toTransaction)
                 .filter { other -> name == null || other.payee == null || other.payee.equals(name, ignoreCase = true) }
+                .filter { other -> ref == null || referenceIn(other.note).let { it == null || it.equals(ref, ignoreCase = true) } }
                 .forEach { found.putIfAbsent(it.id!!, it) }
         }
         found.values.take(limit)
     }
+
+    /** The reference an entry made from a shared payment carries in its note ("Ref 428312345678"), or null. */
+    private fun referenceIn(note: String?): String? = note?.let { noteReference.find(it)?.groupValues?.get(1) }
+
+    private val noteReference = Regex("""\bRef\s+([A-Za-z0-9]{6,35})\b""")
 
     /** One entry per calendar day in [range] that has [type] activity. */
     suspend fun dailyTotals(range: DateRange, type: TransactionType): List<DailyTotal> = io {
@@ -1296,6 +1310,12 @@ class FinanceRepository(
 
     companion object {
         private const val MAX_BANK_NAME = 60
+
+        /**
+         * How far apart two entries of the same amount to the same payee can be and still be one payment entered twice
+         * ([possibleDuplicates]): an entry typed in by hand is dated when it was typed, usually soon after paying.
+         */
+        val SAME_PAYMENT_WINDOW: Duration = Duration.ofHours(3)
 
         /** One daemon thread: serializes all finance database work. */
         val defaultDispatcher: CoroutineDispatcher by lazy {

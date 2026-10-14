@@ -17,9 +17,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -46,7 +44,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -60,14 +57,10 @@ import com.example.normpix.finance.domain.Category
 import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.FinanceConflictException
 import com.example.normpix.finance.domain.FinanceValidationException
-import com.example.normpix.finance.domain.emojiIcon
-import com.example.normpix.finance.domain.emojiOf
 import com.example.normpix.finance.domain.minorToInputText
 import com.example.normpix.finance.domain.numberEndingOrNull
 import com.example.normpix.finance.domain.parseMinorUnits
 import com.example.normpix.ui.components.AppHaptics
-import com.example.normpix.ui.components.AppPrimaryTabs
-import com.example.normpix.ui.components.AppTab
 import com.example.normpix.ui.components.DiscardChangesGuard
 import com.example.normpix.ui.components.EditorSheet
 import com.example.normpix.ui.components.rememberAppHaptics
@@ -97,8 +90,6 @@ fun CategoryFormSheet(
     var icon by remember { mutableStateOf(existing?.icon ?: "other") }
     var color by remember { mutableIntStateOf(existing?.color ?: 0) }
     var parentId by remember { mutableStateOf<Long?>(existing?.parentId ?: parent?.id) }
-    var iconTab by remember { mutableIntStateOf(if (emojiOf(icon) != null) 1 else 0) }
-    var iconQuery by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
@@ -215,7 +206,7 @@ fun CategoryFormSheet(
                 name = it
                 error = null
                 brandKeyForName(it)?.let { brandKey ->
-                    if (existing == null || icon == "other" || brandCategoryIcons.containsKey(icon)) {
+                    if (existing == null || icon == "other" || isBrandIcon(icon)) {
                         icon = brandKey
                     }
                 }
@@ -270,79 +261,7 @@ fun CategoryFormSheet(
 
         Spacer(Modifier.height(AppSpacing.xl))
         FormGroupLabel("Icon")
-        val tabs = remember { listOf(AppTab("Icons"), AppTab("Emoji")) }
-        AppPrimaryTabs(
-            tabs = tabs,
-            selectedIndex = iconTab,
-            onSelect = { iconTab = it },
-        )
-        Spacer(Modifier.height(AppSpacing.md))
-
-        if (iconTab != 0) {
-            EmojiPicker(
-                selected = emojiOf(icon),
-                onSelect = { icon = emojiIcon(it) },
-            )
-        } else {
-            OutlinedTextField(
-                value = iconQuery,
-                onValueChange = { iconQuery = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("${categoryIcons.size} icons") },
-                leadingIcon = { Icon(Icons.Rounded.Search, null) },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                singleLine = true,
-                shape = TonalFieldShape,
-                colors = typedFieldColors(),
-            )
-            Spacer(Modifier.height(AppSpacing.sm))
-
-            val query = iconQuery.trim()
-            val matches = categoryIcons.filter { (k, spec) ->
-                query.isBlank() || spec.label.contains(query, ignoreCase = true) || k.contains(query, ignoreCase = true)
-            }
-            if (matches.isEmpty()) {
-                Text(
-                    text = "No icon is called \"$query\". Try another word, or pick an emoji.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(AppSpacing.xs),
-                verticalArrangement = Arrangement.spacedBy(AppSpacing.xs),
-            ) {
-                matches.forEach { (key, spec) ->
-                    val selected = icon == key
-                    val tint = if (selected) {
-                        MaterialTheme.colorScheme.onSecondaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                    IconButton(
-                        onClick = {
-                            haptics.selection()
-                            icon = key
-                        },
-                        modifier = Modifier
-                            .then(
-                                if (selected) {
-                                    Modifier.background(
-                                        MaterialTheme.colorScheme.secondaryContainer,
-                                        CircleShape,
-                                    )
-                                } else Modifier
-                            )
-                            .semantics {
-                                this.selected = selected
-                                this.contentDescription = spec.label
-                            },
-                    ) {
-                        CategoryGlyph(icon = key, tint = tint, size = 24.dp)
-                    }
-                }
-            }
-        }
+        CategoryIconPicker(icon = icon, onSelect = { icon = it })
 
         Spacer(Modifier.height(AppSpacing.xl))
         FormGroupLabel("Color")

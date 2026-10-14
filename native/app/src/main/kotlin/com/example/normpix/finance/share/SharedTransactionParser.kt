@@ -58,6 +58,13 @@ data class ParsedTransactionDraft(
     val instrument: SharedInstrument? = null,
     /** The account or card numbers the message shows partly hidden, as the digits it does show; used to find which account it was. */
     val maskedNumbers: List<MaskedNumber> = emptyList(),
+    /** The payment app whose receipt this was read as, by that app's own reader (see [PaymentAppReceipts]); null otherwise. */
+    val app: String? = null,
+    /**
+     * What the receipt says about the user's own account - its bank, its number - when the app's layout shows which part
+     * that is (empty when it shows none); null when it can't tell, and the whole message is looked through instead.
+     */
+    val accountText: String? = null,
 ) {
     /** A short description for the note: what kind of entry this is, and its reference. Null when there is nothing to say. */
     val note: String?
@@ -77,8 +84,16 @@ data class ParsedTransactionDraft(
  */
 data class MaskedNumber(val prefix: String, val suffix: String)
 
-/** One line of a picture's text, as the recognizer found it, and how tall it is on the picture in pixels. */
-data class PictureLine(val text: String, val height: Int)
+/**
+ * One piece of a picture's text, as the recognizer found it, and where it is on the picture in pixels. A line the
+ * recognizer ran across a wide gap - a payee's name and, far to its right, the amount - is two pieces.
+ */
+data class PictureLine(val text: String, val left: Int, val top: Int, val right: Int, val bottom: Int) {
+    /** A piece whose place isn't known, only how tall it is. */
+    constructor(text: String, height: Int) : this(text, 0, 0, 0, height)
+
+    val height: Int get() = bottom - top
+}
 
 /** The outcome of reading shared text. */
 sealed interface SharedTextReading {
@@ -578,7 +593,8 @@ object SharedTransactionParser {
         RegexOption.IGNORE_CASE,
     )
 
-    private fun cleanName(raw: String): String? {
+    /** [raw] as a payee's or sender's name, tidied; null when it can't be one (see [notAName]). */
+    internal fun cleanName(raw: String): String? {
         val name = raw.trim().trim('.', ',', '-', ':', '*', '\'', '"', '/').replace(Regex("""\s+"""), " ").trim()
         if (name.length < 2 || name.length > MAX_NAME) return null
         if (name.first().isDigit() || name.none { it.isLetter() }) return null
@@ -717,7 +733,7 @@ object SharedTransactionParser {
         RegexOption.IGNORE_CASE,
     )
 
-    private fun instrument(text: String, masks: List<MaskedNumber>): SharedInstrument? {
+    internal fun instrument(text: String, masks: List<MaskedNumber>): SharedInstrument? {
         val own = text.lineSequence().filterNot { otherSideAccount.containsMatchIn(it) }.joinToString("\n")
         val found = instrumentCues.firstOrNull { it.second.containsMatchIn(own) }?.first
         // A number printed with its first digits is a card's - an account's is printed by its last ones - so a UPI payment
@@ -728,7 +744,8 @@ object SharedTransactionParser {
 
     // ------------------------------------------------------------------ date
 
-    private class When(val date: LocalDate?, val time: LocalTime?, val unreadable: Boolean)
+    /** When a message says the money moved: [unreadable] when it gives a date that isn't a real one. */
+    internal class When(val date: LocalDate?, val time: LocalTime?, val unreadable: Boolean)
 
     private val months = mapOf(
         "jan" to 1, "feb" to 2, "mar" to 3, "apr" to 4, "may" to 5, "jun" to 6,
@@ -753,7 +770,7 @@ object SharedTransactionParser {
     /** A date written in the message: where it is, and the day it names (null when it isn't a real day). */
     private class Found(val range: IntRange, val date: LocalDate?)
 
-    private fun dateIn(text: String, today: LocalDate): When {
+    internal fun dateIn(text: String, today: LocalDate): When {
         val found = buildList {
             isoDate.findAll(text).forEach { add(Found(it.range, day(it.groupValues[1], it.groupValues[2], it.groupValues[3], today))) }
             numericDate.findAll(text).forEach {

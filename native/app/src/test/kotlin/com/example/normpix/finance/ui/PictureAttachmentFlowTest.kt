@@ -35,6 +35,7 @@ import java.time.LocalDateTime
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Rule
@@ -57,9 +58,14 @@ class PictureAttachmentFlowTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
 
-    /** Stands in for the on-device recognizer: what it "reads" in any picture. */
+    /** Stands in for the on-device recognizer: what it "reads" in any picture, once [gate] (when there is one) opens. */
     private class FakeReader(var text: String?) : SharedPictureReader {
-        override suspend fun read(picture: Uri): PictureText? = text?.let { PictureText(it) }
+        var gate: CompletableDeferred<Unit>? = null
+
+        override suspend fun read(picture: Uri): PictureText? {
+            gate?.await()
+            return text?.let { PictureText(it) }
+        }
     }
 
     // Illustrative: Google Pay's paid screen, as the recognizer might read it.
@@ -316,6 +322,118 @@ class PictureAttachmentFlowTest {
         waitFor("Couldn't open that picture. Try another one.")
         compose.onNodeWithContentDescription("Picture, Choose one").assertExists()
         assertTrue(compose.onAllNodesWithText("Attached").fetchSemanticsNodes().isEmpty())
+    }
+
+    // ------------------------------------------------- the loading sheet
+
+    private fun drafts(): List<File> = File(env.context.cacheDir, "picture-drafts").listFiles().orEmpty().toList()
+
+    private fun until(condition: () -> Boolean) = compose.waitUntil(timeoutMillis = 10_000) {
+        compose.waitForIdle()
+        condition()
+    }
+
+    private fun receiveShares() {
+        compose.setContent {
+            env.Content { ReceiveSharedTransactions(env.container.sharedText, reader, appLocked = false, sampleData = false) }
+        }
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun `a picture chosen in the form is read under a loading sheet, and the form fills in once it has gone`() {
+        val gate = CompletableDeferred<Unit>().also { reader.gate = it }
+        open { addTransaction() }
+        waitFor("New expense")
+        choose(galleryPicture())
+
+        // A sheet says what is going on - not a line under the field, nor a snackbar under the form.
+        waitFor(READING_PICTURE)
+        compose.onNodeWithText(READING_PICTURE).assertIsDisplayed()
+        compose.onNodeWithText(READING_PICTURE_MESSAGE).assertIsDisplayed()
+        // Nothing on the form changes while it reads.
+        amountField().assert(hasText(""))
+        assertTrue(compose.onAllNodesWithText("Attached").fetchSemanticsNodes().isEmpty())
+
+        gate.complete(Unit)
+        waitGone(READING_PICTURE)
+        waitFor("Filled in from the picture")
+        amountField().assert(hasText("250"))
+        compose.onNodeWithText("Attached").assertExists()
+    }
+
+    @Test
+    fun `cancelling the reading leaves the form as it was, and no copy of the picture behind`() {
+        reader.gate = CompletableDeferred()
+        open { addTransaction() }
+        waitFor("New expense")
+        choose(galleryPicture())
+        waitFor(READING_PICTURE)
+        // The copy is made before it is read.
+        until { drafts().isNotEmpty() }
+
+        compose.onNodeWithText("Cancel").performClick()
+        waitGone(READING_PICTURE)
+        // Back on the form, as it was.
+        compose.onNodeWithText("New expense").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Picture, Choose one").assertExists()
+        assertTrue(compose.onAllNodesWithText("Attached").fetchSemanticsNodes().isEmpty())
+        amountField().assert(hasText(""))
+        until { drafts().isEmpty() }
+    }
+
+    @Test
+    fun `a shared picture is read under a loading sheet before the form opens`() {
+        val gate = CompletableDeferred<Unit>().also { reader.gate = it }
+        receiveShares()
+        compose.runOnUiThread { env.container.sharedText.offer(text = null, picture = galleryPicture()) }
+        waitFor(READING_PICTURE)
+        assertTrue(compose.onAllNodesWithText("New expense").fetchSemanticsNodes().isEmpty())
+
+        gate.complete(Unit)
+        waitFor("Filled in from a shared picture")
+        assertTrue(compose.onAllNodesWithText(READING_PICTURE).fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText("Attached").performScrollTo().assertExists()
+    }
+
+    @Test
+    fun `cancelling the reading of a shared picture opens nothing and leaves nothing behind`() {
+        reader.gate = CompletableDeferred()
+        receiveShares()
+        compose.runOnUiThread { env.container.sharedText.offer(text = null, picture = galleryPicture()) }
+        waitFor(READING_PICTURE)
+        until { drafts().isNotEmpty() }
+
+        compose.onNodeWithText("Cancel").performClick()
+        waitGone(READING_PICTURE)
+        until { drafts().isEmpty() }
+        assertTrue(compose.onAllNodesWithText("New expense").fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodesWithText("Couldn't read the picture").fetchSemanticsNodes().isEmpty())
+        assertTrue(stored().isEmpty())
+    }
+
+    @Test
+    fun `what saving says shows once the form has gone, not under it`() {
+        val transaction = runBlocking {
+            finance.saveTransaction(
+                FinanceTransaction(
+                    type = TransactionType.Expense,
+                    amount = 25_000,
+                    accountId = finance.state.value.defaultAccount!!.id!!,
+                    categoryId = finance.state.value.categories.first { it.name == "Food & dining" }.id,
+                    occurredAt = LocalDateTime.of(2026, 10, 10, 12, 34),
+                    createdAt = LocalDateTime.now(),
+                    updatedAt = LocalDateTime.now(),
+                ),
+            )
+        }
+        open { editTransaction(transaction) }
+        waitFor("Save changes")
+        amountField().performTextInput("0")
+        compose.onNodeWithText("Save changes").performClick()
+        waitFor("Changes saved")
+        // By the time it shows, the form has gone: it isn't dimmed under the sheet.
+        assertTrue(compose.onAllNodesWithText("Save changes").fetchSemanticsNodes().isEmpty())
     }
 
     // ------------------------------------------------- the number a picture shows

@@ -238,7 +238,7 @@ class ShareTransactionFlowTest {
         }
         launch()
         share(hdfc)
-        waitFor("You may have recorded this already: an expense of ₹250.00 to SWIGGY on 10 Oct.")
+        waitFor("You may have recorded this already: an expense of ₹250.00 to SWIGGY on 10 Oct at 9:00 AM.")
         // The payee was filed under Food & dining before, so the draft starts there.
         compose.onNodeWithText("Save expense").performClick()
         waitFor("Already recorded?")

@@ -1,9 +1,13 @@
 package com.example.normpix
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import com.example.normpix.finance.data.FinanceDatabase
 import com.example.normpix.finance.data.FinanceRepository
+import com.example.normpix.finance.data.TransactionPictures
 import com.example.normpix.finance.data.TransactionQuery
 import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.FinanceTransaction
@@ -11,6 +15,7 @@ import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.ui.FinanceController
 import com.example.normpix.finance.ui.FinanceStatus
+import com.example.normpix.finance.ui.PictureEdit
 import com.example.normpix.finance.ui.ReceiptSharer
 import com.example.normpix.reminders.NoOpReminderScheduler
 import com.example.normpix.reminders.Reminder
@@ -24,9 +29,14 @@ import com.example.normpix.wallet.CardKind
 import com.example.normpix.wallet.CardVault
 import com.example.normpix.wallet.CardsState
 import com.example.normpix.wallet.StoredCard
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.File
 import java.time.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -35,7 +45,9 @@ import org.junit.After
 import org.junit.Before
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -133,6 +145,68 @@ class DummyDataTest {
 
             val cards = (dummy.container.cards.state.value as CardsState.Ready).cards
             assertEquals(listOf("HDFC Bank", "ICICI Bank"), cards.map { it.bankName })
+        } finally {
+            dummy.close()
+        }
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun picturesCanBeAttachedInTheSampleSetKeptApartFromTheUsersAndGoWithIt(): Unit = runBlocking {
+        // A picture the user kept with one of their own transactions.
+        val mine = File(context.filesDir, "${TransactionPictures.KEPT_DIR}/pic-mine.jpg").apply {
+            parentFile!!.mkdirs()
+            writeBytes(byteArrayOf(1, 2, 3))
+        }
+        val sampleFolder = File(context.cacheDir, DummyData.SAMPLE_PICTURES_DIR)
+        val dummy = DummyData.open(context, real) { now }
+        try {
+            // Left out, the form had no picture field while the sample set showed.
+            val pictures = assertNotNull(dummy.container.finance.pictures, "pictures can be attached in the sample set")
+            val source = Uri.parse("content://com.example.gallery/receipt")
+            val bitmap = Bitmap.createBitmap(200, 300, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.WHITE) }
+            val png = ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+            shadowOf(context.contentResolver).registerInputStreamSupplier(source) { ByteArrayInputStream(png) }
+            val draft = assertNotNull(pictures.stage(source))
+            val state = dummy.container.finance.state.value
+            val saved = dummy.container.finance.saveTransaction(
+                FinanceTransaction(
+                    type = TransactionType.Expense,
+                    amount = 25_000,
+                    accountId = state.accounts.first().id!!,
+                    categoryId = state.categoriesOf(CategoryType.Expense).first().id!!,
+                    occurredAt = now,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+                PictureEdit.Attach(draft),
+            )
+            val kept = assertNotNull(pictures.file(saved.picture))
+            assertTrue(kept.path.startsWith(sampleFolder.path), "kept in the sample set's own folder, not the user's: ${kept.path}")
+            // Its sweep (on every load) and erasing it never reach the user's pictures.
+            dummy.container.finance.load()
+            dummy.container.finance.resetAll()
+            assertTrue(mine.isFile, "the user's picture is left alone")
+        } finally {
+            dummy.close()
+        }
+        val deadline = System.currentTimeMillis() + 5_000
+        while (!sampleFolder.listFiles().isNullOrEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        assertTrue(sampleFolder.listFiles().isNullOrEmpty(), "the set's pictures went with it")
+        assertTrue(mine.isFile)
+        mine.delete()
+    }
+
+    @Test
+    fun picturesOfASetThatWasNeverClosedGoWhenTheNextOneOpens(): Unit = runBlocking {
+        val leftOver = File(context.cacheDir, "${DummyData.SAMPLE_PICTURES_DIR}/left-over/kept/pic-old.jpg").apply {
+            parentFile!!.mkdirs()
+            writeBytes(byteArrayOf(1))
+        }
+        val dummy = DummyData.open(context, real) { now }
+        try {
+            assertFalse(leftOver.exists())
+            assertFalse(File(context.cacheDir, "${DummyData.SAMPLE_PICTURES_DIR}/left-over").exists())
         } finally {
             dummy.close()
         }

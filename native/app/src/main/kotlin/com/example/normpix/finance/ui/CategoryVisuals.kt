@@ -47,7 +47,6 @@ import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material.icons.outlined.WorkOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
@@ -60,17 +59,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.Category
-import com.example.normpix.finance.domain.emojiOf
 import com.example.normpix.settings.CategoryIconStyle
-import com.example.normpix.ui.components.SvgAsset
 import com.example.normpix.ui.theme.isDark
 import com.materialkolor.PaletteStyle
 import com.materialkolor.blend.Blend
@@ -80,8 +73,9 @@ import com.materialkolor.dynamicColorScheme
  * A curated icon a category can use. Keys are stable (stored in the database); labels are for the picker and screen readers.
  * [icon] is the Material *outlined* glyph, at one weight: it sits on a tonal disc beside the app's other outlined icons, and
  * a mix of outlined and rounded ones would read as two hands. [emoji] is the same idea in colour; which of the two is drawn
- * is the user's choice ([CategoryIconStyle]). (A category may instead have an emoji of its own; see [CategoryGlyph].)
- * Optional [brandAsset] points to an authentic vector asset stored in the app's offline assets directory (e.g. `brands/netflix.svg`).
+ * is the user's choice ([CategoryIconStyle]), and in 3D the emoji is drawn as a 3D picture. (A category may instead have an
+ * emoji of its own; see [categoryArt].) Optional [brandAsset] points to an authentic vector asset stored in the app's offline
+ * assets directory (e.g. `brands/netflix.svg`); a brand may also have a logo (see [brandLogo]).
  */
 class CategoryIconSpec(
     val icon: ImageVector,
@@ -129,7 +123,7 @@ private val coreCategoryIcons: List<Pair<String, CategoryIconSpec>> = listOf(
 
 /**
  * Every icon a category can be given, in the order the picker shows them: the 35 the app was built around, then the wider set
- * in `CategoryIconExtras` (pizza, taxi, dentist ...), and brand icons (Netflix, YouTube, ChatGPT, Spotify ...).
+ * in `CategoryIconExtras` (pizza, taxi, dentist ...), and brands (Netflix, YouTube, Swiggy, Zomato ...).
  * Keys never change meaning, because they are stored.
  */
 val categoryIcons: Map<String, CategoryIconSpec> = LinkedHashMap<String, CategoryIconSpec>().apply {
@@ -137,15 +131,16 @@ val categoryIcons: Map<String, CategoryIconSpec> = LinkedHashMap<String, Categor
     // The core keys win a clash, so an extra can never redefine an icon already in use.
     for ((key, spec) in extraCategoryIcons) putIfAbsent(key, spec)
     for ((key, spec) in brandCategoryIcons) putIfAbsent(key, spec)
+    for ((key, spec) in brandLogoCategoryIcons) putIfAbsent(key, spec)
 }
 
 fun categoryIcon(key: String): ImageVector = (categoryIcons[key] ?: categoryIcons.getValue("other")).icon
 
-/** The emoji a built-in icon stands for in [CategoryIconStyle.Emoji]; the "Other" one for a key the app no longer knows. */
+/** The emoji a built-in icon stands for in the 3D and Emoji styles; the "Other" one for a key the app no longer knows. */
 fun categoryEmoji(key: String): String = (categoryIcons[key] ?: categoryIcons.getValue("other")).emoji
 
 /** How built-in category icons are drawn app-wide; provided from the user's choice in Settings > Appearance. */
-val LocalCategoryIconStyle = staticCompositionLocalOf { CategoryIconStyle.Emoji }
+val LocalCategoryIconStyle = staticCompositionLocalOf { CategoryIconStyle.ThreeD }
 
 /**
  * Seeds for the category palette. They are harmonized toward the app's
@@ -201,7 +196,8 @@ fun paletteColor(index: Int): PaletteColors {
 
 /**
  * A category's icon on its tonal palette color: a disc that deepens toward one corner and is edged by a hairline of the
- * category's accent, so a row of them reads as a set of distinct, finished tokens rather than flat grey-ish dots.
+ * category's accent, so a row of them reads as a set of distinct, finished tokens rather than flat grey-ish dots. A brand's
+ * logo is round already, so it fills the disc; a 3D picture is drawn larger than a flat icon, which would look lost at its size.
  */
 @Composable
 fun CategoryAvatar(category: Category?, modifier: Modifier = Modifier, size: Dp = 40.dp) {
@@ -211,10 +207,19 @@ fun CategoryAvatar(category: Category?, modifier: Modifier = Modifier, size: Dp 
         if (category == null) {
             Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(size / 2))
         } else {
-            CategoryGlyph(category.icon, colors?.onContainer ?: scheme.onSurfaceVariant, size / 2, name = category.name)
+            val art = rememberCategoryArt(category.icon, category.name)
+            val artSize = when (art) {
+                is CategoryArt.Logo -> size
+                is CategoryArt.Picture -> size * PICTURE_IN_DISC
+                else -> size / 2
+            }
+            CategoryArtView(art, colors?.onContainer ?: scheme.onSurfaceVariant, artSize)
         }
     }
 }
+
+/** How much of an avatar's disc a 3D picture spans. */
+private const val PICTURE_IN_DISC = 0.62f
 
 /**
  * The round tonal disc behind a category's or a person's picture: [colors] deepening toward one corner and edged by a hairline
@@ -245,7 +250,7 @@ private val drawable = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
  * Android still lacks some of them and would draw an empty box; those categories fall back to the outlined icon instead.
  * (An emoji the user chose themselves is shown as given: it came from their own keyboard, so their device has it.)
  */
-private fun deviceCanDraw(emoji: String): Boolean =
+internal fun deviceCanDraw(emoji: String): Boolean =
     drawable.getOrPut(emoji) { runCatching { android.graphics.Paint().hasGlyph(emoji) }.getOrDefault(true) }
 
 /** How far the avatar's disc deepens toward its accent, and how visible its edge is. */
@@ -253,10 +258,8 @@ private const val AVATAR_DEPTH = 0.2f
 private const val AVATAR_RING = 0.16f
 
 /**
- * A category's icon at [size]:
- * 1. If [icon] (or [name]) corresponds to an authentic brand, it is rendered as an offline vector SVG in [tint].
- * 2. If [icon] is a user-chosen emoji (or [CategoryIconStyle.Emoji] is active), it renders the emoji.
- * 3. Otherwise, it falls back to the app's outlined icon in [tint].
+ * A category's icon at [size], drawn as [categoryArt] says for the user's icon style: a brand's logo or mark, a 3D picture,
+ * an emoji, or the app's outlined icon in [tint]. [name] is the category's, for a category called after a brand.
  *
  * Decorative: the category's name is what a screen reader says.
  */
@@ -268,31 +271,8 @@ fun CategoryGlyph(
     modifier: Modifier = Modifier,
     name: String? = null,
 ) {
-    val brand = brandAsset(icon) ?: name?.let { brandAssetForName(it) }
-    if (brand != null) {
-        SvgAsset(brand, modifier = modifier.size(size), tint = tint)
-        return
-    }
-    val emoji = emojiOf(icon)
-        ?: if (LocalCategoryIconStyle.current == CategoryIconStyle.Emoji) categoryEmoji(icon).takeIf(::deviceCanDraw) else null
-    if (emoji == null) {
-        Icon(categoryIcon(icon), contentDescription = null, tint = tint, modifier = modifier.size(size))
-        return
-    }
-    // `size` in dp whatever the user's font scale: an icon does not grow with the text around it.
-    val fontSize = with(LocalDensity.current) { (size * EMOJI_FILL).toSp() }
-    Box(modifier.size(size).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
-        Text(
-            emoji,
-            style = TextStyle(fontSize = fontSize, lineHeight = fontSize, platformStyle = PlatformTextStyle(includeFontPadding = false)),
-            maxLines = 1,
-            softWrap = false,
-        )
-    }
+    CategoryArtView(rememberCategoryArt(icon, name), tint, size, modifier)
 }
-
-/** How much of its box an emoji fills, so one reads as large as an outlined icon of the same size. */
-private const val EMOJI_FILL = 0.92f
 
 /** Avatar for a transfer (no category). */
 @Composable

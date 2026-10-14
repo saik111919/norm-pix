@@ -73,11 +73,11 @@ import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.creditRoom
 import com.example.normpix.finance.domain.minorToInputText
 import com.example.normpix.finance.domain.parseMinorUnits
+import com.example.normpix.finance.share.PaymentAppReceipts
 import com.example.normpix.finance.share.ShareNotice
 import com.example.normpix.finance.share.SharedDraftNotice
 import com.example.normpix.finance.share.SharedTextReading
 import com.example.normpix.finance.share.SharedTransactionImport
-import com.example.normpix.finance.share.SharedTransactionParser
 import com.example.normpix.finance.share.SharedTransactionPrefill
 import com.example.normpix.ui.components.AppLoadingState
 import com.example.normpix.ui.components.LocalOverlays
@@ -223,12 +223,11 @@ private fun TransactionEditor(
     // The picture: the one saved on the transaction (until it is removed or replaced), and a new one not saved yet.
     val pictureStore = controller.pictures
     val pictureReader = LocalAppContainer.current.sharedPictures
+    val is24Hour = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
     var keptPicture by remember { mutableStateOf(existing?.picture) }
     var draftPicture by remember { mutableStateOf(prefill?.picture) }
     val keptFile = remember(keptPicture) { pictureStore?.file(keptPicture) }
     val shownPicture = draftPicture ?: keptFile
-    var stagingPicture by remember { mutableStateOf(false) }
-    var readingPicture by remember { mutableStateOf(false) }
     var viewingPicture by remember { mutableStateOf(false) }
     // A payment read from an attached picture is looked for among those already recorded, as a shared one is.
     var readFromPicture by remember { mutableStateOf(false) }
@@ -319,7 +318,7 @@ private fun TransactionEditor(
         } ?: return true
         return overlays.confirm(
             title = "Already recorded?",
-            message = "${SharedTransactionImport.describe(match, finance.money, LocalDateTime.now()).replaceFirstChar { it.uppercase() }} " +
+            message = "${SharedTransactionImport.describe(match, finance.money, LocalDateTime.now(), is24Hour).replaceFirstChar { it.uppercase() }} " +
                 "looks like the same payment. Save this one as well?",
             confirmLabel = "Save anyway",
             cancelLabel = "Go back",
@@ -391,114 +390,123 @@ private fun TransactionEditor(
         }
     }
 
-    /** Attaches [draft] in place of any picture, then fills in from what it says whatever the form doesn't have yet. */
-    fun attachPicture(draft: File) {
-        pictureStore?.discard(draftPicture)
-        draftPicture = draft
-        pictureProblem = null
-        readingPicture = true
-        // In place of what the last picture said, if anything.
-        fun say(note: PictureNote) {
-            pictureNote = note
-            pictureNoteShown = true
-            picturesRead++
+    /** Says at the top of the form what reading a picture came to, in place of what the last picture said, if anything. */
+    fun sayAboutPicture(note: PictureNote) {
+        pictureNote = note
+        pictureNoteShown = true
+        picturesRead++
+    }
+
+    /**
+     * Fills in from what a picture says ([found], read from [readText]) whatever the form doesn't have yet, and says what
+     * it filled in.
+     */
+    fun fillFromPicture(found: SharedTransactionPrefill, readText: String) {
+        val fill = pictureFill(
+            found,
+            FormGaps(
+                type = type,
+                typeOpen = !typeChosen ||
+                    (!isEditing && !typeTouched && amount.isBlank() && type != TransactionType.Transfer),
+                amountEmpty = amount.isBlank(),
+                payeeEmpty = payee.isBlank(),
+                noteEmpty = note.isBlank(),
+                categoryEmpty = categoryId == null,
+                dateOpen = dateUnset || (!isEditing && !dateTouched && prefill?.occurredAt == null),
+                accountOpen = !isEditing && !accountTouched && initialAccountId == null && prefill?.accountId == null,
+            ),
+        )
+        fill.type?.let {
+            typeChosen = true
+            typeError = null
+            setType(it)
         }
-        scope.launch {
-            try {
-                val read = pictureReader.read(Uri.fromFile(draft))
-                if (read == null) {
-                    say(PictureNote("Picture attached", "No text could be read from it, so nothing was filled in."))
-                    return@launch
-                }
-                val now = LocalDateTime.now()
-                val reading = SharedTransactionParser.read(read.text, finance.currency, now.toLocalDate(), headline = read.headline)
-                if (reading !is SharedTextReading.Draft) {
-                    say(
-                        PictureNote(
-                            "Picture attached",
-                            "It doesn't look like a payment, so nothing was filled in.",
-                            readText = read.text,
-                        ),
-                    )
-                    return@launch
-                }
-                val found = SharedTransactionImport.prefill(reading.draft, read.text, finance, controller.repository, now, walletCards?.cards.orEmpty())
-                val fill = pictureFill(
-                    found,
-                    FormGaps(
-                        type = type,
-                        typeOpen = !typeChosen ||
-                            (!isEditing && !typeTouched && amount.isBlank() && type != TransactionType.Transfer),
-                        amountEmpty = amount.isBlank(),
-                        payeeEmpty = payee.isBlank(),
-                        noteEmpty = note.isBlank(),
-                        categoryEmpty = categoryId == null,
-                        dateOpen = dateUnset || (!isEditing && !dateTouched && prefill?.occurredAt == null),
-                        accountOpen = !isEditing && !accountTouched && initialAccountId == null && prefill?.accountId == null,
+        fill.amount?.let {
+            amount = minorToInputText(it, finance.currency.decimals)
+            amountError = null
+        }
+        fill.payee?.let {
+            payee = it
+            showDetails = true
+        }
+        fill.note?.let {
+            note = it
+            showDetails = true
+        }
+        fill.categoryId?.let {
+            categoryId = it
+            categoryError = null
+        }
+        fill.occurredAt?.let {
+            occurredAt = it
+            dateUnset = false
+            dateError = null
+        }
+        fill.accountId?.let {
+            accountId = it
+            accountError = null
+        }
+        // A number nothing matches: the account the form started with is a guess; it is the user's to choose.
+        if (fill.chooseAccount) {
+            accountId = null
+            accountError = null
+        }
+        readFromPicture = true
+        pictureReference = found.reference
+        val summary = fill.summary
+        val accountNotice = found.accountNotice.takeIf { fill.chooseAccount }
+        sayAboutPicture(
+            if (summary != null) {
+                PictureNote(
+                    "Filled in from the picture",
+                    "Read on this phone${found.app?.let { " as a $it receipt" }.orEmpty()}, which can get things wrong. " +
+                        "Check each detail, then save.",
+                    notices = listOfNotNull(
+                        ShareNotice("Filled in $summary."),
+                        ShareNotice("Anything already filled in stays as it was.").takeIf { fill.kept },
+                        accountNotice,
                     ),
+                    readText = readText,
                 )
-                fill.type?.let {
-                    typeChosen = true
-                    typeError = null
-                    setType(it)
-                }
-                fill.amount?.let {
-                    amount = minorToInputText(it, finance.currency.decimals)
-                    amountError = null
-                }
-                fill.payee?.let {
-                    payee = it
-                    showDetails = true
-                }
-                fill.note?.let {
-                    note = it
-                    showDetails = true
-                }
-                fill.categoryId?.let {
-                    categoryId = it
-                    categoryError = null
-                }
-                fill.occurredAt?.let {
-                    occurredAt = it
-                    dateUnset = false
-                    dateError = null
-                }
-                fill.accountId?.let {
-                    accountId = it
-                    accountError = null
-                }
-                // A number nothing matches: the account the form started with is a guess; it is the user's to choose.
-                if (fill.chooseAccount) {
-                    accountId = null
-                    accountError = null
-                }
-                readFromPicture = true
-                pictureReference = found.reference
-                val summary = fill.summary
-                val accountNotice = found.accountNotice.takeIf { fill.chooseAccount }
-                say(
-                    if (summary != null) {
-                        PictureNote(
-                            "Filled in from the picture",
-                            "Read on this phone, which can get things wrong. Check each detail, then save.",
-                            notices = listOfNotNull(
-                                ShareNotice("Filled in $summary."),
-                                ShareNotice("Anything already filled in stays as it was.").takeIf { fill.kept },
-                                accountNotice,
-                            ),
-                            readText = read.text,
-                        )
-                    } else {
-                        PictureNote(
-                            "Picture attached",
-                            "What it shows is already filled in.",
-                            notices = listOfNotNull(accountNotice),
-                            readText = read.text,
-                        )
-                    },
+            } else {
+                PictureNote(
+                    "Picture attached",
+                    "What it shows is already filled in.",
+                    notices = listOfNotNull(accountNotice),
+                    readText = readText,
                 )
-            } finally {
-                readingPicture = false
+            },
+        )
+    }
+
+    /**
+     * Reads [draft] while the loading sheet is up ([rememberPictureInput]) and gives back what attaching it does: put it in
+     * place of any picture, then fill in from what it says whatever the form doesn't have yet. The form doesn't change until
+     * then, so a cancelled reading leaves it as it was. The text is read from the [original] picture when there is one: the
+     * draft is scaled down, and small print reads worse.
+     */
+    suspend fun readPicture(draft: File, original: Uri?): () -> Unit {
+        val read = original?.let { pictureReader.read(it) } ?: pictureReader.read(Uri.fromFile(draft))
+        val now = LocalDateTime.now()
+        // What it says as a payment, read the way a shared picture is; null when it doesn't look like one.
+        val found = read?.let {
+            val reading = PaymentAppReceipts.read("", it, finance.currency, now.toLocalDate())
+            if (reading is SharedTextReading.Draft) {
+                SharedTransactionImport.prefill(reading.draft, it.text, finance, controller.repository, now, walletCards?.cards.orEmpty())
+            } else {
+                null
+            }
+        }
+        return {
+            pictureStore?.discard(draftPicture)
+            draftPicture = draft
+            pictureProblem = null
+            when {
+                read == null -> sayAboutPicture(PictureNote("Picture attached", "No text could be read from it, so nothing was filled in."))
+                found == null -> sayAboutPicture(
+                    PictureNote("Picture attached", "It doesn't look like a payment, so nothing was filled in.", readText = read.text),
+                )
+                else -> fillFromPicture(found, read.text)
             }
         }
     }
@@ -524,7 +532,6 @@ private fun TransactionEditor(
     LaunchedEffect(picturesRead) { if (picturesRead > 0) topOfForm.bringIntoView() }
     val (dateShape, timeShape) = remember { connectedFieldShapes() }
     val reduced = rememberReducedMotion()
-    val is24Hour = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
 
     EditorSheet(
         title = "${if (isEditing) "Edit" else "New"} $noun",
@@ -734,16 +741,14 @@ private fun TransactionEditor(
                 shape = TonalFieldShape,
             )
         }
-        // Where pictures can be kept (not in the sample data): a bill, a receipt or a payment screenshot, read to fill in.
+        // Where pictures can be kept (the sample data keeps its own): a bill, a receipt or a payment screenshot, read to fill in.
         if (pictureStore != null) {
             Spacer(Modifier.height(AppSpacing.lg))
             TransactionPictureField(
                 picture = shownPicture,
-                busy = stagingPicture || readingPicture,
                 input = rememberPictureInput(
                     pictureStore,
-                    onBusy = { stagingPicture = it },
-                    onPicked = ::attachPicture,
+                    onPicked = ::readPicture,
                     onProblem = { pictureProblem = it },
                 ),
                 onView = { viewingPicture = true },

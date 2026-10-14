@@ -125,11 +125,13 @@ enum class CardsLayout(val label: String, val description: String) {
 }
 
 /**
- * How the app's built-in category icons are drawn: as colourful emoji, or as the outlined Material icons. A category the
- * user gave an emoji of their own shows that emoji either way.
+ * How the app's built-in category icons are drawn: as 3D pictures, as the phone's own emoji, or as the outlined Material
+ * icons. A brand is shown by its logo in the first two. A category the user gave an emoji of their own shows that emoji in
+ * every style (in 3D where the app has a picture of it). Stored by name: "Emoji" and "Outline" are what earlier versions saved.
  */
 enum class CategoryIconStyle(val label: String, val description: String) {
-    Emoji("Emoji", "Colourful, specific pictures: a pizza for Pizza, a bus for Bus & metro"),
+    ThreeD("3D", "Rich 3D pictures, and each brand's own logo: a pizza for Pizza, the Swiggy logo for Swiggy"),
+    Emoji("Emoji", "Your phone's own colourful emoji, with brand logos"),
     Outline("Outline", "Simple single-colour icons that take the category's colour"),
 }
 
@@ -174,7 +176,7 @@ data class AppPrefsState(
     /** The window each [ScheduledFeature] may be used in; a feature missing here is always available. */
     val availability: Map<ScheduledFeature, AvailabilityRule> = emptyMap(),
     /** How the built-in category icons are drawn, wherever a category shows. */
-    val categoryIconStyle: CategoryIconStyle = CategoryIconStyle.Emoji,
+    val categoryIconStyle: CategoryIconStyle = CategoryIconStyle.ThreeD,
     /** What the user likes to be called. Stays on this device; empty until they say. */
     val profileName: String = "",
     /** One emoji for the profile picture, or empty for the name's initials. */

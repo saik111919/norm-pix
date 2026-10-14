@@ -246,7 +246,7 @@ fun ProvideAppEnvironment(container: AppContainer, content: @Composable () -> Un
     }
     DisposableEffect(scope) { onDispose { scope.cancel() } }
     val overlays = remember { AppOverlays() }
-    val snackbars = remember { AppSnackbars(SnackbarHostState(), scope).also { snackbarsRef[0] = it } }
+    val snackbars = remember { AppSnackbars(SnackbarHostState(), scope, heldBack = { overlays.isOpen }).also { snackbarsRef[0] = it } }
     val permissions = rememberPermissionRequester()
 
     // The page under an open sheet or dialog is blurred here, by the app, so it can move in step with the sheet: each

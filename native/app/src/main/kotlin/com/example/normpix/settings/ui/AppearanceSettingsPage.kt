@@ -1,6 +1,7 @@
 package com.example.normpix.settings.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -30,12 +32,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -45,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.settings.AccentColor
+import com.example.normpix.settings.AppIcon
+import com.example.normpix.settings.AppIcons
 import com.example.normpix.settings.BackButtonStyle
 import com.example.normpix.settings.CategoryIconStyle
 import com.example.normpix.settings.ColorSource
@@ -55,6 +65,8 @@ import com.example.normpix.ui.components.AppLinearProgress
 import com.example.normpix.ui.components.AppLoadingIndicator
 import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.ListSection
+import com.example.normpix.ui.components.LocalAppScope
+import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.RadioRow
 import com.example.normpix.ui.components.SwitchRow
 import com.example.normpix.ui.components.rememberAppHaptics
@@ -68,6 +80,7 @@ import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.AppTheme
 import com.example.normpix.ui.theme.isDark
+import kotlinx.coroutines.launch
 
 private val themeOptions = listOf(
     ChoiceOption(ThemeMode.System, "System", Icons.Outlined.BrightnessAuto),
@@ -84,6 +97,11 @@ fun AppearanceSettingsPage() {
     val haptics = rememberAppHaptics()
     val wallpaperColors = AppTheme.dynamicColorSupported
     val usingWallpaper = prefs.colorSource == ColorSource.System && wallpaperColors
+    val context = LocalContext.current
+    val overlays = LocalOverlays.current
+    val scope = LocalAppScope.current
+    // Android holds the choice; read it each time the page opens.
+    var appIcon by remember { mutableStateOf(AppIcons.current(context)) }
 
     AppSubPage(title = "Appearance", onBack = navigator::back) {
         item(key = "body") {
@@ -129,6 +147,32 @@ fun AppearanceSettingsPage() {
                     }
                 }
                 ListSection(
+                    title = "App icon",
+                    footer = "How NormPix looks on your home screen and in the app list. Android may close NormPix while it " +
+                        "changes the icon, and some home screens drop the old one - add it back from the app list.",
+                ) {
+                    item {
+                        AppIconPicker(
+                            selected = appIcon,
+                            onSelected = { icon ->
+                                haptics.selection()
+                                scope.launch {
+                                    val change = overlays.confirm(
+                                        title = "Use the ${icon.label} icon?",
+                                        message = "NormPix may close for a moment while Android changes its icon. " +
+                                            "If it leaves your home screen, add it back from the app list.",
+                                        confirmLabel = "Change icon",
+                                    )
+                                    if (!change) return@launch
+                                    AppIcons.use(context, icon)
+                                    appIcon = icon
+                                }
+                            },
+                            modifier = Modifier.padding(AppSpacing.lg),
+                        )
+                    }
+                }
+                ListSection(
                     title = "Effects",
                     footer = "Needs Android 12 or later with the system's blur effects on. Where blur is off or unavailable, " +
                         "sheets, dialogs and the floating bars are solid and the page behind them stays sharp.",
@@ -168,7 +212,7 @@ fun AppearanceSettingsPage() {
                 ListSection(
                     title = "Category icons",
                     footer = "How categories are pictured in lists, charts and the transaction editor. A category with an emoji of " +
-                        "its own keeps it either way.",
+                        "its own keeps it in every style.",
                     modifier = Modifier.selectableGroup(),
                 ) {
                     for (style in CategoryIconStyle.entries) {
@@ -256,6 +300,78 @@ private fun ProgressPreview(style: ProgressStyle) {
         AppLinearProgress(Modifier.width(56.dp), progress = { 0.6f }, style = style)
         Spacer(Modifier.width(AppSpacing.sm))
         AppLoadingIndicator(Modifier.size(32.dp), style = style, strokeWidth = 3.dp)
+    }
+}
+
+/** The launcher icons, five to a row, each as a round launcher shows it, with its name underneath. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AppIconPicker(selected: AppIcon, onSelected: (AppIcon) -> Unit, modifier: Modifier = Modifier) {
+    val primary = MaterialTheme.colorScheme.primary
+    FlowRow(
+        modifier.fillMaxWidth().selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(AppSpacing.xs),
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.md),
+        maxItemsInEachRow = 5,
+    ) {
+        for (icon in AppIcon.entries) {
+            val isSelected = icon == selected
+            val ring by animateColorAsState(if (isSelected) primary else Color.Transparent, label = "appIconRing")
+            Column(
+                Modifier
+                    .weight(1f)
+                    .clip(AppRadius.rMd)
+                    .selectable(selected = isSelected, role = Role.RadioButton, onClick = { if (!isSelected) onSelected(icon) })
+                    .clearAndSetSemantics {
+                        contentDescription = "${icon.label} icon"
+                        role = Role.RadioButton
+                        this.selected = isSelected
+                    }
+                    .padding(vertical = AppSpacing.xs),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box {
+                    AppIconImage(icon, Modifier.size(52.dp).border(2.dp, ring, CircleShape).padding(4.dp))
+                    if (isSelected) {
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomEnd)
+                                .size(18.dp)
+                                .background(primary, CircleShape)
+                                .border(1.5.dp, MaterialTheme.colorScheme.surfaceContainer, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(12.dp),
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(AppSpacing.xs))
+                Text(icon.label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** An app icon as a round launcher shows it: its two layers, of which only the middle two thirds are ever shown. */
+@Composable
+private fun AppIconImage(icon: AppIcon, modifier: Modifier = Modifier) {
+    Box(modifier.clip(CircleShape)) {
+        for (layer in listOf(icon.background, icon.foreground)) {
+            Image(
+                painterResource(layer),
+                contentDescription = null,
+                contentScale = ContentScale.FillBounds,
+                modifier = Modifier.fillMaxSize().graphicsLayer {
+                    scaleX = 1.5f
+                    scaleY = 1.5f
+                },
+            )
+        }
     }
 }
 
