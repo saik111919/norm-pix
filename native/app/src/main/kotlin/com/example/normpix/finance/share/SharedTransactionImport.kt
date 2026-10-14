@@ -35,6 +35,8 @@ data class SharedTransactionPrefill(
     val note: String? = null,
     /** Null to start at now, as any new entry does. */
     val occurredAt: LocalDateTime? = null,
+    /** Whether the message gave the time as well: without it, [occurredAt] has the time of reading. */
+    val timeRead: Boolean = false,
     /** The message's date couldn't be read, so the date has to be chosen before saving. */
     val dateNeedsChoice: Boolean = false,
     val accountId: Long? = null,
@@ -117,6 +119,7 @@ object SharedTransactionImport {
             payee = payee,
             note = draft.note,
             occurredAt = occurredAt,
+            timeRead = draft.date != null && draft.time != null,
             dateNeedsChoice = draft.dateUnreadable,
             accountId = account?.id,
             accountNeedsChoice = needsChoice,

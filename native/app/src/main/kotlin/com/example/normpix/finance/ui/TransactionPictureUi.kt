@@ -27,15 +27,22 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.DocumentScanner
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -219,7 +226,8 @@ fun rememberPictureBitmap(file: File?, maxSide: Int): ImageBitmap? {
 /**
  * The form's picture field, in the form's own tonal style. Without a picture: "Take a photo" and "Choose one" as one
  * split pill, like the date and time. With one: a [PictureCard] (which opens it whole) with Replace - the camera or a
- * picture, from the app's menu - and Remove at its end. While a picture is prepared and read, a loading sheet is up
+ * picture, from the app's menu - and Remove at its end, after [onReadAgain] (when given): the picture read once more and
+ * what it says put in the form. While a picture is prepared and read, a loading sheet is up
  * ([rememberPictureInput]); [errorText] says what went wrong getting one, under the field like any field's error.
  */
 @Composable
@@ -230,6 +238,7 @@ fun TransactionPictureField(
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
     errorText: String? = null,
+    onReadAgain: (() -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     Column(modifier.fillMaxWidth()) {
@@ -255,6 +264,7 @@ fun TransactionPictureField(
             }
         } else {
             PictureCard(picture, label = "Picture", value = "Attached", onView = onView) {
+                onReadAgain?.let { ReadAgainButton(it) }
                 ReplacePictureButton(input)
                 IconButton(onClick = onRemove) {
                     Icon(Icons.Outlined.DeleteOutline, contentDescription = "Remove picture")
@@ -317,6 +327,21 @@ fun PictureCard(
             }
         }
         actions()
+    }
+}
+
+/** Read again: the picture read once more by this version of NormPix, and what it says put in the form. Named on long press. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReadAgainButton(onClick: () -> Unit) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+        tooltip = { PlainTooltip { Text("Read again") } },
+        state = rememberTooltipState(),
+    ) {
+        IconButton(onClick = onClick) {
+            Icon(Icons.Outlined.DocumentScanner, contentDescription = "Read the picture again")
+        }
     }
 }
 
@@ -536,5 +561,43 @@ internal fun pictureFill(found: SharedTransactionPrefill, gaps: FormGaps): Pictu
         accountId = found.accountId?.takeIf { gaps.accountOpen },
         chooseAccount = found.accountNeedsChoice && found.accountId == null && gaps.accountOpen && !transfer,
         kept = kept,
+    )
+}
+
+/** What the form holds, for [pictureRefill]. */
+internal data class FormValues(
+    /** Null while the user hasn't said expense or income. */
+    val type: TransactionType?,
+    val amount: Long?,
+    val payee: String,
+    val note: String,
+    val categoryId: Long?,
+    /** Null while the date has to be chosen. */
+    val occurredAt: LocalDateTime?,
+    val accountId: Long?,
+)
+
+/**
+ * What reading the attached picture again ([found]) changes in the form ([now]). Unlike [pictureFill] - which fills only
+ * what is empty - what the picture says takes the place of what the form has: it is asked for to put right a picture an
+ * earlier NormPix read wrongly, so the form has to follow the picture. What a picture can't say stays: the category the
+ * user chose (unless the type changes from under it), the note they wrote, a transfer's type, and a time it doesn't show.
+ */
+internal fun pictureRefill(found: SharedTransactionPrefill, now: FormValues): PictureFill {
+    val transfer = now.type == TransactionType.Transfer
+    val type = found.type?.takeIf { !transfer && it != now.type }
+    val finalType = type ?: now.type
+    val categoryFits = found.type == finalType
+    val occurredAt = found.occurredAt?.let { read ->
+        if (found.timeRead || now.occurredAt == null) read else LocalDateTime.of(read.toLocalDate(), now.occurredAt.toLocalTime())
+    }
+    return PictureFill(
+        type = type,
+        amount = found.amount?.takeIf { it != now.amount },
+        payee = found.payee?.takeIf { !transfer && it != now.payee },
+        note = found.note?.takeIf { now.note.isBlank() },
+        categoryId = found.categoryId?.takeIf { !transfer && categoryFits && (now.categoryId == null || type != null) && it != now.categoryId },
+        occurredAt = occurredAt?.takeIf { it != now.occurredAt },
+        accountId = found.accountId?.takeIf { it != now.accountId },
     )
 }

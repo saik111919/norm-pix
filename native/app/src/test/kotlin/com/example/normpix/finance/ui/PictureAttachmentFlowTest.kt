@@ -217,6 +217,69 @@ class PictureAttachmentFlowTest {
     }
 
     @Test
+    fun `a saved transaction's picture can be read again, and what it says replaces what was read wrongly`() {
+        // Saved as an earlier reading had it: ₹710 from a misread ₹, and no payee.
+        val transaction = runBlocking {
+            val draft = assertNotNull(store.stage(galleryPicture()))
+            finance.saveTransaction(
+                FinanceTransaction(
+                    type = TransactionType.Expense,
+                    amount = 71_000,
+                    accountId = finance.state.value.defaultAccount!!.id!!,
+                    categoryId = finance.state.value.categories.first { it.name == "Food & dining" }.id,
+                    occurredAt = LocalDateTime.of(2026, 10, 10, 12, 34),
+                    createdAt = LocalDateTime.now(),
+                    updatedAt = LocalDateTime.now(),
+                ),
+                PictureEdit.Attach(draft),
+            )
+        }
+        open { editTransaction(transaction) }
+        waitFor("Attached")
+        amountField().assert(hasText("710"))
+
+        compose.onNodeWithContentDescription("Read the picture again").performScrollTo().performClick()
+        waitFor("Changed the amount, payee and reference.")
+        compose.onNodeWithText("Read again").assertIsDisplayed()
+        amountField().assert(hasText("250"))
+        compose.onNodeWithText("SWIGGY").assertExists()
+        // Nothing is saved until the form is.
+        assertEquals(71_000L, stored().single().amount)
+
+        compose.onNodeWithText("Save changes").performClick()
+        compose.waitUntil(timeoutMillis = 10_000) { stored().single().amount == 25_000L }
+        val saved = stored().single()
+        assertEquals("SWIGGY", saved.payee)
+        assertEquals("Food & dining", finance.state.value.category(saved.categoryId)?.name)
+        assertEquals(transaction.picture, saved.picture)
+    }
+
+    @Test
+    fun `reading a picture again that says nothing changes nothing`() {
+        reader.text = null
+        val transaction = runBlocking {
+            val draft = assertNotNull(store.stage(galleryPicture()))
+            finance.saveTransaction(
+                FinanceTransaction(
+                    type = TransactionType.Expense,
+                    amount = 71_000,
+                    accountId = finance.state.value.defaultAccount!!.id!!,
+                    categoryId = finance.state.value.categories.first { it.name == "Food & dining" }.id,
+                    occurredAt = LocalDateTime.of(2026, 10, 10, 12, 34),
+                    createdAt = LocalDateTime.now(),
+                    updatedAt = LocalDateTime.now(),
+                ),
+                PictureEdit.Attach(draft),
+            )
+        }
+        open { editTransaction(transaction) }
+        waitFor("Attached")
+        compose.onNodeWithContentDescription("Read the picture again").performScrollTo().performClick()
+        waitFor("No text could be read from it, so nothing changed.")
+        amountField().assert(hasText("710"))
+    }
+
+    @Test
     fun `a transaction's details show its picture, which opens whole`() {
         val transaction = runBlocking {
             val draft = assertNotNull(store.stage(galleryPicture()))
