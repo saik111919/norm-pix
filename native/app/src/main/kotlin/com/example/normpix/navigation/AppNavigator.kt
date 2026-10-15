@@ -1,6 +1,7 @@
 package com.example.normpix.navigation
 
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.example.normpix.finance.domain.DateRange
 import com.example.normpix.finance.domain.MonthKey
 
 /** The top-level destinations of the app shell. */
@@ -46,6 +47,9 @@ interface AppNavigator {
     fun openPerson(personId: Long)
 
     fun openCategoryHistory(categoryId: Long, month: MonthKey)
+
+    /** One category's transactions over the whole days of [range]; a navigator without the route shows the month it starts in. */
+    fun openCategoryHistory(categoryId: Long, range: DateRange) = openCategoryHistory(categoryId, MonthKey.of(range.start))
 
     fun openAccountHistory(accountId: Long)
 

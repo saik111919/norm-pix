@@ -78,7 +78,13 @@ fun BudgetsView() {
     val overview by rememberFinanceQuery(month) { budgetOverview(month) }
 
     Column(Modifier.padding(AppSpacing.page)) {
-        MonthSwitcher(month = month, latest = current, onChanged = { month = it })
+        // Clear of whatever is above it - the section tabs, or the overdue notice under them - by the same gap either way.
+        MonthSwitcher(
+            month = month,
+            latest = current,
+            onChanged = { month = it },
+            modifier = Modifier.padding(top = AppSpacing.md),
+        )
         when (val value = overview) {
             is AsyncValue.Loading -> AppLoadingState(label = "Loading budgets")
             is AsyncValue.Failure -> AppErrorState(

@@ -69,8 +69,12 @@ class RecentRowDateTest {
 
     private fun showHome() {
         compose.setContent { env.Content { HomeScreen() } }
-        // Home reads its recent activity in the background; wait for the row's date rather than racing it.
-        compose.waitUntil(10_000) { compose.onAllNodesWithText(date, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        // Home reads its recent activity in the background; wait for the row's date rather than racing it. Each read comes
+        // back through the main looper, so idle on every check or one that lands after the last idle is never delivered.
+        compose.waitUntil(10_000) {
+            compose.waitForIdle()
+            compose.onAllNodesWithText(date, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     /**
