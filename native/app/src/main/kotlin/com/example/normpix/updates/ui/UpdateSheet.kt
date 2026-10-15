@@ -65,6 +65,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 import java.util.WeakHashMap
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 
 /** How many update sheets are on screen, for each updater (only ever touched on the main thread). */
@@ -86,12 +87,13 @@ suspend fun showUpdateSheet(overlays: AppOverlays, updater: AppUpdater) {
 
 /**
  * At launch, once the app is unlocked: a newer release found by the daily check is offered in the update sheet (see
- * [AppUpdater.launchOffer]); nothing is asked while the user has automatic checks off. And whenever a download finishes
- * with no update sheet on screen (it was closed to let the download carry on), the sheet comes back, once the app is
- * unlocked, ready to install: nothing is installed until the user taps Install.
+ * [AppUpdater.launchOffer]); nothing is asked while the user has automatic checks off. Whenever a download the user
+ * started finishes with no update sheet on screen (it was closed to let the download carry on), the sheet comes back,
+ * once the app is unlocked, ready to install: nothing is installed until the user taps Install. And a tapped update
+ * notification ([requests]) brings the sheet up, once unlocked.
  */
 @Composable
-fun OfferAppUpdates(updater: AppUpdater?, appLocked: Boolean) {
+fun OfferAppUpdates(updater: AppUpdater?, appLocked: Boolean, requests: MutableStateFlow<Boolean>? = null) {
     if (updater == null) return
     val overlays = LocalOverlays.current
     val preferences = LocalAppPreferences.current
@@ -100,7 +102,19 @@ fun OfferAppUpdates(updater: AppUpdater?, appLocked: Boolean) {
         if (appLocked) return@LaunchedEffect
         val allowed = preferences?.state?.value?.updateChecksEnabled ?: false
         updater.launchOffer(allowed) ?: return@LaunchedEffect
-        showUpdateSheet(overlays, updater)
+        if (!isUpdateSheetOpen(updater)) showUpdateSheet(overlays, updater)
+    }
+    if (requests != null) {
+        LaunchedEffect(updater, requests) {
+            requests.collect { asked ->
+                if (!asked) return@collect
+                snapshotFlow { locked }.first { !it }
+                requests.value = false
+                // A fresh start after the notification: GitHub is asked again (an update downloaded is found ready).
+                if (updater.state.value.release == null) updater.check()
+                if (updater.state.value !is UpdateState.UpToDate && !isUpdateSheetOpen(updater)) showUpdateSheet(overlays, updater)
+            }
+        }
     }
     LaunchedEffect(updater) {
         updater.downloaded.collect {

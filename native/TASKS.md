@@ -443,6 +443,28 @@ Asked for (2026-10-14): "When loading an image show proper loading sheet instead
 - [x] Transport's 3D car centred in its circle
 - [ ] Checks: CI (tests, lint, release build) on the PR; not tried on a phone
 
+## Phase 18 - Motion, undo, full backups, viewer (2026-10-15)
+- [x] Font: GS Flex in its Zenith style is the default
+- [x] Tabs: no flash of the arriving tab at full strength before it fades in; the tab going away stays under it and leaves in the chosen style (in the window style it recedes as the new one grows out of the bottom edge)
+- [x] Sheets and decisions open and close like windows in the Linux window style (grow out of the bottom edge as they rise, shrink back as they're dragged down)
+- [x] Snackbars follow the finger when swiped (drag events no longer go through a coroutine each); a fling decides the way they go
+- [x] Undo for a few seconds after deleting a transaction, account, category, person, recurring payment, budget, reminder or card, after archiving, after erasing all finance data and after restoring a backup (`FinanceController.undoable`: the ledger as it was, given back only while nothing else changed)
+- [x] Full backup with pictures (.zip: `normpix-backup.json` + `pictures/`), backup without pictures (.json) and CSV; restore reads either kind
+- [x] A new repeating payment (from the editor's repeat or a recurring payment) gets a linked reminder at once, with an Undo
+- [x] Settings: the search field waits in the header as an icon once scrolled away
+- [x] Picture viewer: glass close button and title, zoom toolbar (out / percent to fit / in / fit), double tap zooms where tapped; Read again uses a redo icon
+- [x] Eye button on Insights and Plans & Transactions too
+- [ ] Checks: CI (tests, lint, release build) on the PR; not tried on a phone
+
+## Phase 19 - Updates in the background (2026-10-15)
+- [x] Inspected first: the updater only checked at launch (once a day) and in Settings, and every install waited for the user's confirmation; the network state permission had been removed
+- [x] A daily JobScheduler run (`UpdateJobService`, `UpdateSchedule`): kept over a restart, not on a low battery, on Wi-Fi (or another unmetered network) to download unless mobile data is allowed; follows Settings as it changes
+- [x] Settings > Automatic updates: the daily check on or off, what happens to an update found in the background - Tell me / Download it, then ask (the default) / Install it automatically - and Download on mobile data; says when Android's install leave or notifications stand in the way
+- [x] Install it automatically: `USER_ACTION_NOT_REQUIRED` with `UPDATE_PACKAGES_WITHOUT_USER_ACTION` (Android 12+, NormPix updating itself), only once NormPix has been off screen 10 minutes; if Android wants a confirmation, or refuses for now, it waits for the user's Install and says it's ready; the new version says it was installed
+- [x] Notifications on a quiet "App updates" channel, once per release; a tap opens the update sheet (after unlocking); Later or Install takes them down; none while notifications are off
+- [x] A download made in the background is found at the next launch, ready to install, without downloading again; Later is respected in the background
+- [ ] Checks: CI on the PR; not tried on a phone
+
 ## Backlog - to come back to
 
 - [ ] **Reminders that behave like Samsung Reminder** (asked 2026-10-14, parked until we return to it). Today a reminder

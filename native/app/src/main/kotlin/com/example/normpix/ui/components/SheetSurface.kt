@@ -9,11 +9,14 @@ import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
@@ -26,6 +29,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.platform.LocalDensity
 import kotlin.math.max
 import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.graphics.graphicsLayer
@@ -273,4 +278,40 @@ private fun rememberCrossWindowBlur(): Boolean {
         onDispose { runCatching { manager?.removeCrossWindowBlurEnabledListener(listener) } }
     }
     return enabled
+}
+
+/** How small a sheet or decision is as it starts to rise in the window style: it grows to full size as it comes up. */
+private const val SHEET_WINDOW_SCALE = 0.9f
+
+/**
+ * A sheet that opens and closes like a window, for the Linux window page style: it grows out of the bottom edge as it
+ * rises - quick to fade in, decelerating into place - and shrinks back towards it, fading, as it is dragged down or
+ * closed, the way a page opens and closes in that style. Read from where [state] has the sheet each frame, so it follows
+ * the finger and the sheet's own motion exactly; at rest it is the sheet as it is. Off ([enabled] false) it changes nothing.
+ *
+ * Material's sheet is laid out at the top of its window and drawn [SheetState.requireOffset] lower, so the window's
+ * bottom-edge pivot is worked out from that offset rather than from where the sheet is laid out.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun Modifier.windowRise(state: SheetState, enabled: Boolean): Modifier {
+    if (!enabled) return this
+    val statusTop = WindowInsets.statusBars.getTop(LocalDensity.current).toFloat()
+    // The window's height and the sheet's own, as laid out (neither changes with the scaling below).
+    val sizes = remember { floatArrayOf(0f, 0f) }
+    return onGloballyPositioned { coordinates ->
+        sizes[0] = (coordinates.parentLayoutCoordinates?.size?.height ?: 0).toFloat()
+        sizes[1] = coordinates.size.height.toFloat()
+    }.graphicsLayer {
+        val height = sizes[1]
+        val offset = runCatching { state.requireOffset() }.getOrNull()
+        if (offset == null || height <= 0f) return@graphicsLayer
+        val share = sheetShareOnScreen(sizes[0] - statusTop, offset, height)
+        val scale = SHEET_WINDOW_SCALE + (1f - SHEET_WINDOW_SCALE) * share
+        scaleX = scale
+        scaleY = scale
+        alpha = (share / 0.6f).coerceIn(0f, 1f)
+        // The bottom of the sheet as drawn: it grows out of, and shrinks back into, the bottom edge.
+        transformOrigin = TransformOrigin(0.5f, (offset + height) / height)
+    }
 }

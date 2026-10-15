@@ -120,19 +120,35 @@ fun installOutcome(status: Int, message: String?): InstallOutcome {
     }
 }
 
-/** Hands an APK to Android's installer, which asks the user; the outcome comes back to [AppUpdater] (see [UpdateInstallReceiver]). */
+/**
+ * Hands an APK to Android's installer, which asks the user - or, for an update the user chose to have installed
+ * automatically, doesn't where Android allows it. The outcome comes back to [AppUpdater] (see [UpdateInstallReceiver]).
+ */
 interface UpdateInstaller {
     /** Whether Android lets NormPix ask it to install apps (Settings > Apps > Special app access > Install unknown apps). */
     fun canInstall(): Boolean
 
+    /**
+     * Whether this Android can install an update of NormPix without asking (Android 12 and later, for an app updating
+     * itself). Even then Android may still ask, and says so (see [AppUpdater.onInstallNeedsUser]).
+     */
+    val installsQuietly: Boolean
+
     /** Opens that setting at NormPix's entry; false when no screen could show it. */
     fun openInstallSetting(): Boolean
 
+    /** [install] as the user asked for it: Android asks them to confirm. */
+    fun install(apk: File, release: UpdateRelease, started: (id: Int) -> Unit) = install(apk, release, quiet = false, started)
+
     /**
      * Starts installing [apk], checking it against [release]'s SHA-256 once more as it is handed over. [started] gets the
-     * install's id before Android can report on it.
+     * install's id before Android can report on it. [quiet] asks Android not to ask the user: only for an update they
+     * chose to have installed automatically.
      */
-    fun install(apk: File, release: UpdateRelease, started: (id: Int) -> Unit)
+    fun install(apk: File, release: UpdateRelease, quiet: Boolean, started: (id: Int) -> Unit)
+
+    /** Drops install [id], if it is still under way. */
+    fun abandon(id: Int)
 
     /** Shows the confirmation Android's installer asks for; false when it couldn't be shown. */
     fun confirm(intent: Intent): Boolean
@@ -143,8 +159,9 @@ interface UpdateInstaller {
 
 /**
  * [UpdateInstaller] through a [PackageInstaller] session: the update is streamed into it (no file is shared with another
- * app, so no FileProvider is needed), and Android shows its own confirmation before anything is installed. The app is
- * never uninstalled: an update Android won't put over it fails and says why.
+ * app, so no FileProvider is needed), and Android shows its own confirmation before anything is installed - unless the
+ * user chose automatic installs and Android allows one. The app is never uninstalled: an update Android won't put over it
+ * fails and says why.
  */
 class SessionUpdateInstaller(
     private val context: Context,
@@ -155,18 +172,26 @@ class SessionUpdateInstaller(
 
     override fun canInstall(): Boolean = context.packageManager.canRequestPackageInstalls()
 
+    override val installsQuietly: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
     override fun openInstallSetting(): Boolean =
         show(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")))
 
-    override fun install(apk: File, release: UpdateRelease, started: (id: Int) -> Unit) {
+    override fun install(apk: File, release: UpdateRelease, quiet: Boolean, started: (id: Int) -> Unit) {
         // An install left from an earlier try (turned down, or the app closed under it) goes: only the newest is committed.
         sessions.mySessions.forEach { runCatching { sessions.abandonSession(it.sessionId) } }
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(context.packageName)
             setSize(apk.length())
             setInstallReason(PackageManager.INSTALL_REASON_USER)
-            // The user confirms every update. NormPix never installs one quietly, even where Android would let it.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
+            // The user confirms every update, unless they chose to have updates installed automatically: then Android
+            // installs this one without asking, where it allows that (NormPix updating itself, with
+            // UPDATE_PACKAGES_WITHOUT_USER_ACTION), and asks where it doesn't.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                setRequireUserAction(
+                    if (quiet) PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED else PackageInstaller.SessionParams.USER_ACTION_REQUIRED,
+                )
+            }
         }
         val id = try {
             sessions.createSession(params)
@@ -205,6 +230,10 @@ class SessionUpdateInstaller(
     }
 
     override fun confirm(intent: Intent): Boolean = show(intent)
+
+    override fun abandon(id: Int) {
+        runCatching { sessions.abandonSession(id) }
+    }
 
     override fun isActive(id: Int): Boolean = sessions.getSessionInfo(id) != null
 

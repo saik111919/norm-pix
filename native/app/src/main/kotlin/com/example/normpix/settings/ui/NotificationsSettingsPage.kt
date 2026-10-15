@@ -30,8 +30,8 @@ import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppSpacing
 
 /**
- * Settings > Notifications: one switch for everything NormPix posts - reminders as they come due, and the daily card-expiry
- * reminder. Off, nothing alerts; reminders and expiry dates are still there in the app. Android's own switch for the app is
+ * Settings > Notifications: one switch for everything NormPix posts - reminders as they come due, the daily card-expiry
+ * reminder, and word of an update. Off, nothing alerts; reminders, expiry dates and updates are still there in the app. Android's own switch for the app is
  * a separate one, and this page says when that is what keeps notifications away.
  */
 @Composable
@@ -60,15 +60,17 @@ fun NotificationsSettingsPage() {
             Column(Modifier.padding(AppSpacing.page)) {
                 ListSection(
                     footer = if (prefs.notificationsEnabled) {
-                        "Reminders alert you when they come due, and a saved card that is about to expire gets a daily reminder."
+                        "Reminders alert you when they come due, a saved card that is about to expire gets a daily reminder, and " +
+                            "you hear when an update is out or ready."
                     } else {
-                        "Nothing alerts while this is off. Reminders still come due in Plans, and card expiry still shows in Wallet."
+                        "Nothing alerts while this is off. Reminders still come due in Plans, card expiry still shows in Wallet, " +
+                            "and updates are offered when you open NormPix."
                     },
                 ) {
                     item {
                         SettingsSwitchRow(
                             headline = "Allow notifications",
-                            supporting = "Reminder alerts and card expiry reminders",
+                            supporting = "Reminder alerts, card expiry reminders and updates",
                             icon = if (prefs.notificationsEnabled) Icons.Outlined.NotificationsActive else Icons.Outlined.NotificationsOff,
                             hue = SettingsPageNotificationsHue,
                             checked = prefs.notificationsEnabled,

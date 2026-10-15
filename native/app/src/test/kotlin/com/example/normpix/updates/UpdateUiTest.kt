@@ -14,9 +14,11 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.example.normpix.navigation.SettingsPage
 import com.example.normpix.settings.AppPreferences
+import com.example.normpix.settings.BackgroundUpdates
 import com.example.normpix.settings.ui.SettingsCatalog
 import com.example.normpix.settings.ui.SettingsScreen
 import com.example.normpix.settings.ui.SettingsSpecial
+import com.example.normpix.settings.ui.UpdatesSettingsPage
 import com.example.normpix.testing.TestEnvironment
 import com.example.normpix.ui.theme.NormPixTheme
 import com.example.normpix.updates.ui.OfferAppUpdates
@@ -93,6 +95,12 @@ class UpdateUiTest {
 
     private fun tap(text: String) {
         compose.onNodeWithText(text).performClick()
+        compose.waitForIdle()
+    }
+
+    /** Taps a row further down a page, scrolling it into view first. */
+    private fun scrollTap(text: String) {
+        compose.onNodeWithText(text).performScrollTo().performClick()
         compose.waitForIdle()
     }
 
@@ -219,13 +227,43 @@ class UpdateUiTest {
     }
 
     @Test
-    fun `automatic checks can be turned off`() {
+    fun `Settings leads to Automatic updates, saying what they do`() {
         val environment = environment(updater())
         compose.setContent { environment.Content { SettingsScreen() } }
-        compose.onNodeWithText("Check for updates automatically").performScrollTo()
+        compose.onNodeWithText("Automatic updates").performScrollTo()
+        compose.onNodeWithText("Daily · Download, then ask · Wi-Fi only").assertIsDisplayed()
+        tap("Automatic updates")
+        assertEquals(listOf<SettingsPage?>(SettingsPage.Updates), environment.navigator.settingsPages)
+    }
+
+    @Test
+    fun `automatic checks can be turned off, and with them everything done in the background`() {
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatesSettingsPage() } }
         assertTrue(environment.preferences.state.value.updateChecksEnabled)
-        tap("Check for updates automatically")
+        compose.onNodeWithText("Download it, then ask").performScrollTo().assertIsDisplayed()
+        scrollTap("Check for updates automatically")
         assertFalse(environment.preferences.state.value.updateChecksEnabled)
+        absent("When an update is found")
+        absent("Download it, then ask")
+    }
+
+    @Test
+    fun `what happens to an update found in the background is the user's to choose`() {
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatesSettingsPage() } }
+        assertEquals(BackgroundUpdates.Download, environment.preferences.state.value.backgroundUpdates)
+        compose.onNodeWithText("Download on mobile data").performScrollTo().assertIsDisplayed()
+        scrollTap("Download on mobile data")
+        assertTrue(environment.preferences.state.value.updateOnMobileData)
+
+        scrollTap("Install it automatically")
+        assertEquals(BackgroundUpdates.Install, environment.preferences.state.value.backgroundUpdates)
+        compose.onNodeWithText("never while you're using it", substring = true).performScrollTo().assertIsDisplayed()
+
+        scrollTap("Tell me")
+        assertEquals(BackgroundUpdates.Notify, environment.preferences.state.value.backgroundUpdates)
+        absent("Download on mobile data")
     }
 
     @Test
@@ -235,7 +273,27 @@ class UpdateUiTest {
         compose.onNodeWithText("Check for updates").performScrollTo()
         compose.onNodeWithText("Version 1.0.2 · updates come with release builds").assertIsDisplayed()
         absent("Check for updates automatically")
+        absent("Automatic updates")
         assertEquals(emptyList(), network.asked)
+    }
+
+    @Test
+    fun `a tapped update notification brings the sheet up once unlocked`() {
+        Releases.publish(network)
+        val updater = updater()
+        val environment = environment(updater)
+        environment.preferences.setUpdateChecksEnabled(false)
+        var locked by mutableStateOf(true)
+        compose.setContent {
+            environment.Content { OfferAppUpdates(updater, appLocked = locked, requests = environment.container.updateRequests) }
+        }
+        environment.container.updateRequests.value = true
+        compose.waitForIdle()
+        absent("Update available")
+
+        locked = false
+        waitFor("Update available")
+        assertFalse(environment.container.updateRequests.value)
     }
 
     @Test
@@ -328,7 +386,24 @@ class UpdatePreferenceTest {
     fun `resetting settings turns them back on`() {
         val preferences = AppPreferences(store())
         preferences.setUpdateChecksEnabled(false)
+        preferences.setBackgroundUpdates(BackgroundUpdates.Install)
+        preferences.setUpdateOnMobileData(true)
         preferences.resetToDefaults()
         assertTrue(preferences.state.value.updateChecksEnabled)
+        assertEquals(BackgroundUpdates.Download, preferences.state.value.backgroundUpdates)
+        assertFalse(preferences.state.value.updateOnMobileData)
+    }
+
+    @Test
+    fun `in the background an update is downloaded on Wi-Fi and then asked about, until the user chooses otherwise`() {
+        val store = store()
+        val defaults = AppPreferences(store).state.value
+        assertEquals(BackgroundUpdates.Download, defaults.backgroundUpdates)
+        assertFalse(defaults.updateOnMobileData)
+        AppPreferences(store).setBackgroundUpdates(BackgroundUpdates.Install)
+        AppPreferences(store).setUpdateOnMobileData(true)
+        val read = AppPreferences(store).state.value
+        assertEquals(BackgroundUpdates.Install, read.backgroundUpdates, "read back by the next launch")
+        assertTrue(read.updateOnMobileData)
     }
 }

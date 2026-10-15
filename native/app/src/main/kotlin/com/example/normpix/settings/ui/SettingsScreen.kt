@@ -1,22 +1,36 @@
 package com.example.normpix.settings.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Update
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SearchOff
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.normpix.availability.ScheduledFeature
 import com.example.normpix.availability.summary
@@ -37,8 +51,13 @@ import com.example.normpix.ui.components.SearchField
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.AppTheme
 import com.example.normpix.updates.ui.updateSummary
+import kotlinx.coroutines.launch
 
-val SettingsGroups = SettingsPage.entries
+/** The groups listed on the main Settings screen. Automatic updates sits with "Check for updates", under System. */
+val SettingsGroups = SettingsPage.entries - SettingsPage.Updates
+
+/** How far the search field may scroll up before it counts as gone and the header offers it as an icon. */
+private const val SEARCH_GONE_PX = 48
 
 val SettingsPage.title: String
     get() = when (this) {
@@ -49,6 +68,7 @@ val SettingsPage.title: String
         SettingsPage.Availability -> "Availability & Schedules"
         SettingsPage.Notifications -> "Notifications"
         SettingsPage.Security -> "Security & Lock"
+        SettingsPage.Updates -> "Automatic updates"
     }
 
 val SettingsPage.icon: ImageVector
@@ -70,11 +90,41 @@ fun SettingsScreen() {
     var query by rememberSaveable { mutableStateOf("") }
     val searching = query.isNotBlank()
     val results = SettingsCatalog.search(query)
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val searchFocus = remember { FocusRequester() }
+    // Once the search field has scrolled away, it waits in the header as an icon: tapping it brings the field back and
+    // puts the cursor in it.
+    val searchOutOfView by remember(listState) {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > SEARCH_GONE_PX }
+    }
 
-    AppSubPage(title = "Settings", onBack = navigator::back, imeAware = true) {
+    AppSubPage(
+        title = "Settings",
+        onBack = navigator::back,
+        imeAware = true,
+        listState = listState,
+        actions = {
+            AnimatedVisibility(visible = searchOutOfView, enter = fadeIn() + scaleIn(initialScale = 0.6f), exit = fadeOut() + scaleOut(targetScale = 0.6f)) {
+                IconButton(
+                    onClick = {
+                        scope.launch {
+                            listState.animateScrollToItem(0)
+                            runCatching { searchFocus.requestFocus() }
+                        }
+                    },
+                ) { Icon(Icons.Rounded.Search, contentDescription = "Search settings") }
+            }
+        },
+    ) {
         item(key = "search") {
             Column(Modifier.padding(AppSpacing.page)) {
-                SearchField(value = query, onValueChange = { query = it }, placeholder = "Search settings")
+                SearchField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = "Search settings",
+                    modifier = Modifier.focusRequester(searchFocus),
+                )
                 Spacer(Modifier.height(AppSpacing.sm))
             }
         }
@@ -148,13 +198,12 @@ fun SettingsScreen() {
                                 }
                                 if (updater.enabled) {
                                     item {
-                                        SettingsSwitchRow(
-                                            headline = "Check for updates automatically",
-                                            supporting = "Once a day, when you open NormPix. Only GitHub is contacted.",
+                                        SettingsRow(
+                                            headline = SettingsPage.Updates.title,
+                                            supporting = automaticUpdatesSummary(prefs),
                                             icon = Icons.Outlined.Update,
-                                            hue = 6,
-                                            checked = prefs.updateChecksEnabled,
-                                            onCheckedChange = container.preferences::setUpdateChecksEnabled,
+                                            hue = SettingsPage.Updates.hue,
+                                            onClick = { navigator.openSettings(SettingsPage.Updates) },
                                         )
                                     }
                                 }
@@ -197,7 +246,8 @@ private fun summary(group: SettingsPage, prefs: AppPrefsState, finance: FinanceS
             "Biometric lock off"
         }
     SettingsPage.Wallet -> prefs.walletCardActionStyle.label
-    SettingsPage.Notifications -> if (prefs.notificationsEnabled) "On · Reminders and card expiry" else "Off"
+    SettingsPage.Notifications -> if (prefs.notificationsEnabled) "On · Reminders, card expiry and updates" else "Off"
+    SettingsPage.Updates -> automaticUpdatesSummary(prefs)
     SettingsPage.Availability -> ScheduledFeature.entries.joinToString(" · ") { feature ->
         "${feature.shortLabel}: ${prefs.availabilityOf(feature).summary(is24Hour)}"
     }

@@ -3,6 +3,7 @@ package com.example.normpix.navigation
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
@@ -64,6 +65,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.normpix.AppContainer
 import com.example.normpix.finance.domain.TransactionType
@@ -502,32 +504,58 @@ val LocalTabVisible = staticCompositionLocalOf { true }
 internal fun TabHost(visible: Boolean, enterOffset: Dp = 0.dp, animateArrival: Boolean = true, content: @Composable () -> Unit) {
     val animation = LocalPageAnimation.current
     val reduced = rememberReducedMotion()
-    val alpha = remember { Animatable(1f) }
+    val animate = animateArrival && !reduced
     val density = LocalDensity.current
     val travel = remember(visible) { with(density) { enterOffset.toPx() } }
+    // Keyed on [visible], so the first frame a tab is switched to is already at the start of its arrival - not one frame
+    // at full strength before it jumps back and fades in, which read as a flicker.
+    val arrival = remember(visible) { Animatable(if (visible && animate) 0f else 1f) }
+    val departure = remember(visible) { Animatable(0f) }
+    // The tab that was in front stays drawn under the one arriving, going away in the chosen style, until that one is
+    // there: the arriving tab never fades in over an empty background.
+    var onScreen by remember { mutableStateOf(visible) }
+    val departing = !visible && onScreen && animate
     LaunchedEffect(visible) {
-        if (visible && !reduced && animateArrival) {
-            alpha.snapTo(0f)
-            alpha.animateTo(1f, tween(AppMotion.MEDIUM_MS, easing = AppMotion.enter))
+        if (visible) {
+            onScreen = true
+            // Linear in time: each part of the motion applies its own easing over its own share of it (see TabMotion), as
+            // a pushed page's do - the window's quick fade over the first 60%, its growth over all of it.
+            if (animate) arrival.animateTo(1f, tween(TabMotion.openMs(animation), easing = LinearEasing))
         } else {
-            alpha.snapTo(1f)
+            if (animate && onScreen) departure.animateTo(1f, tween(TabMotion.openMs(animation), easing = LinearEasing))
+            onScreen = false
         }
     }
     Box(
         Modifier
             .fillMaxSize()
+            // The arriving tab over the leaving one, as a page opening over the one it was opened from.
+            .zIndex(if (visible) 1f else 0f)
             .then(
-                if (visible) {
-                    Modifier.graphicsLayer {
-                        this.alpha = alpha.value
-                        val scale = TabMotion.scale(animation, alpha.value)
+                when {
+                    visible -> Modifier.graphicsLayer {
+                        val t = arrival.value
+                        val p = AppMotion.enter.transform(t)
+                        alpha = TabMotion.arrivalAlpha(animation, t)
+                        val scale = TabMotion.scale(animation, p)
                         scaleX = scale
                         scaleY = scale
                         transformOrigin = TabMotion.origin(animation)
-                        translationX = if (TabMotion.slides(animation)) (1f - alpha.value) * travel else 0f
+                        translationX = if (TabMotion.slides(animation)) (1f - p) * travel else 0f
                     }
-                } else {
-                    Modifier.layout { _, _ -> layout(0, 0) {} }.clearAndSetSemantics {}
+                    departing -> Modifier
+                        .graphicsLayer {
+                            val t = departure.value
+                            val q = AppMotion.enter.transform(t)
+                            alpha = TabMotion.departureAlpha(animation, t)
+                            val scale = TabMotion.departureScale(animation, q)
+                            scaleX = scale
+                            scaleY = scale
+                            transformOrigin = TabMotion.origin(animation)
+                            translationX = if (TabMotion.slides(animation)) -q * travel / 2 else 0f
+                        }
+                        .clearAndSetSemantics {}
+                    else -> Modifier.layout { _, _ -> layout(0, 0) {} }.clearAndSetSemantics {}
                 },
             ),
         contentAlignment = Alignment.TopStart,

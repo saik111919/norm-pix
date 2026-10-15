@@ -55,6 +55,8 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.normpix.settings.PageAnimationType
+import com.example.normpix.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -298,6 +300,9 @@ fun OverlayHost(overlays: AppOverlays) {
     val preferences = LocalAppPreferences.current
     val prefsState = preferences?.state?.collectAsState()
     val sheetBlurEnabled = prefsState?.value?.sheetBlurEnabled ?: true
+    // In the Linux window style sheets and decisions open and close like its windows (see windowRise).
+    val windowStyle = (prefsState?.value?.pageAnimation ?: PageAnimationType.LinuxWindow) == PageAnimationType.LinuxWindow &&
+        !rememberReducedMotion()
 
     for (request in overlays.sheets) {
         key(request) {
@@ -343,7 +348,7 @@ fun OverlayHost(overlays: AppOverlays) {
                 // At full height a sheet stops under the status bar, which stays over the page (blurred, as around the sheet).
                 // The padding looks up the insets of the window it ends up in - the sheet's own - unlike a WindowInsets
                 // read here, in the page's window.
-                modifier = Modifier.statusBarsPadding(),
+                modifier = Modifier.statusBarsPadding().windowRise(sheetState, windowStyle),
                 shape = SheetShape,
                 containerColor = surface.container,
                 contentColor = surface.content,
@@ -408,7 +413,7 @@ fun OverlayHost(overlays: AppOverlays) {
                 // At full height a sheet stops under the status bar, which stays over the page (blurred, as around the sheet).
                 // The padding looks up the insets of the window it ends up in - the sheet's own - unlike a WindowInsets
                 // read here, in the page's window.
-                modifier = Modifier.statusBarsPadding(),
+                modifier = Modifier.statusBarsPadding().windowRise(sheetState, windowStyle),
                 shape = SheetShape,
                 containerColor = surface.container,
                 contentColor = surface.content,
@@ -469,14 +474,27 @@ class AppSnackbars(
         kind: SnackbarKind = SnackbarKind.Done,
         actionLabel: String? = null,
         onAction: (() -> Unit)? = null,
+        /** Called when it goes without its action being used: timed out, swiped away, or replaced by the next one. */
+        onDismiss: (() -> Unit)? = null,
     ) {
         scope.launch {
-            snapshotFlow(heldBack).first { held -> !held }
-            hostState.currentSnackbarData?.dismiss()
-            val result = hostState.showSnackbar(AppSnackbarVisuals(message, actionLabel, kind))
-            if (result == SnackbarResult.ActionPerformed) onAction?.invoke()
+            var result = SnackbarResult.Dismissed
+            try {
+                snapshotFlow(heldBack).first { held -> !held }
+                hostState.currentSnackbarData?.dismiss()
+                result = hostState.showSnackbar(AppSnackbarVisuals(message, actionLabel, kind))
+            } finally {
+                if (result == SnackbarResult.ActionPerformed) onAction?.invoke() else onDismiss?.invoke()
+            }
         }
     }
+
+    /**
+     * Says [message] with an Undo for the few seconds the snackbar shows: [undo] takes the change back if it is used;
+     * [settle] makes the change final once it has gone without being used.
+     */
+    fun showUndoable(message: String, undo: () -> Unit, settle: () -> Unit = {}, kind: SnackbarKind = SnackbarKind.Deleted) =
+        show(message, kind, actionLabel = "Undo", onAction = undo, onDismiss = settle)
 }
 
 val LocalSnackbars = compositionLocalOf<AppSnackbars> { error("No AppSnackbars provided") }

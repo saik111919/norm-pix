@@ -16,6 +16,12 @@ interface ReminderLauncher {
     fun about(rule: RecurringRule)
 
     fun about(account: Account)
+
+    /**
+     * A repeating payment was just set up: give it a reminder of its own straight away - due when the next payment is, and
+     * repeating with it - without asking, and say so with an Undo. Nothing happens when one is already linked to [rule].
+     */
+    fun linkAutomatically(rule: RecurringRule)
 }
 
 /** The launcher the screens use, or null where reminders are not available (then no "Remind me" is offered). */

@@ -124,6 +124,21 @@ class TransactionPictures(
     /** Whether the kept picture called [name] is there. */
     fun exists(name: String?): Boolean = file(name) != null
 
+    /**
+     * Files [file] - a picture read from a full backup ([FinanceBackupArchive]) - as the kept picture called [name], unless
+     * a picture by that name is already kept (the same one: names are random and never reused). False when it couldn't be.
+     */
+    suspend fun adopt(file: File, name: String): Boolean = withContext(Dispatchers.IO) {
+        if (!isPictureName(name) || !file.isFile) return@withContext false
+        kept.mkdirs()
+        val target = File(kept, name)
+        if (target.isFile) return@withContext true
+        file.renameTo(target) || runCatching { file.copyTo(target) }.isSuccess
+    }
+
+    /** A fresh, empty folder in the cache to read a full backup's pictures into before they are adopted (see [adopt]). */
+    fun newRestoreFolder(): File = File(context.cacheDir, "restore-${UUID.randomUUID()}").also { it.mkdirs() }
+
     suspend fun delete(name: String?) {
         if (!isPictureName(name)) return
         withContext(Dispatchers.IO) { File(kept, name!!).delete() }

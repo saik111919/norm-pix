@@ -77,6 +77,7 @@ import com.example.normpix.finance.domain.upcomingOccurrences
 import com.example.normpix.ui.components.AppLoadingState
 import com.example.normpix.ui.components.DiscardChangesGuard
 import com.example.normpix.ui.components.EditorSheet
+import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.RevealVisibility
@@ -134,6 +135,8 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
     val snackbars = LocalSnackbars.current
     val haptics = rememberAppHaptics()
     val scope = rememberCoroutineScope()
+    val appScope = LocalAppScope.current
+    val reminderLauncher = LocalReminderLauncher.current
     val isEditing = existing != null
 
     var type by remember { mutableStateOf(existing?.type ?: TransactionType.Expense) }
@@ -233,9 +236,11 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
         saving = true
         scope.launch {
             try {
-                controller.saveRecurringRule(draft(parsed))
+                val saved = controller.saveRecurringRule(draft(parsed))
                 haptics.success()
                 snackbars.show(if (isEditing) "Changes saved" else "Recurring payment saved")
+                // A new repeating payment gets a reminder of its own at once, linked to it.
+                if (!isEditing) reminderLauncher?.linkAutomatically(saved)
                 onDone(true)
             } catch (e: FinanceValidationException) {
                 formError = e.message
@@ -259,8 +264,12 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
                 icon = Icons.Outlined.DeleteOutline,
             )
             if (!confirmed) return@launch
-            controller.deleteRecurringRule(existing!!.id!!)
-            snackbars.show("Recurring payment deleted", SnackbarKind.Deleted)
+            val undo = controller.undoable {
+                deleteRecurringRule(existing!!.id!!)
+                emptyList()
+            }
+            // The app's scope, not this sheet's: the Undo has to work after the sheet has closed.
+            snackbars.offerUndo("Recurring payment deleted", controller, undo, appScope)
             onDone(true)
         }
     }

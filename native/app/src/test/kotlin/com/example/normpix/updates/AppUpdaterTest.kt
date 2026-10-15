@@ -1,6 +1,7 @@
 package com.example.normpix.updates
 
 import android.content.Intent
+import com.example.normpix.settings.BackgroundUpdates
 import com.example.normpix.updates.Releases.LATEST
 import java.io.File
 import java.io.InputStream
@@ -15,6 +16,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -43,6 +45,7 @@ class AppUpdaterTest {
     private val records = MemoryUpdateRecords()
     private val installer = FakeInstaller()
     private val inspector = FakeInspector()
+    private val notifier = FakeNotifier()
     private var clock = 1_800_000_000_000L
 
     @AfterTest
@@ -50,12 +53,19 @@ class AppUpdaterTest {
         dir.deleteRecursively()
     }
 
-    /** A fresh updater, as a new launch of the app makes one: only [records] carry over. */
-    private fun TestScope.updater(enabled: Boolean = true): AppUpdater {
+    /**
+     * A fresh updater, as a new launch of the app makes one: only [records] carry over. [onScreen] false is a process
+     * started for the background run, with NormPix never on screen.
+     */
+    private fun TestScope.updater(
+        enabled: Boolean = true,
+        onScreen: Boolean = true,
+        installed: InstalledApp = Releases.installed,
+    ): AppUpdater {
         val github = GitHubAccess(network, "NormPix/test")
         return AppUpdater(
-            installed = Releases.installed,
-            checker = UpdateChecker(github, Releases.REPO, Releases.installed),
+            installed = installed,
+            checker = UpdateChecker(github, Releases.REPO, installed),
             downloads = UpdateDownloader(github, dir),
             inspector = inspector,
             installer = installer,
@@ -65,7 +75,8 @@ class AppUpdaterTest {
             io = StandardTestDispatcher(testScheduler),
             now = { clock },
             enabled = enabled,
-        ).also { it.onForeground() }
+            notifier = notifier,
+        ).also { if (onScreen) it.onForeground() }
     }
 
     /** An updater that has found 1.0.3 and been told Update now, run until it stops (at Ready, when all went well). */
@@ -408,13 +419,212 @@ class AppUpdaterTest {
         assertIs<UpdateState.Installing>(updater.state.value)
         assertEquals(1, installer.installs.size)
     }
+
+    // ------------------------------------------------------------ in the background
+
+    @Test
+    fun `Tell me says an update is out, once, and downloads nothing`() = runTest {
+        Releases.publish(network)
+        assertEquals(BackgroundRun.Done, updater(onScreen = false).runInBackground(BackgroundUpdates.Notify))
+        assertEquals(listOf("available 1.0.3"), notifier.posted)
+        assertEquals(emptyList(), downloads())
+
+        clock += AppUpdater.CHECK_INTERVAL_MS
+        assertEquals(BackgroundRun.Done, updater(onScreen = false).runInBackground(BackgroundUpdates.Notify))
+        assertEquals(1, notifier.posted.size, "said once per release")
+    }
+
+    @Test
+    fun `Download, then ask downloads in the background, says it's ready once, and installs nothing`() = runTest {
+        val apk = Releases.publish(network)
+        val updater = updater(onScreen = false)
+        val announced = mutableListOf<UpdateRelease>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { updater.downloaded.toList(announced) }
+        assertEquals(BackgroundRun.Done, updater.runInBackground(BackgroundUpdates.Download))
+        val ready = assertIs<UpdateState.Ready>(updater.state.value)
+        assertContentEquals(apk, ready.apk.readBytes())
+        assertEquals(listOf("ready 1.0.3"), notifier.posted)
+        assertEquals(emptyList(), installer.installs)
+        assertEquals(emptyList(), announced, "the notification says it, not a sheet over whatever is on screen")
+
+        clock += AppUpdater.CHECK_INTERVAL_MS
+        assertEquals(BackgroundRun.Done, updater.runInBackground(BackgroundUpdates.Download))
+        assertEquals(1, notifier.posted.size, "said once per release")
+
+        // NormPix opened later the same day, in a new process: offered at once, ready to install, without downloading again.
+        clock += 60 * 60 * 1000
+        val opened = updater()
+        val asked = network.asked.size
+        assertEquals("1.0.3", opened.launchOffer(allowed = true)?.versionName)
+        assertIs<UpdateState.Ready>(opened.state.value)
+        assertTrue(network.asked.drop(asked).none { "NormPix-1.0.3.apk" in it }, "not downloaded again: ${network.asked.drop(asked)}")
+        // Install from the sheet: the notification goes, and Android asks the user as always.
+        opened.install()
+        advanceUntilIdle()
+        assertEquals(listOf(false), installer.quiet)
+        assertTrue(notifier.withdrawn > 0)
+    }
+
+    @Test
+    fun `an update put off with Later is left alone in the background`() = runTest {
+        Releases.publish(network)
+        records.dismissedVersionCode = 10003
+        assertEquals(BackgroundRun.Done, updater(onScreen = false).runInBackground(BackgroundUpdates.Install))
+        assertEquals(emptyList(), downloads())
+        assertEquals(emptyList(), notifier.posted)
+        assertEquals(emptyList(), installer.installs)
+    }
+
+    @Test
+    fun `Install automatically installs without asking while NormPix is closed, and the new version says so`() = runTest {
+        Releases.publish(network)
+        val updater = updater(onScreen = false)
+        val run = async { updater.runInBackground(BackgroundUpdates.Install) }
+        runCurrent()
+        assertIs<UpdateState.Installing>(updater.state.value)
+        assertEquals(listOf(true), installer.quiet)
+        assertEquals(10003L, records.quietInstallVersionCode)
+        assertEquals(emptyList(), notifier.posted, "nothing to say until it's installed")
+        updater.onInstallFinished(1, InstallOutcome.Success)
+        assertEquals(BackgroundRun.Done, run.await())
+
+        // The new version starts: it says it came by itself, once.
+        updater(onScreen = false, installed = Releases.installed.copy(versionCode = 10003, versionName = "1.0.3")).start()
+        assertEquals(listOf("installed 1.0.3"), notifier.posted)
+        assertEquals(0L, records.quietInstallVersionCode)
+        updater(onScreen = false, installed = Releases.installed.copy(versionCode = 10003, versionName = "1.0.3")).start()
+        assertEquals(1, notifier.posted.size)
+    }
+
+    @Test
+    fun `an automatic install waits while NormPix is on screen, and a while after it was left`() = runTest {
+        Releases.publish(network)
+        val updater = updater()
+        assertEquals(BackgroundRun.Again, updater.runInBackground(BackgroundUpdates.Install))
+        assertIs<UpdateState.Ready>(updater.state.value)
+        assertEquals(emptyList(), installer.installs)
+
+        updater.onBackground()
+        clock += 60_000
+        assertEquals(BackgroundRun.Again, updater.runInBackground(BackgroundUpdates.Install))
+        assertEquals(emptyList(), installer.installs)
+
+        clock += AppUpdater.QUIET_AFTER_MS
+        val run = async { updater.runInBackground(BackgroundUpdates.Install) }
+        runCurrent()
+        assertEquals(listOf(true), installer.quiet)
+        updater.onInstallFinished(1, InstallOutcome.Success)
+        assertEquals(BackgroundRun.Done, run.await())
+    }
+
+    @Test
+    fun `when Android wants the user to confirm, an automatic install waits for their Install and says it's ready`() = runTest {
+        Releases.publish(network)
+        val updater = updater(onScreen = false)
+        val run = async { updater.runInBackground(BackgroundUpdates.Install) }
+        runCurrent()
+        updater.onInstallNeedsUser(1, Intent("confirm"))
+        assertEquals(listOf(1), installer.abandoned)
+        assertEquals(emptyList(), installer.confirmations, "nothing is put in front of the user from the background")
+        assertIs<UpdateState.Ready>(updater.state.value)
+        assertEquals(listOf("ready 1.0.3"), notifier.posted)
+        assertEquals(BackgroundRun.Done, run.await())
+        assertEquals(0L, records.quietInstallVersionCode)
+
+        // The next day it isn't tried again without asking: it waits for the user.
+        clock += AppUpdater.CHECK_INTERVAL_MS
+        assertEquals(BackgroundRun.Done, updater.runInBackground(BackgroundUpdates.Install))
+        assertEquals(1, installer.installs.size)
+        updater.install()
+        advanceUntilIdle()
+        assertEquals(listOf(true, false), installer.quiet)
+    }
+
+    @Test
+    fun `an automatic install Android refuses for now is left for the user's Install`() = runTest {
+        Releases.publish(network)
+        val updater = updater(onScreen = false)
+        val run = async { updater.runInBackground(BackgroundUpdates.Install) }
+        runCurrent()
+        updater.onInstallFinished(1, InstallOutcome.Failed(UpdateProblem.InstallBlocked))
+        assertEquals(BackgroundRun.Done, run.await())
+        assertIs<UpdateState.Ready>(updater.state.value)
+        assertEquals(listOf("ready 1.0.3"), notifier.posted)
+    }
+
+    @Test
+    fun `without leave to install apps, or before Android 12, Install automatically asks like Download`() = runTest {
+        for (setUp in listOf({ installer.allowed = false }, { installer.installsQuietly = false })) {
+            installer.allowed = true
+            installer.installsQuietly = true
+            records.readyAnnouncedVersionCode = 0
+            notifier.posted.clear()
+            setUp()
+            Releases.publish(network)
+            val updater = updater(onScreen = false)
+            assertEquals(BackgroundRun.Done, updater.runInBackground(BackgroundUpdates.Install))
+            assertIs<UpdateState.Ready>(updater.state.value)
+            assertEquals(emptyList(), installer.installs)
+            assertEquals(listOf("ready 1.0.3"), notifier.posted)
+        }
+    }
+
+    @Test
+    fun `a background download Android stops leaves the update to download again, and says nothing`() = runTest {
+        val apk = Releases.publish(network)
+        val updater = updater(onScreen = false)
+        network.stream(apkUrl, apk.size.toLong()) { CancellingStream(apk) { updater.stopBackgroundWork() } }
+        assertEquals(BackgroundRun.Again, updater.runInBackground(BackgroundUpdates.Download))
+        assertIs<UpdateState.Available>(updater.state.value, "not \"stopped by the user\"")
+        assertEquals(emptyList(), downloads())
+        assertEquals(emptyList(), notifier.posted)
+
+        network.answer(apkUrl, body = apk)
+        assertEquals(BackgroundRun.Done, updater.runInBackground(BackgroundUpdates.Download))
+        assertIs<UpdateState.Ready>(updater.state.value)
+    }
+
+    @Test
+    fun `offline, the background run asks to go again soon, and a debug build never asks at all`() = runTest {
+        network.fail(LATEST, UnknownHostException("api.github.com"))
+        assertEquals(BackgroundRun.Again, updater(onScreen = false).runInBackground(BackgroundUpdates.Download))
+        network.asked.clear()
+        assertEquals(BackgroundRun.Done, updater(enabled = false, onScreen = false).runInBackground(BackgroundUpdates.Install))
+        assertEquals(emptyList(), network.asked)
+    }
+
+    @Test
+    fun `with notifications off nothing counts as said, so it is said once they can be`() = runTest {
+        Releases.publish(network)
+        notifier.shows = false
+        updater(onScreen = false).runInBackground(BackgroundUpdates.Download)
+        assertEquals(0L, records.readyAnnouncedVersionCode)
+        notifier.shows = true
+        clock += AppUpdater.CHECK_INTERVAL_MS
+        updater(onScreen = false).runInBackground(BackgroundUpdates.Download)
+        assertEquals(listOf("ready 1.0.3"), notifier.posted)
+    }
+
+    @Test
+    fun `Later takes the notification down`() = runTest {
+        Releases.publish(network)
+        val updater = updater(onScreen = false)
+        updater.runInBackground(BackgroundUpdates.Download)
+        updater.later()
+        assertEquals(1, notifier.withdrawn)
+    }
 }
 
 class FakeInstaller : UpdateInstaller {
     var allowed = true
+    override var installsQuietly = true
     var settingOpened = 0
     var failWith: UpdateProblem? = null
     val installs = mutableListOf<File>()
+
+    /** For each of [installs], whether Android was asked not to ask the user. */
+    val quiet = mutableListOf<Boolean>()
+    val abandoned = mutableListOf<Int>()
     val confirmations = mutableListOf<Intent>()
     val active = mutableSetOf<Int>()
     private var nextId = 1
@@ -426,12 +636,18 @@ class FakeInstaller : UpdateInstaller {
         return true
     }
 
-    override fun install(apk: File, release: UpdateRelease, started: (id: Int) -> Unit) {
+    override fun install(apk: File, release: UpdateRelease, quiet: Boolean, started: (id: Int) -> Unit) {
         failWith?.let { throw UpdateException(it) }
         val id = nextId++
         started(id)
         installs += apk
+        this.quiet += quiet
         active += id
+    }
+
+    override fun abandon(id: Int) {
+        abandoned += id
+        active -= id
     }
 
     override fun confirm(intent: Intent): Boolean {
@@ -440,6 +656,27 @@ class FakeInstaller : UpdateInstaller {
     }
 
     override fun isActive(id: Int) = id in active
+}
+
+/** Remembers what it was asked to post; [shows] false is notifications being off. */
+class FakeNotifier(var shows: Boolean = true) : UpdateNotifier {
+    val posted = mutableListOf<String>()
+    var withdrawn = 0
+
+    override fun available(release: UpdateRelease) = post("available ${release.versionName}")
+
+    override fun ready(release: UpdateRelease) = post("ready ${release.versionName}")
+
+    override fun installed(versionName: String) = post("installed $versionName")
+
+    override fun withdraw() {
+        withdrawn++
+    }
+
+    private fun post(what: String): Boolean {
+        if (shows) posted += what
+        return shows
+    }
 }
 
 /** Reads a downloaded APK as the release it was meant to be, unless a test says otherwise. */

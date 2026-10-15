@@ -64,6 +64,7 @@ import com.example.normpix.finance.domain.largestDecrease
 import com.example.normpix.finance.domain.largestIncrease
 import com.example.normpix.finance.domain.relativeChange
 import com.example.normpix.finance.domain.shareOf
+import com.example.normpix.navigation.AmountsVisibilityButton
 import com.example.normpix.navigation.AppNavigator
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.ui.components.AppEmptyState
@@ -210,6 +211,7 @@ fun InsightsScreen(listState: LazyListState = rememberLazyListState()) {
 
     AppPage(
         title = "Insights",
+        actions = { AmountsVisibilityButton() },
         maxWidth = AppLayout.maxWideContentWidth,
         listState = listState,
         insetBottom = false,
