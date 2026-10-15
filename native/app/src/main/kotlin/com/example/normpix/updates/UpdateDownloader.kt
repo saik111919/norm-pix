@@ -17,11 +17,11 @@ import kotlinx.coroutines.ensureActive
 class UpdateDownloader(private val github: GitHubAccess, private val dir: File) {
     /** The checked APK for [release], downloading it unless an earlier download already holds it. Cancellable between reads. */
     suspend fun download(release: UpdateRelease, onProgress: (done: Long, total: Long) -> Unit): File {
-        val target = File(dir, fileName(release))
-        if (target.isFile && target.length() == release.size && runCatching { sha256Of(target) }.getOrNull() == release.sha256) {
+        existing(release)?.let { done ->
             onProgress(release.size, release.size)
-            return target
+            return done
         }
+        val target = File(dir, fileName(release))
         if (!dir.isDirectory && !dir.mkdirs()) throw UpdateException(UpdateProblem.Storage)
         // Only one update is ever kept: older downloads and the leftovers of an interrupted one go first.
         clear()
@@ -75,6 +75,19 @@ class UpdateDownloader(private val github: GitHubAccess, private val dir: File) 
             part.delete()
             throw e
         }
+    }
+
+    /** [release]'s APK when an earlier download already holds all of it, exactly as the release describes it; null otherwise. */
+    fun existing(release: UpdateRelease): File? {
+        val target = File(dir, fileName(release))
+        val whole = target.isFile && target.length() == release.size && runCatching { sha256Of(target) }.getOrNull() == release.sha256
+        return target.takeIf { whole }
+    }
+
+    /** Whether a finished download of a version newer than [installedCode] is waiting here (to be checked against its release). */
+    fun holdsNewerThan(installedCode: Long): Boolean = dir.listFiles().orEmpty().any { file ->
+        val code = NAME.matchEntire(file.name)?.groupValues?.get(1)?.toLongOrNull()
+        code != null && code > installedCode
     }
 
     /** Deletes every download but [keep]. */

@@ -9,6 +9,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
 import com.example.normpix.navigation.NormPixRoot
 import com.example.normpix.reminders.ReminderNotifications
+import com.example.normpix.updates.SystemUpdateNotifier
 import com.example.normpix.wallet.BiometricAuthenticator
 import com.example.normpix.wallet.expiry.CardExpiryNotifications
 
@@ -54,7 +55,10 @@ class MainActivity : FragmentActivity() {
         handleIntent(intent)
     }
 
-    /** A tapped reminder notification asks for that reminder's alert screen; a tapped card-expiry one for Wallet. */
+    /**
+     * A tapped reminder notification asks for that reminder's alert screen; a tapped card-expiry one for Wallet; a tapped
+     * update one for the update sheet.
+     */
     private fun handleIntent(intent: Intent?) {
         val id = intent?.getLongExtra(ReminderNotifications.EXTRA_REMINDER_ID, -1) ?: -1
         if (id >= 0) {
@@ -64,6 +68,10 @@ class MainActivity : FragmentActivity() {
         if (intent?.getBooleanExtra(CardExpiryNotifications.EXTRA_OPEN_WALLET, false) == true) {
             container.walletRequests.value = true
             intent.removeExtra(CardExpiryNotifications.EXTRA_OPEN_WALLET)
+        }
+        if (intent?.getBooleanExtra(SystemUpdateNotifier.EXTRA_OPEN_UPDATE, false) == true) {
+            container.updateRequests.value = true
+            intent.removeExtra(SystemUpdateNotifier.EXTRA_OPEN_UPDATE)
         }
     }
 

@@ -456,6 +456,15 @@ Asked for (2026-10-14): "When loading an image show proper loading sheet instead
 - [x] Eye button on Insights and Plans & Transactions too
 - [ ] Checks: CI (tests, lint, release build) on the PR; not tried on a phone
 
+## Phase 19 - Updates in the background (2026-10-15)
+- [x] Inspected first: the updater only checked at launch (once a day) and in Settings, and every install waited for the user's confirmation; the network state permission had been removed
+- [x] A daily JobScheduler run (`UpdateJobService`, `UpdateSchedule`): kept over a restart, not on a low battery, on Wi-Fi (or another unmetered network) to download unless mobile data is allowed; follows Settings as it changes
+- [x] Settings > Automatic updates: the daily check on or off, what happens to an update found in the background - Tell me / Download it, then ask (the default) / Install it automatically - and Download on mobile data; says when Android's install leave or notifications stand in the way
+- [x] Install it automatically: `USER_ACTION_NOT_REQUIRED` with `UPDATE_PACKAGES_WITHOUT_USER_ACTION` (Android 12+, NormPix updating itself), only once NormPix has been off screen 10 minutes; if Android wants a confirmation, or refuses for now, it waits for the user's Install and says it's ready; the new version says it was installed
+- [x] Notifications on a quiet "App updates" channel, once per release; a tap opens the update sheet (after unlocking); Later or Install takes them down; none while notifications are off
+- [x] A download made in the background is found at the next launch, ready to install, without downloading again; Later is respected in the background
+- [ ] Checks: CI on the PR; not tried on a phone
+
 ## Backlog - to come back to
 
 - [ ] **Reminders that behave like Samsung Reminder** (asked 2026-10-14, parked until we return to it). Today a reminder

@@ -36,6 +36,7 @@ import com.example.normpix.finance.share.NoSharedPictureReader
 import com.example.normpix.finance.share.SharedPictureReader
 import com.example.normpix.finance.share.SharedTextInbox
 import com.example.normpix.updates.AppUpdater
+import com.example.normpix.updates.UpdateSchedule
 import com.example.normpix.wallet.clipboard.NoClipboard
 import com.example.normpix.wallet.clipboard.SecureClipboard
 import com.example.normpix.wallet.clipboard.androidSecureClipboard
@@ -52,7 +53,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -85,7 +88,10 @@ class AppContainer(
     val sharedText: SharedTextInbox = SharedTextInbox(),
     /** Reads the text of a shared picture on the device; reads nothing where there is no recognizer (tests). */
     val sharedPictures: SharedPictureReader = NoSharedPictureReader,
-    /** Checks GitHub for a newer release and installs it with the user's say-so; null where nothing is updated (tests). */
+    /**
+     * Checks GitHub for a newer release and installs it with the user's say-so (or, in the background, as far as they chose);
+     * null where nothing is updated (tests).
+     */
     val updates: AppUpdater? = null,
 ) {
     /** A reminder whose alert screen should open (notification tapped), consumed by the UI. */
@@ -93,6 +99,9 @@ class AppContainer(
 
     /** Set when a card-expiry notification was tapped: the UI opens Wallet, then clears it. */
     val walletRequests = MutableStateFlow(false)
+
+    /** Set when an update notification was tapped: the UI shows the update sheet (once unlocked), then clears it. */
+    val updateRequests = MutableStateFlow(false)
 }
 
 class NormPixApplication : Application() {
@@ -111,6 +120,19 @@ class NormPixApplication : Application() {
         followCardsForExpiry()
         followCardsForBanks()
         container.updates?.start()
+        followUpdateSettings()
+    }
+
+    /** The daily check in the background follows Settings > Automatic updates: scheduled, changed or cancelled with it. */
+    private fun followUpdateSettings() {
+        if (container.updates?.enabled != true) return
+        val preferences = container.preferences
+        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            preferences.state
+                .map { Triple(it.updateChecksEnabled, it.backgroundUpdates, it.updateOnMobileData) }
+                .distinctUntilChanged()
+                .collect { (enabled, mode, mobileData) -> UpdateSchedule.sync(this@NormPixApplication, enabled, mode, mobileData) }
+        }
     }
 
     /**

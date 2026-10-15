@@ -5,7 +5,7 @@ NormPix is an offline-first, private personal finance and card manager for Andro
 ## Architecture & Features
 
 - **Jetpack Compose & Material 3**: Fluid UI following the express design system.
-- **Private by design**: Everything stays on the phone. The one connection the app makes is to GitHub, to check for and download its own updates; [`network_security_config.xml`](native/app/src/main/res/xml/network_security_config.xml) refuses every other host, and ML Kit's telemetry upload is removed. No `ACCESS_NETWORK_STATE`, SMS, or notification listener permissions.
+- **Private by design**: Everything stays on the phone. The one connection the app makes is to GitHub, to check for and download its own updates; [`network_security_config.xml`](native/app/src/main/res/xml/network_security_config.xml) refuses every other host, and ML Kit's telemetry upload is removed. No SMS or notification listener permissions; `ACCESS_NETWORK_STATE` is there only so the daily update check in the background can wait for a network (Wi-Fi, to download).
 - **Privacy & Security**: SQLite database for financial data, AES-256-GCM encrypted secure card vault, and `FLAG_SECURE` window protection.
 - **OCR Scan**: On-device credit card and document number scanning with Google ML Kit.
 
@@ -36,7 +36,9 @@ cd native
 
 ### Releases and in-app updates
 
-The app checks GitHub for a newer release once a day at launch (Settings → Check for updates automatically, on by default; turn it off and the app only checks when asked) or when asked (Settings → Check for updates). It never downloads or installs on its own. **Update now** downloads the APK and checks its size, SHA-256, package name, version and signing key; the sheet then says it's ready, coming back if it was closed during the download, and only **Install** hands it to Android's installer, which asks the user to confirm. Nothing is installed silently, and the app is never uninstalled. Only release builds update themselves: debug and qa builds carry another key, so no release could install over them.
+The app checks GitHub for a newer release once a day, in the background and at launch (Settings → Automatic updates, on by default; turn it off and the app only checks when asked), or when asked (Settings → Check for updates). What happens to an update found in the background is the user's choice there: **Tell me** (a notification), **Download it, then ask** (the default: downloaded in the background, then a notification says it's ready to install), or **Install it automatically** (downloaded and installed without asking once the app has been closed for a while, on Android 12 and later; a notification says what was installed, and if Android wants a confirmation it waits for the user's Install instead). Background downloads wait for Wi-Fi unless **Download on mobile data** is on. The daily run is a JobScheduler job (`UpdateJobService`), kept over a restart, and not run while the battery is low.
+
+In the app, **Update now** downloads the APK and checks its size, SHA-256, package name, version and signing key; the sheet then says it's ready, coming back if it was closed during the download, and only **Install** hands it to Android's installer, which asks the user to confirm. Every download, in the app or in the background, gets the same checks, and the app is never uninstalled. Only release builds update themselves: debug and qa builds carry another key, so no release could install over them.
 
 Every push to `main` publishes one on its own. To publish a version of your choosing, with notes of your own:
 

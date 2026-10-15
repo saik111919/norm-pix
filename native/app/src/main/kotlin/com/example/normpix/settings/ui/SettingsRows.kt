@@ -38,6 +38,7 @@ val SettingsPage.hue: Int
         SettingsPage.Wallet -> 7
         SettingsPage.Availability -> 4
         SettingsPage.Notifications -> SettingsPageNotificationsHue
+        SettingsPage.Updates -> SettingsPageUpdatesHue
         SettingsPage.Security -> 0
     }
 

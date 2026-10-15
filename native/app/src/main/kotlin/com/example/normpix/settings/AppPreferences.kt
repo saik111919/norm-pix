@@ -171,6 +171,29 @@ enum class AccountButtonTarget(val label: String, val description: String) {
     Settings("Settings", "Straight to Settings"),
 }
 
+/**
+ * What NormPix does with an update its daily check finds on its own (Settings > Automatic updates). Every update is
+ * still checked against its release and has to be signed with the same key as the app on the phone.
+ */
+enum class BackgroundUpdates(val label: String, val description: String, val short: String) {
+    Notify("Tell me", "A notification says a new version is out. Downloading and installing wait for you.", "Tell me"),
+    Download(
+        "Download it, then ask",
+        "It downloads in the background, and a notification says it's ready. You install it when it suits you.",
+        "Download, then ask",
+    ),
+    Install(
+        "Install it automatically",
+        "It downloads and installs while NormPix is closed, and a notification says what was installed. Android 12 and " +
+            "later; before that, Android asks you first.",
+        "Install automatically",
+    ),
+    ;
+
+    /** Whether this downloads the update, so the network it may use matters. */
+    val downloads: Boolean get() = this != Notify
+}
+
 /** The longest name the profile keeps: enough for a full name, short enough for a header. */
 const val MAX_PROFILE_NAME = 40
 
@@ -215,8 +238,15 @@ data class AppPrefsState(
     val profilePhoto: String = "",
     /** Where the account button at the top of each tab leads. Settings, as it always has; Profile is the user's to choose. */
     val accountButtonTarget: AccountButtonTarget = AccountButtonTarget.Settings,
-    /** Once a day, at launch, ask GitHub whether a newer release is out (Settings > Check for updates automatically). */
+    /**
+     * Once a day, in the background and at launch, ask GitHub whether a newer release is out (Settings > Automatic updates).
+     * Off, NormPix only checks when asked.
+     */
     val updateChecksEnabled: Boolean = true,
+    /** What happens to an update found in the background: downloaded, and then the user installs it, unless they choose otherwise. */
+    val backgroundUpdates: BackgroundUpdates = BackgroundUpdates.Download,
+    /** Background downloads may use mobile data; off, they wait for Wi-Fi (or another network that isn't metered). */
+    val updateOnMobileData: Boolean = false,
     /** NormPix may post notifications: reminders that come due and card-expiry reminders. Android's own switch still applies. */
     val notificationsEnabled: Boolean = true,
     /** Every amount is shown as dots (the eye button at the top of Home and Wallet) until shown again. */
@@ -287,6 +317,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
             profilePhoto = prefs.getString(K_PROFILE_PHOTO, defaults.profilePhoto).orEmpty().takeIf(::isProfilePhotoName).orEmpty(),
             accountButtonTarget = prefs.enum(K_ACCOUNT_BUTTON, defaults.accountButtonTarget),
             updateChecksEnabled = prefs.getBoolean(K_UPDATE_CHECKS, defaults.updateChecksEnabled),
+            backgroundUpdates = prefs.enum(K_BACKGROUND_UPDATES, defaults.backgroundUpdates),
+            updateOnMobileData = prefs.getBoolean(K_UPDATE_MOBILE_DATA, defaults.updateOnMobileData),
             notificationsEnabled = prefs.getBoolean(K_NOTIFICATIONS, defaults.notificationsEnabled),
             amountsHidden = prefs.getBoolean(K_AMOUNTS_HIDDEN, defaults.amountsHidden),
             interfaceFont = prefs.enum(K_FONT, defaults.interfaceFont),
@@ -409,6 +441,12 @@ class AppPreferences(private val prefs: SharedPreferences) {
     fun setUpdateChecksEnabled(enabled: Boolean) =
         change({ copy(updateChecksEnabled = enabled) }) { putBoolean(K_UPDATE_CHECKS, enabled) }
 
+    fun setBackgroundUpdates(mode: BackgroundUpdates) =
+        change({ copy(backgroundUpdates = mode) }) { putString(K_BACKGROUND_UPDATES, mode.name) }
+
+    fun setUpdateOnMobileData(allowed: Boolean) =
+        change({ copy(updateOnMobileData = allowed) }) { putBoolean(K_UPDATE_MOBILE_DATA, allowed) }
+
     fun setNotificationsEnabled(enabled: Boolean) =
         change({ copy(notificationsEnabled = enabled) }) { putBoolean(K_NOTIFICATIONS, enabled) }
 
@@ -508,6 +546,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_PROFILE_PHOTO = "profile_photo"
         const val K_ACCOUNT_BUTTON = "account_button_target"
         const val K_UPDATE_CHECKS = "update_checks_enabled"
+        const val K_BACKGROUND_UPDATES = "background_updates"
+        const val K_UPDATE_MOBILE_DATA = "update_on_mobile_data"
         const val K_NOTIFICATIONS = "notifications_enabled"
         const val K_AMOUNTS_HIDDEN = "amounts_hidden"
         const val K_FONT = "interface_font"

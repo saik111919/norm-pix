@@ -53,7 +53,8 @@ import com.example.normpix.ui.theme.AppTheme
 import com.example.normpix.updates.ui.updateSummary
 import kotlinx.coroutines.launch
 
-val SettingsGroups = SettingsPage.entries
+/** The groups listed on the main Settings screen. Automatic updates sits with "Check for updates", under System. */
+val SettingsGroups = SettingsPage.entries - SettingsPage.Updates
 
 /** How far the search field may scroll up before it counts as gone and the header offers it as an icon. */
 private const val SEARCH_GONE_PX = 48
@@ -67,6 +68,7 @@ val SettingsPage.title: String
         SettingsPage.Availability -> "Availability & Schedules"
         SettingsPage.Notifications -> "Notifications"
         SettingsPage.Security -> "Security & Lock"
+        SettingsPage.Updates -> "Automatic updates"
     }
 
 val SettingsPage.icon: ImageVector
@@ -196,13 +198,12 @@ fun SettingsScreen() {
                                 }
                                 if (updater.enabled) {
                                     item {
-                                        SettingsSwitchRow(
-                                            headline = "Check for updates automatically",
-                                            supporting = "Once a day, when you open NormPix. Only GitHub is contacted.",
+                                        SettingsRow(
+                                            headline = SettingsPage.Updates.title,
+                                            supporting = automaticUpdatesSummary(prefs),
                                             icon = Icons.Outlined.Update,
-                                            hue = 6,
-                                            checked = prefs.updateChecksEnabled,
-                                            onCheckedChange = container.preferences::setUpdateChecksEnabled,
+                                            hue = SettingsPage.Updates.hue,
+                                            onClick = { navigator.openSettings(SettingsPage.Updates) },
                                         )
                                     }
                                 }
@@ -245,7 +246,8 @@ private fun summary(group: SettingsPage, prefs: AppPrefsState, finance: FinanceS
             "Biometric lock off"
         }
     SettingsPage.Wallet -> prefs.walletCardActionStyle.label
-    SettingsPage.Notifications -> if (prefs.notificationsEnabled) "On · Reminders and card expiry" else "Off"
+    SettingsPage.Notifications -> if (prefs.notificationsEnabled) "On · Reminders, card expiry and updates" else "Off"
+    SettingsPage.Updates -> automaticUpdatesSummary(prefs)
     SettingsPage.Availability -> ScheduledFeature.entries.joinToString(" · ") { feature ->
         "${feature.shortLabel}: ${prefs.availabilityOf(feature).summary(is24Hour)}"
     }
