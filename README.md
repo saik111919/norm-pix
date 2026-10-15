@@ -57,7 +57,7 @@ CI fails a tag that doesn't match `versionName`, a release that isn't signed wit
 
 ### Signing key
 
-Android installs an update only if it is signed with the same key as the app already on the phone. Every release is signed with one fixed key, the **release key**: the key the installed NormPix has always carried (it began as this machine's `~/.android/debug.keystore`; alias `androiddebugkey`, both passwords `android`; certificate SHA-256 `96:B3:0A:AE:…:5A:34:88`). CI reads it from these repository secrets (Settings → Secrets and variables → Actions):
+Android installs an update only if it is signed with the same key as the app already on the phone. Every release is signed with one fixed key, the **release key**: the key the installed NormPix has always carried (certificate SHA-256 `96:B3:0A:AE:…:5A:34:88`; its alias and passwords are kept with the keystore, not here). CI reads it from these repository secrets (Settings → Secrets and variables → Actions):
 
 | Secret | Value |
 |---|---|
@@ -72,9 +72,9 @@ A release built on your own machine is signed with the same key when Gradle know
 
 ```properties
 normpixKeystoreFile=C:/Users/<you>/.android/normpix-release.jks
-normpixKeystorePassword=android
-normpixKeyAlias=androiddebugkey
-normpixKeyPassword=android
+normpixKeystorePassword=<keystore password>
+normpixKeyAlias=<key alias>
+normpixKeyPassword=<key password>
 ```
 
 (or the environment variables `NORMPIX_KEYSTORE_FILE`, `NORMPIX_KEYSTORE_PASSWORD`, `NORMPIX_KEY_ALIAS`, `NORMPIX_KEY_PASSWORD`, which CI uses). Keep a backup of that keystore: without it no later APK can update the app.
