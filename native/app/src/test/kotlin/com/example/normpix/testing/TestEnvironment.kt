@@ -38,8 +38,7 @@ import com.example.normpix.wallet.StoredCard
 import com.example.normpix.wallet.clipboard.SecureClipboard
 import com.example.normpix.wallet.expiry.CardExpiryTracker
 import com.example.normpix.settings.ClipboardTimeout
-import java.util.concurrent.Executors
-import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 
 /** A navigator that only remembers where it was asked to go. */
@@ -139,10 +138,12 @@ class TestEnvironment(
     private val financeDb = FinanceDatabase(context, name = null)
     private val remindersDb = RemindersDatabase(context, name = null)
 
-    // Each environment's databases work on threads of their own. The app's are one thread for the whole process, so a job
-    // one test leaves on it (its screen, still up, asking a closed database for something) would hold up every test after.
-    private val financeThread = Executors.newSingleThreadExecutor { r -> Thread(r, "test-finance-db").apply { isDaemon = true } }
-    private val remindersThread = Executors.newSingleThreadExecutor { r -> Thread(r, "test-reminders-db").apply { isDaemon = true } }
+    // The databases are read and written right where they are called, on the test's own thread, never on a thread of their
+    // own. A read finishing on another thread hands its result back to Compose's test dispatcher across threads, and under
+    // Robolectric that hand-off races the test: now and then the result was never delivered (Home stayed on "Loading your
+    // month" with the database idle) or the screen's next frame ran on the database's thread, which Compose rejects. Not
+    // using the app's process-wide threads also means a job one test leaves behind can't hold up the tests after it.
+    private val inPlace = Dispatchers.Unconfined
     val prefsStore = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE).also { it.edit().clear().commit() }
     val navigator = RecordingNavigator()
     val shell = ShellState()
@@ -152,11 +153,11 @@ class TestEnvironment(
         container = AppContainer(
             preferences = AppPreferences(prefsStore),
             finance = FinanceController(
-                FinanceRepository(financeDb, dispatcher = financeThread.asCoroutineDispatcher()),
+                FinanceRepository(financeDb, dispatcher = inPlace),
                 TransactionPictures(context),
             ),
             reminders = RemindersController(
-                ReminderDao(remindersDb, dispatcher = remindersThread.asCoroutineDispatcher()),
+                ReminderDao(remindersDb, dispatcher = inPlace),
                 scheduler = NoOpReminderScheduler,
             ),
             vault = vault,
@@ -193,7 +194,5 @@ class TestEnvironment(
     fun close() {
         financeDb.close()
         remindersDb.close()
-        financeThread.shutdownNow()
-        remindersThread.shutdownNow()
     }
 }

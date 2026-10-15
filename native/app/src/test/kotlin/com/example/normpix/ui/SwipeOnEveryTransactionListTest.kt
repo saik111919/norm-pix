@@ -88,15 +88,13 @@ class SwipeOnEveryTransactionListTest {
     private fun waitForRow() {
         try {
             compose.waitUntil(timeoutMillis = 30_000) {
-                // Home reads in several steps on the database's thread, and each comes back through the main looper, which
-                // only runs here when the test lets it. Without idling on every check, a step that lands after the last
-                // idle is never delivered and Home stays on "Loading your month" (it did, now and then, on CI).
+                // Home reads in several steps; idle on every check so each one's result reaches the screen before looking.
                 compose.waitForIdle()
                 compose.onAllNodes(hasContentDescription("Corner Cafe", substring = true)).fetchSemanticsNodes().isNotEmpty()
             }
         } catch (e: ComposeTimeoutException) {
-            // Say what the screen was showing and where the database threads were, so a slow load can be told from a stuck one.
-            throw AssertionError("No Corner Cafe row after 30 s. Showing: ${showing()}\n${threads()}", e)
+            // Say what the screen was showing, so a load that never finished can be told from a row that isn't there.
+            throw AssertionError("No Corner Cafe row after 30 s. Showing: ${showing()}", e)
         }
     }
 
@@ -104,12 +102,6 @@ class SwipeOnEveryTransactionListTest {
         val matcher = hasText(text, substring = true) or hasContentDescription(text, substring = true)
         "\"$text\" ×${compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes(atLeastOneRootRequired = false).size}"
     }
-
-    private fun threads(): String = Thread.getAllStackTraces()
-        .filterKeys { it.name.startsWith("test-") }
-        .entries.joinToString("\n") { (thread, frames) ->
-            "--- ${thread.name} (${thread.state})\n" + frames.take(15).joinToString("\n") { "    at $it" }
-        }
 
     // Ends well outside the row: a drag that stops inside a clickable still counts as its tap, and the tap opens the
     // details sheet (which has an Edit button of its own).
