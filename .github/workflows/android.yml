@@ -52,6 +52,31 @@ jobs:
         if: ${{ !cancelled() }}
         run: ./gradlew lintDebug
 
+      # Each failed test is named on the run's page, with the start of its stack trace, so a red run says what broke
+      # without downloading the reports.
+      - name: Name the failed tests
+        if: ${{ failure() }}
+        run: |
+          python3 - <<'EOF'
+          import glob, xml.etree.ElementTree as ET
+
+          def data(text):
+              return text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+
+          def prop(text):
+              return data(text).replace(':', '%3A').replace(',', '%2C')
+
+          failed = 0
+          for path in sorted(glob.glob('app/build/test-results/**/*.xml', recursive=True)):
+              for case in ET.parse(path).getroot().iter('testcase'):
+                  for problem in case.findall('failure') + case.findall('error'):
+                      failed += 1
+                      name = f"{case.get('classname', '').rsplit('.', 1)[-1]} > {case.get('name', '')}"
+                      trace = '\n'.join((problem.text or problem.get('message') or '').splitlines()[:30])
+                      print(f"::error title={prop(name)}::{data(trace.strip())}")
+          print(f"{failed} failed test(s)")
+          EOF
+
       - name: Upload test and lint reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
