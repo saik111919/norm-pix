@@ -55,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -139,7 +140,9 @@ fun DateRangeSheet(initial: DateRange?, latest: LocalDate?, onPick: (DateRange?)
     val haptics = rememberAppHaptics()
     val scheme = MaterialTheme.colorScheme
     val reduced = rememberReducedMotion()
-    val firstDayOfWeek = remember { WeekFields.of(Locale.getDefault()).firstDayOfWeek }
+    // The phone's language and region, read so that a change to them shows at once.
+    val locale = LocalConfiguration.current.locales[0]
+    val firstDayOfWeek = remember(locale) { WeekFields.of(locale).firstDayOfWeek }
     val presets = remember(today, latest) { dayPresets(if (latest != null && latest.isBefore(today)) latest else today, firstDayOfWeek) }
     val lastMonth = YearMonth.from(latest ?: today.plusYears(10))
 
@@ -270,7 +273,7 @@ fun DateRangeSheet(initial: DateRange?, latest: LocalDate?, onPick: (DateRange?)
         Row(Modifier.fillMaxWidth().clearAndSetSemantics {}) {
             for (i in 0 until 7) {
                 Text(
-                    firstDayOfWeek.plus(i.toLong()).getDisplayName(TextStyle.NARROW, Locale.getDefault()),
+                    firstDayOfWeek.plus(i.toLong()).getDisplayName(TextStyle.NARROW, locale),
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.labelMedium,

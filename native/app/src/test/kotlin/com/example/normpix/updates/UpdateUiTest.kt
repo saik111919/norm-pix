@@ -229,8 +229,8 @@ class UpdateUiTest {
         val environment = environment(updater())
         compose.setContent { environment.Content { UpdatePage() } }
         waitFor("Update available")
+        compose.onNodeWithText("1.0.3").assertIsDisplayed()
         compose.onNodeWithText("Update now").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("- Faster receipts").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -258,7 +258,10 @@ class UpdateUiTest {
         waitFor("Update available")
         val asked = network.asked.size
         scrollTap("Update now")
-        compose.waitUntil(10_000) { updater.state.value is UpdateState.Ready }
+        compose.waitUntil(10_000) {
+            compose.waitForIdle()
+            updater.state.value is UpdateState.Ready
+        }
         compose.waitForIdle()
         assertEquals(1, compose.onAllNodesWithText("Ready to install").fetchSemanticsNodes().size, "the page says so, with no sheet over it")
         assertTrue(network.asked.drop(asked).none { "releases/latest" in it }, "not asked again: ${network.asked.drop(asked)}")
@@ -329,7 +332,11 @@ class UpdateUiTest {
         assertEquals(0, environment.navigator.updatesOpened)
 
         locked = false
-        compose.waitUntil(10_000) { environment.navigator.updatesOpened == 1 }
+        // Idled each time round: under Robolectric the screen only takes in the unlock as the main looper runs.
+        compose.waitUntil(10_000) {
+            compose.waitForIdle()
+            environment.navigator.updatesOpened == 1
+        }
         assertFalse(environment.container.updateRequests.value)
     }
 
@@ -357,7 +364,10 @@ class UpdateUiTest {
         }
         environment.container.updateInstallRequests.value = true
         environment.container.updateRequests.value = true
-        compose.waitUntil(10_000) { installer.installs.isNotEmpty() }
+        compose.waitUntil(10_000) {
+            compose.waitForIdle()
+            installer.installs.isNotEmpty()
+        }
         assertEquals(1, environment.navigator.updatesOpened)
         assertFalse(environment.container.updateInstallRequests.value)
     }
