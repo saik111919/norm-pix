@@ -120,7 +120,8 @@ class CategoryStackTest {
         showTopSpending(seedSpending())
 
         // Shopping is the biggest of two, and was Rs 1,000 last month: up 100%.
-        compose.onNodeWithContentDescription("100% more than ${monthLabel(month.previous)}, 1 of 2", substring = true).assertExists()
+        // This month is still going, so it is set against the same days of last month.
+        compose.onNodeWithContentDescription("100% more than this time last month, 1 of 2", substring = true).assertExists()
     }
 
     @Test
@@ -141,7 +142,7 @@ class CategoryStackTest {
         // Shopping has ready-made sub-categories, so the sheet also says the whole of it was spent directly in Shopping.
         compose.onAllNodesWithText("₹2,002.00")[0].assertIsDisplayed()
         compose.onNodeWithText("Directly in Shopping").assertExists()
-        compose.onNodeWithText("100% more than ${monthLabel(month.previous)}").assertIsDisplayed()
+        compose.onNodeWithText("100% more than this time last month").assertIsDisplayed()
         compose.onNodeWithText("See all in ${monthLabel(month)}").assertIsDisplayed()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Latest").fetchSemanticsNodes().isNotEmpty() }
     }
