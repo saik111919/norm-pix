@@ -95,10 +95,59 @@ class AppPreferencesTest {
     fun backButtonStyleCanBeToggled() {
         val store = prefs()
         val preferences = AppPreferences(store)
+        assertEquals(BackButtonStyle.TopFloatingCircle, preferences.state.value.backButtonStyle, "the top floating circle is the default")
+        preferences.setBackButtonStyle(BackButtonStyle.BottomDock)
         assertEquals(BackButtonStyle.BottomDock, preferences.state.value.backButtonStyle)
-        preferences.setBackButtonStyle(BackButtonStyle.TopFloatingCircle)
-        assertEquals(BackButtonStyle.TopFloatingCircle, preferences.state.value.backButtonStyle)
-        assertEquals(BackButtonStyle.TopFloatingCircle, AppPreferences(store).state.value.backButtonStyle)
+        assertEquals(BackButtonStyle.BottomDock, AppPreferences(store).state.value.backButtonStyle)
+    }
+
+    @Test
+    fun voltIsTheColorWithWallpaperColorsOff() {
+        val store = prefs()
+        val preferences = AppPreferences(store)
+        assertEquals(AccentColor.Volt, preferences.state.value.accent)
+        // Turning wallpaper colors off, without picking a color, lands on Volt.
+        preferences.setColorSource(ColorSource.Custom)
+        assertEquals(AccentColor.Volt, AppPreferences(store).state.value.accent)
+        // A color the user picked is kept.
+        preferences.setAccent(AccentColor.Blue)
+        preferences.setColorSource(ColorSource.System)
+        preferences.setColorSource(ColorSource.Custom)
+        assertEquals(AccentColor.Blue, AppPreferences(store).state.value.accent)
+    }
+
+    @Test
+    fun notificationsAndHiddenAmountsPersist() {
+        val store = prefs()
+        val preferences = AppPreferences(store)
+        assertTrue(preferences.state.value.notificationsEnabled)
+        assertEquals(false, preferences.state.value.amountsHidden)
+        preferences.setNotificationsEnabled(false)
+        preferences.setAmountsHidden(true)
+        val reread = AppPreferences(store).state.value
+        assertEquals(false, reread.notificationsEnabled)
+        assertTrue(reread.amountsHidden)
+    }
+
+    @Test
+    fun fontChoicesPersistAndCustomStartsFromTheStyle() {
+        val store = prefs()
+        val preferences = AppPreferences(store)
+        assertEquals(InterfaceFont.System, preferences.state.value.interfaceFont, "the phone's font stays the default")
+        preferences.setInterfaceFont(InterfaceFont.GsFlex)
+        preferences.setFontPreset(FontPreset.Airy)
+        assertEquals(FontShape(FontPreset.Airy.weightShift, FontPreset.Airy.width, FontPreset.Airy.roundness), preferences.state.value.fontShape)
+        // Custom starts where the style was, so nothing jumps, and its values are kept within the font's axes.
+        preferences.setCustomFont(true)
+        assertEquals(FontPreset.Airy.width, preferences.state.value.fontWidth)
+        preferences.setFontShape(weightShift = 900, width = 10, roundness = 50)
+        val reread = AppPreferences(store).state.value
+        assertEquals(InterfaceFont.GsFlex, reread.interfaceFont)
+        assertTrue(reread.customFont)
+        assertEquals(FontShape(FontAxes.WEIGHT_SHIFT.last, FontAxes.WIDTH.first, 50), reread.fontShape)
+        // Picking a style again leaves custom.
+        preferences.setFontPreset(FontPreset.Neo)
+        assertEquals(false, AppPreferences(store).state.value.customFont)
     }
 
     @Test

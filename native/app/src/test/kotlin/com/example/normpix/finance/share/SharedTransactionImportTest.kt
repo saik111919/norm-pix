@@ -193,6 +193,38 @@ class SharedTransactionImportTest {
         assertNull(SharedTransactionImport.matchAccount(text, draft.counterparty, draft.instrument, state.activeAccounts, state.catalog))
     }
 
+    // ------------------------------------------------------------ card bill
+
+    @Test
+    fun `a payment to the user's own credit card is recorded as that card's bill`() {
+        account("SBI Savings", AccountKind.Bank, "sbi")
+        val card = account("HDFC Credit Card", AccountKind.Card, "hdfc")
+        val draft = ParsedTransactionDraft(
+            amount = 567_930,
+            type = TransactionType.Expense,
+            counterparty = "HDFC Bank Credit Card",
+            reference = "123456789012",
+        )
+        val prefill = runBlocking { SharedTransactionImport.prefill(draft, "Paid to HDFC Bank Credit Card", finance.state.value, repository, now) }
+
+        assertEquals(TransactionType.Transfer, prefill.type)
+        assertEquals(card.id, prefill.toAccountId)
+        assertTrue(prefill.accountId != card.id, "the card is where it went, not where it came from")
+        assertNull(prefill.categoryId)
+        assertEquals("Card bill payment · Ref 123456789012", prefill.note)
+        assertTrue(prefill.notices.any { "bill payment" in it.text && !it.attention })
+    }
+
+    @Test
+    fun `without a card of the user's it stays an expense`() {
+        account("SBI Savings", AccountKind.Bank, "sbi")
+        val draft = ParsedTransactionDraft(amount = 567_930, type = TransactionType.Expense, counterparty = "HDFC Bank Credit Card")
+        val prefill = runBlocking { SharedTransactionImport.prefill(draft, "Paid to HDFC Bank Credit Card", finance.state.value, repository, now) }
+
+        assertEquals(TransactionType.Expense, prefill.type)
+        assertNull(prefill.toAccountId)
+    }
+
     // ------------------------------------------------------------- prefill
 
     @Test

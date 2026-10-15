@@ -8,6 +8,7 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Schedule
@@ -62,6 +63,7 @@ object SettingsCatalog {
         SettingsEntry("Progress indicators", SettingsPage.Appearance, listOf("progress", "loading", "wavy", "flat", "bar", "spinner", "loader", "indicator", "expressive")),
         SettingsEntry("Background blur", SettingsPage.Appearance, listOf("sheet", "dialog", "blur", "frosted", "glass", "background", "overlay", "dock", "footer")),
         SettingsEntry("Category icons", SettingsPage.Appearance, listOf("category", "icons", "emoji", "outline", "outlined", "glyph", "avatar", "style")),
+        SettingsEntry("Interface font", SettingsPage.Appearance, listOf("font", "typeface", "text", "gs flex", "google sans", "weight", "width", "roundness", "zenith", "neo", "impact", "airy")),
         SettingsEntry("Back button style", SettingsPage.Appearance, listOf("back", "button", "floating", "circle", "header", "dock", "top bar")),
         SettingsEntry("Page transitions", SettingsPage.Appearance, listOf("animation", "motion", "shared axis", "slide", "fade")),
 
@@ -78,12 +80,16 @@ object SettingsCatalog {
         SettingsEntry("Import backup", SettingsPage.Data, listOf("restore", "import", "load", "recover")),
 
         // Wallet
+        SettingsEntry("Export and import cards", SettingsPage.Wallet, listOf("export cards", "import cards", "card backup", "backup cards", "move cards", "transfer cards", "password")),
         SettingsEntry("Card actions style", SettingsPage.Wallet, listOf("buttons", "menu", "context menu", "actions")),
         SettingsEntry("Accounts layout", SettingsPage.Wallet, listOf("accounts", "stack", "stacked", "cards", "list", "rows", "compact", "layout", "wallet")),
         SettingsEntry("Bank logo style", SettingsPage.Wallet, listOf("logo", "brand", "icon", "compact", "full")),
         SettingsEntry("NFC tag reveal gate", SettingsPage.Wallet, listOf("nfc", "tap to reveal", "card number", "security", "registered tag", "only my tag", "my tag", "register tag")),
         SettingsEntry("Card tilt", SettingsPage.Wallet, listOf("tilt", "motion", "gyroscope", "sensor", "parallax", "animation")),
         SettingsEntry("Clear copied card details after", SettingsPage.Wallet, listOf("clipboard", "copy", "clear", "timeout", "seconds", "security", "cvv")),
+
+        // Notifications
+        SettingsEntry("Notifications", SettingsPage.Notifications, listOf("notifications", "notify", "alerts", "alert", "mute", "silence", "reminder alerts", "card expiry")),
 
         // Availability
         SettingsEntry("NFC card exchange schedule", SettingsPage.Availability, listOf("nfc", "schedule", "hours", "time window", "availability", "when")),
@@ -115,6 +121,7 @@ object SettingsCatalog {
         SettingsPage.Data -> Icons.Outlined.Storage
         SettingsPage.Wallet -> Icons.Outlined.CreditCard
         SettingsPage.Availability -> Icons.Outlined.Schedule
+        SettingsPage.Notifications -> Icons.Outlined.Notifications
         SettingsPage.Security -> Icons.Outlined.Security
         null -> Icons.Outlined.Tune
     }
@@ -207,7 +214,9 @@ fun rememberSettingsSystemActions(): SettingsSystemActions {
             overlays.alert(
                 title = "About NormPix",
                 message = "NormPix ${BuildConfig.VERSION_NAME}\nModern finance, cards & reminders on Android.\n" +
-                    "Your data stays on this phone, encrypted. NormPix connects only to GitHub, to check for updates and download them.",
+                    "Your data stays on this phone, encrypted. NormPix connects only to GitHub, to check for updates and download them.\n\n" +
+                    "3D category pictures: Microsoft Fluent Emoji (MIT licence). GS Flex font: Google Sans Flex, under the SIL Open " +
+                    "Font License 1.1; Google Sans Flex is a trademark of Google LLC, and NormPix is not affiliated with Google.",
                 okLabel = "OK",
             )
         }

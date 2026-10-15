@@ -53,6 +53,21 @@ fun shareOf(part: Long, total: Long): Double =
     if (total <= 0) 0.0 else (part.toDouble() / total).coerceIn(0.0, 1.0)
 
 /**
+ * A [share] (0..1, see [shareOf]) as the percentage every screen shows: rounded to the nearest whole percent, except that
+ * a sliver is "<1%" rather than "0%" (there is something there) and nearly all of it is ">99%" rather than "100%" (it is
+ * not all of it). Only nothing is "0%", and only all of it "100%".
+ */
+fun percentLabel(share: Double): String {
+    val percent = Math.round(share.coerceIn(0.0, 1.0) * 100).toInt()
+    return when {
+        share <= 0.0 -> "0%"
+        percent == 0 -> "<1%"
+        percent == 100 && share < 1.0 -> ">99%"
+        else -> "$percent%"
+    }
+}
+
+/**
  * Relative change from [previous] to [current] (0.18 = 18% more), or null
  * when there's no baseline to compare against.
  */
@@ -115,6 +130,18 @@ data class BudgetStatus(val allocated: Long, val spent: Long) {
 
     /** Spent / allocated, unclamped (1.25 = 25% over). */
     val utilization: Double get() = if (allocated <= 0) 0.0 else spent.toDouble() / allocated
+
+    /**
+     * How much of the budget is used, in whole percent, the way it is written ("96% used"). Worked out in integers and
+     * rounded down, so it never says 100% while some of the budget is left; once spending is over, it is at least 101%,
+     * so it never reads 100% (on budget) for an exceeded one either.
+     */
+    val usedPercent: Int
+        get() {
+            if (allocated <= 0) return 0
+            val floor = (maxOf(0L, spent) * 100 / allocated).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            return if (spent > allocated) maxOf(floor, 101) else floor
+        }
 
     val health: BudgetHealth
         get() = when {

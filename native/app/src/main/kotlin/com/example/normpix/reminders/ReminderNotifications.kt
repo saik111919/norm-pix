@@ -16,6 +16,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.example.normpix.settings.AppNotifications
 import androidx.core.content.ContextCompat
 import com.example.normpix.MainActivity
 import com.example.normpix.NormPixApplication
@@ -82,6 +83,8 @@ object ReminderNotifications {
     @SuppressLint("MissingPermission")
     fun post(context: Context, reminder: Reminder) {
         val id = reminder.id ?: return
+        // Turned off in Settings: the reminder still comes due in the list, it just doesn't alert.
+        if (!AppNotifications.allowed(context)) return
         if (!hasPermission(context) || !NotificationManagerCompat.from(context).areNotificationsEnabled()) return
         createChannel(context)
         val open = PendingIntent.getActivity(

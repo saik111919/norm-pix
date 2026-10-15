@@ -62,6 +62,7 @@ import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.BillDue
 import com.example.normpix.finance.domain.creditRoom
 import com.example.normpix.finance.domain.nextBillDue
+import com.example.normpix.navigation.AmountsVisibilityButton
 import java.time.LocalDate
 import com.example.normpix.finance.ui.ChoiceOption
 import com.example.normpix.finance.ui.ConnectedChoiceRow
@@ -205,6 +206,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
     AppPage(
         title = "Wallet",
         actions = {
+            AmountsVisibilityButton()
             IconButton(onClick = { flows.openNfcExchange(ExchangeTab.Inlet) }) {
                 Icon(Icons.Outlined.Nfc, contentDescription = "NFC Card Exchange (Inlet / Outlet)")
             }

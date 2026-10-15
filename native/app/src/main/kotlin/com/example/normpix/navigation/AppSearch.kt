@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CreditCard
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -61,6 +63,7 @@ import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.SearchField
+import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.components.rememberBackButtonStyle
 import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppSpacing
@@ -281,3 +284,25 @@ private fun Message(text: String, style: androidx.compose.ui.text.TextStyle = Ma
     )
 }
 
+
+/**
+ * The eye at the top of Home and Wallet: hides every amount in the app (as dots) or shows them again. Remembered, so amounts
+ * stay hidden until shown, even after NormPix is closed.
+ */
+@Composable
+fun AmountsVisibilityButton() {
+    val preferences = LocalAppPreferences.current ?: return
+    val hidden = preferences.state.collectAsState().value.amountsHidden
+    val haptics = rememberAppHaptics()
+    IconButton(
+        onClick = {
+            haptics.selection()
+            preferences.setAmountsHidden(!hidden)
+        },
+    ) {
+        Icon(
+            if (hidden) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+            contentDescription = if (hidden) "Show amounts" else "Hide amounts",
+        )
+    }
+}

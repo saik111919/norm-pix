@@ -6,6 +6,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.example.normpix.finance.ui.CategoriesPage
@@ -49,10 +50,12 @@ class ConnectedChoiceSettingsTest {
         compose.setContent { env.Content { AppearanceSettingsPage() } }
         compose.waitForIdle()
 
-        // (The page has other radio rows too, such as the page animations.)
-        val themeChoices = radio and (hasText("System") or hasText("Light") or hasText("Dark"))
-        assertEquals(3, compose.onAllNodes(themeChoices).fetchSemanticsNodes().size, "System, Light and Dark")
-        compose.onNode(hasText("System") and radio).assertIsSelected()
+        // (The page has other radio rows too, such as the page animations - and the interface font's own "System", after the theme.)
+        val themeChoices = radio and (hasText("Light") or hasText("Dark"))
+        assertEquals(2, compose.onAllNodes(themeChoices).fetchSemanticsNodes().size, "Light and Dark")
+        val systems = compose.onAllNodes(hasText("System") and radio)
+        assertEquals(2, systems.fetchSemanticsNodes().size, "the theme's System, and the font's")
+        systems.onFirst().assertIsSelected()
         assertEquals(false, compose.onNode(hasText("Dark") and radio).fetchSemanticsNode().config[SemanticsProperties.Selected])
     }
 
@@ -66,7 +69,7 @@ class ConnectedChoiceSettingsTest {
 
         assertEquals(ThemeMode.Dark, env.preferences.state.value.mode)
         compose.onNode(hasText("Dark") and radio).assertIsSelected()
-        assertEquals(false, compose.onNode(hasText("System") and radio).fetchSemanticsNode().config[SemanticsProperties.Selected])
+        assertEquals(false, compose.onAllNodes(hasText("System") and radio).onFirst().fetchSemanticsNode().config[SemanticsProperties.Selected])
 
         compose.onNodeWithText("Light").performClick()
         compose.waitForIdle()

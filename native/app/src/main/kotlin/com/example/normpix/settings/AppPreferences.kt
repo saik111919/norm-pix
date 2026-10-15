@@ -12,6 +12,32 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
+/** The typeface the interface is set in: the phone's own, or the bundled variable GS Flex (Google Sans Flex, SIL OFL). */
+enum class InterfaceFont(val label: String, val description: String) {
+    GsFlex("GS Flex", "A variable font with adjustable weight, width and roundness"),
+    System("System", "Your phone's own font"),
+}
+
+/**
+ * GS Flex styles: how heavy, how wide and how round the letters are. [weightShift] moves every text style's weight by that
+ * much (so headings stay heavier than body text), [width] is the font's width axis (100 is as designed) and [roundness] its
+ * ROND axis (0 sharp, 100 fully rounded). [Standard] is the font as designed.
+ */
+enum class FontPreset(val label: String, val weightShift: Int, val width: Int, val roundness: Int) {
+    Standard("Standard", weightShift = 0, width = 100, roundness = 0),
+    Zenith("Zenith", weightShift = -50, width = 112, roundness = 0),
+    Neo("Neo", weightShift = 50, width = 88, roundness = 0),
+    Impact("Impact", weightShift = 250, width = 104, roundness = 0),
+    Airy("Airy", weightShift = -100, width = 106, roundness = 100),
+}
+
+/** The ranges the custom GS Flex controls allow (see [AppPrefsState.fontWeightShift] and the rest). */
+object FontAxes {
+    val WEIGHT_SHIFT = -300..300
+    val WIDTH = 75..125
+    val ROUNDNESS = 0..100
+}
+
 /** Light, dark, or follow the system. */
 enum class ThemeMode(val label: String) {
     System("Follow system"),
@@ -35,7 +61,7 @@ enum class PageAnimationType(val label: String, val description: String) {
     ScaleAndFade("Scale and fade", "Pages grow into place as they fade in"),
 }
 
-/** Style and placement of a page's back button - and, in the floating style, of its whole header. */
+/** Style and placement of a page's back button - and, in the floating style, of its whole header. [TopFloatingCircle] is the default. */
 enum class BackButtonStyle(val label: String, val description: String) {
     BottomDock("Bottom dock", "Floating pill at the bottom of sub-pages"),
     TopFloatingCircle("Top floating circle", "Glass circles and pills float over the top of every page, in place of the app bar"),
@@ -100,7 +126,8 @@ enum class ClipboardTimeout(val seconds: Int, val label: String, val description
 /**
  * Curated seed colors used when [ColorSource.Custom] is selected. The final
  * palette is generated from the seed (see `AppTheme`), so these are starting
- * hues, not literal UI colors.
+ * hues, not literal UI colors. [Volt] is the default: what the app wears with
+ * wallpaper colors off (or unavailable) until the user picks another.
  */
 enum class AccentColor(val seed: Color, val label: String) {
     Green(Color(0xFF16A34A), "Emerald"),
@@ -151,7 +178,7 @@ const val MAX_PROFILE_NAME = 40
 data class AppPrefsState(
     val mode: ThemeMode = ThemeMode.System,
     val colorSource: ColorSource = ColorSource.System,
-    val accent: AccentColor = AccentColor.Green,
+    val accent: AccentColor = AccentColor.Volt,
     val pageAnimation: PageAnimationType = PageAnimationType.LinuxWindow,
     val walletCardActionStyle: WalletCardActionStyle = WalletCardActionStyle.Bar,
     val bankIconStyle: BankIconStyle = BankIconStyle.Full,
@@ -173,7 +200,7 @@ data class AppPrefsState(
     /** Blurs the background behind bottom sheets on supported devices. */
     val sheetBlurEnabled: Boolean = true,
     /** Back button style and placement on sub-pages. */
-    val backButtonStyle: BackButtonStyle = BackButtonStyle.BottomDock,
+    val backButtonStyle: BackButtonStyle = BackButtonStyle.TopFloatingCircle,
     /** How progress bars and loaders look, wherever the app shows progress. */
     val progressStyle: ProgressStyle = ProgressStyle.Wavy,
     /** The window each [ScheduledFeature] may be used in; a feature missing here is always available. */
@@ -190,9 +217,36 @@ data class AppPrefsState(
     val accountButtonTarget: AccountButtonTarget = AccountButtonTarget.Settings,
     /** Once a day, at launch, ask GitHub whether a newer release is out (Settings > Check for updates automatically). */
     val updateChecksEnabled: Boolean = true,
+    /** NormPix may post notifications: reminders that come due and card-expiry reminders. Android's own switch still applies. */
+    val notificationsEnabled: Boolean = true,
+    /** Every amount is shown as dots (the eye button at the top of Home and Wallet) until shown again. */
+    val amountsHidden: Boolean = false,
+    /** The interface's typeface. The phone's own, as it always was, until the user picks GS Flex. */
+    val interfaceFont: InterfaceFont = InterfaceFont.System,
+    /** The GS Flex style used while [customFont] is off. */
+    val fontPreset: FontPreset = FontPreset.Standard,
+    /** GS Flex is set by hand with the three values below instead of a [fontPreset]. */
+    val customFont: Boolean = false,
+    /** How much heavier (+) or lighter (-) than designed every text style is, in font-weight units (see [FontAxes]). */
+    val fontWeightShift: Int = 0,
+    /** GS Flex's width axis: 100 as designed, less is narrower. */
+    val fontWidth: Int = 100,
+    /** GS Flex's roundness axis: 0 sharp corners, 100 fully rounded. */
+    val fontRoundness: Int = 0,
 ) {
+    /** The GS Flex values in force: the custom ones while [customFont] is on, else the [fontPreset]'s. */
+    val fontShape: FontShape
+        get() = if (customFont) {
+            FontShape(fontWeightShift, fontWidth, fontRoundness)
+        } else {
+            FontShape(fontPreset.weightShift, fontPreset.width, fontPreset.roundness)
+        }
+
     fun availabilityOf(feature: ScheduledFeature): AvailabilityRule = availability[feature] ?: AvailabilityRule()
 }
+
+/** How GS Flex is drawn: the weight shift, width and roundness (see [FontPreset]). */
+data class FontShape(val weightShift: Int = 0, val width: Int = 100, val roundness: Int = 0)
 
 /**
  * App-wide preferences, persisted in [SharedPreferences]. Reads are
@@ -233,6 +287,14 @@ class AppPreferences(private val prefs: SharedPreferences) {
             profilePhoto = prefs.getString(K_PROFILE_PHOTO, defaults.profilePhoto).orEmpty().takeIf(::isProfilePhotoName).orEmpty(),
             accountButtonTarget = prefs.enum(K_ACCOUNT_BUTTON, defaults.accountButtonTarget),
             updateChecksEnabled = prefs.getBoolean(K_UPDATE_CHECKS, defaults.updateChecksEnabled),
+            notificationsEnabled = prefs.getBoolean(K_NOTIFICATIONS, defaults.notificationsEnabled),
+            amountsHidden = prefs.getBoolean(K_AMOUNTS_HIDDEN, defaults.amountsHidden),
+            interfaceFont = prefs.enum(K_FONT, defaults.interfaceFont),
+            fontPreset = prefs.enum(K_FONT_PRESET, defaults.fontPreset),
+            customFont = prefs.getBoolean(K_FONT_CUSTOM, defaults.customFont),
+            fontWeightShift = prefs.getInt(K_FONT_WEIGHT, defaults.fontWeightShift).coerceIn(FontAxes.WEIGHT_SHIFT),
+            fontWidth = prefs.getInt(K_FONT_WIDTH, defaults.fontWidth).coerceIn(FontAxes.WIDTH),
+            fontRoundness = prefs.getInt(K_FONT_ROUNDNESS, defaults.fontRoundness).coerceIn(FontAxes.ROUNDNESS),
             // Only features the user has configured; the rest read as the default (always on) through availabilityOf.
             availability = ScheduledFeature.entries.filter { prefs.contains(it.key("mode")) }.associateWith { prefs.readRule(it) },
         )
@@ -347,6 +409,53 @@ class AppPreferences(private val prefs: SharedPreferences) {
     fun setUpdateChecksEnabled(enabled: Boolean) =
         change({ copy(updateChecksEnabled = enabled) }) { putBoolean(K_UPDATE_CHECKS, enabled) }
 
+    fun setNotificationsEnabled(enabled: Boolean) =
+        change({ copy(notificationsEnabled = enabled) }) { putBoolean(K_NOTIFICATIONS, enabled) }
+
+    fun setAmountsHidden(hidden: Boolean) = change({ copy(amountsHidden = hidden) }) { putBoolean(K_AMOUNTS_HIDDEN, hidden) }
+
+    fun setInterfaceFont(font: InterfaceFont) = change({ copy(interfaceFont = font) }) { putString(K_FONT, font.name) }
+
+    /** Picking a style also leaves the custom values: the style is what is then used. */
+    fun setFontPreset(preset: FontPreset) = change({ copy(fontPreset = preset, customFont = false) }) {
+        putString(K_FONT_PRESET, preset.name)
+        putBoolean(K_FONT_CUSTOM, false)
+    }
+
+    /**
+     * Turning the custom font on starts it from the style in use, so nothing jumps; the values are the user's to change from
+     * there (see [setFontShape]).
+     */
+    fun setCustomFont(enabled: Boolean) {
+        val from = state.value.fontPreset
+        change({
+            if (enabled) {
+                copy(customFont = true, fontWeightShift = from.weightShift, fontWidth = from.width, fontRoundness = from.roundness)
+            } else {
+                copy(customFont = false)
+            }
+        }) {
+            putBoolean(K_FONT_CUSTOM, enabled)
+            if (enabled) {
+                putInt(K_FONT_WEIGHT, from.weightShift)
+                putInt(K_FONT_WIDTH, from.width)
+                putInt(K_FONT_ROUNDNESS, from.roundness)
+            }
+        }
+    }
+
+    /** The custom GS Flex values, each kept inside [FontAxes]. */
+    fun setFontShape(weightShift: Int, width: Int, roundness: Int) {
+        val w = weightShift.coerceIn(FontAxes.WEIGHT_SHIFT)
+        val wd = width.coerceIn(FontAxes.WIDTH)
+        val r = roundness.coerceIn(FontAxes.ROUNDNESS)
+        change({ copy(fontWeightShift = w, fontWidth = wd, fontRoundness = r) }) {
+            putInt(K_FONT_WEIGHT, w)
+            putInt(K_FONT_WIDTH, wd)
+            putInt(K_FONT_ROUNDNESS, r)
+        }
+    }
+
     /** Whether the user was already sent to the system page for exact-alarm access (asked once, then never nagged). */
     var exactAlarmPrompted: Boolean
         get() = prefs.getBoolean(K_EXACT_ALARM_PROMPTED, false)
@@ -399,6 +508,14 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_PROFILE_PHOTO = "profile_photo"
         const val K_ACCOUNT_BUTTON = "account_button_target"
         const val K_UPDATE_CHECKS = "update_checks_enabled"
+        const val K_NOTIFICATIONS = "notifications_enabled"
+        const val K_AMOUNTS_HIDDEN = "amounts_hidden"
+        const val K_FONT = "interface_font"
+        const val K_FONT_PRESET = "font_preset"
+        const val K_FONT_CUSTOM = "font_custom"
+        const val K_FONT_WEIGHT = "font_weight_shift"
+        const val K_FONT_WIDTH = "font_width"
+        const val K_FONT_ROUNDNESS = "font_roundness"
 
         fun ScheduledFeature.key(field: String) = "availability_${name.lowercase()}_$field"
         fun LocalTime.minuteOfDay() = hour * 60 + minute

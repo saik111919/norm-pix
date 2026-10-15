@@ -24,6 +24,7 @@ import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.RepeatSchedule
+import com.example.normpix.navigation.LocalAppPreferences
 import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -56,8 +57,10 @@ data class FinanceState(
     val customBanks: List<CustomBank> = emptyList(),
     /** Everyone expenses can be spent on, archived ones last. */
     val people: List<Person> = emptyList(),
+    /** Amounts are kept off the screen (see [MoneyFormatter.hidden]); set by [rememberFinanceState] from the user's choice. */
+    val amountsHidden: Boolean = false,
 ) {
-    val money: MoneyFormatter = MoneyFormatter(currency)
+    val money: MoneyFormatter = MoneyFormatter(currency, hidden = amountsHidden)
 
     /** Every bank accounts and cards can belong to: the built-in directory plus the user's own. */
     val catalog: BankCatalog by lazy(LazyThreadSafetyMode.NONE) { BankCatalog(customBanks) }
@@ -310,9 +313,16 @@ sealed interface PictureEdit {
 
 val LocalFinance = compositionLocalOf<FinanceController> { error("No FinanceController provided") }
 
-/** The current finance reference data, recomposing when it changes. */
+/**
+ * The current finance reference data, recomposing when it changes, as screens show it: with every amount hidden while the user has asked for that (the eye button). Work
+ * done outside the screens - reminders, notifications, exports - reads the controller's own state, where nothing is hidden.
+ */
 @Composable
-fun rememberFinanceState(): FinanceState = LocalFinance.current.state.collectAsState().value
+fun rememberFinanceState(): FinanceState {
+    val state = LocalFinance.current.state.collectAsState().value
+    val hidden = LocalAppPreferences.current?.state?.collectAsState()?.value?.amountsHidden == true
+    return remember(state, hidden) { if (hidden) state.copy(amountsHidden = true) else state }
+}
 
 /** Explicit async state (instead of isLoading/hasError/hasData flags). */
 sealed interface AsyncValue<out T> {

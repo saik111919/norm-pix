@@ -143,9 +143,17 @@ enum class AmountSign {
  * arithmetic end to end, so output is identical on every device and locale
  * and never touches floating point.
  */
-class MoneyFormatter(val currency: CurrencySpec) {
+class MoneyFormatter(
+    val currency: CurrencySpec,
+    /**
+     * Amounts are being kept off the screen (the eye button): every amount reads as the currency and [HIDDEN_DIGITS], the
+     * same length whatever it is, so not even its size shows. Only display text is affected - never what is stored, typed
+     * into a field or exported.
+     */
+    val hidden: Boolean = false,
+) {
     private fun signed(minor: Long, sign: AmountSign, body: (Long) -> String): String {
-        val text = body(kotlin.math.abs(minor))
+        val text = if (hidden) currency.symbol + HIDDEN_DIGITS else body(kotlin.math.abs(minor))
         return when {
             minor < 0 -> "−$text"
             sign == AmountSign.Explicit && minor > 0 -> "+$text"
@@ -201,5 +209,10 @@ class MoneyFormatter(val currency: CurrencySpec) {
     }
 
     /** "1,23,456.50" with no currency symbol. */
-    fun plain(minor: Long): String = signed(minor, AmountSign.None) { number(it) }
+    fun plain(minor: Long): String = if (hidden) HIDDEN_DIGITS else signed(minor, AmountSign.None) { number(it) }
+
+    companion object {
+        /** What a hidden amount shows in place of its digits. */
+        const val HIDDEN_DIGITS = "••••"
+    }
 }
