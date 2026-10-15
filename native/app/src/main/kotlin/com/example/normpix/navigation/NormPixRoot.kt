@@ -13,6 +13,7 @@ import com.example.normpix.settings.AppPreferences
 import com.example.normpix.settings.ui.AppearanceSettingsPage
 import com.example.normpix.settings.ui.AvailabilitySettingsPage
 import com.example.normpix.settings.ui.DataSettingsPage
+import com.example.normpix.settings.ui.NotificationsSettingsPage
 import com.example.normpix.settings.ui.FinanceSettingsPage
 import com.example.normpix.settings.ui.ProfilePage
 import com.example.normpix.settings.ui.SecuritySettingsPage
@@ -89,6 +90,7 @@ import com.example.normpix.ui.components.SnackbarOverlay
 import com.example.normpix.ui.components.rememberWindowBlurAvailable
 import com.example.normpix.ui.components.rememberEasedBlur
 import com.example.normpix.ui.components.blurredBy
+import com.example.normpix.ui.theme.AppFont
 import com.example.normpix.ui.theme.Appearance
 import com.example.normpix.ui.theme.LocalSystemReducedMotion
 import com.example.normpix.ui.theme.NormPixTheme
@@ -175,7 +177,7 @@ fun NormPixRoot(container: AppContainer, onDarkChanged: (Boolean) -> Unit = {}) 
     val shell = rememberShellState()
     val data = rememberDataContainer(container, prefs.dummyDataEnabled)
     KeepRemindersArmed(container)
-    NormPixTheme(Appearance(prefs.mode, prefs.colorSource, prefs.accent)) {
+    NormPixTheme(Appearance(prefs.mode, prefs.colorSource, prefs.accent, AppFont(prefs.interfaceFont, prefs.fontShape))) {
         val dark = MaterialTheme.colorScheme.isDark
         LaunchedEffect(dark) { onDarkChanged(dark) }
         ProvideAppEnvironment(data) {
@@ -444,6 +446,7 @@ private fun AppNavigation(
                     SettingsPage.Security -> SecuritySettingsPage()
                     SettingsPage.Wallet -> WalletSettingsPage()
                     SettingsPage.Availability -> AvailabilitySettingsPage()
+                    SettingsPage.Notifications -> NotificationsSettingsPage()
                     null -> SettingsScreen()
                 }
             }

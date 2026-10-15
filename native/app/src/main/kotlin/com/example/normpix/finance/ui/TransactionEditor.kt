@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +22,7 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.rounded.Add
@@ -49,8 +51,11 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import com.example.normpix.finance.domain.Account
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalAppPreferences
 import com.example.normpix.ui.components.DialogBackdropBlur
@@ -70,6 +75,7 @@ import com.example.normpix.finance.domain.FinanceValidationException
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.RepeatSchedule
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.finance.domain.cardBillTarget
 import com.example.normpix.finance.domain.creditRoom
 import com.example.normpix.finance.domain.minorToInputText
 import com.example.normpix.finance.domain.parseMinorUnits
@@ -89,6 +95,7 @@ import com.example.normpix.ui.components.RevealVisibility
 import com.example.normpix.ui.components.politeLiveRegion
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppMotion
+import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.rememberReducedMotion
 import java.io.File
@@ -200,6 +207,8 @@ private fun TransactionEditor(
     var toAccountId by remember {
         mutableStateOf(
             existing?.toAccountId
+                // A shared payment to the user's own credit card arrives as that card's bill: a transfer onto it.
+                ?: prefill?.toAccountId?.takeIf { id -> finance.activeAccounts.any { it.id == id } }
                 ?: if (initialType == TransactionType.Transfer) {
                     finance.activeAccounts.firstOrNull { it.id != startAccountId }?.id
                 } else {
@@ -584,6 +593,28 @@ private fun TransactionEditor(
     } else {
         null
     }
+    // An expense that says it went to one of the user's credit cards is that card's bill: offered as a transfer onto it, so the
+    // card's balance comes down and the money isn't spent twice (see `cardBillTarget`).
+    val categoryName = finance.category(categoryId)?.name.orEmpty()
+    val billCard = remember(type, typeChosen, payee, note, categoryName, accountId, finance.accounts) {
+        if (!typeChosen || type != TransactionType.Expense) {
+            null
+        } else {
+            cardBillTarget("$payee $note $categoryName", finance.activeAccounts, paidFrom = accountId) { finance.catalog.resolve(it)?.key }
+        }
+    }
+
+    fun recordAsBillPayment(card: Account) {
+        haptics.selection()
+        typeChosen = true
+        typeTouched = true
+        typeError = null
+        setType(TransactionType.Transfer)
+        toAccountId = card.id
+        if (note.isBlank()) note = "Card bill payment"
+        showDetails = true
+    }
+
     val amountFocus = remember { FocusRequester() }
     // A shared draft that already has its amount opens for reading, without the keyboard covering it.
     LaunchedEffect(Unit) { if (!isEditing && prefill?.amount == null) runCatching { amountFocus.requestFocus() } }
@@ -727,6 +758,11 @@ private fun TransactionEditor(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error,
                             )
+                        }
+                        // Paid to one of the user's cards: say what that does to the card, and offer to record it as its bill.
+                        billCard?.let { card ->
+                            Spacer(Modifier.height(AppSpacing.md))
+                            CardBillSuggestion(card = card, onRecord = { recordAsBillPayment(card) })
                         }
                         // Who it was spent on: only an expense has someone, so the field comes and goes with the type.
                         RevealVisibility(visible = type == TransactionType.Expense) {
@@ -929,3 +965,33 @@ fun TimePickerDialogFor(initial: LocalDateTime, onPicked: (hour: Int, minute: In
 
 /** What reading a picture again came to: the text read off it (null when none was), and what it says as a payment. */
 private class PictureReading(val text: String?, val found: SharedTransactionPrefill?)
+
+/**
+ * Said under the account of an expense that looks like a credit card's bill being paid: recorded as an expense, the card
+ * keeps showing the bill as owed and the money counts as spent twice. One tap makes it a transfer onto the card instead.
+ */
+@Composable
+private fun CardBillSuggestion(card: Account, onRecord: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(AppRadius.rLg)
+            .background(scheme.secondaryContainer)
+            .padding(start = AppSpacing.lg, top = AppSpacing.md, end = AppSpacing.sm, bottom = AppSpacing.xs)
+            .politeLiveRegion(),
+    ) {
+        Row(verticalAlignment = Alignment.Top) {
+            Icon(Icons.Outlined.CreditCard, contentDescription = null, tint = scheme.onSecondaryContainer, modifier = Modifier.padding(top = 2.dp).size(20.dp))
+            Spacer(Modifier.size(AppSpacing.md))
+            Text(
+                "Paying your ${card.name} bill? Record it as a payment to the card: what's owed on it goes down, and the money " +
+                    "isn't counted as spending twice - it was counted when you spent it on the card.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = scheme.onSecondaryContainer,
+                modifier = Modifier.padding(end = AppSpacing.sm),
+            )
+        }
+        TextButton(onClick = onRecord, modifier = Modifier.align(Alignment.End)) { Text("Record as card payment") }
+    }
+}

@@ -8,6 +8,7 @@ import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.MoneyFormatter
 import com.example.normpix.finance.domain.NUMBER_ENDING_LENGTH
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.finance.domain.cardBillTarget
 import com.example.normpix.finance.ui.FinanceState
 import com.example.normpix.finance.ui.label
 import com.example.normpix.finance.ui.shortDate
@@ -40,6 +41,11 @@ data class SharedTransactionPrefill(
     /** The message's date couldn't be read, so the date has to be chosen before saving. */
     val dateNeedsChoice: Boolean = false,
     val accountId: Long? = null,
+    /**
+     * Set when the message is the user's own credit card's bill being paid ("Paid to HDFC Bank Credit Card"): the entry is
+     * then a [TransactionType.Transfer] onto that card (see `cardBillTarget`), not an expense.
+     */
+    val toAccountId: Long? = null,
     /**
      * The message shows an account's number and none of the user's accounts (of several) is that one, or more than one is: the
      * form starts with no account chosen, rather than the default one, which would be a guess.
@@ -95,11 +101,23 @@ object SharedTransactionImport {
         // An app's receipt says which part is the user's account; the rest of it is the other side's, and the app's bank.
         val ownSide = draft.accountText ?: text
         val match = findAccount(ownSide, draft.counterparty, draft.instrument, state.activeAccounts, state.catalog, draft.maskedNumbers, cards)
-        val account = match.account
         val payee = draft.counterparty
+        // Money paid to one of the user's own credit cards is that card's bill: a transfer onto it, not spending.
+        val billCard = if (draft.type == TransactionType.Expense && payee != null) {
+            cardBillTarget(payee, state.activeAccounts, paidFrom = null) { state.catalog.resolve(it)?.key }
+        } else {
+            null
+        }
+        // The card is where the money went, so it is never also where it came from.
+        val account = match.account?.takeIf { it.id != billCard?.id }
+        val type = if (billCard != null) TransactionType.Transfer else draft.type
         // The user's own filing of this payee first; a merchant the app knows only for a payee they haven't filed yet.
-        val fromHistory = if (draft.type != null && payee != null) quietly { repository.lastCategoryForPayee(payee, draft.type) } else null
-        val fromMerchant = if (fromHistory == null) MerchantCategories.categoryFor(payee, draft.type, state.categories) else null
+        val fromHistory = if (billCard == null && draft.type != null && payee != null) {
+            quietly { repository.lastCategoryForPayee(payee, draft.type) }
+        } else {
+            null
+        }
+        val fromMerchant = if (billCard == null && fromHistory == null) MerchantCategories.categoryFor(payee, draft.type, state.categories) else null
         val categoryId = fromHistory ?: fromMerchant
         val categoryOrigin = when {
             fromHistory != null -> CategoryOrigin.History
@@ -108,28 +126,37 @@ object SharedTransactionImport {
         }
         val duplicate = quietly {
             repository.possibleDuplicates(
-                draft.type, draft.amount, occurredAt ?: now, payee, draft.reference, limit = 1, timeKnown = draft.date != null && draft.time != null,
+                type, draft.amount, occurredAt ?: now, if (billCard != null) null else payee, draft.reference, limit = 1,
+                timeKnown = draft.date != null && draft.time != null,
             ).firstOrNull()
         }
         // With one account there is nothing to choose between.
         val needsChoice = account == null && draft.maskedNumbers.isNotEmpty() && state.activeAccounts.size > 1
+        val notices = notices(draft, state.money, now, account, categoryOrigin, duplicate = duplicate, accountByNumber = match.byNumber, accountsFit = match.fitting)
         return SharedTransactionPrefill(
-            type = draft.type,
+            type = type,
             amount = draft.amount,
             payee = payee,
-            note = draft.note,
+            // A transfer keeps no payee, so the note says what it was (and keeps the reference duplicates are found by).
+            note = if (billCard != null) listOfNotNull("Card bill payment", draft.note).joinToString(" · ") else draft.note,
             occurredAt = occurredAt,
             timeRead = draft.date != null && draft.time != null,
             dateNeedsChoice = draft.dateUnreadable,
             accountId = account?.id,
+            toAccountId = billCard?.id,
             accountNeedsChoice = needsChoice,
             accountNotice = accountNotice(draft, account, match.fitting).takeIf { needsChoice },
             categoryId = categoryId,
-            notices = notices(draft, state.money, now, account, categoryOrigin, duplicate = duplicate, accountByNumber = match.byNumber, accountsFit = match.fitting),
+            notices = if (billCard != null) notices + ShareNotice(cardBillNotice(billCard)) else notices,
             reference = draft.reference,
             app = draft.app,
         )
     }
+
+    /** What the form says when a shared payment is a card's bill, and so was made a transfer onto the card. */
+    fun cardBillNotice(card: Account): String =
+        "Paid to your ${card.name}, so it's recorded as a bill payment: a transfer onto the card. What's owed on it goes down, " +
+            "and the money isn't counted as spending twice. Switch to Expense if it wasn't your card's bill."
 
     /** A lookup that only adds to the draft: if it fails, the draft goes without it. */
     private suspend fun <T> quietly(block: suspend () -> T): T? = try {

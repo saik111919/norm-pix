@@ -36,6 +36,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import com.example.normpix.finance.domain.MoneyFormatter
+import com.example.normpix.navigation.AmountsVisibilityButton
 import com.example.normpix.ui.theme.resolve
 import com.example.normpix.finance.data.FinanceRepository
 import com.example.normpix.finance.data.TransactionQuery
@@ -108,7 +109,6 @@ import com.example.normpix.wallet.CardStack
 import com.example.normpix.wallet.CardsState
 import com.example.normpix.wallet.rememberCardFlows
 import java.time.LocalDateTime
-import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 /** How far ahead "Next 7 days" looks. */
@@ -137,7 +137,7 @@ private class HomeData(
     val previous: PeriodSummary,
     val recent: List<FinanceTransaction>,
     val topSpending: List<CategoryTotal>,
-    /** What each category came to the month before, to say whether it is up or down. */
+    /** What each category came to over the same days of the month before ([previous]'s days), to say whether it is up or down. */
     val previousSpending: Map<Long, Long>,
     val budgets: BudgetOverview,
     /** Recurring occurrences in the next 7 days, soonest first. */
@@ -150,6 +150,7 @@ private class HomeData(
             val horizon = now.plusDays(COMING_UP_DAYS)
             // The biggest are per top-level category: a sub-category's spending counts toward its parent.
             val parents = repo.categories().parentMap()
+            val compare = comparisonRange(month, now.toLocalDate())
             val upcoming = repo.recurringRules()
                 .filter { it.active && !it.isFinished }
                 .flatMap { rule -> upcomingOccurrences(rule, 8).filter { !it.isAfter(horizon) }.map { it to rule } }
@@ -157,10 +158,12 @@ private class HomeData(
             return HomeData(
                 month = month,
                 summary = repo.summary(month.range),
-                previous = repo.summary(comparisonRange(month, now.toLocalDate())),
+                previous = repo.summary(compare),
                 recent = repo.transactions(TransactionQuery(), limit = 5).items,
                 topSpending = rollUpToParents(repo.categoryTotals(month.range, TransactionType.Expense), parents).take(TOP_SPENDING),
-                previousSpending = rollUpToParents(repo.categoryTotals(month.previous.range, TransactionType.Expense), parents)
+                // The same days of last month as the total above (all of it once this month is over): a month still going is
+                // never set against the whole of the one before, which would make every category look down.
+                previousSpending = rollUpToParents(repo.categoryTotals(compare, TransactionType.Expense), parents)
                     .associate { it.categoryId to it.amount },
                 budgets = repo.budgetOverview(month),
                 upcoming = upcoming,
@@ -180,7 +183,10 @@ fun HomeScreen(listState: LazyListState = rememberLazyListState()) {
 
     AppPage(
         title = "Home",
-        actions = { AppSearchButton() },
+        actions = {
+            AmountsVisibilityButton()
+            AppSearchButton()
+        },
         listState = listState,
         bottomPadding = AppLayout.fabClearance,
         insetBottom = false,
@@ -305,7 +311,7 @@ private fun MonthOverview(data: HomeData, onClick: () -> Unit) {
 @Composable
 private fun BudgetTile(slot: HeroSlot, status: BudgetStatus, money: MoneyFormatter, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
-    val percent = (status.utilization * 100).roundToInt()
+    val percent = status.usedPercent
     val over = status.health == BudgetHealth.Exceeded
     val tone = if (status.health == BudgetHealth.Healthy) scheme.tertiary else budgetTone(status.health).resolve().color
     val label = if (over) "Over budget by" else "Left in budget"

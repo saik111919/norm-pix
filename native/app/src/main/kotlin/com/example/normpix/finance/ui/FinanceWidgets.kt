@@ -57,7 +57,6 @@ import com.example.normpix.finance.domain.pathName
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.StatusTone
 import com.example.normpix.ui.theme.resolve
-import kotlin.math.roundToInt
 
 /**
  * One transaction in a list: what (category or payee), where (account), and
@@ -238,7 +237,7 @@ fun BudgetProgress(
     val health = status.health
     val role = budgetTone(health).resolve()
     val scheme = MaterialTheme.colorScheme
-    val percent = (status.utilization * 100).roundToInt()
+    val percent = status.usedPercent
     val over = health == BudgetHealth.Exceeded
     val message = if (over) {
         "${money.format(-status.remaining)} over · $percent% used"

@@ -79,6 +79,7 @@ import com.example.normpix.navigation.LocalAppPreferences
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.navigation.rememberScrollAwareBarState
 import com.example.normpix.settings.AccountButtonTarget
+import com.example.normpix.settings.AppPrefsState
 import com.example.normpix.settings.BackButtonStyle
 import com.example.normpix.ui.theme.AppFrostedTokens
 import com.example.normpix.ui.theme.AppLayout
@@ -530,7 +531,7 @@ const val PROFILE_BUTTON_LABEL = "Profile"
 @Composable
 internal fun rememberBackButtonStyle(): BackButtonStyle {
     val state = LocalAppPreferences.current?.state?.collectAsState()
-    return state?.value?.backButtonStyle ?: BackButtonStyle.BottomDock
+    return state?.value?.backButtonStyle ?: AppPrefsState().backButtonStyle
 }
 
 /**

@@ -17,9 +17,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.domain.Category
+import com.example.normpix.finance.domain.percentLabel
 import com.example.normpix.ui.components.AppLinearProgress
 import com.example.normpix.ui.theme.AppSpacing
-import kotlin.math.roundToInt
 
 /**
  * One category's share of the month's spending, as a row of a ListSection - what Home's Top spending and Insights'
@@ -35,7 +35,7 @@ fun CategoryShareRow(
 ) {
     val finance = rememberFinanceState()
     val scheme = MaterialTheme.colorScheme
-    val percent = "${(share * 100).roundToInt()}%"
+    val percent = percentLabel(share)
     val barColor = if (category == null) scheme.outline else paletteColor(category.color).accent
     ListItem(
         modifier = modifier.then(

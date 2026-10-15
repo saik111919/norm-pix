@@ -58,6 +58,7 @@ import com.example.normpix.settings.AppIcons
 import com.example.normpix.settings.BackButtonStyle
 import com.example.normpix.settings.CategoryIconStyle
 import com.example.normpix.settings.ColorSource
+import com.example.normpix.settings.InterfaceFont
 import com.example.normpix.settings.PageAnimationType
 import com.example.normpix.settings.ProgressStyle
 import com.example.normpix.settings.ThemeMode
@@ -148,11 +149,11 @@ fun AppearanceSettingsPage() {
                 }
                 ListSection(
                     title = "App icon",
-                    footer = "How NormPix looks on your home screen and in the app list. Android may close NormPix while it " +
-                        "changes the icon, and some home screens drop the old one - add it back from the app list.",
+                    footer = "Android may close NormPix while it changes the icon, and some home screens drop the old one - " +
+                        "add it back from the app list.",
                 ) {
                     item {
-                        AppIconPicker(
+                        AppIconCard(
                             selected = appIcon,
                             onSelected = { icon ->
                                 haptics.selection()
@@ -168,9 +169,18 @@ fun AppearanceSettingsPage() {
                                     appIcon = icon
                                 }
                             },
-                            modifier = Modifier.padding(AppSpacing.lg),
                         )
                     }
+                }
+                ListSection(
+                    title = "Interface font",
+                    footer = if (prefs.interfaceFont == InterfaceFont.GsFlex) {
+                        "Applies to all text in NormPix. GS Flex is Google Sans Flex, under the SIL Open Font License."
+                    } else {
+                        "NormPix uses your phone's font. Pick GS Flex to choose a style, or to set its weight, width and roundness yourself."
+                    },
+                ) {
+                    item { InterfaceFontCard(prefs, preferences, haptics) }
                 }
                 ListSection(
                     title = "Effects",
@@ -301,78 +311,6 @@ private fun ProgressPreview(style: ProgressStyle) {
         AppLinearProgress(Modifier.width(56.dp), progress = { 0.6f }, style = style)
         Spacer(Modifier.width(AppSpacing.sm))
         AppLoadingIndicator(Modifier.size(32.dp), style = style, strokeWidth = 3.dp)
-    }
-}
-
-/** The launcher icons, five to a row, each as a round launcher shows it, with its name underneath. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun AppIconPicker(selected: AppIcon, onSelected: (AppIcon) -> Unit, modifier: Modifier = Modifier) {
-    val primary = MaterialTheme.colorScheme.primary
-    FlowRow(
-        modifier.fillMaxWidth().selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(AppSpacing.xs),
-        verticalArrangement = Arrangement.spacedBy(AppSpacing.md),
-        maxItemsInEachRow = 5,
-    ) {
-        for (icon in AppIcon.entries) {
-            val isSelected = icon == selected
-            val ring by animateColorAsState(if (isSelected) primary else Color.Transparent, label = "appIconRing")
-            Column(
-                Modifier
-                    .weight(1f)
-                    .clip(AppRadius.rMd)
-                    .selectable(selected = isSelected, role = Role.RadioButton, onClick = { if (!isSelected) onSelected(icon) })
-                    .clearAndSetSemantics {
-                        contentDescription = "${icon.label} icon"
-                        role = Role.RadioButton
-                        this.selected = isSelected
-                    }
-                    .padding(vertical = AppSpacing.xs),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Box {
-                    AppIconImage(icon, Modifier.size(52.dp).border(2.dp, ring, CircleShape).padding(4.dp))
-                    if (isSelected) {
-                        Box(
-                            Modifier
-                                .align(Alignment.BottomEnd)
-                                .size(18.dp)
-                                .background(primary, CircleShape)
-                                .border(1.5.dp, MaterialTheme.colorScheme.surfaceContainer, CircleShape),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                Icons.Rounded.Check,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(12.dp),
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.height(AppSpacing.xs))
-                Text(icon.label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-            }
-        }
-    }
-}
-
-/** An app icon as a round launcher shows it: its two layers, of which only the middle two thirds are ever shown. */
-@Composable
-private fun AppIconImage(icon: AppIcon, modifier: Modifier = Modifier) {
-    Box(modifier.clip(CircleShape)) {
-        for (layer in listOf(icon.background, icon.foreground)) {
-            Image(
-                painterResource(layer),
-                contentDescription = null,
-                contentScale = ContentScale.FillBounds,
-                modifier = Modifier.fillMaxSize().graphicsLayer {
-                    scaleX = 1.5f
-                    scaleY = 1.5f
-                },
-            )
-        }
     }
 }
 

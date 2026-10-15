@@ -47,6 +47,7 @@ val SettingsPage.title: String
         SettingsPage.Data -> "Data & Backup"
         SettingsPage.Wallet -> "Wallet & Cards"
         SettingsPage.Availability -> "Availability & Schedules"
+        SettingsPage.Notifications -> "Notifications"
         SettingsPage.Security -> "Security & Lock"
     }
 
@@ -196,6 +197,7 @@ private fun summary(group: SettingsPage, prefs: AppPrefsState, finance: FinanceS
             "Biometric lock off"
         }
     SettingsPage.Wallet -> prefs.walletCardActionStyle.label
+    SettingsPage.Notifications -> if (prefs.notificationsEnabled) "On · Reminders and card expiry" else "Off"
     SettingsPage.Availability -> ScheduledFeature.entries.joinToString(" · ") { feature ->
         "${feature.shortLabel}: ${prefs.availabilityOf(feature).summary(is24Hour)}"
     }

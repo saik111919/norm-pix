@@ -26,7 +26,7 @@ enum class PlanSection(val label: String) {
 }
 
 /** Settings pages reachable directly (from search, or links inside the app). */
-enum class SettingsPage { Appearance, Finance, Data, Wallet, Availability, Security }
+enum class SettingsPage { Appearance, Finance, Data, Wallet, Notifications, Availability, Security }
 
 /**
  * Everything a screen may ask the app to show. Screens depend on this

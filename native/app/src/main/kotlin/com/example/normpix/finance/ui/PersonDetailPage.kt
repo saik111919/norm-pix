@@ -28,6 +28,7 @@ import com.example.normpix.finance.data.TransactionQuery
 import com.example.normpix.finance.domain.PeriodSummary
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.finance.domain.percentLabel
 import com.example.normpix.finance.domain.shareOf
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.ui.components.AppEmptyState
@@ -135,7 +136,7 @@ private fun PersonSummary(person: Person, view: HistoryView) {
             HeroStats(
                 buildList<@Composable (Modifier) -> Unit> {
                     add { m -> SummaryStat(label = "Expenses", value = count.toString(), modifier = m) }
-                    if (count > 0) add { m -> SummaryStat(label = "Average", value = money.format(spent / count), modifier = m) }
+                    if (count > 0) add { m -> SummaryStat(label = "Average", value = money.format((spent + count / 2) / count), modifier = m) }
                     if (whole.expense > 0 && !narrowed) {
                         add { m -> SummaryStat(label = "Of all spending", value = percentOf(share), modifier = m) }
                     }
@@ -145,15 +146,8 @@ private fun PersonSummary(person: Person, view: HistoryView) {
     }
 }
 
-/** "34%", "<1%" for a sliver, "0%" for nothing. */
-private fun percentOf(share: Double): String {
-    val percent = share * 100
-    return when {
-        percent <= 0.0 -> "0%"
-        percent < 1.0 -> "<1%"
-        else -> "${percent.toInt()}%"
-    }
-}
+/** "34%", "<1%" for a sliver, "0%" for nothing: the same as every other screen (see [percentLabel]). */
+private fun percentOf(share: Double): String = percentLabel(share)
 
 /** The query narrowed by anything the person's own page doesn't already imply (search, categories, accounts, amounts, a type). */
 private val TransactionQuery.hasFiltersBeyondPerson: Boolean

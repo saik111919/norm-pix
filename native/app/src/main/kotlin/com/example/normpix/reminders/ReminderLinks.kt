@@ -61,6 +61,7 @@ import com.example.normpix.finance.ui.ConnectedChoiceRow
 import com.example.normpix.finance.ui.FinanceController
 import com.example.normpix.finance.ui.FinanceState
 import com.example.normpix.finance.ui.LocalFinance
+import com.example.normpix.finance.ui.rememberFinanceState
 import com.example.normpix.finance.ui.TransactionTile
 import com.example.normpix.finance.ui.describeRepeat
 import com.example.normpix.finance.ui.icon
@@ -159,7 +160,8 @@ private suspend fun resolveLink(link: ReminderLink, finance: FinanceController, 
 @Composable
 fun rememberResolvedLink(link: ReminderLink?): ResolvedLink? {
     val finance = LocalFinance.current
-    val state = finance.state.collectAsState().value
+    // As screens show it: with amounts hidden while the user has hidden them.
+    val state = rememberFinanceState()
     val vault = LocalAppContainer.current.vault
     val resolved by produceState<ResolvedLink?>(null, link, state.revision) {
         value = if (link == null) {

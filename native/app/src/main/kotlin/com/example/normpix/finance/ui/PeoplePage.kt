@@ -50,6 +50,7 @@ import com.example.normpix.finance.domain.DateRange
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.PeopleSpending
 import com.example.normpix.finance.domain.Person
+import com.example.normpix.finance.domain.percentLabel
 import com.example.normpix.finance.domain.rankedBy
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.ui.components.AppEmptyState
@@ -330,11 +331,10 @@ private fun PersonRow(
     val money = rememberFinanceState().money
     val amount = total?.amount ?: 0L
     val count = total?.count ?: 0
-    val percent = (share * 100).let { if (it > 0 && it < 1) "<1" else it.toInt().toString() }
-    val summary = if (count == 0) {
+        val summary = if (count == 0) {
         "Nothing spent in this period"
     } else {
-        "$count ${if (count == 1) "expense" else "expenses"} · $percent% of spending"
+        "$count ${if (count == 1) "expense" else "expenses"} · ${percentLabel(share)} of spending"
     }
     ListItem(
         modifier = Modifier

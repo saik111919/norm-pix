@@ -430,6 +430,19 @@ Asked for (2026-10-14): "When loading an image show proper loading sheet instead
 - [x] Preview: a pushed page is drawn as a window while it moves - its corners round as it starts to leave (or is previewed by the back gesture) and square up as it settles (`PageWindow`). The shell's own back preview rounds its corners, lifts with a shadow, shrinks towards where the chosen style closes a page, and eases back instead of snapping when the gesture is let go
 - [ ] Checks: CI (tests, lint, release build) on the PR; not tried on a phone
 
+## Phase 17 - Defaults, calculations, card bills, fonts, notifications, card files (2026-10-15)
+- [x] Defaults: back button style is the top floating circle; with wallpaper colors off (or unavailable) the color is Volt until another is picked
+- [x] Calculations: one percent rule everywhere (`percentLabel`: "<1%" / ">99%", never 0% or 100% unless it is); budgets never read 100% used while some is left or once over (`usedPercent`); Home's top categories compared with the same days of last month, not all of it; Day by day's average and day count taken over the same days as its total; a person's average rounded like the others
+- [x] Card bills: an expense that says it went to one of the user's credit cards offers "Record as card payment" (a transfer onto the card, so what's owed goes down and it isn't counted twice); a shared receipt paid to the user's card arrives as that transfer (`cardBillTarget`)
+- [x] Appearance: App icon card restyled (header, four to a row, ringed choice); Interface font: GS Flex (Google Sans Flex, OFL, bundled and cut to Latin, ~0.5 MB) or System (the default), styles Standard / Zenith / Neo / Impact / Airy, and a custom weight / width / roundness
+- [x] Notifications page: one switch for reminder alerts and card-expiry reminders, and a way to Android's settings when Android blocks them
+- [x] Eye button on Home and Wallet hides every amount on screen (as ₹••••) until shown again
+- [x] Cards export / import (Settings > Cards): a password-locked file (AES-256-GCM, PBKDF2-SHA256); importing only adds, never replaces or duplicates
+- [x] Insights charts: pill columns, stubs for empty days, today / the chosen bar marked, Average and Peak tiles
+- [x] Dock: the selected label opens and folds with the pill, so switching tabs no longer jumps
+- [x] Transport's 3D car centred in its circle
+- [ ] Checks: CI (tests, lint, release build) on the PR; not tried on a phone
+
 ## Backlog - to come back to
 
 - [ ] **Reminders that behave like Samsung Reminder** (asked 2026-10-14, parked until we return to it). Today a reminder

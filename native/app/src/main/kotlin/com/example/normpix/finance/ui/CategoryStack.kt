@@ -55,6 +55,8 @@ import com.example.normpix.finance.domain.Category
 import com.example.normpix.finance.domain.MoneyFormatter
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.finance.domain.isInProgress
+import com.example.normpix.finance.domain.percentLabel
 import com.example.normpix.finance.domain.relativeChange
 import com.example.normpix.ui.components.AppLinearProgress
 import com.example.normpix.ui.components.DeckStack
@@ -64,6 +66,7 @@ import com.example.normpix.ui.components.SheetHeader
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.resolve
+import java.time.LocalDate
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -78,12 +81,18 @@ class CategorySpend(
     val count: Int,
     /** Its share of the month's spending, 0..1. */
     val share: Double,
-    /** What it came to the month before (0 if it had nothing then). */
+    /** What it came to over the same days of the month before, or all of it once [month] is over (0 if it had nothing then). */
     val previous: Long,
     val budget: BudgetStatus?,
 ) {
     /** How much more (+) or less (-) than the month before, as a fraction; null without anything to compare to. */
     val change: Double? get() = relativeChange(amount, previous)
+
+    /** What [previous] covers, in words: "this time last month" while [month] is still going, else that month's name. */
+    val basis: String get() = if (isInProgress(month, LocalDate.now())) "this time last month" else monthLabel(month.previous)
+
+    /** "18% less than this time last month", or null without anything to compare to. */
+    val comparison: String? get() = change?.let { comparedWith(it, basis) }
 
     val name: String get() = category?.name ?: "Deleted category"
 }
@@ -116,8 +125,8 @@ fun CategoryStack(spends: List<CategorySpend>, onOpen: (CategorySpend) -> Unit, 
 }
 
 private fun CategorySpend.spoken(money: MoneyFormatter, index: Int, count: Int): String = buildString {
-    append("$name, ${money.format(amount)} spent in ${monthLabel(month)}, ${(share * 100).roundToInt()}% of spending")
-    spendingComparison(change, month.previous)?.let { append(", $it") }
+    append("$name, ${money.format(amount)} spent in ${monthLabel(month)}, ${percentLabel(share)} of spending")
+    comparison?.let { append(", $it") }
     if (count > 1) append(", ${index + 1} of $count")
 }
 
@@ -205,7 +214,7 @@ private fun SpendFace(spend: CategorySpend) {
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    "${(spend.share * 100).roundToInt()}%",
+                    percentLabel(spend.share),
                     style = type.labelLarge.copy(fontFeatureSettings = TABULAR_FIGURES),
                     color = ink,
                 )
@@ -276,7 +285,7 @@ fun CategorySpendSheet(spend: CategorySpend, onSeeAll: () -> Unit) {
     val monthTotals by rememberFinanceQuery(spend.categoryId to spend.month) {
         if (subCategories.isEmpty()) emptyList() else categoryTotals(spend.month.range, TransactionType.Expense)
     }
-    val comparison = spendingComparison(spend.change, spend.month.previous)
+    val comparison = spend.comparison
 
     Column(
         Modifier
@@ -294,7 +303,7 @@ fun CategorySpendSheet(spend: CategorySpend, onSeeAll: () -> Unit) {
         )
         Spacer(Modifier.height(AppSpacing.xs))
         Text(
-            "${(spend.share * 100).roundToInt()}% of everything you spent · ${spend.count} ${if (spend.count == 1) "transaction" else "transactions"}",
+            "${percentLabel(spend.share)} of everything you spent · ${spend.count} ${if (spend.count == 1) "transaction" else "transactions"}",
             style = type.bodyMedium,
             color = scheme.onSurfaceVariant,
         )
@@ -359,7 +368,7 @@ private const val LATEST = 5
 private fun SpendBudget(budget: BudgetStatus, money: MoneyFormatter) {
     val scheme = MaterialTheme.colorScheme
     val tone = if (budget.health == BudgetHealth.Healthy) scheme.primary else budgetTone(budget.health).resolve().color
-    val percent = (budget.utilization * 100).roundToInt()
+    val percent = budget.usedPercent
     val words = if (budget.health == BudgetHealth.Exceeded) {
         "${money.format(-budget.remaining)} over a budget of ${money.format(budget.allocated, trimZeroFraction = true)}"
     } else {

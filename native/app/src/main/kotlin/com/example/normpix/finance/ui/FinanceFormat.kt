@@ -25,8 +25,6 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
-import kotlin.math.abs
-import kotlin.math.roundToInt
 
 /*
  * Shared finance text formatting, so every screen phrases amounts, dates and
@@ -155,14 +153,6 @@ fun monthLabel(month: MonthKey, now: LocalDateTime = LocalDateTime.now()): Strin
 fun monthLabelFull(month: MonthKey): String = fmt("MMMM yyyy").format(month.start)
 
 fun monthShort(month: MonthKey): String = fmt("MMM").format(month.start)
-
-/** "18% less than August" style comparison text, or null without a baseline. */
-fun spendingComparison(change: Double?, previous: MonthKey): String? {
-    if (change == null) return null
-    val percent = (abs(change) * 100).roundToInt()
-    if (percent == 0) return "About the same as ${monthLabel(previous)}"
-    return "$percent% ${if (change < 0) "less" else "more"} than ${monthLabel(previous)}"
-}
 
 val RecurrenceFrequency.label: String
     get() = when (this) {

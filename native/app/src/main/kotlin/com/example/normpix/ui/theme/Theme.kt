@@ -9,7 +9,6 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
-import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -205,7 +204,9 @@ internal val VoltLime = Color(0xFFAFE22D)
 data class Appearance(
     val mode: ThemeMode = ThemeMode.System,
     val colorSource: ColorSource = ColorSource.System,
-    val accent: AccentColor = AccentColor.Green,
+    val accent: AccentColor = AccentColor.Volt,
+    /** The interface's typeface (Settings > Appearance > Interface font). */
+    val font: AppFont = AppFont(),
 )
 
 @Composable
@@ -226,6 +227,7 @@ fun NormPixTheme(
         AppTheme.scheme(context, appearance.colorSource, appearance.accent, dark)
     }
     val status = remember(scheme, dark) { AppStatusColors.fromScheme(scheme, dark) }
+    val typography = remember(appearance.font) { appTypography(appearance.font) }
     // The window behind the app takes the app's background, not the system's: the app's light / dark choice can differ,
     // and any moment nothing is drawn over it (a page arriving, the keyboard resizing) would flash the wrong one.
     val view = LocalView.current
@@ -237,7 +239,7 @@ fun NormPixTheme(
     CompositionLocalProvider(LocalAppStatusColors provides status) {
         MaterialTheme(
             colorScheme = scheme,
-            typography = Typography(),
+            typography = typography,
             shapes = AppTheme.shapes,
             content = content,
         )

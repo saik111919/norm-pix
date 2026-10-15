@@ -4,18 +4,25 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -41,21 +49,25 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.takeOrElse
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.normpix.finance.domain.DailyTotal
 import com.example.normpix.finance.domain.MoneyFormatter
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppMotion
+import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.rememberReducedMotion
 import kotlin.math.floor
@@ -177,19 +189,24 @@ private fun rememberEmphasis(count: Int, selected: Int?): List<Animatable<Float,
     return values
 }
 
-/** How much a set-back mark keeps of its color: still clearly there, plainly not the one being talked about. */
-private const val SET_BACK_ALPHA = 0.32f
+/** How much a set-back column keeps of its color: still clearly there, plainly not the one being talked about. */
+private const val SET_BACK_ALPHA = 0.5f
+
+/** A column with nothing in it is a short pill on the baseline this tall, as a share of the column's width. */
+private const val STUB_SHARE = 0.36f
 
 // --- bar chart --------------------------------------------------------------------------------------------------------
 
 /**
- * A Material column chart of one series: columns with fully rounded data ends on a shared baseline, hairline gridlines at
- * clean values with their amounts at the end side, and [labels] (by column) underneath as real text, so they scale with the
- * user's font size. [reference] adds a dashed line (an average). Columns from [elapsed] on have not happened yet (the rest
- * of a month in progress) and show as dots on the baseline.
+ * A column chart of one series: pill-shaped columns standing on one baseline, a short pill stub where a column has nothing
+ * (so an empty day still reads as a day), hairline gridlines at clean values with their amounts on the start side, and
+ * [labels] (by column) underneath as real text, so they scale with the user's font size. [reference] adds a dashed line
+ * (an average). Columns from [elapsed] on have not happened yet (the rest of a month in progress): fainter stubs, fainter
+ * labels.
  *
- * With [selected] set, that column keeps its full color and the others step back. Tapping or dragging across the chart
- * picks a column ([onSelect]); tapping the selected one again clears the selection when [clearable].
+ * One column is the one being talked about: [selected], or else [highlight] (today, this month). It is drawn in full color
+ * with its label in the accent and a small bar under it; the others step back. Tapping or dragging across the chart picks a
+ * column ([onSelect]); tapping the selected one again clears the selection when [clearable].
  */
 @Composable
 fun BarChart(
@@ -206,15 +223,20 @@ fun BarChart(
     elapsed: Int = values.size,
     maxBarWidth: Dp = 28.dp,
     height: Dp = 176.dp,
+    highlight: Int? = null,
 ) {
     if (values.isEmpty()) return
     val scheme = MaterialTheme.colorScheme
     val axisStyle = MaterialTheme.typography.labelSmall
-    val grid = scheme.outlineVariant
+    val labelStyle = MaterialTheme.typography.labelMedium
+    val grid = scheme.outlineVariant.copy(alpha = scheme.outlineVariant.alpha * 0.6f)
     val axisText = scheme.onSurfaceVariant
+    val empty = scheme.onSurface.copy(alpha = 0.10f)
+    val emptyAhead = scheme.onSurface.copy(alpha = 0.05f)
     val referenceColor = scheme.onSurfaceVariant
+    val focus = (selected ?: highlight)?.takeIf { it in values.indices }
     val progress by rememberGrowIn()
-    val emphasis = rememberEmphasis(values.size, selected)
+    val emphasis = rememberEmphasis(values.size, focus)
     val haptics = rememberAppHaptics()
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -222,14 +244,14 @@ fun BarChart(
     val ticks = remember(values, reference, money) {
         niceTicks(max(values.maxOrNull() ?: 0L, reference ?: 0L), money.currency.minorPerMajor)
     }
-    val tickLayouts = remember(ticks, axisStyle, density) { ticks.drop(1).map { measurer.measure(money.compact(it), axisStyle) } }
-    val labelLayouts = remember(labels, selected, axisStyle, density) {
+    val tickLayouts = remember(ticks, axisStyle, density, money) { ticks.map { measurer.measure(money.compact(it), axisStyle) } }
+    val labelLayouts = remember(labels, focus, labelStyle, density) {
         labels.mapValues { (i, text) ->
-            measurer.measure(text, if (i == selected) axisStyle.copy(fontWeight = FontWeight.Bold) else axisStyle)
+            measurer.measure(text, if (i == focus) labelStyle.copy(fontWeight = FontWeight.Bold) else labelStyle)
         }
     }
-    val lineHeight = remember(axisStyle, density) { measurer.measure("0", axisStyle).size.height.toFloat() }
-    val gap = with(density) { AppSpacing.sm.toPx() }
+    val lineHeight = remember(labelStyle, density) { measurer.measure("0", labelStyle).size.height.toFloat() }
+    val gap = with(density) { AppSpacing.md.toPx() }
     val reserved = (tickLayouts.maxOfOrNull { it.size.width } ?: 0).toFloat() + gap
 
     val currentSelected by rememberUpdatedState(selected)
@@ -253,83 +275,97 @@ fun BarChart(
             .then(
                 if (onSelect == null) Modifier else Modifier
                     .pointerInput(values.size, reserved) {
-                        detectTapGestures { pick(columnAt(it.x, size.width - reserved, values.size), true) }
+                        detectTapGestures { pick(columnAt(it.x - reserved, size.width - reserved, values.size), true) }
                     }
                     .pointerInput(values.size, reserved) {
                         detectHorizontalDragGestures(
-                            onDragStart = { pick(columnAt(it.x, size.width - reserved, values.size), false) },
+                            onDragStart = { pick(columnAt(it.x - reserved, size.width - reserved, values.size), false) },
                         ) { change, _ ->
                             change.consume()
-                            pick(columnAt(change.position.x, size.width - reserved, values.size), false)
+                            pick(columnAt(change.position.x - reserved, size.width - reserved, values.size), false)
                         }
                     },
             ),
     ) {
-        val plotRight = size.width - reserved
+        val plotLeft = reserved
+        val plotWidth = size.width - reserved
+        val slot = plotWidth / values.size
+        val barWidth = minOf(maxBarWidth.toPx(), slot * 0.56f, slot - 2.dp.toPx()).coerceAtLeast(1.dp.toPx())
+        val stub = max(3.dp.toPx(), barWidth * STUB_SHARE)
+        val marker = 3.dp.toPx()
+        // Room under the baseline for half a stub, then the labels and the marker under the chosen one.
+        val below = if (labels.isEmpty()) stub / 2 else stub / 2 + AppSpacing.sm.toPx() + lineHeight + AppSpacing.xs.toPx() + marker
         val plotTop = lineHeight / 2
-        val plotBottom = size.height - if (labels.isEmpty()) 0f else lineHeight + AppSpacing.sm.toPx()
+        val plotBottom = size.height - below
         val scaleTop = ticks.last().toFloat()
         fun y(value: Long) = plotBottom - (plotBottom - plotTop) * (value / scaleTop)
         val hairline = 1.dp.toPx()
 
-        // Gridlines first, so the columns sit on them; each with its value at the end.
+        // Gridlines first, so the columns sit on them; each with its value at the start.
         ticks.forEachIndexed { i, tick ->
             val ty = y(tick)
-            drawLine(grid, Offset(0f, ty), Offset(plotRight, ty), strokeWidth = hairline)
-            if (i > 0) {
-                val layout = tickLayouts[i - 1]
-                drawText(layout, color = axisText, topLeft = Offset(plotRight + gap, ty - layout.size.height / 2f))
-            }
+            drawLine(grid, Offset(plotLeft, ty), Offset(size.width, ty), strokeWidth = hairline)
+            val layout = tickLayouts[i]
+            drawText(layout, color = axisText, topLeft = Offset(plotLeft - gap - layout.size.width, ty - layout.size.height / 2f))
         }
 
-        val slot = plotRight / values.size
-        val barWidth = minOf(maxBarWidth.toPx(), slot * 0.62f, slot - 2.dp.toPx()).coerceAtLeast(1.dp.toPx())
         values.forEachIndexed { i, value ->
-            val centre = slot * (i + 0.5f)
-            if (i >= elapsed) {
-                drawCircle(grid, radius = 1.5.dp.toPx(), center = Offset(centre, plotBottom - 1.5.dp.toPx()))
+            val centre = plotLeft + slot * (i + 0.5f)
+            val left = centre - barWidth / 2
+            val strength = SET_BACK_ALPHA + (1f - SET_BACK_ALPHA) * emphasis[i].value
+            val ahead = i >= elapsed
+            if (ahead || value <= 0) {
+                // Nothing here (yet): a stub on the baseline - the chosen column's in full color, so "today" shows even empty.
+                val tone = when {
+                    i == focus -> color
+                    ahead -> emptyAhead
+                    else -> empty
+                }
+                drawPill(tone, left, plotBottom - stub / 2, barWidth, stub)
                 return@forEachIndexed
             }
-            if (value <= 0) return@forEachIndexed
-            val h = max(2.dp.toPx(), (plotBottom - y(value)) * progress)
-            val alpha = SET_BACK_ALPHA + (1f - SET_BACK_ALPHA) * emphasis[i].value
-            drawColumn(color.copy(alpha = color.alpha * alpha), centre - barWidth / 2, plotBottom - h, barWidth, h)
+            val top = plotBottom - max(stub / 2, (plotBottom - y(value)) * progress)
+            drawPill(color.copy(alpha = color.alpha * strength), left, top, barWidth, plotBottom + stub / 2 - top)
         }
 
         if (reference != null && reference > 0) {
             val ry = y(reference)
             drawLine(
                 referenceColor,
-                Offset(0f, ry),
-                Offset(plotRight, ry),
+                Offset(plotLeft, ry),
+                Offset(size.width, ry),
                 strokeWidth = 1.5.dp.toPx(),
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx())),
                 cap = StrokeCap.Round,
             )
         }
 
+        val labelTop = plotBottom + stub / 2 + AppSpacing.sm.toPx()
         for ((i, layout) in labelLayouts) {
-            val left = (slot * (i + 0.5f) - layout.size.width / 2f).coerceIn(0f, max(0f, plotRight - layout.size.width))
-            drawText(
-                layout,
-                color = if (i == selected) scheme.onSurface else axisText,
-                topLeft = Offset(left, plotBottom + AppSpacing.sm.toPx()),
-            )
+            val centre = plotLeft + slot * (i + 0.5f)
+            val left = (centre - layout.size.width / 2f).coerceIn(plotLeft - gap, max(plotLeft, size.width - layout.size.width))
+            val ink = when {
+                i == focus -> color
+                i >= elapsed -> axisText.copy(alpha = axisText.alpha * 0.5f)
+                else -> axisText
+            }
+            drawText(layout, color = ink, topLeft = Offset(left, labelTop))
+            if (i == focus) {
+                val markerWidth = min(16.dp.toPx(), max(barWidth, 8.dp.toPx()))
+                drawPill(color, centre - markerWidth / 2, labelTop + layout.size.height + AppSpacing.xs.toPx(), markerWidth, marker)
+            }
         }
     }
 }
 
-/** Which column [x] falls in, for a plot [plotWidth] wide holding [count] of them. */
+/** Which column [x] (from the plot's start) falls in, for a plot [plotWidth] wide holding [count] of them. */
 private fun columnAt(x: Float, plotWidth: Float, count: Int): Int =
     if (plotWidth <= 0f) 0 else (x / (plotWidth / count)).toInt().coerceIn(0, count - 1)
 
-/** A column with its data end fully rounded and square where it stands on the baseline, as one shape (no doubled overlap). */
-private fun DrawScope.drawColumn(color: Color, x: Float, y: Float, width: Float, height: Float) {
-    val r = min(width / 2, height)
-    val column = Path().apply {
-        addRoundRect(RoundRect(Rect(Offset(x, y), Size(width, height)), topLeft = CornerRadius(r, r), topRight = CornerRadius(r, r)))
-    }
-    drawPath(column, color)
+/** A capsule: both ends fully rounded (a stub as short as it is round is a circle). */
+private fun DrawScope.drawPill(color: Color, x: Float, y: Float, width: Float, height: Float) {
+    val r = min(width, height) / 2
+    drawRoundRect(color, topLeft = Offset(x, y), size = Size(width, height), cornerRadius = CornerRadius(r, r))
 }
 
 // --- pace chart -------------------------------------------------------------------------------------------------------
@@ -513,5 +549,48 @@ fun ChartReadout(label: String, value: String, modifier: Modifier = Modifier, ke
             Spacer(Modifier.width(AppSpacing.md))
             Box(Modifier.padding(bottom = AppSpacing.xs)) { key() }
         }
+    }
+}
+
+/**
+ * A figure that sums a chart up, under it: a small icon on a tinted disc, what the figure is, then the figure itself large
+ * (the reader came for the number), and an optional [detail] under it ("a day", "on 9 Oct").
+ */
+@Composable
+fun ChartStatTile(icon: ImageVector, label: String, value: String, modifier: Modifier = Modifier, detail: String? = null) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        modifier
+            .clip(AppRadius.rLg)
+            .background(scheme.surfaceContainerHighest)
+            .padding(AppSpacing.lg)
+            .semantics(mergeDescendants = true) {},
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(32.dp).background(scheme.primary.copy(alpha = 0.14f), CircleShape), contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.width(AppSpacing.sm))
+            Text(label, style = MaterialTheme.typography.titleSmall, color = scheme.onSurfaceVariant, maxLines = 1)
+        }
+        Spacer(Modifier.height(AppSpacing.sm))
+        Text(
+            value,
+            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold, fontFeatureSettings = TABULAR_FIGURES),
+            color = scheme.onSurface,
+            maxLines = 1,
+            softWrap = false,
+            autoSize = TextAutoSize.StepBased(minFontSize = 14.sp, maxFontSize = MaterialTheme.typography.headlineSmall.fontSize),
+        )
+        if (detail != null) Text(detail, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, maxLines = 1)
+    }
+}
+
+/** Two [ChartStatTile]s side by side, equally wide. */
+@Composable
+fun ChartStats(first: @Composable (Modifier) -> Unit, second: @Composable (Modifier) -> Unit, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)) {
+        first(Modifier.weight(1f).fillMaxHeight())
+        second(Modifier.weight(1f).fillMaxHeight())
     }
 }

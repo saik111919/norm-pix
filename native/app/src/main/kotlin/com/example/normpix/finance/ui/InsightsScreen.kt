@@ -13,10 +13,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.TrendingFlat
 import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.TrendingDown
@@ -54,6 +56,7 @@ import com.example.normpix.finance.domain.PeriodSummary
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.categoryChanges
 import com.example.normpix.finance.domain.parentMap
+import com.example.normpix.finance.domain.percentLabel
 import com.example.normpix.finance.domain.rollUpToParents
 import com.example.normpix.finance.domain.comparisonRange
 import com.example.normpix.finance.domain.isInProgress
@@ -77,7 +80,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import kotlin.math.abs
-import kotlin.math.roundToInt
 
 /** What Insights shows: one month (the default), or days the user picked. */
 private sealed interface InsightsPeriod {
@@ -576,7 +578,7 @@ private fun WhereMoneyWent(data: InsightsData) {
     val biggest = totals.first()
     val biggestName = finance.category(biggest.categoryId)?.name ?: "Deleted category"
 
-    val biggestShare = "${(shareOf(biggest.amount, total) * 100).roundToInt()}%"
+    val biggestShare = percentLabel(shareOf(biggest.amount, total))
     val month = data.month
     ListSection(
         title = "Where your money went",
@@ -590,7 +592,7 @@ private fun WhereMoneyWent(data: InsightsData) {
         for (t in rows) item {
             val category = finance.category(t.categoryId)
             val name = category?.name ?: "Deleted category"
-            val percent = "${(shareOf(t.amount, total) * 100).roundToInt()}%"
+            val percent = percentLabel(shareOf(t.amount, total))
             val count = "${t.count} ${if (t.count == 1) "transaction" else "transactions"}"
             val open = { data.openCategory(navigator, t.categoryId) }
             CategoryShareRow(
@@ -655,7 +657,7 @@ private fun ByPerson(data: InsightsData) {
             ListRow(
                 headline = name,
                 supporting = "${entry.count} ${if (entry.count == 1) "expense" else "expenses"} · " +
-                    "${(shareOf(entry.amount, spending.totalExpense) * 100).roundToInt()}% of spending",
+                    "${percentLabel(shareOf(entry.amount, spending.totalExpense))} of spending",
                 leading = { PersonAvatar(person) },
                 trailing = {
                     Text(
@@ -706,13 +708,13 @@ private fun Trend(data: InsightsData) {
     var selected by remember(month, months.size) { mutableIntStateOf(months.lastIndex) }
     val pick = months[selected.coerceIn(0, months.lastIndex)]
     val stillGoing = data.inProgress && pick.month == month
+    val peak = months.maxBy { it.expense }
 
     Panel(
         title = "Spending by month",
         footer = buildString {
-            if (usual > 0) append("You usually spend about ${money.format(usual, trimZeroFraction = true)} a month. ")
             append("The last bar is ${monthLabelFull(month)}")
-            if (data.inProgress) append(" so far")
+            if (data.inProgress) append(" so far, left out of the average")
             append(". Tap a bar to see its month.")
         },
     ) {
@@ -721,11 +723,6 @@ private fun Trend(data: InsightsData) {
             label = if (stillGoing) "${monthLabelFull(pick.month)} so far" else monthLabelFull(pick.month),
             value = money.format(pick.expense),
             modifier = Modifier.clearAndSetSemantics {},
-            key = if (usual > 0) {
-                { ChartKey(color = scheme.onSurfaceVariant, label = "Usual", dashed = true) }
-            } else {
-                null
-            },
         )
         Spacer(Modifier.height(AppSpacing.lg))
         BarChart(
@@ -735,7 +732,22 @@ private fun Trend(data: InsightsData) {
             labels = months.indices.associateWith { monthShort(months[it].month) },
             selected = selected,
             onSelect = { it?.let { index -> selected = index } },
-            reference = usual.takeIf { it > 0 },
+            highlight = months.lastIndex.takeIf { data.inProgress },
+        )
+        Spacer(Modifier.height(AppSpacing.lg))
+        ChartStats(
+            first = { m ->
+                ChartStatTile(
+                    Icons.AutoMirrored.Rounded.TrendingFlat,
+                    "Average",
+                    if (usual > 0) money.format(usual, trimZeroFraction = true) else "None yet",
+                    m,
+                    detail = "a month",
+                )
+            },
+            second = { m ->
+                ChartStatTile(Icons.Rounded.Bolt, "Peak", money.format(peak.expense, trimZeroFraction = true), m, detail = "in ${monthShort(peak.month)}")
+            },
         )
     }
 }
@@ -780,28 +792,37 @@ private fun DailySpending(data: InsightsData) {
         if (i in 0 until days) values[i] = d.amount
     }
     val elapsed = elapsedDays(start, days)
-    // A day dated later in the period than today is drawn too: it is part of the period's total.
+    // A day dated later in the period than today is drawn too: it is part of the period's total, so the average and the
+    // count of days are taken over the same days the total is - otherwise a payment dated ahead would raise the average
+    // with no day to spread it over ("spent on 6 of 4 days").
     val drawn = maxOf(elapsed, data.daily.maxOf { dayNumber(start, it.day) })
-    val average = average(data.summary.expense, elapsed)
+    val average = average(data.summary.expense, drawn)
     val peak = data.daily.maxBy { it.amount }
     val spendDays = data.daily.size
-    val scheme = MaterialTheme.colorScheme
     var selected by remember(data.period) { mutableStateOf<Int?>(null) }
-    val last = days
     val month = data.month
-    // Weekly marks, by the day of the month each falls on (1, 8, 15, 22 and the last day for a month).
-    val marks = listOf(0, 7, 14, 21, last - 1).filter { it in 0 until days }.distinct()
+    // Today, while the period is still going: the column the chart marks until another is picked.
+    val today = (dayNumber(start, LocalDate.now()) - 1).takeIf { data.inProgress && it in 0 until days }
+    val focus = selected ?: today
+    // Weekly marks (1, 8, 15, 22 and the last day for a month), and the day in focus; a mark too close to it gives way.
+    val marks = listOf(0, 7, 14, 21, days - 1).filter { it in 0 until days }.distinct()
+        .filter { focus == null || it == focus || kotlin.math.abs(it - focus) >= 3 }
+    val labelled = (marks + listOfNotNull(focus)).distinct()
 
     Panel(
         title = "Day by day",
-        footer = "Spent on $spendDays of $elapsed days. Biggest day: ${shortDate(peak.day.atStartOfDay())}, ${money.format(peak.amount)}.",
+        footer = "Spent on $spendDays of $drawn days. Tap a day to see what went out on it.",
     ) {
-        val day = selected
+        val day = focus
         ChartReadout(
-            label = if (day == null) "Daily average" else shortDate(start.plusDays(day.toLong())),
-            value = if (day == null) money.format(average, trimZeroFraction = true) else money.format(values[day]),
+            label = when {
+                selected != null -> shortDate(start.plusDays(selected!!.toLong()))
+                day != null -> "Today"
+                month != null -> "Spent in ${monthLabel(month)}"
+                else -> "Spent ${data.within}"
+            },
+            value = if (day != null) money.format(values[day]) else money.format(data.summary.expense),
             modifier = Modifier.clearAndSetSemantics {},
-            key = { ChartKey(color = scheme.onSurfaceVariant, label = "Average", dashed = true) },
         )
         Spacer(Modifier.height(AppSpacing.lg))
         BarChart(
@@ -809,14 +830,29 @@ private fun DailySpending(data: InsightsData) {
             money = money,
             semanticsLabel = "Spending per day ${if (month != null) "in ${monthLabelFull(month)}" else data.within}. " +
                 "Daily average ${money.format(average)}. Biggest day ${shortDate(peak.day.atStartOfDay())}, ${money.format(peak.amount)}.",
-            labels = marks.associateWith { "${start.plusDays(it.toLong()).dayOfMonth}" },
+            labels = labelled.associateWith { "${start.plusDays(it.toLong()).dayOfMonth}" },
             selected = selected,
             onSelect = { selected = it },
             clearable = true,
-            reference = average,
             elapsed = drawn,
-            maxBarWidth = 12.dp,
-            height = 148.dp,
+            maxBarWidth = 14.dp,
+            height = 168.dp,
+            highlight = today,
+        )
+        Spacer(Modifier.height(AppSpacing.lg))
+        ChartStats(
+            first = { m ->
+                ChartStatTile(Icons.AutoMirrored.Rounded.TrendingFlat, "Average", money.format(average, trimZeroFraction = true), m, detail = "a day")
+            },
+            second = { m ->
+                ChartStatTile(
+                    Icons.Rounded.Bolt,
+                    "Peak",
+                    money.format(peak.amount, trimZeroFraction = true),
+                    m,
+                    detail = "on ${shortDate(peak.day.atStartOfDay())}",
+                )
+            },
         )
     }
 }
@@ -831,7 +867,7 @@ private fun IncomeSources(data: InsightsData) {
             item {
                 ListRow(
                     headline = finance.category(t.categoryId)?.name ?: "Deleted category",
-                    supporting = "${(shareOf(t.amount, total) * 100).roundToInt()}% of income",
+                    supporting = "${percentLabel(shareOf(t.amount, total))} of income",
                     leading = { CategoryAvatar(finance.category(t.categoryId)) },
                     trailing = {
                         Text(

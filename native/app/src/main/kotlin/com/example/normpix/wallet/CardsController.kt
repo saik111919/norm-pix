@@ -49,6 +49,21 @@ class CardsController(private val vault: CardVault) {
     suspend fun delete(id: String): Boolean = mutate { list -> list.filter { it.id != id } }
 
     /**
+     * Adds the cards read from a cards file, skipping any already saved (see [CardsTransfer.merge]). Null when the vault
+     * couldn't be read or written, in which case nothing was added.
+     */
+    suspend fun addAll(incoming: List<StoredCard>): CardsTransfer.Merge? = mutex.withLock {
+        if (_state.value !is CardsState.Ready) load()
+        val stored = (_state.value as? CardsState.Ready)?.cards ?: return@withLock null
+        val merge = CardsTransfer.merge(stored, incoming)
+        when {
+            merge.added.isEmpty() -> merge
+            persist(merge.applyTo(stored)) -> merge
+            else -> null
+        }
+    }
+
+    /**
      * Applies [change] to the cards actually stored and writes the result.
      *
      * Always starts from a successfully read vault: if the list hasn't loaded

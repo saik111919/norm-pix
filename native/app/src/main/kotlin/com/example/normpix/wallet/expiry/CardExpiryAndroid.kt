@@ -12,6 +12,7 @@ import android.content.SharedPreferences
 import android.net.Uri
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.example.normpix.settings.AppNotifications
 import com.example.normpix.MainActivity
 import com.example.normpix.NormPixApplication
 import com.example.normpix.R
@@ -63,6 +64,8 @@ object CardExpiryNotifications {
 
     @SuppressLint("MissingPermission")
     fun post(context: Context, record: CardExpiryRecord, expired: Boolean) {
+        // Turned off in Settings: the card's expiry is still shown in Wallet, it just doesn't alert.
+        if (!AppNotifications.allowed(context)) return
         createChannel(context)
         val open = PendingIntent.getActivity(
             context,

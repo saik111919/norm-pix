@@ -4,12 +4,14 @@ package com.example.normpix.navigation
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
@@ -485,15 +487,11 @@ fun FloatingNavBar(
             .frostedGlass(backdrop, RoundedCornerShape(DockCorner))
             .selectableGroup(),
     ) {
+        // No animateContentSize here: each item grows and shrinks its own label (see FloatingNavItem), so the dock's width
+        // follows them frame by frame. Animating the row's bounds as well made the items jump into place while only the
+        // outline moved.
         Row(
-            modifier = Modifier
-                .padding(DockPadding)
-                .animateContentSize(
-                    animationSpec = tween(
-                        durationMillis = AppMotion.duration(AppMotion.MEDIUM_MS),
-                        easing = AppMotion.standard,
-                    ),
-                ),
+            modifier = Modifier.padding(DockPadding),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -600,11 +598,15 @@ private fun FloatingNavItem(
     )
 
     val shape = CircleShape
-    val horizontalPadding: Dp = if (selected) {
-        if (isNarrow) 10.dp else 14.dp
-    } else {
-        12.dp
-    }
+    val horizontalPadding by animateDpAsState(
+        targetValue = if (selected) {
+            if (isNarrow) 10.dp else 14.dp
+        } else {
+            12.dp
+        },
+        animationSpec = tween(animDuration, easing = AppMotion.standard),
+        label = "nav_item_padding",
+    )
 
     // Icon-only items name themselves on long press. The wrapper stays in place when the item is selected (its
     // label is already showing) so the container/content color animations are never restarted.
@@ -678,8 +680,16 @@ private fun FloatingNavItem(
                 )
             }
 
-            // Too little room for even a few letters: the pill alone says which item is selected.
-            if (selected && (maxLabelWidth == Dp.Unspecified || maxLabelWidth >= MinLabelWidth)) {
+            // Too little room for even a few letters: the pill alone says which item is selected. The label opens out of the
+            // icon as the pill fills in, and folds back into it as the pill empties, so a tab change moves every item smoothly
+            // instead of swapping labels in one frame.
+            AnimatedVisibility(
+                visible = selected && (maxLabelWidth == Dp.Unspecified || maxLabelWidth >= MinLabelWidth),
+                enter = expandHorizontally(tween(animDuration, easing = AppMotion.standard), expandFrom = Alignment.Start) +
+                    fadeIn(tween(animDuration / 2, delayMillis = animDuration / 3)),
+                exit = shrinkHorizontally(tween(animDuration, easing = AppMotion.standard), shrinkTowards = Alignment.Start) +
+                    fadeOut(tween(animDuration / 3)),
+            ) {
                 Text(
                     text = label,
                     color = contentColor,
