@@ -65,6 +65,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.normpix.finance.domain.DateRange
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.ui.components.InnerCorner
 import com.example.normpix.ui.components.LocalOverlays
@@ -77,6 +78,7 @@ import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.rememberReducedMotion
+import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.launch
 
 /** As tall as the search bar and the split buttons, so a page's controls line up as one family. */
@@ -448,6 +450,94 @@ fun AllTimeSwitcher(onByMonth: () -> Unit, modifier: Modifier = Modifier) {
             color = scheme.surfaceContainerHigh,
             contentColor = scheme.onSurface,
             interactionSource = press,
+        ) {
+            Row(Modifier.padding(start = AppSpacing.md, end = AppSpacing.lg), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.CalendarMonth, contentDescription = null, modifier = Modifier.size(AppIconSizes.md))
+                Spacer(Modifier.width(AppSpacing.sm))
+                Text("By month", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** How many whole days [range] covers (a range picked from the calendar is always whole days). */
+internal fun dayCount(range: DateRange): Int =
+    ChronoUnit.DAYS.between(range.start.toLocalDate(), range.end.toLocalDate()).toInt().coerceAtLeast(1)
+
+/** "3 Oct – 15 Oct", or "15 Oct" for a single day: the days a page shows, in words. */
+internal fun rangeLabel(range: DateRange): String {
+    val last = range.end.minusDays(1)
+    return if (dayCount(range) == 1) shortDate(range.start) else "${shortDate(range.start)} – ${shortDate(last)}"
+}
+
+/** "1 day", "13 days". */
+internal fun daysLabel(days: Int): String = if (days == 1) "1 day" else "$days days"
+
+/**
+ * What stands in for the [MonthSwitcher] while a page shows days the user picked: the same connected control, its tonal part
+ * saying which days and how many (tap it to pick others), and beside it the way back to one month at a time - as the
+ * [AllTimeSwitcher] has.
+ */
+@Composable
+fun DateRangeSwitcher(range: DateRange, onChange: () -> Unit, onByMonth: () -> Unit, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    val haptics = rememberAppHaptics()
+    val outer = CornerSize(50)
+    val rangePress = remember { MutableInteractionSource() }
+    val rangeInner = CornerSize(pressedCorner(rangePress))
+    val monthPress = remember { MutableInteractionSource() }
+    val monthInner = CornerSize(pressedCorner(monthPress))
+    val label = rangeLabel(range)
+    val length = daysLabel(dayCount(range))
+    val change = {
+        haptics.selection()
+        onChange()
+    }
+    Row(modifier.fillMaxWidth().height(SwitcherHeight), horizontalArrangement = Arrangement.spacedBy(SplitGap)) {
+        Surface(
+            onClick = change,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .clearAndSetSemantics {
+                    contentDescription = "$label, $length, choose dates"
+                    role = Role.Button
+                    onClick(label = "Choose dates") { change(); true }
+                },
+            shape = RoundedCornerShape(topStart = outer, bottomStart = outer, topEnd = rangeInner, bottomEnd = rangeInner),
+            color = scheme.secondaryContainer,
+            contentColor = scheme.onSecondaryContainer,
+            interactionSource = rangePress,
+        ) {
+            Row(Modifier.padding(start = AppSpacing.lg, end = AppSpacing.sm), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        length,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = scheme.onSecondaryContainer.copy(alpha = 0.78f),
+                        maxLines = 1,
+                    )
+                }
+                Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(22.dp))
+            }
+        }
+        Surface(
+            onClick = {
+                haptics.selection()
+                onByMonth()
+            },
+            modifier = Modifier.fillMaxHeight(),
+            shape = RoundedCornerShape(topStart = monthInner, bottomStart = monthInner, topEnd = outer, bottomEnd = outer),
+            color = scheme.surfaceContainerHigh,
+            contentColor = scheme.onSurface,
+            interactionSource = monthPress,
         ) {
             Row(Modifier.padding(start = AppSpacing.md, end = AppSpacing.lg), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.CalendarMonth, contentDescription = null, modifier = Modifier.size(AppIconSizes.md))

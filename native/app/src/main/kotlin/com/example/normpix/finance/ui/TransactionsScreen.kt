@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import com.example.normpix.banks.ui.BankBadge
 import com.example.normpix.finance.data.TransactionCursor
 import com.example.normpix.finance.data.TransactionQuery
+import com.example.normpix.finance.domain.DateRange
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.PeriodSummary
@@ -111,14 +112,15 @@ fun AccountHistoryPage(accountId: Long) {
 
 /** Transactions in one category for one month, pushed from Insights. */
 @Composable
-fun CategoryHistoryPage(categoryId: Long, month: MonthKey) {
+fun CategoryHistoryPage(categoryId: Long, month: MonthKey, range: DateRange? = null) {
     val finance = rememberFinanceState()
     val navigator = LocalNavigator.current
     TransactionHistory(
         title = finance.category(categoryId)?.name ?: "Category",
         onBack = navigator::back,
         initialMonth = month,
-        initialFilters = TransactionQuery(categoryIds = setOf(categoryId)),
+        // Opened from days picked on Insights: those days, as a date filter that can be removed to get back to the month.
+        initialFilters = TransactionQuery(range = range, categoryIds = setOf(categoryId)),
     )
 }
 

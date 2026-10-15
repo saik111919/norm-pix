@@ -45,6 +45,7 @@ import com.example.normpix.finance.data.FinanceRepository
 import com.example.normpix.finance.domain.CategoryChange
 import com.example.normpix.finance.domain.CategoryTotal
 import com.example.normpix.finance.domain.DailyTotal
+import com.example.normpix.finance.domain.DateRange
 import com.example.normpix.finance.domain.MoneyFormatter
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.MonthTotals
@@ -60,6 +61,7 @@ import com.example.normpix.finance.domain.largestDecrease
 import com.example.normpix.finance.domain.largestIncrease
 import com.example.normpix.finance.domain.relativeChange
 import com.example.normpix.finance.domain.shareOf
+import com.example.normpix.navigation.AppNavigator
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.ui.components.AppEmptyState
 import com.example.normpix.ui.components.AppErrorState
@@ -73,46 +75,115 @@ import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppSpacing
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** Everything Insights shows for one month, read in one pass. */
+/** What Insights shows: one month (the default), or days the user picked. */
+private sealed interface InsightsPeriod {
+    /** The days shown. */
+    val range: DateRange
+
+    /** How many days are shown. */
+    val days: Int
+
+    /** As many days, just before [range] (the month before, for a month): the hero's dashed line is drawn from them. */
+    val before: DateRange
+
+    /** How many days [before] has. */
+    val beforeDays: Int
+
+    /** The part of [before] the figures are set against: the same number of days while the period is still going. */
+    fun comparison(today: LocalDate): DateRange
+
+    /** True while [today] is one of the days shown. */
+    fun stillGoing(today: LocalDate): Boolean
+
+    data class Month(val month: MonthKey) : InsightsPeriod {
+        override val range: DateRange get() = month.range
+        override val days: Int get() = month.dayCount
+        override val before: DateRange get() = month.previous.range
+        override val beforeDays: Int get() = month.previous.dayCount
+        override fun comparison(today: LocalDate): DateRange = comparisonRange(month, today)
+        override fun stillGoing(today: LocalDate): Boolean = isInProgress(month, today)
+    }
+
+    data class Days(override val range: DateRange) : InsightsPeriod {
+        override val days: Int get() = dayCount(range)
+        override val before: DateRange get() = DateRange(range.start.minusDays(days.toLong()), range.start)
+        override val beforeDays: Int get() = days
+
+        // The first as many days of [before] as have passed of the range, as a month in progress is set against the
+        // same days of the month before - so the pill says what the hero's two lines show where they end.
+        override fun comparison(today: LocalDate): DateRange =
+            DateRange(before.start, before.start.plusDays(elapsedDays(range.start, days, today).toLong()))
+
+        override fun stillGoing(today: LocalDate): Boolean = today.atStartOfDay() in range
+    }
+}
+
+/** Everything Insights shows for one period, read in one pass. */
 private class InsightsData(
-    val month: MonthKey,
+    val period: InsightsPeriod,
     val summary: PeriodSummary,
-    /** The comparable slice of the previous month (see [comparisonRange]): the same days while [inProgress], else all of it. */
+    /** The comparable slice of the period before (see [InsightsPeriod.comparison]): the same days while [inProgress], else all of it. */
     val previous: PeriodSummary,
     val previousExpenses: List<CategoryTotal>,
     val inProgress: Boolean,
     val expenses: List<CategoryTotal>,
     val income: List<CategoryTotal>,
     val daily: List<DailyTotal>,
-    /** What went out on each day of the whole previous month: the hero's reference line. */
+    /** What went out on each day of the whole period before: the hero's reference line. */
     val previousDaily: List<DailyTotal>,
+    /** The months up to the one shown; nothing while days that were picked are shown. */
     val trend: List<MonthTotals>,
     val hasAnyData: Boolean,
-    /** What the month's spending came to on each person; nothing when no expense names one. */
+    /** What the period's spending came to on each person; nothing when no expense names one. */
     val people: PeopleSpending = PeopleSpending.Empty,
 ) {
+    /** The month shown, or null while days that were picked are. */
+    val month: MonthKey? get() = (period as? InsightsPeriod.Month)?.month
+
+    /** The first day shown. */
+    val start: LocalDateTime get() = period.range.start
+
+    /** "in October", or "from 3 Oct to 15 Oct" ("on 15 Oct" for one day): the period after a verb. */
+    val within: String
+        get() = when (val p = period) {
+            is InsightsPeriod.Month -> "in ${monthLabel(p.month)}"
+            is InsightsPeriod.Days ->
+                if (p.days == 1) "on ${shortDate(p.range.start)}" else "from ${shortDate(p.range.start)} to ${shortDate(p.range.end.minusDays(1))}"
+        }
+
+    /** One category's transactions over the period shown. */
+    fun openCategory(navigator: AppNavigator, categoryId: Long) {
+        when (val p = period) {
+            is InsightsPeriod.Month -> navigator.openCategoryHistory(categoryId, p.month)
+            is InsightsPeriod.Days -> navigator.openCategoryHistory(categoryId, p.range)
+        }
+    }
+
     companion object {
-        suspend fun load(repo: FinanceRepository, month: MonthKey): InsightsData {
+        suspend fun load(repo: FinanceRepository, period: InsightsPeriod): InsightsData {
             val today = LocalDate.now()
-            val compare = comparisonRange(month, today)
+            val range = period.range
+            val compare = period.comparison(today)
             // Spending is shown per top-level category: a sub-category's counts toward its parent (its own detail is a tap away).
             val parents = repo.categories().parentMap()
             return InsightsData(
-            month = month,
-            summary = repo.summary(month.range),
+            period = period,
+            summary = repo.summary(range),
             previous = repo.summary(compare),
             previousExpenses = rollUpToParents(repo.categoryTotals(compare, TransactionType.Expense), parents),
-            inProgress = isInProgress(month, today),
-            expenses = rollUpToParents(repo.categoryTotals(month.range, TransactionType.Expense), parents),
-            income = rollUpToParents(repo.categoryTotals(month.range, TransactionType.Income), parents),
-            daily = repo.dailyTotals(month.range, TransactionType.Expense),
-            previousDaily = repo.dailyTotals(month.previous.range, TransactionType.Expense),
-            trend = repo.monthlyTotals(month.addMonths(-5), month),
+            inProgress = period.stillGoing(today),
+            expenses = rollUpToParents(repo.categoryTotals(range, TransactionType.Expense), parents),
+            income = rollUpToParents(repo.categoryTotals(range, TransactionType.Income), parents),
+            daily = repo.dailyTotals(range, TransactionType.Expense),
+            previousDaily = repo.dailyTotals(period.before, TransactionType.Expense),
+            // Spending by month is about months: it is left out while days that were picked are shown.
+            trend = if (period is InsightsPeriod.Month) repo.monthlyTotals(period.month.addMonths(-5), period.month) else emptyList(),
             hasAnyData = repo.firstActiveMonth() != null,
-            people = repo.peopleSpending(month.range),
+            people = repo.peopleSpending(range),
             )
         }
     }
@@ -120,14 +191,20 @@ private class InsightsData(
 
 /**
  * The Insights tab: answers "where did my money go?", "am I spending more than
- * usual?" and "how did this month build up?" for one month at a time.
+ * usual?" and "how did this month build up?" for one month at a time - or, when
+ * asked, for days picked from the calendar ("Dates" beside the month).
  * Transfers are never counted as income or spending.
  */
 @Composable
 fun InsightsScreen(listState: LazyListState = rememberLazyListState()) {
     val actions = rememberFinanceActions()
     var month by remember { mutableStateOf(MonthKey.of(LocalDateTime.now())) }
-    val result by rememberFinanceQuery(month) { InsightsData.load(this, month) }
+    // Days picked from the calendar, shown instead of the month until "By month"; the month is kept for coming back to.
+    var picked by remember { mutableStateOf<DateRange?>(null) }
+    var picking by remember { mutableStateOf(false) }
+    val chosen = picked
+    val period: InsightsPeriod = if (chosen != null) InsightsPeriod.Days(chosen) else InsightsPeriod.Month(month)
+    val result by rememberFinanceQuery(period) { InsightsData.load(this, period) }
 
     AppPage(
         title = "Insights",
@@ -136,13 +213,27 @@ fun InsightsScreen(listState: LazyListState = rememberLazyListState()) {
         insetBottom = false,
     ) {
         item(key = "month") {
-            Row(Modifier.fillMaxWidth().padding(AppSpacing.page), horizontalArrangement = Arrangement.Center) {
-                MonthSwitcher(
-                    month = month,
-                    latest = MonthKey.of(LocalDateTime.now()),
-                    onChanged = { month = it },
-                    modifier = Modifier.widthIn(max = 480.dp),
-                )
+            // Clear of the hero under it by the gap the hero keeps from what follows it on Home.
+            Row(
+                Modifier.fillMaxWidth().padding(AppSpacing.page).padding(bottom = AppSpacing.md),
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                if (chosen == null) {
+                    MonthSwitcher(
+                        month = month,
+                        latest = MonthKey.of(LocalDateTime.now()),
+                        onChanged = { month = it },
+                        modifier = Modifier.widthIn(max = 480.dp),
+                        trailing = { MonthScopeButton("Dates", onClick = { picking = true }) },
+                    )
+                } else {
+                    DateRangeSwitcher(
+                        range = chosen,
+                        onChange = { picking = true },
+                        onByMonth = { picked = null },
+                        modifier = Modifier.widthIn(max = 480.dp),
+                    )
+                }
             }
         }
         item(key = "content") {
@@ -197,6 +288,17 @@ fun InsightsScreen(listState: LazyListState = rememberLazyListState()) {
             }
         }
     }
+
+    if (picking) {
+        DateRangePickerDialogFor(
+            initial = picked,
+            onPicked = {
+                picked = it
+                picking = false
+            },
+            onDismiss = { picking = false },
+        )
+    }
 }
 
 /** One column in reading order on phones ([narrow]); two balanced columns on wide windows. */
@@ -226,15 +328,37 @@ private fun Panel(title: String, footer: String? = null, content: @Composable ()
 /** Rounded integer average (no floating point in money). */
 private fun average(total: Long, count: Int): Long = if (count <= 0) 0 else (total + count / 2) / count
 
-/** Days of [month] that have passed (all of them for past months). */
-private fun elapsedDays(month: MonthKey): Int {
-    val today = LocalDate.now()
-    return if (month == MonthKey.of(today)) today.dayOfMonth else month.dayCount
+/** Which of the days from [start] [day] is, counting [start] as 1 (a month's day of the month). */
+private fun dayNumber(start: LocalDateTime, day: LocalDate): Int = ChronoUnit.DAYS.between(start.toLocalDate(), day).toInt() + 1
+
+/** How many of the [days] from [start] have passed by [today]: all of them once they are over, none before they begin. */
+private fun elapsedDays(start: LocalDateTime, days: Int, today: LocalDate = LocalDate.now()): Int =
+    dayNumber(start, today).coerceIn(0, days)
+
+/** Running totals at the end of each of the first [days] days from [start], from what went out on each day. */
+private fun runningTotalsFrom(daily: List<DailyTotal>, start: LocalDateTime, days: Int): List<Long> {
+    val totals = LongArray(days)
+    for (d in daily) {
+        val i = dayNumber(start, d.day) - 1
+        if (i in 0 until days) totals[i] += d.amount
+    }
+    for (i in 1 until days) totals[i] += totals[i - 1]
+    return totals.toList()
 }
 
-/** What the comparison is against, in words: "the same days of September" while this month is still going, else "September". */
-private fun comparisonBasis(data: InsightsData): String =
-    if (data.inProgress) "the same days of ${monthLabel(data.month.previous)}" else monthLabel(data.month.previous)
+/**
+ * What the comparison is against, in words: "the same days of September" while this month is still going, else
+ * "September"; for days that were picked, "the 13 days before" (or the same days of them, while they are still going).
+ */
+private fun comparisonBasis(data: InsightsData): String = when (val p = data.period) {
+    is InsightsPeriod.Month ->
+        if (data.inProgress) "the same days of ${monthLabel(p.month.previous)}" else monthLabel(p.month.previous)
+    is InsightsPeriod.Days -> when {
+        p.days == 1 -> "the day before"
+        elapsedDays(p.range.start, p.days) in 1 until p.days -> "the same days of the ${p.days} days before"
+        else -> "the ${p.days} days before"
+    }
+}
 
 /**
  * The one answer the screen exists for, as the hero (the same group as Home's): how much went out, a pill saying whether
@@ -261,15 +385,27 @@ private fun Snapshot(data: InsightsData) {
             },
         ),
     ) {
+        val period = data.period
         Column(Modifier.semantics(mergeDescendants = true) {}) {
-            HeroEyebrow(if (data.inProgress) "Spent this month" else "Spent in ${monthLabel(data.month)}")
+            HeroEyebrow(
+                when (period) {
+                    is InsightsPeriod.Month -> if (data.inProgress) "Spent this month" else "Spent in ${monthLabel(period.month)}"
+                    is InsightsPeriod.Days -> "Spent ${data.within}"
+                },
+            )
             HeroAmount(money.format(s.expense))
         }
         if (change != null) {
             Spacer(Modifier.height(AppSpacing.sm))
             HeroChangePill(
                 trendIcon(change),
-                comparedWith(change, if (data.inProgress) "this time last month" else monthLabel(data.month.previous)),
+                comparedWith(
+                    change,
+                    when (period) {
+                        is InsightsPeriod.Month -> if (data.inProgress) "this time last month" else monthLabel(period.month.previous)
+                        is InsightsPeriod.Days -> comparisonBasis(data)
+                    },
+                ),
             )
         }
         SpendingPace(data, money)
@@ -285,17 +421,32 @@ private fun Snapshot(data: InsightsData) {
 private fun SpendingPace(data: InsightsData, money: MoneyFormatter) {
     val scheme = MaterialTheme.colorScheme
     val onHero = LocalContentColor.current
-    val month = data.month
-    val before = month.previous
-    // Up to today in a month still going (or to the latest day anything is dated, if later); all of a finished one.
-    val shown = maxOf(elapsedDays(month), data.daily.maxOfOrNull { it.day.dayOfMonth } ?: 0)
-    val current = remember(data) { runningTotals(data.daily, shown) }
-    val previous = remember(data) { if (data.previousDaily.isEmpty()) emptyList() else runningTotals(data.previousDaily, before.dayCount) }
+    val period = data.period
+    val start = data.start
+    val beforeStart = period.before.start
+    // Up to today in a period still going (or to the latest day anything is dated, if later); all of a finished one.
+    val shown = maxOf(elapsedDays(start, period.days), data.daily.maxOfOrNull { dayNumber(start, it.day) } ?: 0)
+    val current = remember(data) { runningTotalsFrom(data.daily, start, shown) }
+    val previous = remember(data) {
+        if (data.previousDaily.isEmpty()) emptyList() else runningTotalsFrom(data.previousDaily, beforeStart, period.beforeDays)
+    }
     if ((current.lastOrNull() ?: 0L) <= 0L) return
     var day by remember(data) { mutableStateOf<Int?>(null) }
 
-    val nowLabel = if (data.inProgress) "This month" else monthLabel(month)
-    val spokenBefore = if (data.inProgress) "Same days of ${monthLabel(before)}" else monthLabel(before)
+    val nowLabel = when (period) {
+        is InsightsPeriod.Month -> if (data.inProgress) "This month" else monthLabel(period.month)
+        is InsightsPeriod.Days -> "These days"
+    }
+    val spokenBefore = when (period) {
+        is InsightsPeriod.Month ->
+            if (data.inProgress) "Same days of ${monthLabel(period.month.previous)}" else monthLabel(period.month.previous)
+        is InsightsPeriod.Days -> "${daysLabel(period.days)} before"
+    }
+    // The dashed line's name in the key when no day is touched.
+    val beforeKey = when (period) {
+        is InsightsPeriod.Month -> if (data.inProgress) "Last month" else monthLabel(period.month.previous)
+        is InsightsPeriod.Days -> "Days before"
+    }
     val spoken = buildString {
         append("$nowLabel ${money.format(data.summary.expense)}")
         if (previous.isNotEmpty()) append(", $spokenBefore ${money.format(data.previous.expense)}")
@@ -307,7 +458,7 @@ private fun SpendingPace(data: InsightsData, money: MoneyFormatter) {
     PaceChart(
         current = current,
         previous = previous,
-        days = maxOf(month.dayCount, before.dayCount),
+        days = maxOf(period.days, period.beforeDays),
         semanticsLabel = spoken,
         lineColor = onHero,
         referenceColor = reference,
@@ -322,17 +473,17 @@ private fun SpendingPace(data: InsightsData, money: MoneyFormatter) {
         val d = day
         ChartKey(
             color = onHero,
-            label = if (d == null) nowLabel else "${shortDate(month.start.plusDays(d - 1L))} · ${money.compact(current[d - 1])}",
+            label = if (d == null) nowLabel else "${shortDate(start.plusDays(d - 1L))} · ${money.compact(current[d - 1])}",
             textColor = keyText,
         )
         if (previous.isNotEmpty()) {
             val sameDay = d?.coerceAtMost(previous.size)
             ChartKey(
                 color = reference,
-                label = when {
-                    sameDay != null -> "${shortDate(before.start.plusDays(sameDay - 1L))} · ${money.compact(previous[sameDay - 1])}"
-                    data.inProgress -> "Last month"
-                    else -> monthLabel(before)
+                label = if (sameDay != null) {
+                    "${shortDate(beforeStart.plusDays(sameDay - 1L))} · ${money.compact(previous[sameDay - 1])}"
+                } else {
+                    beforeKey
                 },
                 dashed = true,
                 textColor = keyText,
@@ -353,13 +504,18 @@ private fun Footnote() {
     )
 }
 
-/** A month with nothing recorded: say so, and still show the trend around it so the screen isn't blank. */
+/** A month (or days) with nothing recorded: say so, and still show the trend around it so the screen isn't blank. */
 @Composable
 private fun EmptyMonth(data: InsightsData, onAdd: () -> Unit) {
+    val month = data.month
     AppEmptyState(
         icon = Icons.Outlined.EventBusy,
-        title = "Nothing recorded in ${monthLabelFull(data.month)}",
-        message = "Use the arrows above to look at another month, or add an expense.",
+        title = if (month != null) "Nothing recorded in ${monthLabelFull(month)}" else "Nothing recorded ${data.within}",
+        message = if (month != null) {
+            "Use the arrows above to look at another month, or add an expense."
+        } else {
+            "Choose other dates above, or add an expense."
+        },
         actionLabel = "Add expense",
         actionIcon = Icons.Rounded.Add,
         onAction = onAdd,
@@ -420,9 +576,15 @@ private fun WhereMoneyWent(data: InsightsData) {
     val biggest = totals.first()
     val biggestName = finance.category(biggest.categoryId)?.name ?: "Deleted category"
 
+    val biggestShare = "${(shareOf(biggest.amount, total) * 100).roundToInt()}%"
+    val month = data.month
     ListSection(
         title = "Where your money went",
-        intro = "$biggestName is your biggest spend: ${(shareOf(biggest.amount, total) * 100).roundToInt()}% of ${monthLabel(data.month)}.",
+        intro = if (month != null) {
+            "$biggestName is your biggest spend: $biggestShare of ${monthLabel(month)}."
+        } else {
+            "$biggestName is your biggest spend: $biggestShare of spending ${data.within}."
+        },
         footer = "Tap a category to see its transactions.",
     ) {
         for (t in rows) item {
@@ -430,7 +592,7 @@ private fun WhereMoneyWent(data: InsightsData) {
             val name = category?.name ?: "Deleted category"
             val percent = "${(shareOf(t.amount, total) * 100).roundToInt()}%"
             val count = "${t.count} ${if (t.count == 1) "transaction" else "transactions"}"
-            val open = { navigator.openCategoryHistory(t.categoryId, data.month) }
+            val open = { data.openCategory(navigator, t.categoryId) }
             CategoryShareRow(
                 category = category,
                 amount = t.amount,
@@ -484,7 +646,7 @@ private fun ByPerson(data: InsightsData) {
     ListSection(
         title = "Spent on people",
         intro = "${money.format(spending.assigned)} of ${money.format(spending.totalExpense)} went on " +
-            "${spending.byPerson.size} ${if (spending.byPerson.size == 1) "person" else "people"} in ${monthLabel(data.month)}.",
+            "${spending.byPerson.size} ${if (spending.byPerson.size == 1) "person" else "people"} ${data.within}.",
         footer = "The rest wasn't for anyone in particular. Tap a person to see their expenses.",
     ) {
         for (entry in top) item {
@@ -525,6 +687,8 @@ private const val PEOPLE_ROWS = 3
  */
 @Composable
 private fun Trend(data: InsightsData) {
+    // Only a month sits among months; days that were picked have no trend here.
+    val month = data.month ?: return
     val money = rememberFinanceState().money
     val scheme = MaterialTheme.colorScheme
     val first = data.trend.indexOfFirst { it.expense > 0 }
@@ -539,15 +703,15 @@ private fun Trend(data: InsightsData) {
         for (m in months) add("${monthLabelFull(m.month)}: ${money.format(m.expense)}")
         if (usual > 0) add("Usual month: ${money.format(usual)}")
     }.joinToString(". ")
-    var selected by remember(data.month, months.size) { mutableIntStateOf(months.lastIndex) }
+    var selected by remember(month, months.size) { mutableIntStateOf(months.lastIndex) }
     val pick = months[selected.coerceIn(0, months.lastIndex)]
-    val stillGoing = data.inProgress && pick.month == data.month
+    val stillGoing = data.inProgress && pick.month == month
 
     Panel(
         title = "Spending by month",
         footer = buildString {
             if (usual > 0) append("You usually spend about ${money.format(usual, trimZeroFraction = true)} a month. ")
-            append("The last bar is ${monthLabelFull(data.month)}")
+            append("The last bar is ${monthLabelFull(month)}")
             if (data.inProgress) append(" so far")
             append(". Tap a bar to see its month.")
         },
@@ -601,24 +765,32 @@ private fun MoreDetail(data: InsightsData) {
 }
 
 /**
- * Each day of the month as a column, the daily average dashed across them. Above the chart it reads the average until a
- * day is touched, then that day (touching it again goes back). Days still to come are dots on the baseline.
+ * Each day of the month (or of the days picked) as a column, the daily average dashed across them. Above the chart it reads
+ * the average until a day is touched, then that day (touching it again goes back). Days still to come are dots on the
+ * baseline.
  */
 @Composable
 private fun DailySpending(data: InsightsData) {
     val money = rememberFinanceState().money
-    val month = data.month
-    val values = MutableList(month.dayCount) { 0L }
-    for (d in data.daily) values[d.day.dayOfMonth - 1] = d.amount
-    val elapsed = elapsedDays(month)
-    // A day dated later in the month than today is drawn too: it is part of the month's total.
-    val drawn = maxOf(elapsed, data.daily.maxOf { it.day.dayOfMonth })
+    val start = data.start
+    val days = data.period.days
+    val values = MutableList(days) { 0L }
+    for (d in data.daily) {
+        val i = dayNumber(start, d.day) - 1
+        if (i in 0 until days) values[i] = d.amount
+    }
+    val elapsed = elapsedDays(start, days)
+    // A day dated later in the period than today is drawn too: it is part of the period's total.
+    val drawn = maxOf(elapsed, data.daily.maxOf { dayNumber(start, it.day) })
     val average = average(data.summary.expense, elapsed)
     val peak = data.daily.maxBy { it.amount }
     val spendDays = data.daily.size
     val scheme = MaterialTheme.colorScheme
-    var selected by remember(data.month) { mutableStateOf<Int?>(null) }
-    val last = month.dayCount
+    var selected by remember(data.period) { mutableStateOf<Int?>(null) }
+    val last = days
+    val month = data.month
+    // Weekly marks, by the day of the month each falls on (1, 8, 15, 22 and the last day for a month).
+    val marks = listOf(0, 7, 14, 21, last - 1).filter { it in 0 until days }.distinct()
 
     Panel(
         title = "Day by day",
@@ -626,7 +798,7 @@ private fun DailySpending(data: InsightsData) {
     ) {
         val day = selected
         ChartReadout(
-            label = if (day == null) "Daily average" else shortDate(month.start.plusDays(day.toLong())),
+            label = if (day == null) "Daily average" else shortDate(start.plusDays(day.toLong())),
             value = if (day == null) money.format(average, trimZeroFraction = true) else money.format(values[day]),
             modifier = Modifier.clearAndSetSemantics {},
             key = { ChartKey(color = scheme.onSurfaceVariant, label = "Average", dashed = true) },
@@ -635,9 +807,9 @@ private fun DailySpending(data: InsightsData) {
         BarChart(
             values = values,
             money = money,
-            semanticsLabel = "Spending per day in ${monthLabelFull(month)}. Daily average ${money.format(average)}. " +
-                "Biggest day ${shortDate(peak.day.atStartOfDay())}, ${money.format(peak.amount)}.",
-            labels = listOf(0, 7, 14, 21, last - 1).associateWith { "${it + 1}" },
+            semanticsLabel = "Spending per day ${if (month != null) "in ${monthLabelFull(month)}" else data.within}. " +
+                "Daily average ${money.format(average)}. Biggest day ${shortDate(peak.day.atStartOfDay())}, ${money.format(peak.amount)}.",
+            labels = marks.associateWith { "${start.plusDays(it.toLong()).dayOfMonth}" },
             selected = selected,
             onSelect = { selected = it },
             clearable = true,
@@ -667,7 +839,7 @@ private fun IncomeSources(data: InsightsData) {
                             style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = TABULAR_FIGURES),
                         )
                     },
-                    onClick = { navigator.openCategoryHistory(t.categoryId, data.month) },
+                    onClick = { data.openCategory(navigator, t.categoryId) },
                 )
             }
         }

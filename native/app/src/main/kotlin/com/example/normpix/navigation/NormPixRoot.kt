@@ -53,6 +53,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.normpix.AppContainer
 import com.example.normpix.DummyData
+import com.example.normpix.finance.domain.DateRange
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.ui.AccountHistoryPage
 import com.example.normpix.finance.ui.BudgetHistoryPage
@@ -71,6 +72,7 @@ import com.example.normpix.finance.share.ReceiveSharedTransactions
 import com.example.normpix.updates.ui.OfferAppUpdates
 import com.example.normpix.settings.PageAnimationType
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import com.example.normpix.ui.components.AppErrorState
 import com.example.normpix.ui.components.AppLoadingState
 import com.example.normpix.ui.components.AppOverlays
@@ -94,13 +96,17 @@ import com.example.normpix.ui.theme.isDark
 import com.example.normpix.ui.theme.rememberReducedMotion
 import com.example.normpix.ui.theme.rememberSystemReducedMotion
 
+/** The value of an optional day argument that was not given. */
+private const val NO_DAY = -1L
+
 object Routes {
     const val MAIN = "main"
     const val CATEGORIES = "categories"
     const val BUDGET_HISTORY = "budget-history"
     const val PEOPLE = "people"
     const val PERSON = "person/{personId}"
-    const val CATEGORY_HISTORY = "category/{categoryId}/{month}"
+    /** [from] and [to] (epoch days, [to] exclusive) are optional: given, the history shows those days instead of the month. */
+    const val CATEGORY_HISTORY = "category/{categoryId}/{month}?from={from}&to={to}"
     const val ACCOUNT_HISTORY = "account/{accountId}"
     const val SETTINGS = "settings"
     const val SETTINGS_PAGE = "settings/{page}"
@@ -109,6 +115,9 @@ object Routes {
     const val REMINDER_ALERT = "reminder/{reminderId}"
 
     fun categoryHistory(categoryId: Long, month: MonthKey) = "category/$categoryId/${month.toInt()}"
+    fun categoryHistory(categoryId: Long, range: DateRange) =
+        "category/$categoryId/${MonthKey.of(range.start).toInt()}" +
+            "?from=${range.start.toLocalDate().toEpochDay()}&to=${range.end.toLocalDate().toEpochDay()}"
     fun accountHistory(accountId: Long) = "account/$accountId"
     fun person(personId: Long) = "person/$personId"
     fun settingsPage(page: SettingsPage) = "settings/${page.name}"
@@ -396,11 +405,27 @@ private fun AppNavigation(
                 arguments = listOf(
                     navArgument("categoryId") { type = NavType.LongType },
                     navArgument("month") { type = NavType.IntType },
+                    navArgument("from") {
+                        type = NavType.LongType
+                        defaultValue = NO_DAY
+                    },
+                    navArgument("to") {
+                        type = NavType.LongType
+                        defaultValue = NO_DAY
+                    },
                 ),
             ) { entry ->
+                val args = entry.arguments!!
+                val from = args.getLong("from", NO_DAY)
+                val to = args.getLong("to", NO_DAY)
                 CategoryHistoryPage(
-                    categoryId = entry.arguments!!.getLong("categoryId"),
-                    month = MonthKey.fromInt(entry.arguments!!.getInt("month")),
+                    categoryId = args.getLong("categoryId"),
+                    month = MonthKey.fromInt(args.getInt("month")),
+                    range = if (from != NO_DAY && to > from) {
+                        DateRange(LocalDate.ofEpochDay(from).atStartOfDay(), LocalDate.ofEpochDay(to).atStartOfDay())
+                    } else {
+                        null
+                    },
                 )
             }
             page(
@@ -488,6 +513,10 @@ class NavControllerNavigator(private val nav: NavHostController, private val she
 
     override fun openCategoryHistory(categoryId: Long, month: MonthKey) {
         nav.navigate(Routes.categoryHistory(categoryId, month))
+    }
+
+    override fun openCategoryHistory(categoryId: Long, range: DateRange) {
+        nav.navigate(Routes.categoryHistory(categoryId, range))
     }
 
     override fun openAccountHistory(accountId: Long) {
