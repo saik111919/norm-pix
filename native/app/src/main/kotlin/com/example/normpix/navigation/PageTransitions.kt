@@ -22,10 +22,11 @@ import androidx.navigation.compose.composable
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -33,7 +34,6 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.navigation.NavBackStackEntry
@@ -59,10 +59,12 @@ import com.example.normpix.ui.theme.rememberReducedMotion
  * - [PageAnimationType.FadeThrough]: the old page fades out, then the new one fades in and scales up gently.
  * - [PageAnimationType.SharedAxis]: the same, with both pages gliding a short distance along the horizontal axis.
  * - [PageAnimationType.ScaleAndFade]: the new page grows into place as it fades in, over the old one.
- * - [PageAnimationType.LinuxWindow]: a desktop window manager's open and close. A page opens by growing out of
- *   the bottom edge (where a dock would be) with a quick fade, decelerating into place, over a page that stays
- *   solid and recedes a little; it closes faster than it opened, shrinking back towards the bottom edge as it fades,
- *   while the page beneath comes forward.
+ * - [PageAnimationType.LinuxWindow]: a desktop window manager's open and close (GNOME's, near enough). A page opens by
+ *   growing out of the bottom edge (where a dock would be) as it fades in, over a page that stays solid and recedes a
+ *   little; it closes faster than it opened, shrinking back into itself (a little low, towards the dock) as it fades,
+ *   while the page beneath comes forward. Its motion is eased the way a desktop's windows are ([WindowEasing]), not with
+ *   Material's emphasized curve, which is three quarters done in its first fifth: a new page's first frames go to
+ *   composing it, so on a phone the window had all but opened before it was ever drawn, and seemed not to move at all.
  */
 class PageTransitions(type: PageAnimationType, reduced: Boolean) {
     private val duration = if (reduced) 0 else AppMotion.MEDIUM_MS
@@ -85,21 +87,20 @@ class PageTransitions(type: PageAnimationType, reduced: Boolean) {
             PageAnimationType.LinuxWindow -> {
                 val open = if (reduced) 0 else WINDOW_OPEN_MS
                 val close = if (reduced) 0 else WINDOW_CLOSE_MS
-                val grow = tween<Float>(open, easing = AppMotion.enter)
-                val fadeInQuick = tween<Float>((open * 0.6f).toInt(), easing = AppMotion.enter)
-                val recede = tween<Float>(open, easing = AppMotion.enter)
-                val shrink = tween<Float>(close, easing = AppMotion.standard)
-                val fadeOutQuick = tween<Float>(close, easing = AppMotion.standard)
-                val sink = tween<IntOffset>(close, easing = AppMotion.standard)
-                val comeForward = tween<Float>(close, easing = AppMotion.standard)
+                val grow = tween<Float>(open, easing = WindowEasing.open)
+                // Faded in over the first half, evenly: the window is seen growing, not arriving whole.
+                val fadeInQuick = tween<Float>(open / 2, easing = LinearEasing)
+                val recede = tween<Float>(open, easing = WindowEasing.open)
+                val shrink = tween<Float>(close, easing = WindowEasing.open)
+                // Fades late, so it is seen shrinking before it goes.
+                val fadeOutLate = tween<Float>(close, easing = WindowEasing.close)
+                val comeForward = tween<Float>(close, easing = WindowEasing.open)
                 // The opening window grows from the bottom edge; the page under it only recedes, never fades.
                 forward = (scaleIn(grow, initialScale = WINDOW_OPEN_SCALE, transformOrigin = FROM_BOTTOM) + fadeIn(fadeInQuick)) to
-                    scaleOut(recede, targetScale = WINDOW_BEHIND_SCALE, transformOrigin = FROM_BOTTOM)
-                // The closing window shrinks and sinks towards the bottom edge as it fades; the page under it comes forward.
-                backward = scaleIn(comeForward, initialScale = WINDOW_BEHIND_SCALE, transformOrigin = FROM_BOTTOM) to
-                    (scaleOut(shrink, targetScale = WINDOW_CLOSE_SCALE, transformOrigin = FROM_BOTTOM) +
-                        slideOutVertically(sink) { (it * WINDOW_SINK).toInt() } +
-                        fadeOut(fadeOutQuick))
+                    scaleOut(recede, targetScale = WINDOW_BEHIND_SCALE, transformOrigin = TransformOrigin.Center)
+                // The closing window shrinks into itself as it fades; the page under it comes forward.
+                backward = scaleIn(comeForward, initialScale = WINDOW_BEHIND_SCALE, transformOrigin = TransformOrigin.Center) to
+                    (scaleOut(shrink, targetScale = WINDOW_CLOSE_SCALE, transformOrigin = CLOSING_ORIGIN) + fadeOut(fadeOutLate))
             }
             PageAnimationType.System -> {
                 // In: slides a short way from the edge, fading in over the first part. The page under shifts back.
@@ -137,6 +138,12 @@ class PageTransitions(type: PageAnimationType, reduced: Boolean) {
         }
     }
 
+    /** How a page arrives as it is opened, for a screen that opens over the app outside the navigation graph (the picture viewer). */
+    val opening: EnterTransition get() = forward.first
+
+    /** How a page leaves as it is closed, likewise. */
+    val closing: ExitTransition get() = backward.second
+
     val enter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = { forward.first }
     val exit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = { forward.second }
     val popEnter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = { backward.first }
@@ -144,12 +151,11 @@ class PageTransitions(type: PageAnimationType, reduced: Boolean) {
 
     companion object {
         /** A window takes its time to open and is quicker to close, as on a desktop. */
-        const val WINDOW_OPEN_MS = 280
-        const val WINDOW_CLOSE_MS = 180
-        private const val WINDOW_OPEN_SCALE = 0.9f
-        private const val WINDOW_CLOSE_SCALE = 0.92f
-        private const val WINDOW_BEHIND_SCALE = 0.96f
-        private const val WINDOW_SINK = 0.04f
+        const val WINDOW_OPEN_MS = 340
+        const val WINDOW_CLOSE_MS = 240
+        private const val WINDOW_OPEN_SCALE = 0.8f
+        private const val WINDOW_CLOSE_SCALE = 0.85f
+        private const val WINDOW_BEHIND_SCALE = 0.94f
 
         // Divisors of the page width: how far a page travels (a larger divisor is a shorter way).
         private const val SYSTEM_SLIDE = 6
@@ -161,9 +167,22 @@ class PageTransitions(type: PageAnimationType, reduced: Boolean) {
         private const val FADE_THROUGH_SCALE = 0.92f
         private const val GROW_SCALE = 0.9f
 
-        /** Windows grow from and shrink towards the bottom edge, where a dock would be. */
+        /** Windows grow from the bottom edge, where a dock would be... */
         private val FROM_BOTTOM = TransformOrigin(0.5f, 1f)
+
+        /** ...and shrink into themselves, a little low: towards it. */
+        private val CLOSING_ORIGIN = TransformOrigin(0.5f, 0.75f)
     }
+}
+
+/**
+ * How a desktop's windows move ([PageAnimationType.LinuxWindow]): an ease-out quad, the curve GNOME opens and closes its
+ * windows with - quick to start but spread over the whole time, so the motion is seen - and an ease-in quad for a window
+ * fading as it closes, which keeps it in view while it shrinks.
+ */
+internal object WindowEasing {
+    val open: Easing = CubicBezierEasing(0.25f, 0.46f, 0.45f, 0.94f)
+    val close: Easing = CubicBezierEasing(0.55f, 0.085f, 0.68f, 0.53f)
 }
 
 /** The user's chosen [PageAnimationType], for the pieces that move pages without the navigation graph (tab switches). */
@@ -179,6 +198,10 @@ internal object TabMotion {
     fun openMs(type: PageAnimationType): Int =
         if (type == PageAnimationType.LinuxWindow) PageTransitions.WINDOW_OPEN_MS else AppMotion.MEDIUM_MS
 
+    /** How far into its motion a tab is, [time] (0..1, linear) into it: a window's own curve in the window style, else Material's. */
+    fun ease(type: PageAnimationType, time: Float): Float =
+        if (type == PageAnimationType.LinuxWindow) WindowEasing.open.transform(time) else AppMotion.enter.transform(time)
+
     fun scale(type: PageAnimationType, progress: Float): Float = when (type) {
         PageAnimationType.LinuxWindow -> 0.9f + 0.1f * progress
         PageAnimationType.ScaleAndFade -> 0.92f + 0.08f * progress
@@ -187,11 +210,11 @@ internal object TabMotion {
     }
 
     /**
-     * How visible an arriving tab is, [time] (0..1, linear) into its arrival: a window fades in over the first 60% while it
-     * grows, as a page opens; a fade-through waits for the leaving tab to go first; the rest fade in as they move.
+     * How visible an arriving tab is, [time] (0..1, linear) into its arrival: a window fades in evenly over the first half
+     * while it grows, as a page opens; a fade-through waits for the leaving tab to go first; the rest fade in as they move.
      */
     fun arrivalAlpha(type: PageAnimationType, time: Float): Float = when (type) {
-        PageAnimationType.LinuxWindow -> AppMotion.enter.transform((time / 0.6f).coerceIn(0f, 1f))
+        PageAnimationType.LinuxWindow -> (time / 0.5f).coerceIn(0f, 1f)
         PageAnimationType.FadeThrough, PageAnimationType.SharedAxis ->
             LinearOutSlowInEasing.transform(((time - 0.3f) / 0.7f).coerceIn(0f, 1f))
         else -> AppMotion.enter.transform(time.coerceIn(0f, 1f))
@@ -242,7 +265,7 @@ internal fun NavGraphBuilder.page(
  */
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-private fun AnimatedVisibilityScope.PageWindow(content: @Composable () -> Unit) {
+internal fun AnimatedVisibilityScope.PageWindow(content: @Composable () -> Unit) {
     val reduced = rememberReducedMotion()
     val radius by transition.animateDp(
         transitionSpec = {

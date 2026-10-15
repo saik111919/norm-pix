@@ -3,6 +3,7 @@ package com.example.normpix.navigation
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -44,6 +45,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -73,6 +75,7 @@ import com.example.normpix.finance.ui.PersonDetailPage
 import com.example.normpix.finance.ui.rememberFinanceState
 import com.example.normpix.finance.share.ReceiveSharedTransactions
 import com.example.normpix.updates.ui.OfferAppUpdates
+import com.example.normpix.updates.ui.UpdatePage
 import com.example.normpix.settings.PageAnimationType
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -117,6 +120,7 @@ object Routes {
     const val PROFILE = "profile"
     const val SEARCH = "search"
     const val REMINDER_ALERT = "reminder/{reminderId}"
+    const val UPDATE = "update"
 
     fun categoryHistory(categoryId: Long, month: MonthKey) = "category/$categoryId/${month.toInt()}"
     fun categoryHistory(categoryId: Long, range: DateRange) =
@@ -170,21 +174,51 @@ class ShellState(index: Int = 0, section: Int = 0, plansTab: Int = 0) {
 @Composable
 fun rememberShellState(): ShellState = rememberSaveable(saver = ShellState.Saver) { ShellState() }
 
-/** Root of the UI: theme, app-wide services, and the navigation graph. */
+/**
+ * Root of the UI: theme, app-wide services, and the navigation graph. [showSplash] (a cold start) writes the app's name out
+ * first ([LaunchSplash]); nothing pops up over it - an update offered, a shared draft, a reminder's alert, the lock's
+ * prompt - until it has gone.
+ */
 @Composable
-fun NormPixRoot(container: AppContainer, onDarkChanged: (Boolean) -> Unit = {}) {
+fun NormPixRoot(container: AppContainer, showSplash: Boolean = false, onDarkChanged: (Boolean) -> Unit = {}) {
     val prefs by container.preferences.state.collectAsStateWithLifecycle()
     // Held above the data, so turning Dummy data on or off keeps you on the screen you were on.
     val nav = rememberNavController()
     val shell = rememberShellState()
     val data = rememberDataContainer(container, prefs.dummyDataEnabled)
     KeepRemindersArmed(container)
+    val reducedMotion = rememberReducedMotion()
+    var splashing by remember { mutableStateOf(showSplash && !reducedMotion) }
+    val splashLeaving = remember { Animatable(0f) }
+    val finance by data.finance.state.collectAsStateWithLifecycle()
     NormPixTheme(Appearance(prefs.mode, prefs.colorSource, prefs.accent, AppFont(prefs.interfaceFont, prefs.fontShape))) {
         val dark = MaterialTheme.colorScheme.isDark
         LaunchedEffect(dark) { onDarkChanged(dark) }
-        ProvideAppEnvironment(data) {
-            // Rebuilt for each data set, so no screen keeps reading or writing the other one.
-            key(data) { AppContent(data, nav, shell, prefs.pageAnimation, sampleData = data !== container) }
+        Box(Modifier.fillMaxSize()) {
+            Box(
+                if (splashing) {
+                    // Under the splash the app waits a little way back, and comes forward as it fades: a window opening.
+                    Modifier.fillMaxSize().graphicsLayer {
+                        val scale = SPLASH_APP_SCALE + (1f - SPLASH_APP_SCALE) * splashLeaving.value
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                } else {
+                    Modifier.fillMaxSize()
+                },
+            ) {
+                ProvideAppEnvironment(data) {
+                    // Rebuilt for each data set, so no screen keeps reading or writing the other one.
+                    key(data) { AppContent(data, nav, shell, prefs.pageAnimation, sampleData = data !== container, splashing = splashing) }
+                }
+            }
+            if (splashing) {
+                LaunchSplash(
+                    ready = finance.status != FinanceStatus.Loading,
+                    leaving = splashLeaving,
+                    onFinished = { splashing = false },
+                )
+            }
         }
     }
 }
@@ -308,6 +342,7 @@ private fun AppContent(
     shell: ShellState,
     pageAnimation: PageAnimationType,
     sampleData: Boolean,
+    splashing: Boolean = false,
 ) {
     val finance = container.finance
     val state = rememberFinanceState()
@@ -328,7 +363,7 @@ private fun AppContent(
             onRetry = { scope.launch { finance.load() } },
             modifier = Modifier.fillMaxSize(),
         )
-        FinanceStatus.Ready -> AppNavigation(container, nav, shell, pageAnimation, sampleData)
+        FinanceStatus.Ready -> AppNavigation(container, nav, shell, pageAnimation, sampleData, splashing)
     }
 }
 
@@ -339,6 +374,7 @@ private fun AppNavigation(
     shell: ShellState,
     pageAnimation: PageAnimationType,
     sampleData: Boolean,
+    splashing: Boolean,
 ) {
     val reduced = rememberReducedMotion()
     val transitions = remember(pageAnimation, reduced) { PageTransitions(pageAnimation, reduced) }
@@ -357,9 +393,11 @@ private fun AppNavigation(
 
     // A tapped reminder notification, or a reminder coming due while NormPix is open.
     val pendingAlert by container.reminderAlerts.collectAsStateWithLifecycle()
-    LaunchedEffect(pendingAlert, appLocked) {
+    // Anything that would come up over the app waits for it to be unlocked, and for the splash to have gone.
+    val held = appLocked || splashing
+    LaunchedEffect(pendingAlert, held) {
         val id = pendingAlert ?: return@LaunchedEffect
-        if (appLocked) return@LaunchedEffect // shown once the app is unlocked
+        if (held) return@LaunchedEffect // shown once the app is unlocked
         container.reminderAlerts.value = null
         navigator.openReminderAlert(id)
     }
@@ -369,8 +407,8 @@ private fun AppNavigation(
 
     // A tapped card-expiry notification: show Wallet, where each card says what it needs.
     val walletRequested by container.walletRequests.collectAsStateWithLifecycle()
-    LaunchedEffect(walletRequested, appLocked) {
-        if (!walletRequested || appLocked) return@LaunchedEffect // shown once the app is unlocked
+    LaunchedEffect(walletRequested, held) {
+        if (!walletRequested || held) return@LaunchedEffect // shown once the app is unlocked
         container.walletRequests.value = false
         navigator.go(AppDestination.Wallet)
     }
@@ -380,9 +418,14 @@ private fun AppNavigation(
      // screens can start one; the flows need the navigator, so they are made here, once it is provided.
      CompositionLocalProvider(LocalReminderLauncher provides rememberReminderFlows()) {
       // Text shared from another app (ShareTransactionActivity) opens as a new-transaction draft, once unlocked.
-      ReceiveSharedTransactions(container.sharedText, container.sharedPictures, appLocked = appLocked, sampleData = sampleData)
+      ReceiveSharedTransactions(container.sharedText, container.sharedPictures, appLocked = held, sampleData = sampleData)
       // Once a day at launch, once unlocked: a newer release on GitHub is offered (Settings > Check for updates).
-      OfferAppUpdates(container.updates, appLocked = appLocked, requests = container.updateRequests)
+      OfferAppUpdates(
+          container.updates,
+          appLocked = held,
+          requests = container.updateRequests,
+          installRequests = container.updateInstallRequests,
+      )
       // The app's own background behind every page: while one page leaves and another arrives (or a tab is still
       // composing for the first time) it is what shows between them, never the window's - which follows the
       // *system's* light or dark, not the app's.
@@ -455,13 +498,14 @@ private fun AppNavigation(
                 }
             }
             page(Routes.PROFILE) { ProfilePage() }
+            page(Routes.UPDATE) { UpdatePage() }
             page(Routes.SEARCH) { AppSearchPage() }
             page(
                 Routes.REMINDER_ALERT,
                 arguments = listOf(navArgument("reminderId") { type = NavType.LongType }),
             ) { entry -> ReminderAlertScreen(entry.arguments!!.getLong("reminderId")) }
         }
-        if (appLocked) AppLockScreen(container)
+        if (appLocked) AppLockScreen(container, prompt = !splashing)
       }
      }
     }
@@ -473,14 +517,15 @@ private fun AppNavigation(
  * the app instead of reaching the screens underneath.
  */
 @Composable
-private fun AppLockScreen(container: AppContainer) {
+private fun AppLockScreen(container: AppContainer, prompt: Boolean = true) {
     val activity = LocalActivity.current
     val scope = rememberCoroutineScope()
     fun unlock() {
         scope.launch { container.lock.authenticate("Unlock NormPix") }
     }
-    LaunchedEffect(Unit) {
-        if (container.lock.isDeviceSupported()) unlock()
+    // Once the splash has gone: the system's prompt over it would hide the app's name half written.
+    LaunchedEffect(prompt) {
+        if (prompt && container.lock.isDeviceSupported()) unlock()
     }
     BackHandler { activity?.moveTaskToBack(true) }
     // A Surface, so text defaults to onSurface; it also swallows touches meant for the screens underneath.
@@ -548,6 +593,10 @@ class NavControllerNavigator(private val nav: NavHostController, private val she
 
     override fun openSearch() {
         nav.navigate(Routes.SEARCH) { launchSingleTop = true }
+    }
+
+    override fun openUpdates() {
+        nav.navigate(Routes.UPDATE) { launchSingleTop = true }
     }
 
     override fun openReminderAlert(reminderId: Long) {

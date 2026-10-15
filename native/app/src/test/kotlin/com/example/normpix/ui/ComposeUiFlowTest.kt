@@ -169,7 +169,7 @@ class ComposeUiFlowTest {
 
         compose.waitForIdle()
         // Opens on the transaction history, with the switch to Plans held under the app bar.
-        compose.onNodeWithText("Transactions").assertIsDisplayed()
+        compose.onNodeWithText("Activity").assertIsDisplayed()
         compose.onNodeWithText("Plans").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Budgets").assertIsDisplayed()
@@ -223,6 +223,6 @@ class ComposeUiFlowTest {
         compose.waitForIdle()
         // Shell navigation bar displays tabs; Plans and Transactions share one item.
         compose.onAllNodesWithText("Home").onFirst().assertIsDisplayed()
-        compose.onAllNodesWithText("Plans & Transactions").onFirst().assertIsDisplayed()
+        compose.onAllNodesWithText("Plans & Activity").onFirst().assertIsDisplayed()
     }
 }

@@ -280,7 +280,7 @@ class PictureAttachmentFlowTest {
     }
 
     @Test
-    fun `a transaction's details show its picture, which opens whole`() {
+    fun `a transaction's picture is in its editor, not its receipt, and opens whole`() {
         val transaction = runBlocking {
             val draft = assertNotNull(store.stage(galleryPicture()))
             finance.saveTransaction(
@@ -297,8 +297,11 @@ class PictureAttachmentFlowTest {
             )
         }
         open { showDetails(transaction) }
-        waitFor("Kept with this transaction")
-        compose.onNodeWithText("Kept with this transaction").performScrollTo().performClick()
+        waitFor("Share receipt")
+        assertTrue(compose.onAllNodesWithText("Attached").fetchSemanticsNodes().isEmpty(), "the receipt doesn't show the picture")
+        compose.onNodeWithText("Edit").performClick()
+        waitFor("Attached")
+        compose.onNodeWithText("Attached").performScrollTo().performClick()
         compose.waitUntil(timeoutMillis = 10_000) {
             compose.onAllNodesWithContentDescription("Close").fetchSemanticsNodes().isNotEmpty()
         }

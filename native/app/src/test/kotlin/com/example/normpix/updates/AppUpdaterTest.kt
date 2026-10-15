@@ -420,6 +420,60 @@ class AppUpdaterTest {
         assertEquals(1, installer.installs.size)
     }
 
+    // ------------------------------------------------------------ the download's notification
+
+    @Test
+    fun `a download shows its progress in a notification, and takes it down when it ends`() = runTest {
+        val updater = downloaded()
+        assertIs<UpdateState.Ready>(updater.state.value)
+        assertEquals(0L to false, notifier.progress.first(), "shown as it starts, as the user's own")
+        assertTrue(notifier.progress.size > 1, "and as it goes")
+        assertEquals(1, notifier.stopped)
+        assertEquals(emptyList(), notifier.posted, "NormPix is on screen: the sheet says it's ready, not a notification")
+    }
+
+    @Test
+    fun `a download that finishes with NormPix off screen says it's ready in a notification`() = runTest {
+        Releases.publish(network)
+        val updater = updater()
+        assertIs<UpdateState.Available>(updater.check())
+        updater.download()
+        updater.onBackground()
+        advanceUntilIdle()
+        assertIs<UpdateState.Ready>(updater.state.value)
+        assertEquals(listOf("ready 1.0.3"), notifier.posted)
+        assertEquals(1, notifier.stopped)
+    }
+
+    @Test
+    fun `Download on a notification finds the release in a fresh process and downloads it`() = runTest {
+        Releases.publish(network)
+        val updater = updater(onScreen = false)
+        updater.downloadNow()
+        advanceUntilIdle()
+        assertIs<UpdateState.Ready>(updater.state.value)
+        assertEquals(listOf("ready 1.0.3"), notifier.posted)
+        assertEquals(false, notifier.progress.first().second, "the user's own download, not the background's")
+
+        // Again, with it downloaded: nothing more.
+        val before = network.asked.size
+        updater.downloadNow()
+        advanceUntilIdle()
+        assertTrue(network.asked.drop(before).isEmpty(), "nothing asked again: ${network.asked.drop(before)}")
+    }
+
+    @Test
+    fun `a stopped download takes its notification down`() = runTest {
+        val apk = Releases.publish(network)
+        val updater = updater()
+        network.stream(apkUrl, apk.size.toLong()) { CancellingStream(apk) { updater.cancelDownload() } }
+        assertIs<UpdateState.Available>(updater.check())
+        updater.download()
+        advanceUntilIdle()
+        assertIs<UpdateState.Cancelled>(updater.state.value)
+        assertEquals(1, notifier.stopped)
+    }
+
     // ------------------------------------------------------------ in the background
 
     @Test
@@ -671,6 +725,18 @@ class FakeNotifier(var shows: Boolean = true) : UpdateNotifier {
 
     override fun withdraw() {
         withdrawn++
+    }
+
+    /** Each progress report: the bytes done, and whether the daily check started the download. */
+    val progress = mutableListOf<Pair<Long, Boolean>>()
+    var stopped = 0
+
+    override fun downloading(release: UpdateRelease, done: Long, total: Long, background: Boolean) {
+        progress += done to background
+    }
+
+    override fun downloadStopped() {
+        stopped++
     }
 
     private fun post(what: String): Boolean {

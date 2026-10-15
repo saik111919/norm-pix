@@ -1,6 +1,7 @@
 package com.example.normpix.updates
 
 import android.annotation.SuppressLint
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -13,8 +14,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.PersistableBundle
+import android.text.format.Formatter
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.example.normpix.MainActivity
 import com.example.normpix.NormPixApplication
 import com.example.normpix.R
@@ -114,17 +117,26 @@ class UpdateJobService : JobService() {
 }
 
 /**
- * The notifications updating in the background posts, on a quiet channel of their own ("App updates"): an update is out,
- * an update is downloaded and ready to install (either opens the update sheet), or NormPix installed one by itself. Only
- * the version is said, so there is nothing to hide on the lock screen. Nothing is posted while the user has NormPix's
- * notifications off (Settings > Notifications) or Android does.
+ * The notifications about updates, on a quiet channel of their own ("App updates"): an update is out (with Download, which
+ * fetches it without opening NormPix), it is downloading (how far, with Cancel; kept going by [UpdateDownloadService] when
+ * the user started it, so NormPix can be closed meanwhile), it is downloaded and ready to install (with Install), or NormPix
+ * installed one by itself. A tap opens the update page. Only the version is said, so there is nothing to hide on the lock
+ * screen. Nothing is posted while the user has NormPix's notifications off (Settings > Notifications) or Android does.
  */
 class SystemUpdateNotifier(private val context: Context) : UpdateNotifier {
-    override fun available(release: UpdateRelease): Boolean =
-        post(WAITING, "Update available", "NormPix ${release.versionName} is out. Tap to see what's new.", openUpdate = true)
+    override fun available(release: UpdateRelease): Boolean = post(
+        WAITING,
+        "Update available",
+        "NormPix ${release.versionName} is out. Download it now, or tap to see what's new.",
+        action = NotificationCompat.Action(0, "Download", downloadIntent(context)),
+    )
 
-    override fun ready(release: UpdateRelease): Boolean =
-        post(WAITING, "Update ready to install", "NormPix ${release.versionName} is downloaded and checked. Tap to install it.", openUpdate = true)
+    override fun ready(release: UpdateRelease): Boolean = post(
+        WAITING,
+        "Update ready to install",
+        "NormPix ${release.versionName} is downloaded and checked. Tap Install to update.",
+        action = NotificationCompat.Action(0, "Install", openIntent(context, INSTALL_REQUEST, install = true)),
+    )
 
     override fun installed(versionName: String): Boolean =
         post(INSTALLED, "NormPix updated", "NormPix is now on version $versionName.", openUpdate = false)
@@ -133,23 +145,44 @@ class SystemUpdateNotifier(private val context: Context) : UpdateNotifier {
         NotificationManagerCompat.from(context).cancel(TAG, WAITING)
     }
 
+    /** Whether the download under way has asked for [UpdateDownloadService] already (once is enough). */
+    @Volatile
+    private var serviceAsked = false
+
     @SuppressLint("MissingPermission")
-    private fun post(id: Int, title: String, text: String, openUpdate: Boolean): Boolean {
+    override fun downloading(release: UpdateRelease, done: Long, total: Long, background: Boolean) {
+        // One the user started is kept going by a foreground service, whose notification this is: NormPix can be closed.
+        // (One the daily check started is kept going by its job; Android wouldn't start a service for it from the background.)
+        if (!background && !serviceAsked) {
+            serviceAsked = true
+            runCatching { ContextCompat.startForegroundService(context, Intent(context, UpdateDownloadService::class.java)) }
+        }
+        if (!canPost()) return
+        NotificationManagerCompat.from(context).notify(DOWNLOAD_ID, progress(context, release, done, total))
+    }
+
+    override fun downloadStopped() {
+        serviceAsked = false
+        NotificationManagerCompat.from(context).cancel(DOWNLOAD_ID)
+    }
+
+    private fun canPost(): Boolean {
         if (!AppNotifications.allowed(context) || !ReminderNotifications.hasPermission(context)) return false
-        val notifications = NotificationManagerCompat.from(context)
-        if (!notifications.areNotificationsEnabled()) return false
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return false
         createChannel(context)
         val channel = context.getSystemService(NotificationManager::class.java)?.getNotificationChannel(CHANNEL_ID)
-        if (channel?.importance == NotificationManager.IMPORTANCE_NONE) return false
-        val open = PendingIntent.getActivity(
-            context,
-            id,
-            Intent(context, MainActivity::class.java)
-                .setData(Uri.parse("normpix://updates/$id"))
-                .putExtra(EXTRA_OPEN_UPDATE, openUpdate)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
+        return channel?.importance != NotificationManager.IMPORTANCE_NONE
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun post(
+        id: Int,
+        title: String,
+        text: String,
+        openUpdate: Boolean = true,
+        action: NotificationCompat.Action? = null,
+    ): Boolean {
+        if (!canPost()) return false
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_update)
             .setContentTitle(title)
@@ -159,17 +192,21 @@ class SystemUpdateNotifier(private val context: Context) : UpdateNotifier {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOnlyAlertOnce(true)
             .setAutoCancel(true)
-            .setContentIntent(open)
+            .setContentIntent(openIntent(context, id, install = false, openUpdate = openUpdate))
+            .apply { if (action != null) addAction(action) }
             .build()
-        notifications.notify(TAG, id, notification)
+        NotificationManagerCompat.from(context).notify(TAG, id, notification)
         return true
     }
 
     companion object {
         const val CHANNEL_ID = "normpix_updates"
 
-        /** A tap on an update notification asks the app to show the update sheet. */
+        /** A tap on an update notification asks the app to show the update page. */
         const val EXTRA_OPEN_UPDATE = "open_update"
+
+        /** Install on the ready notification: the update page opens and installs it (Android then asks the user). */
+        const val EXTRA_INSTALL_UPDATE = "install_update"
 
         /** Tagged, so their ids can't meet a reminder's. */
         private const val TAG = "normpix-update"
@@ -178,11 +215,80 @@ class SystemUpdateNotifier(private val context: Context) : UpdateNotifier {
         private const val WAITING = 1
         private const val INSTALLED = 2
 
+        /**
+         * The download's progress: untagged, as a foreground service's notification has to be, and below zero, where no
+         * reminder's (untagged, by its id) can be.
+         */
+        const val DOWNLOAD_ID = -7_601
+
+        // What each tap or button opens; distinct, so one PendingIntent never stands in for another.
+        private const val OPEN_REQUEST = 3
+        private const val INSTALL_REQUEST = 4
+        private const val DOWNLOAD_REQUEST = 5
+        private const val CANCEL_REQUEST = 6
+
         fun createChannel(context: Context) {
             val channel = NotificationChannel(CHANNEL_ID, "App updates", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "A new version of NormPix is out, downloaded, or installed"
+                description = "A new version of NormPix is out, downloading, downloaded, or installed"
             }
             context.getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
         }
+
+        /** How far the download of [release] is ([done] of [total] bytes); [release] null while it is still being found. */
+        fun progress(context: Context, release: UpdateRelease?, done: Long, total: Long): Notification {
+            createChannel(context)
+            val percent = if (total > 0) (done * 100 / total).toInt().coerceIn(0, 100) else 0
+            val known = release != null && total > 0
+            return NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_stat_update)
+                .setContentTitle(release?.let { "Downloading NormPix ${it.versionName}" } ?: "Getting the update")
+                .setContentText(
+                    if (known) {
+                        "${Formatter.formatShortFileSize(context, done)} of ${Formatter.formatShortFileSize(context, total)} · $percent%"
+                    } else {
+                        "Starting…"
+                    },
+                )
+                .setProgress(100, percent, !known)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setSilent(true)
+                .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+                .setContentIntent(openIntent(context, OPEN_REQUEST, install = false))
+                .addAction(0, "Cancel", cancelIntent(context))
+                .build()
+        }
+
+        /** Opens NormPix at the update page ([openUpdate] false: just opens it), and with [install] installs what's ready. */
+        private fun openIntent(context: Context, request: Int, install: Boolean, openUpdate: Boolean = true): PendingIntent =
+            PendingIntent.getActivity(
+                context,
+                request,
+                Intent(context, MainActivity::class.java)
+                    .setData(Uri.parse("normpix://updates/$request"))
+                    .putExtra(EXTRA_OPEN_UPDATE, openUpdate)
+                    .putExtra(EXTRA_INSTALL_UPDATE, install)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+
+        /** Downloads the update without opening NormPix: Android lets a notification's button start the foreground service. */
+        private fun downloadIntent(context: Context): PendingIntent =
+            PendingIntent.getForegroundService(
+                context,
+                DOWNLOAD_REQUEST,
+                Intent(context, UpdateDownloadService::class.java).setAction(UpdateDownloadService.ACTION_DOWNLOAD),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+
+        private fun cancelIntent(context: Context): PendingIntent =
+            PendingIntent.getBroadcast(
+                context,
+                CANCEL_REQUEST,
+                Intent(context, UpdateActionReceiver::class.java).setAction(UpdateActionReceiver.ACTION_CANCEL),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
     }
 }

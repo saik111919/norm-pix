@@ -535,7 +535,7 @@ internal fun TabHost(visible: Boolean, enterOffset: Dp = 0.dp, animateArrival: B
                 when {
                     visible -> Modifier.graphicsLayer {
                         val t = arrival.value
-                        val p = AppMotion.enter.transform(t)
+                        val p = TabMotion.ease(animation, t)
                         alpha = TabMotion.arrivalAlpha(animation, t)
                         val scale = TabMotion.scale(animation, p)
                         scaleX = scale
@@ -546,7 +546,7 @@ internal fun TabHost(visible: Boolean, enterOffset: Dp = 0.dp, animateArrival: B
                     departing -> Modifier
                         .graphicsLayer {
                             val t = departure.value
-                            val q = AppMotion.enter.transform(t)
+                            val q = TabMotion.ease(animation, t)
                             alpha = TabMotion.departureAlpha(animation, t)
                             val scale = TabMotion.departureScale(animation, q)
                             scaleX = scale

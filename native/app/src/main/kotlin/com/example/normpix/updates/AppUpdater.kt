@@ -100,6 +100,15 @@ interface UpdateNotifier {
     /** Takes down the notification about an update waiting: it was installed, put off, or is being installed. */
     fun withdraw()
 
+    /**
+     * [release] is downloading, [done] of [total] bytes: called as it starts, then about once a percent, from any thread.
+     * [background] when the daily check started it rather than the user. Shows nothing by default.
+     */
+    fun downloading(release: UpdateRelease, done: Long, total: Long, background: Boolean) = Unit
+
+    /** The download under way has stopped - finished, failed, or cancelled - so its progress is no longer shown. */
+    fun downloadStopped() = Unit
+
     /** Posts nothing (tests, and builds that don't update). */
     object None : UpdateNotifier {
         override fun available(release: UpdateRelease) = false
@@ -280,19 +289,25 @@ class AppUpdater(
     }
 
     /**
-     * Downloads [release] (or joins the download under way). One the user started says it is ready, so the update sheet can
-     * come back for it; one the [background] started leaves that to its notification, and if it is stopped (the network
-     * went, or Android's time for it ran out) the update simply waits to be downloaded again.
+     * Downloads [release] (or joins the download under way), its progress shown in a notification all the while - so it can
+     * be followed, and stopped, with NormPix closed. One the user started says it is ready, so the update sheet can come back
+     * for it, and - NormPix being off screen by then - a notification says so too; one the [background] started leaves that to
+     * its notification, and if it is stopped (the network went, or Android's time for it ran out) the update simply waits to
+     * be downloaded again.
      */
     private fun startDownload(release: UpdateRelease, thenInstall: Boolean, background: Boolean): Job {
         downloading?.takeIf { it.isActive }?.let { running ->
-            // The user asking for a download the background started makes it theirs.
-            if (!background) backgroundDownload = false
+            // The user asking for a download the background started makes it theirs - kept going with NormPix closed, too.
+            if (!background && backgroundDownload) {
+                backgroundDownload = false
+                (_state.value as? UpdateState.Downloading)?.let { notifier.downloading(release, it.done, it.total, background = false) }
+            }
             return running
         }
         backgroundDownload = background
         return scope.launch {
             _state.value = UpdateState.Downloading(release, 0, release.size)
+            notifier.downloading(release, 0, release.size, background)
             val apk = try {
                 withContext(io) {
                     var shown = -1L
@@ -302,6 +317,7 @@ class AppUpdater(
                         if (percent != shown) {
                             shown = percent
                             _state.value = UpdateState.Downloading(release, done, total)
+                            notifier.downloading(release, done, total, backgroundDownload)
                         }
                     }
                     apkProblem(inspector.inspect(apk), release, installed, inspector.installedSigners())?.let { problem ->
@@ -316,13 +332,43 @@ class AppUpdater(
             } catch (e: CancellationException) {
                 _state.value = if (backgroundDownload) UpdateState.Available(release) else UpdateState.Cancelled(release, null)
                 throw e
+            } finally {
+                notifier.downloadStopped()
             }
             _state.value = UpdateState.Ready(release, apk)
             when {
                 thenInstall -> install()
-                !backgroundDownload -> _downloaded.trySend(release)
+                !backgroundDownload -> {
+                    _downloaded.trySend(release)
+                    // Left (or closed) while it downloaded: the notification says it's ready, and its Install opens it.
+                    if (!inForeground) announceReady(release)
+                }
             }
         }.also { downloading = it }
+    }
+
+    /**
+     * Download on an update's notification: the release is downloaded as if the user had tapped Update now, with NormPix
+     * open or not. A process started just for this knows no release yet, so GitHub is asked first. Returns once the download
+     * has ended (or there was nothing to download: the update is already downloaded, under way, or there is none).
+     */
+    suspend fun downloadNow() {
+        if (!enabled) return
+        when (_state.value) {
+            is UpdateState.Downloading -> {
+                downloading?.join()
+                return
+            }
+            is UpdateState.Installing, is UpdateState.Ready, is UpdateState.NeedsPermission -> return
+            else -> Unit
+        }
+        if (_state.value.release == null || _state.value is UpdateState.Failed) check()
+        val current = _state.value
+        val release = current.release ?: return
+        val needed = current is UpdateState.Available ||
+            current is UpdateState.Cancelled && current.apk == null ||
+            current is UpdateState.Failed && current.apk == null && current.problem.canRetry
+        if (needed) startDownload(release, thenInstall = false, background = false).join()
     }
 
     fun cancelDownload() {

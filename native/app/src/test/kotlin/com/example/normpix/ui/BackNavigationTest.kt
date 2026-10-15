@@ -114,7 +114,7 @@ class BackNavigationTest {
     private fun start() {
         compose.setContent { NormPixRoot(container = container) }
         compose.waitForIdle()
-        navItem("Plans & Transactions").performClick()
+        navItem("Plans & Activity").performClick()
         compose.waitForIdle()
     }
 
@@ -132,10 +132,10 @@ class BackNavigationTest {
 
         // Budgets -> Transactions, the root of Plans & Transactions.
         systemBack()
-        tab("Transactions").assertIsSelected()
+        tab("Activity").assertIsSelected()
         // The history is showing (this wallet is empty, so it offers the first entry).
         compose.onNodeWithText("Add your first expense").assertIsDisplayed()
-        navItem("Plans & Transactions").assertIsSelected()
+        navItem("Plans & Activity").assertIsSelected()
 
         // Only now does back go to where you came from.
         systemBack()
@@ -152,13 +152,13 @@ class BackNavigationTest {
 
         tab("Plans").assertIsSelected()
         tab("Budgets").assertIsSelected()
-        navItem("Plans & Transactions").assertIsSelected()
+        navItem("Plans & Activity").assertIsSelected()
     }
 
     @Test
     fun tabs_exposeTheirSelection_toAccessibility() {
         start()
-        tab("Transactions").assertIsSelected()
+        tab("Activity").assertIsSelected()
         click("Plans")
         tab("Plans").assertIsSelected()
         tab("Budgets").assertIsSelected()

@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.normpix.BuildConfig
 import com.example.normpix.navigation.LocalAppPreferences
+import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.ui.components.AppLinearProgress
 import com.example.normpix.ui.components.AppLoadingIndicator
 import com.example.normpix.ui.components.AppOverlays
@@ -68,41 +69,53 @@ import java.util.WeakHashMap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 
-/** How many update sheets are on screen, for each updater (only ever touched on the main thread). */
-private val openSheets = WeakHashMap<AppUpdater, Int>()
+/** How many update sheets and pages are on screen, for each updater (only ever touched on the main thread). */
+private val showing = WeakHashMap<AppUpdater, Int>()
 
-/** True while an update sheet for [updater] is on screen. */
-fun isUpdateSheetOpen(updater: AppUpdater): Boolean = (openSheets[updater] ?: 0) > 0
+/** True while an update sheet or the update page for [updater] is on screen: no other comes up over it. */
+fun isUpdateShowing(updater: AppUpdater): Boolean = (showing[updater] ?: 0) > 0
+
+/** Counts [updater]'s update shown ([shown] true) or gone again. */
+internal fun markUpdateShowing(updater: AppUpdater, shown: Boolean) {
+    val count = (showing[updater] ?: 0) + if (shown) 1 else -1
+    if (count > 0) showing[updater] = count else showing.remove(updater)
+}
 
 /** Opens the update sheet over whatever is on screen; it follows [updater] until the user closes it. */
 suspend fun showUpdateSheet(overlays: AppOverlays, updater: AppUpdater) {
-    openSheets[updater] = (openSheets[updater] ?: 0) + 1
+    markUpdateShowing(updater, true)
     try {
         overlays.sheet<Unit>(expandable = true) { dismiss -> UpdateSheet(updater, onClose = { dismiss(null) }) }
     } finally {
-        val left = (openSheets[updater] ?: 1) - 1
-        if (left > 0) openSheets[updater] = left else openSheets.remove(updater)
+        markUpdateShowing(updater, false)
     }
 }
 
 /**
  * At launch, once the app is unlocked: a newer release found by the daily check is offered in the update sheet (see
  * [AppUpdater.launchOffer]); nothing is asked while the user has automatic checks off. Whenever a download the user
- * started finishes with no update sheet on screen (it was closed to let the download carry on), the sheet comes back,
- * once the app is unlocked, ready to install: nothing is installed until the user taps Install. And a tapped update
- * notification ([requests]) brings the sheet up, once unlocked.
+ * started finishes with no update sheet or page on screen (it was left to carry on), the sheet comes back, once the app is
+ * unlocked, ready to install: nothing is installed until the user taps Install. And a tapped update notification
+ * ([requests]) opens the update page, once unlocked - installing what is ready when it was the notification's Install
+ * ([installRequests]), which Android then asks the user to confirm as always.
  */
 @Composable
-fun OfferAppUpdates(updater: AppUpdater?, appLocked: Boolean, requests: MutableStateFlow<Boolean>? = null) {
+fun OfferAppUpdates(
+    updater: AppUpdater?,
+    appLocked: Boolean,
+    requests: MutableStateFlow<Boolean>? = null,
+    installRequests: MutableStateFlow<Boolean>? = null,
+) {
     if (updater == null) return
     val overlays = LocalOverlays.current
+    val navigator = LocalNavigator.current
     val preferences = LocalAppPreferences.current
     val locked by rememberUpdatedState(appLocked)
     LaunchedEffect(updater, appLocked) {
         if (appLocked) return@LaunchedEffect
         val allowed = preferences?.state?.value?.updateChecksEnabled ?: false
         updater.launchOffer(allowed) ?: return@LaunchedEffect
-        if (!isUpdateSheetOpen(updater)) showUpdateSheet(overlays, updater)
+        if (!isUpdateShowing(updater)) showUpdateSheet(overlays, updater)
     }
     if (requests != null) {
         LaunchedEffect(updater, requests) {
@@ -110,16 +123,21 @@ fun OfferAppUpdates(updater: AppUpdater?, appLocked: Boolean, requests: MutableS
                 if (!asked) return@collect
                 snapshotFlow { locked }.first { !it }
                 requests.value = false
-                // A fresh start after the notification: GitHub is asked again (an update downloaded is found ready).
-                if (updater.state.value.release == null) updater.check()
-                if (updater.state.value !is UpdateState.UpToDate && !isUpdateSheetOpen(updater)) showUpdateSheet(overlays, updater)
+                val install = installRequests?.value == true
+                installRequests?.value = false
+                navigator.openUpdates()
+                if (install) {
+                    // A fresh start after the notification: GitHub is asked again, and the download is found ready.
+                    if (updater.state.value.release == null) updater.check()
+                    updater.install()
+                }
             }
         }
     }
     LaunchedEffect(updater) {
         updater.downloaded.collect {
             snapshotFlow { locked }.first { !it }
-            if (updater.state.value is UpdateState.Ready && !isUpdateSheetOpen(updater)) showUpdateSheet(overlays, updater)
+            if (updater.state.value is UpdateState.Ready && !isUpdateShowing(updater)) showUpdateSheet(overlays, updater)
         }
     }
 }
@@ -312,7 +330,8 @@ private fun sheetView(state: UpdateState, installed: InstalledApp, actions: Upda
         is UpdateState.Downloading -> SheetView(
             Icons.Outlined.Download,
             "Downloading update",
-            "You can close this: the download carries on, and NormPix shows it again here when it's ready to install.",
+            "You can leave this, or close NormPix: the download carries on, its notification shows how far it is, and " +
+                "says when it's ready to install.",
             null,
             "Cancel download" to actions.cancelDownload,
         )

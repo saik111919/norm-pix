@@ -100,8 +100,11 @@ class AppContainer(
     /** Set when a card-expiry notification was tapped: the UI opens Wallet, then clears it. */
     val walletRequests = MutableStateFlow(false)
 
-    /** Set when an update notification was tapped: the UI shows the update sheet (once unlocked), then clears it. */
+    /** Set when an update notification was tapped: the UI opens the update page (once unlocked), then clears it. */
     val updateRequests = MutableStateFlow(false)
+
+    /** Set with [updateRequests] by Install on the "ready to install" notification: the update page installs it, too. */
+    val updateInstallRequests = MutableStateFlow(false)
 }
 
 class NormPixApplication : Application() {

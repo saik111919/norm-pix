@@ -77,6 +77,12 @@ class RecordingNavigator : AppNavigator {
     }
     override fun openSearch() {}
     override fun openReminderAlert(reminderId: Long) {}
+
+    var updatesOpened = 0
+
+    override fun openUpdates() {
+        updatesOpened++
+    }
     override fun go(destination: AppDestination) {}
     override fun openTransactions() {}
     override fun openPlans(section: PlanSection?) {

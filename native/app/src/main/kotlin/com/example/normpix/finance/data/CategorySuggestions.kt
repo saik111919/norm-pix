@@ -9,6 +9,19 @@ data class SuggestedSubCategory(val name: String, val icon: String)
  * Names are unique across the whole map and never repeat a top-level name, so adding them can't double anything up.
  */
 object CategorySuggestions {
+    /**
+     * The top-level categories added to `defaultCategories` after the first release: a database filled before them is
+     * given them once, with their sub-categories here (FinanceDatabase version 11). A family added later goes here too, with
+     * a database version that gives it to the phones that already have NormPix - seeding alone only reaches new installs.
+     */
+    val addedLater: Set<String> = setOf(
+        "Personal care", "Fitness", "Events", "Kids", "Pets", "Insurance", "Loans & EMI", "Taxes", "Investments",
+        "Family support", "Donations",
+    )
+
+    /** Of [addedLater], the names the first release seeded as sub-categories (under Groceries and Other). */
+    val formerSubCategories: Set<String> = setOf("Personal care", "Donations")
+
     val byParent: Map<String, List<SuggestedSubCategory>> = linkedMapOf(
         "Food & dining" to listOf(
             SuggestedSubCategory("Restaurants", "restaurant"),

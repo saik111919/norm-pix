@@ -101,7 +101,7 @@ class RecurringEditorTest {
         compose.setContent { NormPixRoot(container = container) }
         compose.waitForIdle()
         compose.onNode(
-            hasContentDescription("Plans & Transactions") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab),
+            hasContentDescription("Plans & Activity") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab),
         ).performClick()
         compose.waitForIdle()
         tab("Plans").performClick()

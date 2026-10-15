@@ -254,8 +254,9 @@ fun PeoplePage() {
     }
 
     if (picking) {
-        DateRangePickerDialogFor(
+        DateRangePickerFor(
             initial = custom,
+            latest = now.toLocalDate(),
             onPicked = {
                 customStart = it.start.toUtcMillis()
                 customEnd = it.end.toUtcMillis()

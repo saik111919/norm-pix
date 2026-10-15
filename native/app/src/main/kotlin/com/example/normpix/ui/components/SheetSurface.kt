@@ -174,6 +174,16 @@ private fun sheetShareOnScreen(content: LayoutCoordinates): Float {
 }
 
 /**
+ * How far a sheet has risen in the window style, 0..1: 0 while its top ([top]) is at or below the bottom of a window
+ * [windowHeight] tall, 1 once all [height] of it is up - or half the window, where a tall sheet stops half way. Spread over
+ * the whole rise (unlike the blur's share, which is full well before), so the window is seen growing all the way up.
+ */
+internal fun windowRiseShare(windowHeight: Float, top: Float, height: Float): Float {
+    val full = minOf(height, windowHeight * 0.5f)
+    return if (full <= 0f) 0f else ((windowHeight - top) / full).coerceIn(0f, 1f)
+}
+
+/**
  * How far up a sheet's content is in a window [windowHeight] tall, 0..1: 0 while its top ([top]) is at or below the
  * bottom edge, 1 once all [height] of it is up - or, for a tall sheet, once it covers [FULL_BLUR_AT] of the window, so
  * one resting half-open (an expandable sheet) has the page fully blurred too.
@@ -281,7 +291,7 @@ private fun rememberCrossWindowBlur(): Boolean {
 }
 
 /** How small a sheet or decision is as it starts to rise in the window style: it grows to full size as it comes up. */
-private const val SHEET_WINDOW_SCALE = 0.9f
+private const val SHEET_WINDOW_SCALE = 0.85f
 
 /**
  * A sheet that opens and closes like a window, for the Linux window page style: it grows out of the bottom edge as it
@@ -306,11 +316,11 @@ fun Modifier.windowRise(state: SheetState, enabled: Boolean): Modifier {
         val height = sizes[1]
         val offset = runCatching { state.requireOffset() }.getOrNull()
         if (offset == null || height <= 0f) return@graphicsLayer
-        val share = sheetShareOnScreen(sizes[0] - statusTop, offset, height)
+        val share = windowRiseShare(sizes[0] - statusTop, offset, height)
         val scale = SHEET_WINDOW_SCALE + (1f - SHEET_WINDOW_SCALE) * share
         scaleX = scale
         scaleY = scale
-        alpha = (share / 0.6f).coerceIn(0f, 1f)
+        alpha = (share / 0.5f).coerceIn(0f, 1f)
         // The bottom of the sheet as drawn: it grows out of, and shrinks back into, the bottom edge.
         transformOrigin = TransformOrigin(0.5f, (offset + height) / height)
     }

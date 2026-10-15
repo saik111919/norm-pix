@@ -199,8 +199,9 @@ class BankMigrationTest {
                 rows,
             )
             assertEquals(1L, db.count(FinanceDatabase.TRANSACTIONS), "nothing deleted")
-            assertEquals(1L, db.count(FinanceDatabase.CATEGORIES))
-            assertEquals(0L, db.count(FinanceDatabase.CATEGORIES, "parent_id IS NOT NULL"), "every category stays top-level")
+            // The user's own category is as it was (the ready-made families a later release added come alongside it).
+            assertEquals(1L, db.count(FinanceDatabase.CATEGORIES, "created_at = $at"))
+            assertEquals(1L, db.count(FinanceDatabase.CATEGORIES, "id = 1 AND name = 'Food' AND parent_id IS NULL"), "it stays top-level")
             assertEquals(0L, db.count(FinanceDatabase.BANKS), "no bank is invented")
             assertEquals(0L, db.count(FinanceDatabase.ACCOUNTS, "credit_limit IS NOT NULL"), "no limit is invented")
         } finally {

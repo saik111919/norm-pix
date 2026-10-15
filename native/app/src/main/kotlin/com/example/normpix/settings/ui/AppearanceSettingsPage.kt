@@ -287,7 +287,7 @@ fun AppearanceSettingsPage() {
                 }
                 ListSection(
                     title = "Back button style",
-                    footer = "Choose how pages present their back navigation. Top floating circle also floats the header of Home, Plans & Transactions, Insights, Wallet and search over their content.",
+                    footer = "Choose how pages present their back navigation. Top floating circle also floats the header of Home, Plans & Activity, Insights, Wallet and search over their content.",
                     modifier = Modifier.selectableGroup(),
                 ) {
                     for (style in BackButtonStyle.entries) {
