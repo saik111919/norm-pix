@@ -107,7 +107,7 @@ internal class CardsTransferFlows(
                 .onUnmappableCharacter(CodingErrorAction.REPORT)
                 .decode(ByteBuffer.wrap(bytes))
                 .toString()
-                .removePrefix("﻿")
+                .removePrefix("\uFEFF")
         } catch (_: CharacterCodingException) {
             problem(NOT_A_CARDS_FILE)
             return
