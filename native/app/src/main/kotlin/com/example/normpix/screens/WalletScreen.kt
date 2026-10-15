@@ -85,6 +85,7 @@ import com.example.normpix.ui.components.AppPage
 import com.example.normpix.banks.Bank
 import com.example.normpix.banks.ui.BankBadge
 import com.example.normpix.ui.components.BankGlyph
+import com.example.normpix.ui.components.DeckStackState
 import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
@@ -98,7 +99,9 @@ import com.example.normpix.ui.components.SectionSubheader
 import com.example.normpix.ui.components.RevealVisibility
 import com.example.normpix.ui.components.SheetHeader
 import com.example.normpix.ui.components.SnackbarKind
+import com.example.normpix.ui.components.StackButton
 import com.example.normpix.ui.components.rememberAppHaptics
+import com.example.normpix.ui.components.rememberDeckStackState
 import com.example.normpix.ui.theme.AppIconSizes
 import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppSpacing
@@ -168,6 +171,8 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
 
     // Cards lean with the phone only while they can be seen: this tab in front, unlocked, and the setting on.
     val tilt = rememberCardTilt(enabled = prefs.cardTiltEnabled && LocalTabVisible.current && !locked)
+    // Whether the cards are spread out of their stack; the layout selector's "Stack" segment gathers them again.
+    val cardsDeck = rememberDeckStackState()
 
     fun attemptUnlock() {
         scope.launch {
@@ -290,10 +295,11 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                         Box(Modifier.padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.md)) {
                             ConnectedChoiceRow(
                                 options = cardsLayoutOptions,
-                                selected = prefs.cardsLayout,
+                                // Spread out, the cards are no longer the stack: none is chosen, and "Stack" puts them back.
+                                selected = if (cardsDeck.unfolded) null else prefs.cardsLayout,
                                 onSelect = {
                                     haptics.selection()
-                                    container.preferences.setCardsLayout(it)
+                                    if (it == CardsLayout.Stack && cardsDeck.unfolded) cardsDeck.fold() else container.preferences.setCardsLayout(it)
                                 },
                             )
                         }
@@ -335,7 +341,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                         if (prefs.cardsLayout == CardsLayout.Stack) {
                             item(key = "cards-stack") {
                                 Column(Modifier.padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg)) {
-                                    CardStack(cards = visible, onOpen = flows::showCard, bankIconStyle = prefs.bankIconStyle)
+                                    CardStack(cards = visible, onOpen = flows::showCard, state = cardsDeck, bankIconStyle = prefs.bankIconStyle)
                                     // The next card goes where this stack ends: a slim tile, as the cards behind the front one are slim.
                                     Spacer(Modifier.height(AppSpacing.lg))
                                     AddTile(title = "Add card", supporting = "Encrypted, and kept on this device", onClick = flows::addCard, compact = true)
@@ -457,6 +463,10 @@ private fun AccountsSection(
     val actions = rememberFinanceActions()
     val scope = rememberCoroutineScope()
     val haptics = rememberAppHaptics()
+    // Whether the accounts (and the archived ones) are spread out of their stack; the selector's "Stack" segment gathers the
+    // first again, and the archived ones, which have no selector, a button beside "Hide archived accounts".
+    val accountsDeck = rememberDeckStackState()
+    val archivedDeck = rememberDeckStackState()
     when (finance.status) {
         FinanceStatus.Loading -> {
             AppLoadingState(label = "Loading accounts")
@@ -495,10 +505,11 @@ private fun AccountsSection(
         SectionSubheader("Accounts")
         ConnectedChoiceRow(
             options = accountsLayoutOptions,
-            selected = layout,
+            // Spread out, the accounts are no longer the stack: none is chosen, and "Stack" puts them back.
+            selected = if (accountsDeck.unfolded) null else layout,
             onSelect = {
                 haptics.selection()
-                onLayout(it)
+                if (it == AccountsLayout.Stack && accountsDeck.unfolded) accountsDeck.fold() else onLayout(it)
             },
         )
         Spacer(Modifier.height(AppSpacing.md))
@@ -511,7 +522,7 @@ private fun AccountsSection(
         } else {
             // The place for the next account is a card-shaped tile at the end of them, not a row under them.
             if (active.isNotEmpty()) {
-                AccountCards(active, layout, cardsPerBank, bankIconStyle, onAdd = actions::addAccount)
+                AccountCards(active, layout, cardsPerBank, bankIconStyle, accountsDeck, onAdd = actions::addAccount)
             } else {
                 AddTile(
                     title = "Add your first account",
@@ -529,22 +540,26 @@ private fun AccountsSection(
             }
         }
         if (archived.isNotEmpty()) {
-            TextButton(onClick = onToggleArchived) {
-                Icon(if (showArchived) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, contentDescription = null)
-                Spacer(Modifier.width(AppSpacing.sm))
-                Text(
-                    if (showArchived) {
-                        "Hide archived accounts"
-                    } else {
-                        "Show ${archived.size} archived ${if (archived.size == 1) "account" else "accounts"}"
-                    },
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onToggleArchived) {
+                    Icon(if (showArchived) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, contentDescription = null)
+                    Spacer(Modifier.width(AppSpacing.sm))
+                    Text(
+                        if (showArchived) {
+                            "Hide archived accounts"
+                        } else {
+                            "Show ${archived.size} archived ${if (archived.size == 1) "account" else "accounts"}"
+                        },
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                StackButton(archivedDeck)
             }
             if (showArchived) {
                 if (layout == AccountsLayout.Rows) {
                     ListSection { for (a in archived) item { AccountTile(a, cardsPerBank) } }
                 } else {
-                    AccountCards(archived, layout, cardsPerBank, bankIconStyle)
+                    AccountCards(archived, layout, cardsPerBank, bankIconStyle, archivedDeck)
                 }
             }
         }
@@ -579,6 +594,8 @@ private fun AccountCards(
     layout: AccountsLayout,
     cardsPerBank: Map<String, Int>,
     bankIconStyle: BankIconStyle,
+    /** Whether the stack is spread out; unused when the accounts are laid out as cards. */
+    deck: DeckStackState,
     /** When given, a tile to add one more ends the stack or the list. */
     onAdd: (() -> Unit)? = null,
 ) {
@@ -619,6 +636,7 @@ private fun AccountCards(
                 accounts = cards,
                 onOpen = { navigator.openAccountHistory(it.id) },
                 onManage = { actions.manageAccount(accountOf(it)) },
+                state = deck,
                 bankIconStyle = bankIconStyle,
             )
             // The stack's cards are a hair of colour behind the front one: the add tile under it is a slim one.

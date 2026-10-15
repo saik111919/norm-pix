@@ -66,13 +66,14 @@ private val ActionRowHeight = 48.dp
  * others a hair of colour behind it. Pressing and holding the front one lays them all out, each with its own buttons.
  */
 @Composable
-fun BannerStack(banners: List<Banner>, modifier: Modifier = Modifier) {
+fun BannerStack(banners: List<Banner>, state: DeckStackState, modifier: Modifier = Modifier) {
     DeckStack(
         items = banners,
         itemKey = { it.key },
         shape = AppRadius.rXl,
         description = { banner, index, count -> banner.spoken(index, count) },
         onOpen = { it.onOpen() },
+        state = state,
         modifier = modifier,
         // The item is one thing to a screen reader, so its buttons are offered as actions on it.
         extraActions = { banner ->

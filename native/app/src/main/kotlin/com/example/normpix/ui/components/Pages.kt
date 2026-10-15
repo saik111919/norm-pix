@@ -1,6 +1,13 @@
 package com.example.normpix.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -121,6 +128,7 @@ fun AppPage(
     imeAware: Boolean = false,
     floatingTopBar: Boolean = false,
     onBack: (() -> Unit)? = null,
+    displayTitle: Boolean = false,
     content: LazyListScope.() -> Unit,
 ) {
     val floatsItself = !floatingTopBar && rememberBackButtonStyle() == BackButtonStyle.TopFloatingCircle
@@ -137,6 +145,7 @@ fun AppPage(
             insetBottom = insetBottom,
             imeAware = imeAware,
             floatingTopBar = floatingTopBar,
+            displayTitle = displayTitle,
             content = content,
         )
         return
@@ -158,6 +167,7 @@ fun AppPage(
             imeAware = imeAware,
             floatingTopBar = true,
             largeTitle = pushed,
+            displayTitle = displayTitle,
             content = content,
         )
         FloatingTopHeader(
@@ -199,6 +209,8 @@ private fun PageFrame(
     content: LazyListScope.() -> Unit,
     /** With floating controls: the page opens with its large title, which scrolls up into them (a pushed page), or has none. */
     largeTitle: Boolean = true,
+    /** The title in the display size, as a screen that opens with one (Settings) has it, not the headline size of other pages. */
+    displayTitle: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
     val density = LocalDensity.current
@@ -271,7 +283,7 @@ private fun PageFrame(
                         {
                             item(key = PAGE_TITLE_KEY) {
                                 val gone by remember(collapse) { derivedStateOf { collapse.value >= 1f } }
-                                PageTitle(title, gone) { collapse.value }
+                                PageTitle(title, gone, displayTitle) { collapse.value }
                             }
                             content()
                         }
@@ -361,10 +373,10 @@ private const val TITLE_HOLD = 0.35f
  * fades out - over the first part of [collapse] - and the same title fades in in their row, so the two never show at once.
  */
 @Composable
-private fun PageTitle(title: String, gone: Boolean, collapse: () -> Float) {
+private fun PageTitle(title: String, gone: Boolean, display: Boolean, collapse: () -> Float) {
     Text(
         title,
-        style = MaterialTheme.typography.headlineMedium,
+        style = if (display) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium,
         fontWeight = FontWeight.SemiBold,
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
@@ -401,6 +413,10 @@ private object FloatingTopControls {
  *
  * In the top floating circle style the back circle and the [actions] pill float over the page as glass, the page
  * scrolling on under them, and the title opens the page instead of sitting in a bar.
+ *
+ * [actionsVisible] says whether the [actions] are there at the moment: a page whose action only makes sense part of the time
+ * (Settings' search icon, once the search field has scrolled away) turns it on and off, and the pill grows and shrinks around
+ * it - rather than staying on as an empty capsule while there is nothing in it.
  */
 @Composable
 fun AppSubPage(
@@ -408,10 +424,12 @@ fun AppSubPage(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     actions: (@Composable RowScope.() -> Unit)? = null,
+    actionsVisible: Boolean = true,
     listState: LazyListState = rememberLazyListState(),
     imeAware: Boolean = false,
     showTopBack: Boolean = false,
     showFloatingBack: Boolean = true,
+    displayTitle: Boolean = false,
     content: LazyListScope.() -> Unit,
 ) {
     val navigator = LocalNavigator.current
@@ -450,11 +468,18 @@ fun AppSubPage(
             } else {
                 {}
             },
-            actions = { if (!isTopFloatingCircle) actions?.invoke(this) },
+            actions = {
+                if (!isTopFloatingCircle && actions != null) {
+                    AnimatedVisibility(visible = actionsVisible, enter = ActionsEnter, exit = ActionsExit) {
+                        Row(verticalAlignment = Alignment.CenterVertically, content = actions)
+                    }
+                }
+            },
             listState = listState,
             imeAware = imeAware,
             bottomPadding = if (showFloatingBackEffective) AppLayout.navClearance + 24.dp else AppLayout.navClearance,
             floatingTopBar = isTopFloatingCircle,
+            displayTitle = displayTitle,
             content = content,
         )
         if (isTopFloatingCircle) {
@@ -467,6 +492,7 @@ fun AppSubPage(
                 listUnderRow = true,
                 leading = { FloatingCircleBackButton(onBack = onBack) },
                 actions = actions,
+                actionsVisible = actionsVisible,
             )
         }
         if (showFloatingBackEffective) {
@@ -550,6 +576,7 @@ private fun BoxScope.FloatingTopHeader(
     listUnderRow: Boolean,
     leading: (@Composable () -> Unit)?,
     actions: (@Composable RowScope.() -> Unit)?,
+    actionsVisible: Boolean = true,
 ) {
     val scrolled = rememberTitleCollapse(listState)
     val always = remember { mutableFloatStateOf(1f) }
@@ -587,10 +614,18 @@ private fun BoxScope.FloatingTopHeader(
                     // Spoken once: by the page's own title while that is there, by this one once it is gone.
                     .then(if (collapsed) Modifier.semantics { heading() } else Modifier.clearAndSetSemantics {}),
             )
-            if (actions != null) FloatingHeaderActionsPill(content = actions)
+            if (actions != null) {
+                // The pill is there only while its actions are: it grows out of the end of the row and shrinks back into it.
+                AnimatedVisibility(visible = actionsVisible, enter = ActionsEnter, exit = ActionsExit) {
+                    FloatingHeaderActionsPill(content = actions)
+                }
+            }
         }
     }
 }
+
+private val ActionsEnter = fadeIn() + scaleIn(initialScale = 0.6f) + expandHorizontally(expandFrom = Alignment.End)
+private val ActionsExit = fadeOut() + scaleOut(targetScale = 0.6f) + shrinkHorizontally(shrinkTowards = Alignment.End)
 
 /**
  * What a floating top control is made of: glass where the floating bars are ([rememberFrostedChrome]) - the page it

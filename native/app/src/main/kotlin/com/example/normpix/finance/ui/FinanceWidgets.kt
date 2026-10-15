@@ -109,7 +109,7 @@ fun TransactionTile(
                 }
             },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        leadingContent = { if (isTransfer) TransferAvatar() else CategoryAvatar(category) },
+        leadingContent = { if (isTransfer) TransferAvatar() else CategoryAvatar(category, payee = t.payee) },
         headlineContent = { Text(title, maxLines = if (roomy) 2 else 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {

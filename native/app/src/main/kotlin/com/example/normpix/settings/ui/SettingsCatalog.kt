@@ -64,6 +64,7 @@ object SettingsCatalog {
         SettingsEntry("Progress indicators", SettingsPage.Appearance, listOf("progress", "loading", "wavy", "flat", "bar", "spinner", "loader", "indicator", "expressive")),
         SettingsEntry("Background blur", SettingsPage.Appearance, listOf("sheet", "dialog", "blur", "frosted", "glass", "background", "overlay", "dock", "footer")),
         SettingsEntry("Category icons", SettingsPage.Appearance, listOf("category", "icons", "emoji", "outline", "outlined", "glyph", "avatar", "style")),
+        SettingsEntry("Icon background", SettingsPage.Appearance, listOf("icon background", "shape", "radius", "circle", "rounded", "square", "avatar", "corners", "disc", "tile", "category", "logo", "round")),
         SettingsEntry("Interface font", SettingsPage.Appearance, listOf("font", "typeface", "text", "gs flex", "google sans", "weight", "width", "roundness", "zenith", "neo", "impact", "airy")),
         SettingsEntry("Back button style", SettingsPage.Appearance, listOf("back", "button", "floating", "circle", "header", "dock", "top bar")),
         SettingsEntry("Page transitions", SettingsPage.Appearance, listOf("animation", "motion", "shared axis", "slide", "fade")),

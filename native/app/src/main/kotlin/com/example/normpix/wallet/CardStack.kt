@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.example.normpix.settings.BankIconStyle
 import com.example.normpix.ui.components.DeckStack
+import com.example.normpix.ui.components.DeckStackState
 import com.example.normpix.ui.theme.AppRadius
 
 /**
@@ -18,6 +19,7 @@ import com.example.normpix.ui.theme.AppRadius
 fun CardStack(
     cards: List<StoredCard>,
     onOpen: (StoredCard) -> Unit,
+    state: DeckStackState,
     modifier: Modifier = Modifier,
     bankIconStyle: BankIconStyle = BankIconStyle.Full,
 ) {
@@ -31,6 +33,7 @@ fun CardStack(
             "${card.bankName} $kind card, ending in ${card.last4}, expires ${card.expiryMonth}/${card.expiryYear}, ${card.cardholderName}$place"
         },
         onOpen = onOpen,
+        state = state,
         modifier = modifier,
         plate = { WalletCardPlate(it) },
         face = { WalletCardFacePreview(it, revealed = false, bankIconStyle = bankIconStyle) },

@@ -5,7 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
@@ -16,7 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.ui.paletteColor
 import com.example.normpix.navigation.SettingsPage
+import com.example.normpix.ui.components.ListSectionStyle
 import com.example.normpix.ui.components.ProfileAvatar
 
 /**
@@ -42,18 +43,31 @@ val SettingsPage.hue: Int
         SettingsPage.Security -> 0
     }
 
-/** A settings icon in a solid disc of its group's colour (neutral when there is none), the glyph in whichever of light and dark reads on it. */
+/**
+ * How the groups of the main Settings screen are drawn: rounder ends (24dp), tighter seams between the rows (6dp corners 4dp
+ * apart) and a faint tone over the page rather than a solid one, so the page reads as a few soft cards.
+ */
+@Composable
+fun settingsGroupStyle(): ListSectionStyle {
+    val fill = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = GROUP_FILL_ALPHA)
+    return remember(fill) { ListSectionStyle(outer = 24.dp, inner = 6.dp, gap = 4.dp, container = fill) }
+}
+
+private const val GROUP_FILL_ALPHA = 0.3f
+
+/**
+ * A settings icon in a soft rounded tile of its group's colour (neutral when there is none), the glyph in that colour's deep
+ * tone - the tile is tinted, not filled, so a column of them stays quiet.
+ */
 @Composable
 fun SettingsGlyph(icon: ImageVector, hue: Int?, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
-    val tone = hue?.let { paletteColor(it).accent }
-    val ink = when {
-        tone == null -> scheme.onSurfaceVariant
-        tone.luminance() > 0.5f -> Color(0xFF1B1B1F)
-        else -> Color.White
-    }
-    Box(modifier.size(44.dp).background(tone ?: scheme.surfaceContainerHighest, CircleShape), contentAlignment = Alignment.Center) {
-        Icon(icon, contentDescription = null, tint = ink, modifier = Modifier.size(22.dp))
+    val tone = hue?.let { paletteColor(it) }
+    Box(
+        modifier.size(44.dp).background(tone?.container ?: scheme.surfaceContainerHighest, RoundedCornerShape(14.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = tone?.onContainer ?: scheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
     }
 }
 
@@ -68,6 +82,8 @@ fun SettingsRow(
     hue: Int?,
     modifier: Modifier = Modifier,
     supporting: String? = null,
+    /** Something needs doing here (an update is waiting): what it says under the name is in the error colour, to be seen from the list. */
+    alert: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
     ListItem(
@@ -80,7 +96,7 @@ fun SettingsRow(
                 Text(
                     it,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (alert) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )

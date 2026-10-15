@@ -62,6 +62,7 @@ import com.example.normpix.finance.ui.BudgetHistoryPage
 import com.example.normpix.finance.ui.CategoriesPage
 import com.example.normpix.finance.ui.CategoryHistoryPage
 import com.example.normpix.finance.ui.FinanceStatus
+import com.example.normpix.finance.ui.LocalCategoryIconShape
 import com.example.normpix.finance.ui.LocalCategoryIconStyle
 import com.example.normpix.finance.ui.LocalFinance
 import com.example.normpix.finance.ui.LocalReminderLauncher
@@ -284,6 +285,7 @@ fun ProvideAppEnvironment(container: AppContainer, content: @Composable () -> Un
         LocalSnackbars provides snackbars,
         LocalAppScope provides scope,
         LocalCategoryIconStyle provides prefs.categoryIconStyle,
+        LocalCategoryIconShape provides prefs.categoryIconShape,
     ) {
         Box(Modifier.fillMaxSize()) {
             Box(

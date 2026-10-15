@@ -103,6 +103,8 @@ import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.SectionHeader
 import com.example.normpix.ui.components.SnackbarKind
+import com.example.normpix.ui.components.StackButton
+import com.example.normpix.ui.components.rememberDeckStackState
 import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.wallet.CardStack
@@ -240,7 +242,9 @@ internal fun CardsOnHome() {
 
     @Suppress("UNUSED_EXPRESSION")
     lockVersion // re-evaluate the lock whenever it may have changed
-    SectionHeader(title = "Cards", padding = HomeSectionPadding)
+    val deck = rememberDeckStackState()
+    // The button that gathers the cards again sits in their header, at its end, while they are spread out.
+    SectionHeader(title = "Cards", padding = HomeSectionPadding, trailing = { StackButton(deck) })
     if (container.lock.isWalletLocked(prefs)) {
         ListSection {
             item {
@@ -258,7 +262,7 @@ internal fun CardsOnHome() {
         }
         return
     }
-    CardStack(cards = cards, onOpen = flows::showCard, bankIconStyle = prefs.bankIconStyle)
+    CardStack(cards = cards, onOpen = flows::showCard, state = deck, bankIconStyle = prefs.bankIconStyle)
 }
 
 /**
@@ -418,9 +422,17 @@ internal fun TopSpendingStack(spends: List<CategorySpend>, onSeeAll: () -> Unit)
     val overlays = LocalOverlays.current
     val navigator = LocalNavigator.current
     val scope = rememberCoroutineScope()
-    SectionHeader(title = "Top spending", actionLabel = "Insights", onAction = onSeeAll, padding = HomeSectionPadding)
+    val deck = rememberDeckStackState()
+    SectionHeader(
+        title = "Top spending",
+        actionLabel = "Insights",
+        onAction = onSeeAll,
+        padding = HomeSectionPadding,
+        trailing = { StackButton(deck) },
+    )
     CategoryStack(
         spends = spends,
+        state = deck,
         onOpen = { spend ->
             scope.launch {
                 // The sheet sits above the navigation graph: it closes, and this does the navigating.
@@ -452,7 +464,7 @@ private fun ComingUp(recurring: List<Pair<LocalDateTime, RecurringRule>>, onSeeA
                     ListRow(
                         headline = rule.payee ?: category?.name ?: rule.type.label,
                         supporting = "${dayHeading(date)} · Recurring",
-                        leading = { if (rule.type == TransactionType.Transfer) TransferAvatar() else CategoryAvatar(category) },
+                        leading = { if (rule.type == TransactionType.Transfer) TransferAvatar() else CategoryAvatar(category, payee = rule.payee) },
                         trailing = {
                             TransactionAmount(rule.type, rule.amount, finance.money, style = MaterialTheme.typography.titleSmall)
                         },

@@ -35,8 +35,10 @@ import com.example.normpix.ui.components.BannerStack
 import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.SectionHeader
 import com.example.normpix.ui.components.SnackbarKind
+import com.example.normpix.ui.components.StackButton
 import com.example.normpix.ui.components.StatusAction
 import com.example.normpix.ui.components.rememberAppHaptics
+import com.example.normpix.ui.components.rememberDeckStackState
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.StatusTone
 import com.example.normpix.wallet.CardsState
@@ -52,11 +54,15 @@ import kotlinx.coroutines.launch
  */
 @Composable
 internal fun NeedsAttention(budgets: BudgetOverview) {
-    val stacks = listOf(reminderBanners(), budgetBanners(budgets), cardExpiryBanners()).filter { it.isNotEmpty() }
-    if (stacks.isEmpty()) return
-    SectionHeader(title = "Needs attention", padding = HomeSectionPadding)
+    val stacks = listOf(reminderBanners(), budgetBanners(budgets), cardExpiryBanners())
+    // One for each kind of banner, since each is its own stack: the header's button gathers whichever are spread out.
+    val decks = List(stacks.size) { rememberDeckStackState() }
+    if (stacks.all { it.isEmpty() }) return
+    SectionHeader(title = "Needs attention", padding = HomeSectionPadding, trailing = { StackButton(*decks.toTypedArray()) })
     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.md)) {
-        for (banners in stacks) BannerStack(banners)
+        stacks.forEachIndexed { index, banners ->
+            if (banners.isNotEmpty()) BannerStack(banners, decks[index])
+        }
     }
 }
 

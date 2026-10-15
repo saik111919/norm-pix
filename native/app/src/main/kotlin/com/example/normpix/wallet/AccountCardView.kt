@@ -52,6 +52,7 @@ import com.example.normpix.finance.ui.icon
 import com.example.normpix.finance.ui.label
 import com.example.normpix.settings.BankIconStyle
 import com.example.normpix.ui.components.DeckStack
+import com.example.normpix.ui.components.DeckStackState
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppRadius
 
@@ -366,6 +367,7 @@ fun AccountStack(
     accounts: List<AccountCardData>,
     onOpen: (AccountCardData) -> Unit,
     onManage: (AccountCardData) -> Unit,
+    state: DeckStackState,
     modifier: Modifier = Modifier,
     bankIconStyle: BankIconStyle = BankIconStyle.Full,
 ) {
@@ -377,6 +379,7 @@ fun AccountStack(
             account.spoken + if (count > 1) ", account ${index + 1} of $count" else ""
         },
         onOpen = onOpen,
+        state = state,
         modifier = modifier,
         onItemLongPress = onManage,
         itemLongPressLabel = "Manage account",

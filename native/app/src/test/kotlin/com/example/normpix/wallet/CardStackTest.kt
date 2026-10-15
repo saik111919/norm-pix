@@ -1,7 +1,9 @@
 package com.example.normpix.wallet
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
@@ -75,7 +77,7 @@ class CardStackTest {
         val environment = TestEnvironment("card_stack_test", InMemoryVault(cards.toList()))
         env = environment
         configure(environment)
-        compose.setContent { environment.Content { CardsOnHome() } }
+        compose.setContent { environment.Content { Column { CardsOnHome() } } }
         compose.waitUntil(10_000) { environment.container.cards.state.value is CardsState.Ready }
         compose.waitForIdle()
         return environment
@@ -224,6 +226,24 @@ class CardStackTest {
         frontCard("HDFC Bank", "debit").assertIsDisplayed()
         compose.onAllNodesWithContentDescription("ICICI Bank", substring = true).assertCountEquals(0)
         compose.onAllNodesWithContentDescription("Stack them again").assertCountEquals(0)
+    }
+
+    @Test
+    fun theStackButtonSitsInTheCardsHeader_atItsEnd_andMovesNothing() {
+        showStack(HDFC, ICICI)
+        compose.onAllNodesWithContentDescription("Stack them again").assertCountEquals(0)
+        val before = compose.onNodeWithText("Cards").getUnclippedBoundsInRoot()
+
+        frontCard("HDFC Bank", "debit").performTouchInput { longClick() }
+        compose.waitForIdle()
+
+        val header = compose.onNodeWithText("Cards").getUnclippedBoundsInRoot()
+        val button = compose.onNodeWithContentDescription("Stack them again").getUnclippedBoundsInRoot()
+        val firstCard = frontCard("HDFC Bank", "debit").getUnclippedBoundsInRoot()
+        assertEquals(before.top to before.bottom, header.top to header.bottom, "the button comes in the room the header keeps: the title does not move down or up")
+        assertTrue(button.top < header.bottom && button.bottom > header.top, "on the header's row: $button, $header")
+        assertTrue(button.left >= header.right, "after the title, at the end of the row: $button, $header")
+        assertTrue(button.bottom <= firstCard.top, "above the cards, not between them: $button, $firstCard")
     }
 
     @Test

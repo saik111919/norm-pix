@@ -1,11 +1,14 @@
 package com.example.normpix.ui.components
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -21,6 +24,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,6 +37,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -86,6 +93,28 @@ private const val FLING_SPEED = 1500f
 private const val DRAG_LEAN = 8f
 
 /**
+ * Whether a [DeckStack] is laid out in a column rather than stacked. It lives with whoever places the deck, not in it, so the
+ * "Stack" button that gathers the deck again ([StackButton]) can sit wherever suits the page: in the section header the deck
+ * belongs to, or as a segment of its layout selector.
+ */
+@Stable
+class DeckStackState {
+    var unfolded by mutableStateOf(false)
+        private set
+
+    fun unfold() {
+        unfolded = true
+    }
+
+    fun fold() {
+        unfolded = false
+    }
+}
+
+@Composable
+fun rememberDeckStackState(): DeckStackState = remember { DeckStackState() }
+
+/**
  * A deck of same-sized items as a stack: the front one shown in full by [face], the others a hair of colour above it, each
  * a little smaller, drawn by [plate]. Tapping the front item calls [onOpen]; swiping it sends it to the back (or, the other
  * way, brings the last one forward), and tapping an item behind brings that one forward.
@@ -94,9 +123,10 @@ private const val DRAG_LEAN = 8f
  * Only the front item is something to read or press for a screen reader: it is spoken as [description] (item, its place in
  * [items], how many there are), with "show next" and "show previous" as actions.
  *
- * Pressing and holding the front item lays every item out in a column - each a full item, to read or open - with a "Stack"
- * button above them that gathers them into the stack again. A caller with a long press of its own ([onLongPress], called with the
- * front item and offered to a screen reader as [longPressLabel]) keeps it, and the stack does not unfold.
+ * Pressing and holding the front item lays every item out in a column - each a full item, to read or open ([state] says
+ * so) - and the page shows a [StackButton] that gathers them into the stack again. A caller with a long press of its own
+ * ([onLongPress], called with the front item and offered to a screen reader as [longPressLabel]) keeps it, and the stack does
+ * not unfold.
  *
  * [onItemLongPress] is a long press on one item that leaves the unfolding alone: it is what holding an item laid out in the
  * column does (and holding the only item, which has nothing to unfold), offered to a screen reader as [itemLongPressLabel] -
@@ -115,6 +145,7 @@ fun <T> DeckStack(
     shape: Shape,
     description: (item: T, index: Int, count: Int) -> String,
     onOpen: (T) -> Unit,
+    state: DeckStackState,
     modifier: Modifier = Modifier,
     maxWidth: Dp = 440.dp,
     onLongPress: ((T) -> Unit)? = null,
@@ -125,12 +156,14 @@ fun <T> DeckStack(
     plate: @Composable (T) -> Unit,
     face: @Composable (T) -> Unit,
 ) {
+    val count = items.size
+    val unfolds = onLongPress == null && count > 1
+    // A deck with nothing to unfold (its items went, or it leaves the screen) is not left unfolded: the page's button would stay.
+    LaunchedEffect(state, unfolds) { if (!unfolds) state.fold() }
+    DisposableEffect(state) { onDispose { state.fold() } }
     if (items.isEmpty()) return
     val haptics = rememberAppHaptics()
     var frontKey by remember { mutableStateOf<Any?>(null) }
-    var unfolded by remember { mutableStateOf(false) }
-    val count = items.size
-    val unfolds = onLongPress == null && count > 1
     val holdLabel = when {
         onLongPress != null -> longPressLabel
         unfolds -> "Shows all of them"
@@ -138,7 +171,7 @@ fun <T> DeckStack(
     }
     val hold: ((T) -> Unit)? = onLongPress ?: if (unfolds) ({ _: T ->
         haptics.strong()
-        unfolded = true
+        state.unfold()
     }) else onItemLongPress
     // Holding the front item unfolds the stack, so what holding one item does is offered to a screen reader as an action.
     fun stackedActions(item: T): List<CustomAccessibilityAction> {
@@ -160,7 +193,7 @@ fun <T> DeckStack(
     val leave = AppMotion.duration(AppMotion.SHORT_MS)
     Box(modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
         AnimatedContent(
-            targetState = unfolded && unfolds,
+            targetState = state.unfolded && unfolds,
             transitionSpec = {
                 (fadeIn(tween(arrive, easing = AppMotion.enter)) togetherWith
                     fadeOut(tween(leave, easing = AppMotion.exit))) using SizeTransform(clip = false)
@@ -169,13 +202,6 @@ fun <T> DeckStack(
         ) { open ->
             if (open) {
                 Column(Modifier.widthIn(max = maxWidth).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(AppSpacing.md)) {
-                    StackButton(
-                        onClick = {
-                            haptics.selection()
-                            unfolded = false
-                        },
-                        modifier = Modifier.align(Alignment.End),
-                    )
                     items.forEachIndexed { index, item ->
                         key(itemKey(item)) {
                             val spoken = description(item, index, count)
@@ -230,9 +256,38 @@ fun <T> DeckStack(
     }
 }
 
-/** "Stack": gathers an unfolded deck back into a stack. */
+/**
+ * "Stack": gathers unfolded [decks] back into stacks. It is there while any of them is unfolded and gone while none is, so it
+ * is safe to leave in a section header all the time ([SectionHeader] keeps [StackButtonHeight] of room for it).
+ */
 @Composable
-private fun StackButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun StackButton(vararg decks: DeckStackState, modifier: Modifier = Modifier) {
+    val haptics = rememberAppHaptics()
+    AnimatedVisibility(
+        visible = decks.any { it.unfolded },
+        modifier = modifier,
+        enter = fadeIn(tween(AppMotion.duration(AppMotion.MEDIUM_MS), easing = AppMotion.enter)) + scaleIn(initialScale = 0.8f),
+        exit = fadeOut(tween(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.exit)) + scaleOut(targetScale = 0.8f),
+    ) {
+        StackPill(
+            onClick = {
+                haptics.selection()
+                decks.forEach(DeckStackState::fold)
+            },
+        )
+    }
+}
+
+/**
+ * The room the "Stack" button takes in a row - its 48dp touch target, a little more than the pill drawn in it: a header that may
+ * show one keeps this much, so showing it moves nothing.
+ */
+val StackButtonHeight = 48.dp
+
+private val StackPillHeight = 36.dp
+
+@Composable
+private fun StackPill(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
     Surface(
         onClick = onClick,
@@ -242,7 +297,7 @@ private fun StackButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
         contentColor = scheme.onSecondaryContainer,
     ) {
         Row(
-            Modifier.padding(start = AppSpacing.md, end = AppSpacing.lg, top = AppSpacing.sm, bottom = AppSpacing.sm),
+            Modifier.heightIn(min = StackPillHeight).padding(start = AppSpacing.md, end = AppSpacing.lg),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(Icons.Outlined.Layers, contentDescription = null, modifier = Modifier.size(18.dp))
