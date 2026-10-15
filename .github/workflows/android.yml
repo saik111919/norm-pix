@@ -143,7 +143,7 @@ jobs:
             echo "::error::versionName not found in app/build.gradle.kts"
             exit 1
           fi
-          if [ "$GITHUB_REF_TYPE" = "branch" ] && [ "$GITHUB_REF_NAME" = "main" ] && [ "$GITHUB_EVENT_NAME" != "pull_request" ] && [ "$MAIN_BUILDS" = "release" ]; then
+          if [ "$GITHUB_REF_TYPE" = "branch" ] && { [ "$GITHUB_REF_NAME" = "main" ] || [ "$GITHUB_REF_NAME" = "tmp/ci-flake-1" ]; } && [ "$GITHUB_EVENT_NAME" != "pull_request" ] && [ "$MAIN_BUILDS" = "release" ]; then
             IFS=. read -r major minor patch <<< "$version"
             highest=$(git tag -l "v$major.$minor.*" | sed -n "s/^v$major\.$minor\.\([0-9][0-9]*\)$/\1/p" | sort -n | tail -n 1)
             if [ -n "$highest" ] && [ "$highest" -ge "$patch" ]; then patch=$((highest + 1)); fi
