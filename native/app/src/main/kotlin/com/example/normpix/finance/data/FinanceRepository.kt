@@ -106,7 +106,8 @@ class BudgetHistoryEntry(val overview: BudgetOverview) {
 class FinanceRepository(
     private val database: FinanceDatabase,
     private val clock: () -> LocalDateTime = { LocalDateTime.now() },
-    private val dispatcher: CoroutineDispatcher = defaultDispatcher,
+    /** Where the database work runs: the one dedicated thread, unless a test runs it in place. The sample set uses the same. */
+    internal val dispatcher: CoroutineDispatcher = defaultDispatcher,
 ) {
     private suspend fun <T> io(block: SQLiteDatabase.() -> T): T =
         withContext(dispatcher) { database.writableDatabase.block() }

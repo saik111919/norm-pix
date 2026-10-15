@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
@@ -20,11 +21,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -36,6 +39,9 @@ import com.example.normpix.ui.theme.AppSpacing
 /**
  * Heading for a block of content on a page, with an optional trailing action
  * ("View all"). Marked as a semantic heading for screen readers.
+ *
+ * A [trailing] control (a deck's "Stack" button, say) sits at the end of the row, before the action. It may come and go, so
+ * the row keeps [StackButtonHeight] of room whenever there is one: showing it moves nothing below.
  */
 @Composable
 fun SectionHeader(
@@ -50,9 +56,10 @@ fun SectionHeader(
             end = AppSpacing.sm,
             bottom = AppSpacing.sm,
         ),
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(
-        modifier.fillMaxWidth().padding(padding),
+        modifier.fillMaxWidth().padding(padding).then(if (trailing != null) Modifier.heightIn(min = StackButtonHeight) else Modifier),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -60,6 +67,7 @@ fun SectionHeader(
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.weight(1f).semantics { heading() },
         )
+        trailing?.invoke()
         if (actionLabel != null && onAction != null) {
             TextButton(onClick = onAction) { Text(actionLabel) }
         }
@@ -110,6 +118,7 @@ fun ListSection(
     title: String? = null,
     footer: String? = null,
     intro: String? = null,
+    style: ListSectionStyle = ListSectionStyle.Default,
     content: ListSectionScope.() -> Unit,
 ) {
     val rows = ListSectionScope().apply(content).rows
@@ -123,8 +132,8 @@ fun ListSection(
             )
         }
         rows.forEachIndexed { index, row ->
-            Box(Modifier.padding(top = if (index == 0) 0.dp else LIST_GAP)) {
-                ListSegment(isFirst = index == 0, isLast = index == rows.lastIndex) { row() }
+            Box(Modifier.padding(top = if (index == 0) 0.dp else style.gap)) {
+                ListSegment(isFirst = index == 0, isLast = index == rows.lastIndex, style = style) { row() }
             }
         }
         if (footer != null) {
@@ -138,13 +147,28 @@ fun ListSection(
     }
 }
 
-private val LIST_GAP = 2.dp
+/**
+ * How a [ListSection] is drawn: the radius of the corners at the ends of the group ([outer]) and between its rows ([inner]),
+ * the [gap] between rows and the [container] fill - the tonal surface when unspecified.
+ */
+@Immutable
+class ListSectionStyle(
+    val outer: Dp = AppRadius.xl,
+    val inner: Dp = AppRadius.xs,
+    val gap: Dp = 2.dp,
+    val container: Color = Color.Unspecified,
+) {
+    companion object {
+        /** Grouped lists as pages show them. */
+        val Default = ListSectionStyle()
+    }
+}
 
-fun segmentShape(isFirst: Boolean, isLast: Boolean) = RoundedCornerShape(
-    topStart = if (isFirst) AppRadius.xl else AppRadius.xs,
-    topEnd = if (isFirst) AppRadius.xl else AppRadius.xs,
-    bottomStart = if (isLast) AppRadius.xl else AppRadius.xs,
-    bottomEnd = if (isLast) AppRadius.xl else AppRadius.xs,
+fun segmentShape(isFirst: Boolean, isLast: Boolean, outer: Dp = AppRadius.xl, inner: Dp = AppRadius.xs) = RoundedCornerShape(
+    topStart = if (isFirst) outer else inner,
+    topEnd = if (isFirst) outer else inner,
+    bottomStart = if (isLast) outer else inner,
+    bottomEnd = if (isLast) outer else inner,
 )
 
 /**
@@ -157,12 +181,13 @@ fun ListSegment(
     isFirst: Boolean = true,
     isLast: Boolean = true,
     color: Color = MaterialTheme.colorScheme.surfaceContainer,
+    style: ListSectionStyle = ListSectionStyle.Default,
     content: @Composable () -> Unit,
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = color,
-        shape = segmentShape(isFirst, isLast),
+        color = if (style.container.isSpecified) style.container else color,
+        shape = segmentShape(isFirst, isLast, style.outer, style.inner),
         content = content,
     )
 }

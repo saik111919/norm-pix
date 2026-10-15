@@ -2,6 +2,10 @@ package com.example.normpix.wallet
 
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onLast
@@ -100,6 +104,41 @@ class CardsLayoutTest {
         assertEquals(CardsLayout.Stack, environment.preferences.state.value.cardsLayout)
         compose.onNodeWithContentDescription("HDFC Bank debit card, ending in", substring = true).assertExists()
         compose.onAllNodesWithContentDescription("ICICI Bank", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun spreadOutCards_areGatheredByTheLayoutSelectorsStackSegment() {
+        val environment = showWallet(CardsLayout.Stack)
+        // The second "Stack" is the cards': the accounts' comes first on the page.
+        compose.onAllNodesWithText("Stack")[1].assertIsSelected()
+
+        compose.onNodeWithContentDescription("HDFC Bank debit card, ending in", substring = true).performTouchInput { longClick() }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("ICICI Bank credit card, ending in", substring = true).assertExists()
+
+        // Spread out, no layout is the one in force, and the selector's "Stack" is the way back - not a button of its own.
+        compose.onAllNodesWithContentDescription("Stack them again").assertCountEquals(0)
+        compose.onAllNodesWithText("Stack")[1].assertIsNotSelected()
+        compose.onAllNodesWithText("Stack")[1].performClick()
+        compose.waitForIdle()
+
+        compose.onAllNodesWithContentDescription("ICICI Bank", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Stack")[1].assertIsSelected()
+        assertEquals(CardsLayout.Stack, environment.preferences.state.value.cardsLayout, "the choice was never touched")
+    }
+
+    @Test
+    fun spreadOutCards_goBackToTheOtherLayoutsWhenOneIsPicked() {
+        val environment = showWallet(CardsLayout.Stack)
+        compose.onNodeWithContentDescription("HDFC Bank debit card, ending in", substring = true).performTouchInput { longClick() }
+        compose.waitForIdle()
+
+        compose.onAllNodesWithText("Rows")[1].performClick()
+        compose.waitForIdle()
+
+        assertEquals(CardsLayout.Rows, environment.preferences.state.value.cardsLayout)
+        compose.onNodeWithText("ICICI Bank •••• 4444").assertIsDisplayed()
+        compose.onAllNodesWithText("Stack")[1].assertIsNotSelected()
     }
 
     @Test

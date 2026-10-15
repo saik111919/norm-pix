@@ -4,7 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
@@ -56,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -63,6 +64,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.Category
+import com.example.normpix.settings.CategoryIconShape
 import com.example.normpix.settings.CategoryIconStyle
 import com.example.normpix.ui.theme.isDark
 import com.materialkolor.PaletteStyle
@@ -142,6 +144,12 @@ fun categoryEmoji(key: String): String = (categoryIcons[key] ?: categoryIcons.ge
 /** How built-in category icons are drawn app-wide; provided from the user's choice in Settings > Appearance. */
 val LocalCategoryIconStyle = staticCompositionLocalOf { CategoryIconStyle.ThreeD }
 
+/** The shape behind avatars app-wide; provided from the user's choice in Settings > Appearance. */
+val LocalCategoryIconShape = staticCompositionLocalOf { CategoryIconShape.Circle }
+
+/** The outline of an avatar (or a logo) in this shape: rounded by [CategoryIconShape.cornerPercent] of its size, a circle at 50. */
+internal val CategoryIconShape.outline: Shape get() = RoundedCornerShape(percent = cornerPercent)
+
 /**
  * Seeds for the category palette. They are harmonized toward the app's
  * primary color and turned into tonal container pairs at runtime, so
@@ -197,37 +205,75 @@ fun paletteColor(index: Int): PaletteColors {
 /**
  * A category's icon on its tonal palette color: a disc that deepens toward one corner and is edged by a hairline of the
  * category's accent, so a row of them reads as a set of distinct, finished tokens rather than flat grey-ish dots. A brand's
- * logo is round already, so it fills the disc; a 3D picture is drawn larger than a flat icon, which would look lost at its size.
+ * logo is a full-bleed square, so it fills the disc; a 3D picture is drawn larger than a flat icon, which would look lost at its size.
+ *
+ * A [payee] the app knows by its logo (an "Ola" payee, a "Swiggy" one) shows that logo instead of the category's icon, in the 3D
+ * and Emoji styles - the Outline style has no logos (see [payeeArt]). The disc stays the category's colour.
  */
 @Composable
-fun CategoryAvatar(category: Category?, modifier: Modifier = Modifier, size: Dp = 40.dp) {
+fun CategoryAvatar(category: Category?, modifier: Modifier = Modifier, size: Dp = 40.dp, payee: String? = null) {
+    val payeeArt = rememberPayeeArt(payee)
+    val art = payeeArt ?: category?.let { rememberCategoryArt(it.icon, it.name) }
+    AvatarArt(category?.let { paletteColor(it.color) }, art, modifier, size)
+}
+
+/** A sample avatar of the built-in [icon] on palette entry [colorIndex], drawn just as [CategoryAvatar] draws a category: for Settings previews. */
+@Composable
+internal fun CategoryAvatarSample(icon: String, colorIndex: Int, modifier: Modifier = Modifier, size: Dp = 40.dp) {
+    AvatarArt(paletteColor(colorIndex), rememberCategoryArt(icon), modifier, size)
+}
+
+/** [art] (a question mark for none) on the avatar disc of [colors], in the shape the user chose. */
+@Composable
+private fun AvatarArt(colors: PaletteColors?, art: CategoryArt?, modifier: Modifier, size: Dp) {
     val scheme = MaterialTheme.colorScheme
-    val colors = category?.let { paletteColor(it.color) }
+    val bare = LocalCategoryIconShape.current == CategoryIconShape.None
     AvatarDisc(colors, modifier, size) {
-        if (category == null) {
-            Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(size / 2))
+        if (art == null) {
+            Icon(
+                Icons.AutoMirrored.Outlined.HelpOutline,
+                contentDescription = null,
+                tint = scheme.onSurfaceVariant,
+                modifier = Modifier.size(size * if (bare) BARE_ICON_IN_BOX else ICON_IN_DISC),
+            )
         } else {
-            val art = rememberCategoryArt(category.icon, category.name)
-            val artSize = when (art) {
-                is CategoryArt.Logo -> size
-                is CategoryArt.Picture -> size * PICTURE_IN_DISC
-                else -> size / 2
-            }
-            CategoryArtView(art, colors?.onContainer ?: scheme.onSurfaceVariant, artSize)
+            // With nothing behind it an icon takes the category's accent: its "on container" tone is made to sit on the disc.
+            val tint = if (bare) colors?.accent else colors?.onContainer
+            CategoryArtView(art, tint ?: scheme.onSurfaceVariant, size * artFill(art, bare))
         }
     }
 }
 
-/** How much of an avatar's disc a 3D picture spans. */
+/** How much of an avatar's disc a 3D picture spans, and a flat icon. */
 private const val PICTURE_IN_DISC = 0.62f
+private const val ICON_IN_DISC = 0.5f
+
+/** ... and without a disc, where the art has the whole box to itself. */
+private const val PICTURE_IN_BOX = 0.95f
+private const val BARE_ICON_IN_BOX = 0.72f
+
+/** How much of an avatar's box [art] fills: a logo all of it, a picture or an icon what suits them, more without a disc ([bare]). */
+private fun artFill(art: CategoryArt, bare: Boolean): Float = when (art) {
+    is CategoryArt.Logo -> 1f
+    is CategoryArt.Picture -> if (bare) PICTURE_IN_BOX else PICTURE_IN_DISC
+    else -> if (bare) BARE_ICON_IN_BOX else ICON_IN_DISC
+}
 
 /**
- * The round tonal disc behind a category's or a person's picture: [colors] deepening toward one corner and edged by a hairline
- * of the accent (or a plain neutral disc, without colors), so every kind of avatar in the app shares one look.
+ * The tonal disc behind a category's or a person's picture, in the shape the user chose ([LocalCategoryIconShape]): [colors]
+ * deepening toward one corner and edged by a hairline of the accent (or a plain neutral disc, without colors), so every kind
+ * of avatar in the app shares one look. With no shape ([CategoryIconShape.None]) there is no disc at all, only the content, which
+ * then has the whole box ([size]) to draw in.
  */
 @Composable
 internal fun AvatarDisc(colors: PaletteColors?, modifier: Modifier, size: Dp, content: @Composable () -> Unit) {
+    val choice = LocalCategoryIconShape.current
+    if (choice == CategoryIconShape.None) {
+        Box(modifier.size(size), contentAlignment = Alignment.Center) { content() }
+        return
+    }
     val scheme = MaterialTheme.colorScheme
+    val shape = choice.outline
     val fill = if (colors == null) {
         Brush.linearGradient(listOf(scheme.surfaceContainerHighest, scheme.surfaceContainerHighest))
     } else {
@@ -236,9 +282,9 @@ internal fun AvatarDisc(colors: PaletteColors?, modifier: Modifier, size: Dp, co
     Box(
         modifier
             .size(size)
-            .clip(CircleShape)
+            .clip(shape)
             .background(fill)
-            .then(if (colors == null) Modifier else Modifier.border(1.dp, colors.accent.copy(alpha = AVATAR_RING), CircleShape)),
+            .then(if (colors == null) Modifier else Modifier.border(1.dp, colors.accent.copy(alpha = AVATAR_RING), shape)),
         contentAlignment = Alignment.Center,
     ) { content() }
 }
@@ -274,19 +320,22 @@ fun CategoryGlyph(
     CategoryArtView(rememberCategoryArt(icon, name), tint, size, modifier)
 }
 
-/** Avatar for a transfer (no category). */
+/** Avatar for a transfer (no category), in the shape the user chose for avatars ([LocalCategoryIconShape]). */
 @Composable
 fun TransferAvatar(modifier: Modifier = Modifier, size: Dp = 40.dp) {
     val scheme = MaterialTheme.colorScheme
+    val choice = LocalCategoryIconShape.current
+    val bare = choice == CategoryIconShape.None
     Box(
-        modifier.size(size).background(scheme.secondaryContainer, CircleShape),
+        modifier.size(size).then(if (bare) Modifier else Modifier.background(scheme.secondaryContainer, choice.outline)),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             Icons.Outlined.SwapHoriz,
             contentDescription = null,
-            tint = scheme.onSecondaryContainer,
-            modifier = Modifier.size(size / 2),
+            // With nothing behind it the arrows take the accent tone: "on secondary container" is made to sit on its container.
+            tint = if (bare) scheme.secondary else scheme.onSecondaryContainer,
+            modifier = Modifier.size(size * if (bare) BARE_ICON_IN_BOX else ICON_IN_DISC),
         )
     }
 }

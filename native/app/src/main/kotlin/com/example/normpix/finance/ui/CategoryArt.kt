@@ -3,7 +3,6 @@ package com.example.normpix.finance.ui
 import android.content.Context
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -121,6 +120,22 @@ private fun brandArt(key: String, style: CategoryIconStyle): CategoryArt? {
 /** A brand's own art whatever the style - its logo, else its mark - for choosing among brands. Null for a key that isn't one. */
 internal fun brandPreviewArt(key: String): CategoryArt? = brandArt(key, CategoryIconStyle.ThreeD)
 
+/**
+ * The logo of the brand a [payee] is ([brandKeyForPayee]), or null: no payee, none the app knows, or the Outline style, which
+ * draws no logos (the category's own icon stays then).
+ */
+internal fun payeeArt(payee: String?, style: CategoryIconStyle): CategoryArt.Logo? {
+    if (payee == null || style == CategoryIconStyle.Outline) return null
+    return brandKeyForPayee(payee)?.let(::brandLogo)?.let(CategoryArt::Logo)
+}
+
+/** [payeeArt] for the ambient style; worked out again only when the payee or the style changes. */
+@Composable
+internal fun rememberPayeeArt(payee: String?): CategoryArt.Logo? {
+    val style = LocalCategoryIconStyle.current
+    return remember(payee, style) { payeeArt(payee, style) }
+}
+
 /** [categoryArt] for the ambient style; worked out again only when the icon, the name or the style changes. */
 @Composable
 internal fun rememberCategoryArt(icon: String, name: String? = null): CategoryArt {
@@ -129,11 +144,14 @@ internal fun rememberCategoryArt(icon: String, name: String? = null): CategoryAr
     return remember(icon, name, style) { categoryArt(icon, name, style, context) }
 }
 
-/** [art] in a [size] box: a logo clipped round, a picture or emoji fitted whole, a mark or outline in [tint]. Decorative. */
+/**
+ * [art] in a [size] box: a logo clipped to the user's avatar shape ([LocalCategoryIconShape]), a picture or emoji fitted whole,
+ * a mark or outline in [tint]. Decorative.
+ */
 @Composable
 internal fun CategoryArtView(art: CategoryArt, tint: Color, size: Dp, modifier: Modifier = Modifier) {
     when (art) {
-        is CategoryArt.Logo -> AssetImage(art.path, modifier.size(size).clip(CircleShape))
+        is CategoryArt.Logo -> AssetImage(art.path, modifier.size(size).clip(LocalCategoryIconShape.current.outline))
         is CategoryArt.Picture -> AssetImage(art.path, modifier.size(size))
         is CategoryArt.Mark -> SvgAsset(art.path, modifier = modifier.size(size), tint = tint)
         is CategoryArt.Outline -> Icon(art.icon, contentDescription = null, tint = tint, modifier = modifier.size(size))

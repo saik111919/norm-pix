@@ -56,6 +56,7 @@ import com.example.normpix.settings.AccentColor
 import com.example.normpix.settings.AppIcon
 import com.example.normpix.settings.AppIcons
 import com.example.normpix.settings.BackButtonStyle
+import com.example.normpix.settings.CategoryIconShape
 import com.example.normpix.settings.CategoryIconStyle
 import com.example.normpix.settings.ColorSource
 import com.example.normpix.settings.InterfaceFont
@@ -71,10 +72,13 @@ import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.RadioRow
 import com.example.normpix.ui.components.SwitchRow
 import com.example.normpix.ui.components.rememberAppHaptics
+import com.example.normpix.finance.ui.CategoryAvatarSample
 import com.example.normpix.finance.ui.CategoryGlyph
 import com.example.normpix.finance.ui.ChoiceOption
 import com.example.normpix.finance.ui.ConnectedChoiceRow
+import com.example.normpix.finance.ui.LocalCategoryIconShape
 import com.example.normpix.finance.ui.LocalCategoryIconStyle
+import com.example.normpix.finance.ui.outline
 import com.example.normpix.finance.ui.paletteColor
 import com.example.normpix.ui.components.SectionSubheader
 import com.example.normpix.ui.theme.AppRadius
@@ -241,6 +245,27 @@ fun AppearanceSettingsPage() {
                     }
                 }
                 ListSection(
+                    title = "Icon background",
+                    footer = "The shape behind category icons and people in lists, charts and the transaction editor. Brand logos, " +
+                        "like a payee's, are cut to the same shape.",
+                    modifier = Modifier.selectableGroup(),
+                ) {
+                    for (shape in CategoryIconShape.entries) {
+                        item {
+                            RadioRow(
+                                headline = shape.label,
+                                supporting = shape.description,
+                                selected = prefs.categoryIconShape == shape,
+                                onClick = {
+                                    haptics.selection()
+                                    preferences.setCategoryIconShape(shape)
+                                },
+                                trailing = { CategoryIconShapePreview(shape) },
+                            )
+                        }
+                    }
+                }
+                ListSection(
                     title = "Page transitions",
                     footer = "Pages, tabs, a screen's sections and the back gesture's preview all move in the style you pick. " +
                         "When animations are turned off in system settings, they change without animating.",
@@ -284,21 +309,46 @@ fun AppearanceSettingsPage() {
     }
 }
 
-/** What an icon style looks like: three categories as they would be drawn in that style, whichever one is chosen. */
+/**
+ * What an icon style looks like: three categories as they would be drawn in that style, whichever one is chosen - on the
+ * background the user has chosen, or with none.
+ */
 @Composable
 private fun CategoryIconStylePreview(style: CategoryIconStyle) {
     CompositionLocalProvider(LocalCategoryIconStyle provides style) {
+        val shape = LocalCategoryIconShape.current
+        val bare = shape == CategoryIconShape.None
         Row(
-            horizontalArrangement = Arrangement.spacedBy((-6).dp),
+            horizontalArrangement = Arrangement.spacedBy(if (bare) 2.dp else (-6).dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.clearAndSetSemantics {},
         ) {
             for ((index, key) in listOf("restaurant", "transport", "shopping").withIndex()) {
                 val tone = paletteColor(index * 2)
-                Box(
-                    Modifier.size(32.dp).background(tone.container, CircleShape).border(2.dp, MaterialTheme.colorScheme.surfaceContainer, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) { CategoryGlyph(key, tone.onContainer, 18.dp) }
+                if (bare) {
+                    CategoryGlyph(key, tone.accent, 24.dp)
+                } else {
+                    Box(
+                        Modifier.size(32.dp).background(tone.container, shape.outline).border(2.dp, MaterialTheme.colorScheme.surfaceContainer, shape.outline),
+                        contentAlignment = Alignment.Center,
+                    ) { CategoryGlyph(key, tone.onContainer, 18.dp) }
+                }
+            }
+        }
+    }
+}
+
+/** What an icon background looks like: three avatars in that shape (one a brand's logo), whichever one is chosen. */
+@Composable
+private fun CategoryIconShapePreview(shape: CategoryIconShape) {
+    CompositionLocalProvider(LocalCategoryIconShape provides shape) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(AppSpacing.xs),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.clearAndSetSemantics {},
+        ) {
+            for ((index, icon) in listOf("restaurant", "swiggy", "shopping").withIndex()) {
+                CategoryAvatarSample(icon, colorIndex = index * 2, size = 32.dp)
             }
         }
     }

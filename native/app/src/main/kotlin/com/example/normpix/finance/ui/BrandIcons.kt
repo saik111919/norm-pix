@@ -198,3 +198,29 @@ fun brandKeyForName(name: String): String? {
     val compact = wanted.filter { it.isLetterOrDigit() }
     return compact.takeIf { (it in brandCategoryIcons || it in brandLogoLabels) && it !in brandWordNames }
 }
+
+/** Brand names that are also everyday names or words, which on their own at the front of a payee ("Max Healthcare") do not mean the brand. */
+private val payeeAmbiguousWords: Set<String> =
+    brandWordNames + setOf("max", "medium", "slack", "zoom", "cred", "simpl", "indigo", "mpl", "mozambique")
+
+private val payeeWordBreak = Regex("[^\\p{L}\\p{N}]+")
+
+/**
+ * The brand a payee is, for the logo shown on its transaction: the name as a whole ("Ola", "Amazon Pay", "HBO Max"), else its
+ * first three, two or one words ("Swiggy Instamart", "Uber India Systems Pvt Ltd" are Swiggy and Uber) - a payee is a free-text
+ * name, so unlike a category it often carries more than the brand. Null when it isn't one the app has a logo for.
+ *
+ * A name that is also an everyday one is not taken for the brand when it stands alone as the first word ([brandWordNames], and a
+ * few more: "Max Healthcare" is not Max, "Medium Rare" is not Medium), and "Max" on its own is left as a plain name too.
+ */
+fun brandKeyForPayee(payee: String): String? {
+    val whole = payee.trim()
+    if (whole.isEmpty()) return null
+    if (!whole.equals("max", ignoreCase = true)) brandKeyForName(whole)?.let { return it }
+    val words = whole.lowercase().split(payeeWordBreak).filter { it.isNotEmpty() }
+    for (count in minOf(words.size, 3) downTo 1) {
+        if (count == 1 && words[0] in payeeAmbiguousWords) continue
+        brandKeyForName(words.take(count).joinToString(" "))?.let { return it }
+    }
+    return null
+}

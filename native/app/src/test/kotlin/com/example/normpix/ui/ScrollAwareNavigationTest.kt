@@ -29,6 +29,7 @@ import com.example.normpix.reminders.RemindersDatabase
 import com.example.normpix.settings.AppPreferences
 import com.example.normpix.wallet.CardVault
 import com.example.normpix.wallet.StoredCard
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -65,10 +66,14 @@ class ScrollAwareNavigationTest {
                 this.cards = cards
             }
         }
+        // The databases run in place on the test's own thread, as in TestEnvironment (and the sample set follows them). On the
+        // app's dedicated threads a query's result is handed back across threads, and under Robolectric Home's "load the
+        // month" then now and then resumed on the database thread and stalled there, leaving Home on "Loading your month"
+        // with nothing to scroll - after some other test had run in the same process first.
         container = AppContainer(
             preferences = AppPreferences(prefs),
-            finance = FinanceController(FinanceRepository(financeDb)),
-            reminders = RemindersController(ReminderDao(remindersDb), scheduler = NoOpReminderScheduler),
+            finance = FinanceController(FinanceRepository(financeDb, dispatcher = Dispatchers.Unconfined)),
+            reminders = RemindersController(ReminderDao(remindersDb, dispatcher = Dispatchers.Unconfined), scheduler = NoOpReminderScheduler),
             vault = vault,
         )
         container.finance.load()

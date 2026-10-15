@@ -125,7 +125,7 @@ private fun RuleTile(rule: RecurringRule) {
     ListRow(
         headline = title,
         supporting = subtitle,
-        leading = { if (isTransfer) TransferAvatar() else CategoryAvatar(category) },
+        leading = { if (isTransfer) TransferAvatar() else CategoryAvatar(category, payee = rule.payee) },
         trailing = { TransactionAmount(rule.type, rule.amount, finance.money, style = MaterialTheme.typography.titleSmall) },
         onClick = { rule.id?.let(actions::editRecurring) },
         modifier = Modifier.clearAndSetSemantics {

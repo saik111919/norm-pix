@@ -1,10 +1,5 @@
 package com.example.normpix.settings.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -50,6 +45,7 @@ import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.SearchField
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.AppTheme
+import com.example.normpix.updates.UpdateState
 import com.example.normpix.updates.ui.updateSummary
 import kotlinx.coroutines.launch
 
@@ -99,22 +95,25 @@ fun SettingsScreen() {
         derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > SEARCH_GONE_PX }
     }
 
+    val groupStyle = settingsGroupStyle()
+
     AppSubPage(
         title = "Settings",
         onBack = navigator::back,
+        displayTitle = true,
         imeAware = true,
         listState = listState,
+        // The header's pill holds nothing but this icon, so it appears with it: not before the field has scrolled away.
+        actionsVisible = searchOutOfView,
         actions = {
-            AnimatedVisibility(visible = searchOutOfView, enter = fadeIn() + scaleIn(initialScale = 0.6f), exit = fadeOut() + scaleOut(targetScale = 0.6f)) {
-                IconButton(
-                    onClick = {
-                        scope.launch {
-                            listState.animateScrollToItem(0)
-                            runCatching { searchFocus.requestFocus() }
-                        }
-                    },
-                ) { Icon(Icons.Rounded.Search, contentDescription = "Search settings") }
-            }
+            IconButton(
+                onClick = {
+                    scope.launch {
+                        listState.animateScrollToItem(0)
+                        runCatching { searchFocus.requestFocus() }
+                    }
+                },
+            ) { Icon(Icons.Rounded.Search, contentDescription = "Search settings") }
         },
     ) {
         item(key = "search") {
@@ -136,7 +135,7 @@ fun SettingsScreen() {
                         title = "No settings match \"${query.trim()}\"",
                         message = "Try a different word, like \"dark\", \"backup\" or \"lock\".",
                     )
-                    searching -> ListSection(title = "${results.size} ${if (results.size == 1) "result" else "results"}") {
+                    searching -> ListSection(title = "${results.size} ${if (results.size == 1) "result" else "results"}", style = groupStyle) {
                         for (entry in results) {
                             item {
                                 SettingsRow(
@@ -150,7 +149,7 @@ fun SettingsScreen() {
                         }
                     }
                     else -> {
-                        ListSection {
+                        ListSection(style = groupStyle) {
                             item {
                                 ProfileSettingsRow(
                                     name = prefs.profileName,
@@ -161,8 +160,8 @@ fun SettingsScreen() {
                                 )
                             }
                         }
-                        Spacer(Modifier.height(AppSpacing.lg))
-                        ListSection {
+                        Spacer(Modifier.height(AppSpacing.md))
+                        ListSection(style = groupStyle) {
                             for (group in SettingsGroups) {
                                 item {
                                     SettingsRow(
@@ -175,7 +174,7 @@ fun SettingsScreen() {
                                 }
                             }
                         }
-                        ListSection(title = "System") {
+                        ListSection(title = "System", style = groupStyle) {
                             item {
                                 SettingsRow(
                                     headline = "Reset settings",
@@ -193,6 +192,7 @@ fun SettingsScreen() {
                                         supporting = updateSummary(update, updater),
                                         icon = Icons.Outlined.SystemUpdate,
                                         hue = 6,
+                                        alert = update is UpdateState.Available || update is UpdateState.Ready,
                                         onClick = { system.checkForUpdates() },
                                     )
                                 }

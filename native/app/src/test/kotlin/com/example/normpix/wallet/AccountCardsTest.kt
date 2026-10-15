@@ -4,7 +4,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasText
@@ -134,13 +138,41 @@ class AccountCardsTest {
     fun pressingAndHoldingTheStackSpreadsEveryAccountOut_asTheSavedCardsDo() {
         showWallet()
         val front = accountCards().single()
+        layoutChoice("Stack").assertIsSelected()
 
         compose.onNode(hasContentDescription(front)).performTouchInput { longClick() }
         compose.waitUntil(10_000) { accountCards().size == 3 }
 
-        compose.onNodeWithContentDescription("Stack them again").performClick()
+        // Spread out, they are no longer the stack: none of the layouts is chosen, and the selector's own "Stack" is the way
+        // back - the Wallet has no second "Stack" button for it.
+        compose.onAllNodesWithContentDescription("Stack them again").assertCountEquals(0)
+        layoutChoice("Stack").assertIsNotSelected()
+        layoutChoice("Stack").performClick()
         compose.waitUntil(10_000) { accountCards().size == 1 }
         assertEquals(front, accountCards().single(), "the same account is in front again")
+        layoutChoice("Stack").assertIsSelected()
+        assertEquals(AccountsLayout.Stack, env!!.preferences.state.value.accountsLayout, "and the choice was never touched")
+    }
+
+    @Test
+    fun spreadOutArchivedAccounts_areGatheredByAStackButtonBesideHidingThem() {
+        // They have no selector of their own, so the button sits with the "Hide archived accounts" row that opens them.
+        showWallet {
+            account("Old savings", AccountKind.Bank, archived = true)
+            account("Old wallet", AccountKind.Wallet, archived = true)
+        }
+        compose.onNodeWithText("Show 2 archived accounts").performClick()
+        compose.waitUntil(10_000) { accountCards().size == 2 }
+        val archivedFront = accountCards().single { it.endsWith("account 1 of 2") }
+
+        compose.onNode(hasContentDescription(archivedFront)).performTouchInput { longClick() }
+        compose.waitUntil(10_000) { accountCards().size == 3 }
+        compose.onNodeWithContentDescription("Stack them again").assertIsDisplayed()
+        layoutChoice("Stack").assertIsSelected()
+
+        compose.onNodeWithContentDescription("Stack them again").performClick()
+        compose.waitUntil(10_000) { accountCards().size == 2 }
+        compose.onAllNodesWithContentDescription("Stack them again").assertCountEquals(0)
     }
 
     @Test

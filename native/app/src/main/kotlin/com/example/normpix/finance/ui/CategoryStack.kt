@@ -60,6 +60,7 @@ import com.example.normpix.finance.domain.percentLabel
 import com.example.normpix.finance.domain.relativeChange
 import com.example.normpix.ui.components.AppLinearProgress
 import com.example.normpix.ui.components.DeckStack
+import com.example.normpix.ui.components.DeckStackState
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.SheetHeader
@@ -108,7 +109,7 @@ private const val MAX_FONT_SCALE = 1.15f
  * full, the next ones behind it, each in its own colour. Tapping the front one calls [onOpen].
  */
 @Composable
-fun CategoryStack(spends: List<CategorySpend>, onOpen: (CategorySpend) -> Unit, modifier: Modifier = Modifier) {
+fun CategoryStack(spends: List<CategorySpend>, onOpen: (CategorySpend) -> Unit, state: DeckStackState, modifier: Modifier = Modifier) {
     val money = rememberFinanceState().money
     val density = LocalDensity.current
     val capped = remember(density) { Density(density.density, fontScale = minOf(density.fontScale, MAX_FONT_SCALE)) }
@@ -118,6 +119,7 @@ fun CategoryStack(spends: List<CategorySpend>, onOpen: (CategorySpend) -> Unit, 
         shape = AppRadius.rLg,
         description = { spend, index, count -> spend.spoken(money, index, count) },
         onOpen = onOpen,
+        state = state,
         modifier = modifier,
         plate = { spend -> SpendSurface(spendTone(spend.category)) {} },
         face = { spend -> CompositionLocalProvider(LocalDensity provides capped) { SpendFace(spend) } },

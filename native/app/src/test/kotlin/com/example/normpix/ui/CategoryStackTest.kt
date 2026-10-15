@@ -1,7 +1,9 @@
 package com.example.normpix.ui
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -24,6 +26,7 @@ import com.example.normpix.testing.TestEnvironment
 import java.time.LocalDateTime
 import java.util.Locale
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -97,9 +100,9 @@ class CategoryStackTest {
         )
     }
 
-    /** Home's Top spending block on its own; composing the whole page here only races its background load. */
+    /** Home's Top spending block on its own, in a column as on the page; composing the whole page here only races its background load. */
     private fun showTopSpending(spends: List<CategorySpend>) {
-        compose.setContent { env.Content { TopSpendingStack(spends, onSeeAll = {}) } }
+        compose.setContent { env.Content { Column { TopSpendingStack(spends, onSeeAll = {}) } } }
         compose.waitForIdle()
     }
 
@@ -184,5 +187,24 @@ class CategoryStackTest {
         compose.onNodeWithContentDescription("Stack them again").performClick()
         compose.waitForIdle()
         compose.onAllNodesWithContentDescription("Groceries, ₹1,078.00 spent in", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("Stack them again").assertCountEquals(0)
+    }
+
+    @Test
+    fun theStackButtonSitsInTheSectionHeader_atItsEnd_andMovesNothing() {
+        showTopSpending(seedSpending())
+        compose.onAllNodesWithContentDescription("Stack them again").assertCountEquals(0)
+        val before = compose.onNodeWithText("Top spending").getUnclippedBoundsInRoot()
+
+        front("Shopping", "₹2,002.00").performTouchInput { longClick() }
+        compose.waitForIdle()
+
+        val header = compose.onNodeWithText("Top spending").getUnclippedBoundsInRoot()
+        val button = compose.onNodeWithContentDescription("Stack them again").getUnclippedBoundsInRoot()
+        val card = front("Shopping", "₹2,002.00").getUnclippedBoundsInRoot()
+        assertEquals(before.top to before.bottom, header.top to header.bottom, "the button comes in the room the header keeps: the title does not move down or up")
+        assertTrue(button.top < header.bottom && button.bottom > header.top, "on the header's row: $button, $header")
+        assertTrue(button.left >= header.right, "after the title, at the end of the row: $button, $header")
+        assertTrue(button.bottom <= card.top, "above the cards, not between them: $button, $card")
     }
 }

@@ -22,7 +22,9 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -70,6 +72,7 @@ class FloatingTopControlsTest {
     private lateinit var list: LazyListState
     private var blurAvailable by mutableStateOf(true)
     private var withActions by mutableStateOf(false)
+    private var actionsVisible by mutableStateOf(true)
     private var shown = false
 
     @Before
@@ -95,7 +98,13 @@ class FloatingTopControlsTest {
                 CompositionLocalProvider(LocalWindowBlurOverride provides this.blurAvailable) {
                     env.Content {
                         list = rememberLazyListState()
-                        AppSubPage(title = "Appearance", onBack = {}, listState = list, actions = if (this.withActions) share else null) {
+                        AppSubPage(
+                            title = "Appearance",
+                            onBack = {},
+                            listState = list,
+                            actions = if (this.withActions) share else null,
+                            actionsVisible = this.actionsVisible,
+                        ) {
                             item { Box(Modifier.fillMaxWidth().height(120.dp).background(Color.Red).testTag("red")) }
                             items(20) { Box(Modifier.fillMaxWidth().height(80.dp)) { Text("Row $it") } }
                         }
@@ -159,16 +168,38 @@ class FloatingTopControlsTest {
         assertEquals(solid, switchedOff, "with background blur switched off it is solid, as where the system does not blur")
     }
 
+    /** A pixel where the pill would be, and one in the empty middle of the controls' row. */
+    private fun pillSpotAndMiddle(): Pair<Color, Color> {
+        val circle = back()
+        val px = compose.onRoot().captureToImage().toPixelMap()
+        val y = circle.center.y.toInt()
+        return px[px.width - (circle.left + circle.width * 0.2f).toInt(), y] to px[px.width / 2, y]
+    }
+
+    @Test
+    fun theActionsPill_comesWithItsActions_notBeforeAndNotAfter() {
+        // A page whose action is there only part of the time (Settings' search icon) has no empty capsule in between.
+        actionsVisible = false
+        page(BackButtonStyle.TopFloatingCircle, withActions = true)
+        compose.onAllNodesWithContentDescription("Share").assertCountEquals(0)
+        val (hidden, hiddenMiddle) = pillSpotAndMiddle()
+        assertEquals(hiddenMiddle, hidden, "no empty pill while its actions are away")
+
+        actionsVisible = true
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Share").assertExists()
+        val (pill, middle) = pillSpotAndMiddle()
+        assertFalse(pill == middle, "the pill is there with its actions")
+
+        actionsVisible = false
+        compose.waitForIdle()
+        compose.onAllNodesWithContentDescription("Share").assertCountEquals(0)
+        val (gone, goneMiddle) = pillSpotAndMiddle()
+        assertEquals(goneMiddle, gone, "and gone again, not left behind empty")
+    }
+
     @Test
     fun theActionsPill_isThereOnlyWhenThePageHasActions() {
-        // A pixel where the pill would be, and one in the empty middle of the controls' row.
-        fun pillSpotAndMiddle(): Pair<Color, Color> {
-            val circle = back()
-            val px = compose.onRoot().captureToImage().toPixelMap()
-            val y = circle.center.y.toInt()
-            return px[px.width - (circle.left + circle.width * 0.2f).toInt(), y] to px[px.width / 2, y]
-        }
-
         page(BackButtonStyle.TopFloatingCircle, withActions = false)
         val (bare, bareMiddle) = pillSpotAndMiddle()
         assertEquals(bareMiddle, bare, "no empty pill")

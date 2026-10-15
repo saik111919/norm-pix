@@ -72,6 +72,8 @@ class ReceiptData(
     val type: TransactionType,
     /** Its avatar; null for a transfer, and for a transaction whose category is gone. */
     val category: Category?,
+    /** Who it was with, as typed: a payee the app knows by its logo is drawn as that logo instead of the category's icon. */
+    val payee: String? = null,
     val amount: Long,
     val money: MoneyFormatter,
     /** "12 Sep, 6:30 PM". */
@@ -115,6 +117,7 @@ fun receiptOf(t: FinanceTransaction, finance: FinanceState, is24Hour: Boolean): 
         title = t.payee ?: if (isTransfer) "Transfer" else category?.name ?: "Uncategorized",
         type = t.type,
         category = if (isTransfer) null else category,
+        payee = if (isTransfer) null else t.payee,
         amount = t.amount,
         money = finance.money,
         moment = dateTimeLabel(t.occurredAt, is24Hour),
@@ -222,7 +225,7 @@ private fun ReceiptBadge(data: ReceiptData) {
     val ticket = MaterialTheme.colorScheme.surfaceContainerHigh
     val done = StatusTone.Success.resolve()
     Box(Modifier.clearAndSetSemantics { }) {
-        if (data.type == TransactionType.Transfer) TransferAvatar(size = 64.dp) else CategoryAvatar(data.category, size = 64.dp)
+        if (data.type == TransactionType.Transfer) TransferAvatar(size = 64.dp) else CategoryAvatar(data.category, size = 64.dp, payee = data.payee)
         Box(
             Modifier
                 .align(Alignment.BottomEnd)

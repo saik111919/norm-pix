@@ -165,6 +165,18 @@ enum class CategoryIconStyle(val label: String, val description: String) {
     Outline("Outline", "Simple single-colour icons that take the category's colour"),
 }
 
+/**
+ * The shape behind a category's (or a person's) icon wherever an avatar shows. [cornerPercent] is how much of the avatar's size
+ * each corner takes: 50 is a circle. [None] has no shape behind the icon, which is drawn larger instead; a brand's logo, which
+ * is a full-bleed square, is still clipped (to rounded corners) so it never shows its white edges.
+ */
+enum class CategoryIconShape(val label: String, val description: String, val cornerPercent: Int) {
+    Circle("Circle", "A round disc behind each icon", 50),
+    Rounded("Rounded", "A soft rounded square, like an app icon", 30),
+    Square("Square", "A square tile with just-softened corners", 12),
+    None("No background", "Just the icon, drawn larger, with nothing behind it", 22),
+}
+
 /** Where the round account button at the top of every tab leads. */
 enum class AccountButtonTarget(val label: String, val description: String) {
     Profile("Profile", "Your name and picture, with the way on to Settings"),
@@ -230,6 +242,8 @@ data class AppPrefsState(
     val availability: Map<ScheduledFeature, AvailabilityRule> = emptyMap(),
     /** How the built-in category icons are drawn, wherever a category shows. */
     val categoryIconStyle: CategoryIconStyle = CategoryIconStyle.ThreeD,
+    /** The shape behind those icons (and the people's avatars): a circle, as they have always been, unless the user picks another. */
+    val categoryIconShape: CategoryIconShape = CategoryIconShape.Circle,
     /** What the user likes to be called. Stays on this device; empty until they say. */
     val profileName: String = "",
     /** One emoji for the profile picture, or empty for the name's initials. */
@@ -312,6 +326,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
             backButtonStyle = prefs.enum(K_BACK_STYLE, defaults.backButtonStyle),
             progressStyle = prefs.enum(K_PROGRESS_STYLE, defaults.progressStyle),
             categoryIconStyle = prefs.enum(K_CATEGORY_ICON_STYLE, defaults.categoryIconStyle),
+            categoryIconShape = prefs.enum(K_CATEGORY_ICON_SHAPE, defaults.categoryIconShape),
             profileName = prefs.getString(K_PROFILE_NAME, defaults.profileName).orEmpty(),
             profileEmoji = prefs.getString(K_PROFILE_EMOJI, defaults.profileEmoji).orEmpty(),
             profilePhoto = prefs.getString(K_PROFILE_PHOTO, defaults.profilePhoto).orEmpty().takeIf(::isProfilePhotoName).orEmpty(),
@@ -411,6 +426,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
 
     fun setCategoryIconStyle(style: CategoryIconStyle) =
         change({ copy(categoryIconStyle = style) }) { putString(K_CATEGORY_ICON_STYLE, style.name) }
+
+    fun setCategoryIconShape(shape: CategoryIconShape) =
+        change({ copy(categoryIconShape = shape) }) { putString(K_CATEGORY_ICON_SHAPE, shape.name) }
 
     /** Saves the profile; [name] is trimmed and capped, [emoji] is kept only when it is exactly one emoji (see `isSingleEmoji`). */
     fun setProfile(name: String, emoji: String) {
@@ -541,6 +559,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_BACK_STYLE = "back_button_style"
         const val K_PROGRESS_STYLE = "progress_style"
         const val K_CATEGORY_ICON_STYLE = "category_icon_style"
+        const val K_CATEGORY_ICON_SHAPE = "category_icon_shape"
         const val K_PROFILE_NAME = "profile_name"
         const val K_PROFILE_EMOJI = "profile_emoji"
         const val K_PROFILE_PHOTO = "profile_photo"
