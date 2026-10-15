@@ -81,7 +81,8 @@ class RemindersDatabase(context: Context, name: String? = DB_NAME) :
 class ReminderDao(
     private val database: RemindersDatabase,
     private val zone: ZoneId = ZoneId.systemDefault(),
-    private val dispatcher: CoroutineDispatcher = defaultDispatcher,
+    /** Where the database work runs: the one dedicated thread, unless a test runs it in place. The sample set uses the same. */
+    internal val dispatcher: CoroutineDispatcher = defaultDispatcher,
 ) {
     private fun LocalDateTime.millis(): Long = atZone(zone).toInstant().toEpochMilli()
 

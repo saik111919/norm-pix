@@ -62,6 +62,12 @@ class DummyData private constructor(
     private val remindersDatabase = RemindersDatabase(context, name = null)
     private val remindersScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    // The set's databases work where the user's do - in the app, their dedicated threads. A test that runs the user's
+    // databases in place on its own thread so their results can't be lost crossing threads (see TestEnvironment) then gets
+    // the same for the sample set, instead of the dedicated threads behind its back.
+    private val financeDispatcher = real.finance.repository.dispatcher
+    private val remindersDispatcher = real.reminders.databaseDispatcher
+
     /** This set's pictures, apart from the user's: its own folder, so its sweep never sees theirs (or another set's). */
     private val picturesDir = File(File(context.cacheDir, SAMPLE_PICTURES_DIR), UUID.randomUUID().toString())
         .also { synchronized(openSets) { openSets += it.name } }
@@ -69,10 +75,15 @@ class DummyData private constructor(
     val container = AppContainer(
         preferences = real.preferences,
         finance = FinanceController(
-            FinanceRepository(financeDatabase, clock = clock),
+            FinanceRepository(financeDatabase, clock = clock, dispatcher = financeDispatcher),
             TransactionPictures(context, kept = File(picturesDir, "kept"), drafts = File(picturesDir, "drafts")),
         ),
-        reminders = RemindersController(ReminderDao(remindersDatabase), NoOpReminderScheduler, clock = clock, scope = remindersScope),
+        reminders = RemindersController(
+            ReminderDao(remindersDatabase, dispatcher = remindersDispatcher),
+            NoOpReminderScheduler,
+            clock = clock,
+            scope = remindersScope,
+        ),
         vault = InMemoryCardVault(),
         lock = real.lock,
         host = real.host,
@@ -166,7 +177,7 @@ class DummyData private constructor(
 
         suspend fun writeTo(data: DummyData) {
             writeFinance(data.container.finance.repository)
-            writeReminders(ReminderDao(data.remindersDatabase))
+            writeReminders(ReminderDao(data.remindersDatabase, dispatcher = data.remindersDispatcher))
             data.container.vault.saveCards(cards())
         }
 

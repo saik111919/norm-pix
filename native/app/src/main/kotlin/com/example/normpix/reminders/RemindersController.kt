@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.compositionLocalOf
 import java.time.Duration
 import java.time.LocalDateTime
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -68,6 +69,9 @@ class RemindersController(
 ) {
     private val _state = MutableStateFlow(RemindersState())
     val state: StateFlow<RemindersState> = _state.asStateFlow()
+
+    /** Where the reminders database work runs (see [ReminderDao.dispatcher]); a sample set opened from these runs there too. */
+    internal val databaseDispatcher: CoroutineDispatcher get() = dao.dispatcher
 
     private val _due = MutableSharedFlow<Reminder>(extraBufferCapacity = 8)
 
