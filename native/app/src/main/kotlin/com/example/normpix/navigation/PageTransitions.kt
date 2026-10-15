@@ -187,13 +187,14 @@ internal object TabMotion {
     }
 
     /**
-     * How visible an arriving tab is at [progress]: a window fades in quickly while it grows, a fade-through waits for the
-     * leaving tab to go first, the rest fade in as they move.
+     * How visible an arriving tab is, [time] (0..1, linear) into its arrival: a window fades in over the first 60% while it
+     * grows, as a page opens; a fade-through waits for the leaving tab to go first; the rest fade in as they move.
      */
-    fun arrivalAlpha(type: PageAnimationType, progress: Float): Float = when (type) {
-        PageAnimationType.LinuxWindow -> (progress / 0.6f).coerceIn(0f, 1f)
-        PageAnimationType.FadeThrough, PageAnimationType.SharedAxis -> ((progress - 0.3f) / 0.7f).coerceIn(0f, 1f)
-        else -> progress
+    fun arrivalAlpha(type: PageAnimationType, time: Float): Float = when (type) {
+        PageAnimationType.LinuxWindow -> AppMotion.enter.transform((time / 0.6f).coerceIn(0f, 1f))
+        PageAnimationType.FadeThrough, PageAnimationType.SharedAxis ->
+            LinearOutSlowInEasing.transform(((time - 0.3f) / 0.7f).coerceIn(0f, 1f))
+        else -> AppMotion.enter.transform(time.coerceIn(0f, 1f))
     }
 
     /** The tab going away under the arriving one: in the window style it recedes a little, as a page under a new one does. */
@@ -201,8 +202,8 @@ internal object TabMotion {
         if (type == PageAnimationType.LinuxWindow) 1f - 0.04f * progress else 1f
 
     /** Only the fading styles fade the tab going away, and first, before the new one fades in; the others keep it solid. */
-    fun departureAlpha(type: PageAnimationType, progress: Float): Float = when (type) {
-        PageAnimationType.FadeThrough, PageAnimationType.SharedAxis -> 1f - (progress / 0.3f).coerceIn(0f, 1f)
+    fun departureAlpha(type: PageAnimationType, time: Float): Float = when (type) {
+        PageAnimationType.FadeThrough, PageAnimationType.SharedAxis -> 1f - FastOutLinearInEasing.transform((time / 0.3f).coerceIn(0f, 1f))
         else -> 1f
     }
 

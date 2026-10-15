@@ -3,6 +3,7 @@ package com.example.normpix.navigation
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
@@ -517,9 +518,11 @@ internal fun TabHost(visible: Boolean, enterOffset: Dp = 0.dp, animateArrival: B
     LaunchedEffect(visible) {
         if (visible) {
             onScreen = true
-            if (animate) arrival.animateTo(1f, tween(TabMotion.openMs(animation), easing = AppMotion.enter))
+            // Linear in time: each part of the motion applies its own easing over its own share of it (see TabMotion), as
+            // a pushed page's do - the window's quick fade over the first 60%, its growth over all of it.
+            if (animate) arrival.animateTo(1f, tween(TabMotion.openMs(animation), easing = LinearEasing))
         } else {
-            if (animate && onScreen) departure.animateTo(1f, tween(TabMotion.openMs(animation), easing = AppMotion.enter))
+            if (animate && onScreen) departure.animateTo(1f, tween(TabMotion.openMs(animation), easing = LinearEasing))
             onScreen = false
         }
     }
@@ -531,8 +534,9 @@ internal fun TabHost(visible: Boolean, enterOffset: Dp = 0.dp, animateArrival: B
             .then(
                 when {
                     visible -> Modifier.graphicsLayer {
-                        val p = arrival.value
-                        alpha = TabMotion.arrivalAlpha(animation, p)
+                        val t = arrival.value
+                        val p = AppMotion.enter.transform(t)
+                        alpha = TabMotion.arrivalAlpha(animation, t)
                         val scale = TabMotion.scale(animation, p)
                         scaleX = scale
                         scaleY = scale
@@ -541,8 +545,9 @@ internal fun TabHost(visible: Boolean, enterOffset: Dp = 0.dp, animateArrival: B
                     }
                     departing -> Modifier
                         .graphicsLayer {
-                            val q = departure.value
-                            alpha = TabMotion.departureAlpha(animation, q)
+                            val t = departure.value
+                            val q = AppMotion.enter.transform(t)
+                            alpha = TabMotion.departureAlpha(animation, t)
                             val scale = TabMotion.departureScale(animation, q)
                             scaleX = scale
                             scaleY = scale
