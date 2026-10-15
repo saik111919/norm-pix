@@ -1,15 +1,180 @@
-# NormPix
+<p align="center">
+  <img src="docs/icon.png" width="112" alt="NormPix app icon">
+</p>
 
-NormPix is an offline-first, private personal finance and card manager for Android built natively with **Kotlin**, **Jetpack Compose**, and **Material 3**.
+<h1 align="center">NormPix</h1>
 
-## Architecture & Features
+<p align="center">
+  Your money, cards and reminders in one private Android app.<br>
+  Offline-first: everything stays on your phone.
+</p>
 
-- **Jetpack Compose & Material 3**: Fluid UI following the express design system.
-- **Private by design**: Everything stays on the phone. The one connection the app makes is to GitHub, to check for and download its own updates; [`network_security_config.xml`](native/app/src/main/res/xml/network_security_config.xml) refuses every other host, and ML Kit's telemetry upload is removed. No SMS or notification listener permissions; `ACCESS_NETWORK_STATE` is there only so the daily update check in the background can wait for a network (Wi-Fi, to download).
-- **Privacy & Security**: SQLite database for financial data, AES-256-GCM encrypted secure card vault, and `FLAG_SECURE` window protection.
-- **OCR Scan**: On-device credit card and document number scanning with Google ML Kit.
+<p align="center">
+  <img alt="Android 8.0+" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white">
+  <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.4-7F52FF?logo=kotlin&logoColor=white">
+  <img alt="Jetpack Compose" src="https://img.shields.io/badge/Jetpack%20Compose-Material%203%20Expressive-4285F4?logo=jetpackcompose&logoColor=white">
+  <img alt="Offline first" src="https://img.shields.io/badge/data-on%20your%20phone%20only-16A34A">
+</p>
 
-## Building and Testing
+<p align="center">
+  <a href="../../releases/latest"><b>Download APK</b></a> &nbsp;|&nbsp;
+  <a href="#install">Install</a> &nbsp;|&nbsp;
+  <a href="#faq">FAQ</a> &nbsp;|&nbsp;
+  <a href="#build">Build</a> &nbsp;|&nbsp;
+  <a href="../../issues">Issues</a>
+</p>
+
+---
+
+## About
+
+NormPix is a personal finance tracker and card wallet for Android, built natively with **Kotlin**, **Jetpack Compose** and **Material 3 Expressive**. You record spending and income by hand, or by sharing a payment app's receipt with it. It keeps budgets, repeating payments and reminders, shows where the money went, and holds your cards in an encrypted vault. There is no account, no server and no tracking: the one connection the app makes is to GitHub, to check for its own updates.
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/home.png" width="31%" alt="Home: this month's balance, spending and what needs attention">
+  <img src="docs/screenshots/activity.png" width="31%" alt="Activity: the month's transactions, day by day">
+  <img src="docs/screenshots/insights.png" width="31%" alt="Insights: where the money went, and how the month compares">
+</p>
+<p align="center">
+  <img src="docs/screenshots/budgets.png" width="31%" alt="Plans: budgets for the month">
+  <img src="docs/screenshots/wallet.png" width="31%" alt="Wallet: accounts and cards">
+  <img src="docs/screenshots/home-dark.png" width="31%" alt="Home in the dark theme">
+</p>
+<p align="center">
+  <img src="docs/screenshots/insights-dark.png" width="31%" alt="Insights in the dark theme">
+  <img src="docs/screenshots/wallet-dark.png" width="31%" alt="Wallet in the dark theme">
+  <img src="docs/screenshots/activity-dark.png" width="31%" alt="Activity in the dark theme">
+</p>
+<p align="center">
+  <sub>Home · Activity · Insights · Budgets · Wallet, light and dark. Every screenshot shows the app's built-in sample data
+  (Settings → Data &amp; backup → Sample data); no real person's money is in them.</sub>
+</p>
+
+## Highlights
+
+- **Private by design.** Your data lives in on-device SQLite databases; cards sit in an AES-256-GCM vault. There's no account and no analytics, and the network security config refuses every host but GitHub.
+- **Add a transaction in seconds.** Share a receipt or payment screenshot from Google Pay, PhonePe or your bank app, and NormPix reads it on the device (ML Kit) and fills in the amount, payee, account and category for you to check.
+- **Plans that keep up.** Monthly budgets per category, repeating payments that record themselves, and reminders with snooze, all on the Plans & Activity tab.
+- **Insights that answer questions.** Where the money went, what changed from last month, spending per person, and any range of days you pick.
+- **A wallet you can trust.** Card numbers are encrypted, hidden until you unlock (fingerprint, face or screen lock, or a tap on your own NFC tag), and cleared from the clipboard after copying. Screenshots of the app are blocked.
+- **Made to feel native.** Material 3 Expressive throughout, your choice of accent and font, ten app icons, and six page-transition styles, including a Linux-like window open and close.
+
+<details>
+<summary><b>All features</b></summary>
+
+**Money**
+- Accounts: cash, bank, card, wallet and savings, with bank logos, credit limits, statement and due days
+- Categories with sub-categories, shown as 3D pictures, emoji or outline icons, with brand logos; a full ready-made set to start from
+- Transactions with a payee, note, person and an attached picture (bill, receipt, screenshot), which can be read again to fill the form
+- Transfers between accounts, including paying a credit card's bill
+- Monthly budgets per category, with history
+- Repeating payments, recorded on their day
+- People: label expenses with who they were for, and see the totals per person
+- Search and filters by type, account, category, person, amount and dates
+- Insights: the month's snapshot, trend, top categories, what changed, and custom date ranges
+- Swipe actions on every list, undo after deleting
+
+**Wallet**
+- Cards stored encrypted, with bank designs and the card's network
+- Scan a card's number with the camera, on the device
+- Reveal and copy details only after unlocking; the clipboard is cleared after a set time
+- Card expiry reminders
+- Send a card to another phone running NormPix over NFC, on a schedule you choose
+
+**Reminders**
+- One-off or repeating, with exact alarms, snooze and complete from the notification
+- Linked to what they're about: a transaction, a repeating payment, an account or a card's bill
+
+**Your data**
+- Full backup with pictures (.zip), a small backup without them (.json), and a spreadsheet export (.csv)
+- Restore checks the file first and asks before replacing anything
+- Sample data to try everything without entering your own
+
+**Look and feel**
+- Light, dark or the system's theme; wallpaper colours or a chosen accent
+- Interface fonts, icon shapes and backgrounds, the frosted blur behind sheets
+- Six page-transition styles, ten launcher icons, and an animated splash screen
+
+**Updates**
+- Checks GitHub once a day (or when you ask) and installs only an update signed with the same key
+- Downloads carry on with the app closed, with progress in a notification, then install with one tap
+
+</details>
+
+<details>
+<summary><b>Recent improvements</b></summary>
+
+- A dedicated update page; download progress in a notification, with Download and Install buttons there too
+- A date range sheet in the month picker's style, with ready-made ranges
+- An animated splash screen that writes out the app's name
+- Linux window transitions you can actually see
+- Categories added in an update now reach phones that already had the app
+- The Plans & Transactions tab is now Plans & Activity
+
+</details>
+
+## Install
+
+1. Download the latest `.apk` from [Releases](../../releases/latest).
+2. Open it on your phone. If Android asks, allow your browser or files app to install unknown apps.
+3. That's it: NormPix checks for updates by itself (Settings → Automatic updates), and installs them over the app you have, keeping your data.
+
+> [!NOTE]
+> Only release builds update themselves. Debug and qa builds are signed with another key, so a release can't install over them; uninstall one first.
+
+## FAQ
+
+### Does NormPix send my data anywhere?
+> No. Your transactions, cards and reminders never leave the phone. The only connection is to GitHub, to check for and download NormPix's own updates. Android's network security config refuses every other host, and ML Kit's telemetry upload is taken out.
+
+### Can I try it without entering my own data?
+> Yes. Turn on **Settings → Data & backup → Sample data**: about three months of accounts, transactions, budgets, repeating payments, reminders and cards appear. It lives in memory only, so turning it off brings your own data back, untouched.
+
+### How do I move to a new phone?
+> Make a **Full backup, with pictures** (Settings → Data & backup), copy the `.zip` to the new phone, install NormPix there and **Restore from backup**. Card numbers are never put in a backup; add your cards again on the new phone.
+
+### Does it read my SMS or notifications?
+> No. NormPix has no SMS or notification-listener permission. To add a transaction from a payment app, share its receipt or screenshot with NormPix.
+
+### Why does the update notification stay while downloading?
+> A download you start runs in a foreground service, so it keeps going after you close the app. Android needs that service to show a notification; it goes away when the download finishes or you tap **Cancel**.
+
+## Project structure
+
+```plaintext
+native/                         The Android app (Kotlin, Jetpack Compose)
+├── app/src/main/kotlin/com/example/normpix/
+│   ├── finance/                Money: data (SQLite, backups), domain (ledger, budgets), share (receipt reading), ui
+│   ├── wallet/                 Cards: encrypted vault, card faces, NFC, expiry reminders, secure clipboard
+│   ├── reminders/              Reminders: model, alarms, notifications, screens
+│   ├── screens/                Home, Plans & Activity, Wallet tabs
+│   ├── navigation/             App shell, navigation bar, page transitions, splash, search
+│   ├── settings/               Preferences and the Settings pages
+│   ├── updates/                In-app updates from GitHub releases
+│   ├── ui/                     Design system: theme, tokens, sheets, lists, components
+│   └── banks/, availability/   Bank directory, scheduled features
+├── app/src/test/               Unit and Robolectric UI tests (and the README's screenshots)
+└── design/app-icon/            Where the launcher icons come from
+docs/                           README pictures (docs/screenshots is generated)
+lib/                            The earlier Flutter app, kept for reference
+.github/workflows/              CI: tests, lint, releases, screenshots
+```
+
+## Screenshots in this README
+
+The pictures in [`docs/screenshots`](docs/screenshots) are rendered by Robolectric from the app's real screens with the sample data ([`ReadmeScreenshots.kt`](native/app/src/test/kotlin/com/example/normpix/ReadmeScreenshots.kt)), so they stay true to the app:
+
+- [`.github/workflows/screenshots.yml`](.github/workflows/screenshots.yml) renders them again whenever the app changes on `main`, and commits them when they changed. For a pull request it pushes them to the branch `readme-screenshots/<branch>` to look at.
+- To render them on your own machine:
+
+  ```bash
+  cd native
+  ./gradlew testDebugUnitTest --rerun --tests 'com.example.normpix.ReadmeScreenshots' -Pscreenshots="$PWD/../docs/screenshots"
+  ```
+
+## Build
 
 The Android project is located in the [`native/`](native/) directory:
 
@@ -82,3 +247,14 @@ normpixKeyPassword=<key password>
 (or the environment variables `NORMPIX_KEYSTORE_FILE`, `NORMPIX_KEYSTORE_PASSWORD`, `NORMPIX_KEY_ALIAS`, `NORMPIX_KEY_PASSWORD`, which CI uses). Keep a backup of that keystore: without it no later APK can update the app.
 
 **Debug and qa builds** are signed with a key of their own, `native/app/debug.keystore` (in the repository; alias `androiddebugkey`, passwords `android`), so every machine signs them alike and they can never install over the real app. A debug build installed before this key existed has to be uninstalled once.
+
+
+## License
+
+This repository doesn't include a license yet. Until one is added, the author keeps all rights to the code, and you may not copy or redistribute it.
+
+---
+
+<div align="left">
+<sub>NormPix is a personal project and isn't affiliated with any bank, card network or payment app. Bank and brand names and logos belong to their owners and are shown only to label your own accounts and payments. GS Flex is Google Sans Flex under the SIL Open Font License 1.1; 3D category pictures are Microsoft Fluent Emoji (MIT).</sub>
+</div>
