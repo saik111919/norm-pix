@@ -42,6 +42,7 @@ import com.example.normpix.wallet.CardVault
 import com.example.normpix.wallet.StoredCard
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -83,8 +84,11 @@ class TransactionEditorTest {
         }
         container = AppContainer(
             preferences = AppPreferences(prefs),
-            finance = FinanceController(FinanceRepository(financeDb)),
-            reminders = RemindersController(ReminderDao(remindersDb), scheduler = NoOpReminderScheduler),
+            // The databases are read and written right where they are called, on the test's own thread. On the app's
+            // database threads a read could come back there and carry the screen's next frame with it, which Compose
+            // rejects ("multithreaded access to SnapshotStateObserver"): this test failed that way now and then on CI.
+            finance = FinanceController(FinanceRepository(financeDb, dispatcher = Dispatchers.Unconfined)),
+            reminders = RemindersController(ReminderDao(remindersDb, dispatcher = Dispatchers.Unconfined), scheduler = NoOpReminderScheduler),
             vault = vault,
         )
         container.finance.load()
