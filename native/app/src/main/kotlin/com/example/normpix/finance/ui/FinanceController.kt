@@ -297,7 +297,63 @@ class FinanceController(
         mutate { it.resetAll() }
         pictures?.deleteAll()
     }
+
+    // ----------------------------------------------------------------- undo
+
+    /**
+     * Runs [change] so that it can be taken back for a few moments (see [undo]): the ledger is read as it is just before,
+     * and given back as it was if the user asks. The pictures [change] says it no longer needs (what it returns) are kept
+     * until [settle], so an undone delete gets its picture back too.
+     */
+    suspend fun undoable(change: suspend FinanceController.() -> List<String>): FinanceUndo {
+        val before = repository.snapshot()
+        val released = change()
+        return FinanceUndo(before, _state.value.revision, released)
+    }
+
+    /** Deletes a transaction, keeping its picture until the delete is settled (see [undoable]). */
+    suspend fun deleteTransactionUndoably(id: Long): FinanceUndo = undoable {
+        val picture = repository.transactionById(id)?.picture
+        mutate { it.deleteTransaction(id) }
+        listOfNotNull(picture)
+    }
+
+    /** Erases everything as [resetAll] does, but so it can be undone: the pictures wait until it is settled. */
+    suspend fun resetAllUndoably(): FinanceUndo = undoable {
+        val names = repository.pictureNames().toList()
+        mutate { it.resetAll() }
+        names
+    }
+
+    /**
+     * Puts the ledger back as it was before [undo]'s change. Only while nothing else has changed since - otherwise putting it
+     * back would also take away what came after - so it says false then, and changes nothing.
+     */
+    suspend fun undo(undo: FinanceUndo): Boolean {
+        if (_state.value.revision != undo.revision) return false
+        restore(undo.before)
+        return true
+    }
+
+    /** The change is final (its moment to undo has passed): the pictures it let go of are deleted now. */
+    suspend fun settle(undo: FinanceUndo) {
+        val store = pictures ?: return
+        if (undo.pictures.isEmpty()) return
+        // Restored since (undone after all, or a backup brought them back): only the ones no transaction names any more go.
+        pictureLock.withLock {
+            val named = repository.pictureNames()
+            for (name in undo.pictures) if (name !in named) store.delete(name)
+        }
+    }
 }
+
+/** A change to the ledger that can still be undone (see [FinanceController.undoable]). */
+class FinanceUndo internal constructor(
+    internal val before: FinanceSnapshot,
+    /** The ledger's revision right after the change: undoing is only safe while it is still this. */
+    internal val revision: Int,
+    internal val pictures: List<String>,
+)
 
 /** What saving a transaction does to its attached picture. */
 sealed interface PictureEdit {

@@ -116,6 +116,24 @@ class ReminderFlows(
         addFrom(ReminderDrafts.aboutRecurring(rule, recurringName(rule, state), recurringSummary(rule, state), LocalDateTime.now()))
     }
 
+    override fun linkAutomatically(rule: RecurringRule) {
+        val id = rule.id ?: return
+        scope.launch {
+            controller.ensureLoaded()
+            if (controller.state.value.reminders.any { it.link == ReminderLink.recurring(id) }) return@launch
+            val now = LocalDateTime.now()
+            val draft = ReminderDrafts.aboutRecurring(rule, recurringName(rule, finance), recurringSummary(rule, finance), now)
+            ensureAlertAccess()
+            val added = controller.addReminder(draft)
+            val is24Hour = android.text.format.DateFormat.is24HourFormat(context)
+            snackbars.showUndoable(
+                "Reminder set for ${formatDueMoment(added.effectiveDueAt, is24Hour)}",
+                undo = { scope.launch { added.id?.let { controller.deleteReminder(it) } } },
+                kind = SnackbarKind.Done,
+            )
+        }
+    }
+
     override fun about(account: Account) {
         val state = finance
         val owed = (-state.balanceOf(account.id ?: return)).coerceAtLeast(0)
@@ -167,14 +185,24 @@ class ReminderFlows(
         scope.launch {
             val confirmed = overlays.confirm(
                 title = "Delete \"${reminder.title}\"?",
-                message = "This can't be undone.",
+                message = "You can undo it for a few seconds.",
                 confirmLabel = "Delete",
                 destructive = true,
                 icon = Icons.Outlined.DeleteOutline,
             )
             if (!confirmed) return@launch
-            controller.deleteReminder(reminder.id!!)
-            snackbars.show("Reminder deleted", SnackbarKind.Deleted)
+            val removed = controller.findById(reminder.id!!) ?: reminder
+            controller.deleteReminder(reminder.id)
+            snackbars.showUndoable(
+                "Reminder deleted",
+                undo = {
+                    scope.launch {
+                        // Back under its own id, so whatever it was linked to still finds it, and armed again.
+                        if (controller.findById(removed.id!!) == null) controller.addReminder(removed)
+                        snackbars.show("Reminder restored")
+                    }
+                },
+            )
         }
     }
 }

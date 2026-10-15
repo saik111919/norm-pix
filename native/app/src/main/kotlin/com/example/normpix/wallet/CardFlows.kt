@@ -36,6 +36,7 @@ import com.example.normpix.ui.components.AppHaptics
 import com.example.normpix.ui.components.AppOverlays
 import com.example.normpix.ui.components.AppSnackbars
 import com.example.normpix.reminders.ReminderNotifications
+import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalPermissions
 import com.example.normpix.ui.components.LocalSnackbars
@@ -68,6 +69,8 @@ class CardFlows(
     private val scope: CoroutineScope,
     private val context: Context,
     private val permissions: PermissionRequester,
+    /** Outlives the screen: an Undo has to work after the user has moved on. */
+    private val appScope: CoroutineScope = scope,
 ) {
     private val cards get() = container.cards
 
@@ -164,15 +167,23 @@ class CardFlows(
         scope.launch {
             val confirmed = overlays.confirm(
                 title = "Delete ${card.bankName} card?",
-                message = "The card ending in ${card.last4} will be permanently removed from this device's encrypted vault.",
+                message = "The card ending in ${card.last4} will be removed from this device's encrypted vault. You can undo it for a few seconds.",
                 confirmLabel = "Delete",
                 destructive = true,
                 icon = Icons.Outlined.DeleteOutline,
             )
             if (!confirmed) return@launch
+            val at = cards.cards.indexOfFirst { it.id == card.id }
             if (cards.delete(card.id)) {
                 haptics.success()
-                snackbars.show("Card deleted", SnackbarKind.Deleted)
+                snackbars.showUndoable(
+                    "Card deleted",
+                    undo = {
+                        appScope.launch {
+                            if (cards.restore(card, at)) snackbars.show("Card restored") else snackbars.show("Couldn't restore the card.", SnackbarKind.Error)
+                        }
+                    },
+                )
             }
         }
     }
@@ -258,9 +269,10 @@ fun rememberCardFlows(): CardFlows {
     val finance = rememberFinanceActions()
     val navigator = LocalNavigator.current
     val scope = rememberCoroutineScope()
+    val appScope = LocalAppScope.current
     val context = LocalContext.current
     val permissions = LocalPermissions.current
-    return remember(container, overlays, snackbars, haptics, finance, navigator, scope, context, permissions) {
-        CardFlows(container, overlays, snackbars, haptics, finance, navigator, scope, context, permissions)
+    return remember(container, overlays, snackbars, haptics, finance, navigator, scope, context, permissions, appScope) {
+        CardFlows(container, overlays, snackbars, haptics, finance, navigator, scope, context, permissions, appScope)
     }
 }

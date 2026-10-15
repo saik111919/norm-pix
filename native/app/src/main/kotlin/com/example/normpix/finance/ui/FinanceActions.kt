@@ -60,6 +60,7 @@ import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.wallet.CardsController
 import java.io.File
 import java.time.LocalDateTime
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -225,15 +226,15 @@ class FinanceActions(
             title = "Delete this ${transaction.type.label.lowercase()}?",
             message = "${signedAmount(state.money, transaction.type, transaction.amount)}" +
                 "${if (transaction.picture != null) " and its picture" else ""} will be removed, and balances, " +
-                "totals and budgets will update. This can't be undone.",
+                "totals and budgets will update. You can undo it for a few seconds.",
             confirmLabel = "Delete",
             destructive = true,
             icon = Icons.Outlined.DeleteOutline,
         )
         if (!confirmed) return
-        finance.deleteTransaction(transaction.id!!)
+        val undo = finance.deleteTransactionUndoably(transaction.id!!)
         haptics.success()
-        snackbars.show("Transaction deleted", SnackbarKind.Deleted)
+        snackbars.offerUndo("${transaction.type.label} deleted", finance, undo, scope)
     }
 
     // --------------------------------------------------------------- recurring
@@ -305,8 +306,16 @@ class FinanceActions(
                 }
                 "archive", "restore" -> {
                     val archive = action == "archive"
-                    finance.setAccountArchived(account.id!!, archive)
-                    snackbars.show(if (archive) "${account.name} archived. Its history is kept." else "${account.name} restored")
+                    val undo = finance.undoable {
+                        setAccountArchived(account.id!!, archive)
+                        emptyList()
+                    }
+                    snackbars.offerUndo(
+                        if (archive) "${account.name} archived. Its history is kept." else "${account.name} restored",
+                        finance,
+                        undo,
+                        scope,
+                    )
                 }
                 "delete" -> {
                     val confirmed = overlays.confirm(
@@ -318,8 +327,11 @@ class FinanceActions(
                     )
                     if (!confirmed) return@launch
                     try {
-                        finance.deleteAccount(account.id!!)
-                        snackbars.show("Account deleted", SnackbarKind.Deleted)
+                        val undo = finance.undoable {
+                            deleteAccount(account.id!!)
+                            emptyList()
+                        }
+                        snackbars.offerUndo("${account.name} deleted", finance, undo, scope)
                     } catch (e: FinanceConflictException) {
                         overlays.alert("Can't delete", e.message)
                     }
@@ -385,22 +397,28 @@ class FinanceActions(
                     val confirmed = overlays.confirm(
                         title = "Delete ${person.name}?",
                         message = if (count == 0) {
-                            "${person.name} has no expenses. This can't be undone."
+                            "${person.name} has no expenses."
                         } else {
                             "${person.name}'s $count ${if (count == 1) "expense" else "expenses"} (${state.money.format(spent!!.amount)}) " +
                                 "stay in your history and in every balance, total and budget - they just won't be for anyone " +
-                                "any more. To keep them attached and only hide ${person.name}, archive instead. This can't be undone."
+                                "any more. To keep them attached and only hide ${person.name}, archive instead."
                         },
                         confirmLabel = "Delete",
                         destructive = true,
                         icon = Icons.Outlined.DeleteOutline,
                     )
                     if (!confirmed) return@launch
-                    val kept = finance.deletePerson(id)
+                    var kept = 0
+                    val undo = finance.undoable {
+                        kept = deletePerson(id)
+                        emptyList()
+                    }
                     haptics.success()
-                    snackbars.show(
+                    snackbars.offerUndo(
                         if (kept == 0) "${person.name} deleted" else "${person.name} deleted. $kept ${if (kept == 1) "expense" else "expenses"} kept.",
-                        SnackbarKind.Deleted,
+                        finance,
+                        undo,
+                        scope,
                     )
                     onDeleted()
                 }
@@ -468,8 +486,16 @@ class FinanceActions(
                 "archive", "restore" -> {
                     val archive = action == "archive"
                     try {
-                        finance.setCategoryArchived(category.id!!, archive)
-                        snackbars.show(if (archive) "${category.name} archived. Past transactions keep it." else "${category.name} restored")
+                        val undo = finance.undoable {
+                            setCategoryArchived(category.id!!, archive)
+                            emptyList()
+                        }
+                        snackbars.offerUndo(
+                            if (archive) "${category.name} archived. Past transactions keep it." else "${category.name} restored",
+                            finance,
+                            undo,
+                            scope,
+                        )
                     } catch (e: FinanceConflictException) {
                         overlays.alert("Can't restore", e.message)
                     }
@@ -484,8 +510,11 @@ class FinanceActions(
                     )
                     if (!confirmed) return@launch
                     try {
-                        finance.deleteCategory(category.id!!)
-                        snackbars.show("Category deleted", SnackbarKind.Deleted)
+                        val undo = finance.undoable {
+                            deleteCategory(category.id!!)
+                            emptyList()
+                        }
+                        snackbars.offerUndo("${category.name} deleted", finance, undo, scope)
                     } catch (e: FinanceConflictException) {
                         overlays.alert("Can't delete", e.message)
                     }
@@ -537,3 +566,32 @@ fun ActionListSheet(title: String, subtitle: String?, actions: List<SheetAction>
 /** What reading a shared picture came to, null when no text could be read: the loading sheet gives back null only when cancelled. */
 private class PictureRead(val text: PictureText?)
 
+
+/**
+ * The snackbar for a change to the ledger that can be taken back for a few seconds ([FinanceController.undoable]): Undo puts
+ * it back, and the snackbar going without it settles the change. If something else changed meanwhile, undoing would take
+ * that away too, so it says so instead.
+ */
+internal fun AppSnackbars.offerUndo(message: String, finance: FinanceController, undo: FinanceUndo, scope: CoroutineScope) {
+    showUndoable(
+        message,
+        undo = {
+            scope.launch {
+                val back = try {
+                    finance.undo(undo)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    false
+                }
+                if (back) {
+                    show("Undone")
+                } else {
+                    finance.settle(undo)
+                    show("Couldn't undo, because something else changed since.", SnackbarKind.Warning)
+                }
+            }
+        },
+        settle = { scope.launch { finance.settle(undo) } },
+    )
+}

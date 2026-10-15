@@ -133,7 +133,10 @@ class AppPreferencesTest {
     fun fontChoicesPersistAndCustomStartsFromTheStyle() {
         val store = prefs()
         val preferences = AppPreferences(store)
-        assertEquals(InterfaceFont.System, preferences.state.value.interfaceFont, "the phone's font stays the default")
+        assertEquals(InterfaceFont.GsFlex, preferences.state.value.interfaceFont, "GS Flex is the default")
+        assertEquals(FontPreset.Zenith, preferences.state.value.fontPreset, "in its Zenith style")
+        preferences.setInterfaceFont(InterfaceFont.System)
+        assertEquals(InterfaceFont.System, AppPreferences(store).state.value.interfaceFont)
         preferences.setInterfaceFont(InterfaceFont.GsFlex)
         preferences.setFontPreset(FontPreset.Airy)
         assertEquals(FontShape(FontPreset.Airy.weightShift, FontPreset.Airy.width, FontPreset.Airy.roundness), preferences.state.value.fontShape)

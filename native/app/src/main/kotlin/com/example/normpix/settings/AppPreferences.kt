@@ -221,10 +221,10 @@ data class AppPrefsState(
     val notificationsEnabled: Boolean = true,
     /** Every amount is shown as dots (the eye button at the top of Home and Wallet) until shown again. */
     val amountsHidden: Boolean = false,
-    /** The interface's typeface. The phone's own, as it always was, until the user picks GS Flex. */
-    val interfaceFont: InterfaceFont = InterfaceFont.System,
+    /** The interface's typeface: GS Flex, in its Zenith style, until the user picks another. */
+    val interfaceFont: InterfaceFont = InterfaceFont.GsFlex,
     /** The GS Flex style used while [customFont] is off. */
-    val fontPreset: FontPreset = FontPreset.Standard,
+    val fontPreset: FontPreset = FontPreset.Zenith,
     /** GS Flex is set by hand with the three values below instead of a [fontPreset]. */
     val customFont: Boolean = false,
     /** How much heavier (+) or lighter (-) than designed every text style is, in font-weight units (see [FontAxes]). */

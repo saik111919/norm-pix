@@ -443,6 +443,19 @@ Asked for (2026-10-14): "When loading an image show proper loading sheet instead
 - [x] Transport's 3D car centred in its circle
 - [ ] Checks: CI (tests, lint, release build) on the PR; not tried on a phone
 
+## Phase 18 - Motion, undo, full backups, viewer (2026-10-15)
+- [x] Font: GS Flex in its Zenith style is the default
+- [x] Tabs: no flash of the arriving tab at full strength before it fades in; the tab going away stays under it and leaves in the chosen style (in the window style it recedes as the new one grows out of the bottom edge)
+- [x] Sheets and decisions open and close like windows in the Linux window style (grow out of the bottom edge as they rise, shrink back as they're dragged down)
+- [x] Snackbars follow the finger when swiped (drag events no longer go through a coroutine each); a fling decides the way they go
+- [x] Undo for a few seconds after deleting a transaction, account, category, person, recurring payment, budget, reminder or card, after archiving, after erasing all finance data and after restoring a backup (`FinanceController.undoable`: the ledger as it was, given back only while nothing else changed)
+- [x] Full backup with pictures (.zip: `normpix-backup.json` + `pictures/`), backup without pictures (.json) and CSV; restore reads either kind
+- [x] A new repeating payment (from the editor's repeat or a recurring payment) gets a linked reminder at once, with an Undo
+- [x] Settings: the search field waits in the header as an icon once scrolled away
+- [x] Picture viewer: glass close button and title, zoom toolbar (out / percent to fit / in / fit), double tap zooms where tapped; Read again uses a redo icon
+- [x] Eye button on Insights and Plans & Transactions too
+- [ ] Checks: CI (tests, lint, release build) on the PR; not tried on a phone
+
 ## Backlog - to come back to
 
 - [ ] **Reminders that behave like Samsung Reminder** (asked 2026-10-14, parked until we return to it). Today a reminder

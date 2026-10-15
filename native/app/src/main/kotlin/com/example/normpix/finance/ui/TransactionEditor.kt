@@ -205,6 +205,7 @@ private fun TransactionEditor(
         ?: finance.defaultAccount?.id?.takeIf { prefill?.accountNeedsChoice != true }
     var accountId by remember { mutableStateOf(startAccountId) }
     val walletCards = LocalWalletCards.current
+    val reminders = LocalReminderLauncher.current
     var toAccountId by remember {
         mutableStateOf(
             existing?.toAccountId
@@ -382,6 +383,11 @@ private fun TransactionEditor(
                     controller.saveTransaction(draft, pictureEdit)
                 }
                 haptics.success()
+                // A payment set to repeat gets a reminder of its own at once, linked to the repeating payment.
+                if (schedule != null) {
+                    saved.recurringId?.let { ruleId -> controller.repository.recurringRules().firstOrNull { it.id == ruleId } }
+                        ?.let { rule -> reminders?.linkAutomatically(rule) }
+                }
                 val repeating = schedule?.let { " · ${describeRepeat(it).replaceFirstChar { c -> c.lowercase() }}" }.orEmpty()
                 snackbars.show(
                     if (isEditing) "Changes saved$repeating" else "${saved.type.label} of ${finance.money.format(saved.amount)} saved$repeating",

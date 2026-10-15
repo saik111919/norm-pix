@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.FolderZip
 import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material.icons.outlined.TableView
 import androidx.compose.material.icons.rounded.Restore
@@ -22,9 +23,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.example.normpix.finance.data.FinanceBackupArchive
 import com.example.normpix.finance.data.FinanceBackupCodec
 import com.example.normpix.finance.data.FinanceSnapshot
 import com.example.normpix.finance.ui.LocalFinance
+import com.example.normpix.finance.ui.offerUndo
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.ui.components.AppLoadingIndicator
@@ -37,13 +40,17 @@ import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppSpacing
+import java.io.BufferedInputStream
+import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val fileDate = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 private val csvDate = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
@@ -117,6 +124,29 @@ fun DataSettingsPage() {
         }
     }
 
+    fun exportFullBackup() = run("full") {
+        val now = LocalDateTime.now()
+        val snapshot = finance.repository.snapshot()
+        val text = FinanceBackupCodec.encode(snapshot, exportedAt = now)
+        val names = snapshot.transactions.mapNotNull { it.picture }
+        val store = finance.pictures
+        var pictures = 0
+        val saved = try {
+            files.saveStreaming("normpix-backup-${fileDate.format(now)}.zip", "application/zip") { out ->
+                pictures = withContext(Dispatchers.IO) { FinanceBackupArchive.write(out, text, names) { store?.file(it) } }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            snackbars.show("Couldn't save the backup there. Try another location.", SnackbarKind.Error)
+            return@run
+        }
+        if (saved) {
+            haptics.success()
+            snackbars.show("Backup saved with ${if (pictures == 1) "1 picture" else "$pictures pictures"}: ${describe(snapshot)}")
+        }
+    }
+
     fun exportCsv() = run("csv") {
         val now = LocalDateTime.now()
         val snapshot = finance.repository.snapshot()
@@ -137,55 +167,63 @@ fun DataSettingsPage() {
     }
 
     fun restore() = run("restore") {
-        val bytes = try {
-            files.open() ?: return@run
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: BackupTooLargeException) {
-            problem(listOf("This file is too large to be a NormPix backup."))
-            return@run
-        } catch (_: Exception) {
-            problem(listOf("The file couldn't be read."))
-            return@run
-        }
-        val text = try {
-            Charsets.UTF_8.newDecoder()
-                .onMalformedInput(CodingErrorAction.REPORT)
-                .onUnmappableCharacter(CodingErrorAction.REPORT)
-                .decode(ByteBuffer.wrap(bytes))
-                .toString()
-                .removePrefix("\uFEFF")
-        } catch (_: CharacterCodingException) {
-            problem(listOf("This file isn't a NormPix backup."))
-            return@run
-        }
-        val result = FinanceBackupCodec.decode(text)
-        val snapshot = result.snapshot
-        if (snapshot == null) {
-            problem(result.errors)
-            return@run
-        }
-
-        val current = finance.repository.snapshot()
-        val confirmed = overlays.confirm(
-            title = "Replace all finance data?",
-            message = "The backup has ${describe(snapshot)}.\n\n" +
-                "It will replace everything here now: ${describe(current)}. " +
-                "This can't be undone - export a backup first if you might want the current data back. " +
-                "Saved cards and reminders are not affected.",
-            confirmLabel = "Replace",
-            destructive = true,
-            icon = Icons.Rounded.Restore,
-        )
-        if (!confirmed) return@run
+        // A full backup (.zip) brings its pictures along; they wait in a folder of their own until the restore is confirmed.
+        val store = finance.pictures
+        val staging = store?.newRestoreFolder()
         try {
-            finance.restore(snapshot)
-            haptics.success()
-            snackbars.show("Backup restored")
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            problem(listOf("The backup couldn't be restored, so nothing was changed."))
+            val read = try {
+                files.openStreaming { input -> withContext(Dispatchers.IO) { readBackup(input, staging) } } ?: return@run
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: BackupTooLargeException) {
+                problem(listOf("This file is too large to be a NormPix backup."))
+                return@run
+            } catch (_: Exception) {
+                problem(listOf("The file couldn't be read."))
+                return@run
+            }
+            val text = read.text
+            if (text == null) {
+                problem(listOf("This file isn't a NormPix backup."))
+                return@run
+            }
+            val result = FinanceBackupCodec.decode(text)
+            val snapshot = result.snapshot
+            if (snapshot == null) {
+                problem(result.errors)
+                return@run
+            }
+            val withPictures = snapshot.transactions.count { it.picture != null && it.picture in read.pictures }
+
+            val current = finance.repository.snapshot()
+            val confirmed = overlays.confirm(
+                title = "Replace all finance data?",
+                message = "The backup has ${describe(snapshot)}" +
+                    (if (read.archive) ", with ${if (withPictures == 1) "1 picture" else "$withPictures pictures"}" else "") + ".\n\n" +
+                    "It will replace everything here now: ${describe(current)}. " +
+                    "You can undo it for a few seconds; after that, export a backup first if you might want the current data back. " +
+                    "Saved cards and reminders are not affected.",
+                confirmLabel = "Replace",
+                destructive = true,
+                icon = Icons.Rounded.Restore,
+            )
+            if (!confirmed) return@run
+            try {
+                // The backup's pictures go in first, so the transactions that name them find them there.
+                if (store != null) for ((name, file) in read.pictures) store.adopt(file, name)
+                val undo = finance.undoable {
+                    this.restore(snapshot)
+                    emptyList()
+                }
+                haptics.success()
+                snackbars.offerUndo("Backup restored", finance, undo, scope)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                problem(listOf("The backup couldn't be restored, so nothing was changed."))
+            }
+        } finally {
+            staging?.deleteRecursively()
         }
     }
 
@@ -193,15 +231,15 @@ fun DataSettingsPage() {
         val current = finance.repository.snapshot()
         val confirmed = overlays.confirm(
             title = "Delete all finance data?",
-            message = "This permanently deletes ${describe(current)}, and restores the default Cash account and " +
-                "categories. This can't be undone.\n\nSaved cards, reminders and app settings are kept.",
+            message = "This deletes ${describe(current)}, and restores the default Cash account and categories. You can " +
+                "undo it for a few seconds; after that it's gone.\n\nSaved cards, reminders and app settings are kept.",
             confirmLabel = "Delete everything",
             destructive = true,
             icon = Icons.Outlined.DeleteForever,
         )
         if (!confirmed) return@run
-        finance.resetAll()
-        snackbars.show("Finance data deleted", SnackbarKind.Deleted)
+        val undo = finance.resetAllUndoably()
+        snackbars.offerUndo("Finance data deleted", finance, undo, scope)
     }
 
     @Composable
@@ -245,13 +283,30 @@ fun DataSettingsPage() {
                 }
                 ListSection(
                     title = "Back up",
-                    footer = "Backups include accounts, categories, transactions, budgets and recurring payments. " +
-                        "Saved cards and reminders aren't included. Files are saved only where you choose, and are " +
-                        "not encrypted - keep them somewhere safe.",
+                    footer = "Backups include accounts, categories, transactions, budgets, recurring payments and people. " +
+                        "Saved cards and reminders aren't included (cards have their own export, in Settings > Cards). " +
+                        "Files are saved only where you choose, and are not encrypted - keep them somewhere safe.",
                 ) {
-                    item { Row("backup", Icons.Rounded.SaveAlt, "Export backup", "A JSON file you can restore later", ::exportBackup) }
                     item {
-                        Row("csv", Icons.Outlined.TableView, "Export transactions as CSV", "For spreadsheets. Not restorable.", ::exportCsv)
+                        Row(
+                            "full",
+                            Icons.Outlined.FolderZip,
+                            "Full backup, with pictures",
+                            "A .zip with everything, and the bills and receipts attached to transactions. Restorable.",
+                            ::exportFullBackup,
+                        )
+                    }
+                    item {
+                        Row(
+                            "backup",
+                            Icons.Rounded.SaveAlt,
+                            "Backup without pictures",
+                            "A small .json file. Restorable; attached pictures stay on this phone only.",
+                            ::exportBackup,
+                        )
+                    }
+                    item {
+                        Row("csv", Icons.Outlined.TableView, "Transactions as a spreadsheet", "A .csv for Excel or Sheets. Not restorable.", ::exportCsv)
                     }
                 }
                 ListSection(title = "Restore") {
@@ -260,7 +315,7 @@ fun DataSettingsPage() {
                             "restore",
                             Icons.Rounded.Restore,
                             "Restore from backup",
-                            "The file is checked first. You confirm before anything is replaced.",
+                            "A full backup (.zip) or one without pictures (.json). It's checked first, and you confirm before anything is replaced.",
                             ::restore,
                         )
                     }
@@ -291,4 +346,52 @@ private fun describe(s: FinanceSnapshot): String {
         count(s.budgets.size, "budget change"),
         count(s.recurringRules.size, "recurring payment"),
     ).joinToString(", ")
+}
+
+/** A backup file as read for [restore]: its JSON, and - for a full backup - the pictures it carried. */
+private class ReadBackup(val text: String?, val pictures: Map<String, java.io.File>, val archive: Boolean)
+
+/**
+ * Reads a backup from [input]: a full backup (a zip, see [FinanceBackupArchive]) with its pictures read into [staging], or
+ * a backup's JSON on its own. Throws [BackupTooLargeException] for a file bigger than any backup could be.
+ */
+private fun readBackup(input: InputStream, staging: java.io.File?): ReadBackup {
+    val buffered = if (input.markSupported()) input else BufferedInputStream(input)
+    buffered.mark(8)
+    val head = ByteArray(4)
+    val got = buffered.read(head)
+    buffered.reset()
+    if (got == 4 && FinanceBackupArchive.isArchive(head)) {
+        // With nowhere to keep pictures (no picture store), they are read into a folder thrown away straight after.
+        val folder = staging ?: kotlin.io.path.createTempDirectory("restore").toFile()
+        val contents = try {
+            FinanceBackupArchive.read(buffered, folder)
+        } catch (e: java.io.IOException) {
+            if (e.message == FinanceBackupArchive.TOO_LARGE) throw BackupTooLargeException() else throw e
+        } finally {
+            if (staging == null) folder.deleteRecursively()
+        }
+        return ReadBackup(contents.json, if (staging != null) contents.pictures else emptyMap(), archive = true)
+    }
+    val out = java.io.ByteArrayOutputStream()
+    val buffer = ByteArray(64 * 1024)
+    var total = 0L
+    while (true) {
+        val read = buffered.read(buffer)
+        if (read < 0) break
+        total += read
+        if (total > BackupFiles.MAX_BYTES) throw BackupTooLargeException()
+        out.write(buffer, 0, read)
+    }
+    val text = try {
+        Charsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(out.toByteArray()))
+            .toString()
+            .removePrefix("\uFEFF")
+    } catch (_: CharacterCodingException) {
+        null
+    }
+    return ReadBackup(text, emptyMap(), archive = false)
 }

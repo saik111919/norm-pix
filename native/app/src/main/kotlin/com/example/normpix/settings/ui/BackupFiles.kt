@@ -11,8 +11,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import com.example.normpix.navigation.LocalAppContainer
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -31,6 +34,19 @@ interface BackupFiles {
 
     /** Asks the user for a file to open. Returns null if they cancelled; throws if reading failed. */
     suspend fun open(): ByteArray?
+
+    /**
+     * Asks where to save, then has [write] write the file there as it goes - for one too big to build in memory first (a
+     * backup with its pictures). False if the user cancelled; throws if writing failed, leaving no half-written file.
+     */
+    suspend fun saveStreaming(fileName: String, mimeType: String, write: suspend (OutputStream) -> Unit): Boolean {
+        val buffer = ByteArrayOutputStream()
+        write(buffer)
+        return save(fileName, mimeType, buffer.toByteArray())
+    }
+
+    /** Asks for a file, then hands what is in it to [read] as it is read. Null if the user cancelled. */
+    suspend fun <T> openStreaming(read: suspend (InputStream) -> T): T? = open()?.let { read(ByteArrayInputStream(it)) }
 
     companion object {
         /** Far above any real ledger; protects memory from picking a huge unrelated file. */
@@ -101,6 +117,28 @@ fun rememberBackupFiles(): BackupFiles {
                     }
                 }
                 return true
+            }
+
+            override suspend fun saveStreaming(fileName: String, mimeType: String, write: suspend (OutputStream) -> Unit): Boolean {
+                val uri = pick { createLauncher.launch(fileName to mimeType) } ?: return false
+                val resolver = context.contentResolver
+                try {
+                    val stream = withContext(Dispatchers.IO) {
+                        runCatching { resolver.openOutputStream(uri, "wt") }.getOrNull() ?: resolver.openOutputStream(uri, "w")
+                    } ?: throw IOException("Couldn't open the file for writing")
+                    stream.buffered().use { write(it) }
+                } catch (e: Exception) {
+                    // Don't leave an empty or half-written file behind.
+                    withContext(Dispatchers.IO) { runCatching { DocumentsContract.deleteDocument(resolver, uri) } }
+                    throw e
+                }
+                return true
+            }
+
+            override suspend fun <T> openStreaming(read: suspend (InputStream) -> T): T? {
+                val uri = pick { openLauncher.launch(Unit) } ?: return null
+                val stream = withContext(Dispatchers.IO) { context.contentResolver.openInputStream(uri) } ?: throw IOException("Couldn't open the file")
+                return stream.buffered().use { read(it) }
             }
 
             override suspend fun open(): ByteArray? {

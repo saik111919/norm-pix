@@ -175,11 +175,35 @@ val LocalPageAnimation = staticCompositionLocalOf { PageAnimationType.LinuxWindo
  * is gone at once, so only the entrance can be animated.) [progress] runs 0 -> 1 as the tab arrives.
  */
 internal object TabMotion {
+    /** How long a tab takes to come forward: a window's opening time in the window style, else a page's. */
+    fun openMs(type: PageAnimationType): Int =
+        if (type == PageAnimationType.LinuxWindow) PageTransitions.WINDOW_OPEN_MS else AppMotion.MEDIUM_MS
+
     fun scale(type: PageAnimationType, progress: Float): Float = when (type) {
-        PageAnimationType.LinuxWindow -> 0.94f + 0.06f * progress
+        PageAnimationType.LinuxWindow -> 0.9f + 0.1f * progress
         PageAnimationType.ScaleAndFade -> 0.92f + 0.08f * progress
         PageAnimationType.FadeThrough -> 0.96f + 0.04f * progress
         PageAnimationType.System, PageAnimationType.SharedAxis, PageAnimationType.SlideHorizontal -> 1f
+    }
+
+    /**
+     * How visible an arriving tab is at [progress]: a window fades in quickly while it grows, a fade-through waits for the
+     * leaving tab to go first, the rest fade in as they move.
+     */
+    fun arrivalAlpha(type: PageAnimationType, progress: Float): Float = when (type) {
+        PageAnimationType.LinuxWindow -> (progress / 0.6f).coerceIn(0f, 1f)
+        PageAnimationType.FadeThrough, PageAnimationType.SharedAxis -> ((progress - 0.3f) / 0.7f).coerceIn(0f, 1f)
+        else -> progress
+    }
+
+    /** The tab going away under the arriving one: in the window style it recedes a little, as a page under a new one does. */
+    fun departureScale(type: PageAnimationType, progress: Float): Float =
+        if (type == PageAnimationType.LinuxWindow) 1f - 0.04f * progress else 1f
+
+    /** Only the fading styles fade the tab going away, and first, before the new one fades in; the others keep it solid. */
+    fun departureAlpha(type: PageAnimationType, progress: Float): Float = when (type) {
+        PageAnimationType.FadeThrough, PageAnimationType.SharedAxis -> 1f - (progress / 0.3f).coerceIn(0f, 1f)
+        else -> 1f
     }
 
     /** Whether the tab arrives sliding in from the side it sits on (the others grow in place). */

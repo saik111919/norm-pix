@@ -1,6 +1,7 @@
 package com.example.normpix.ui.components
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -35,7 +36,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -114,12 +117,15 @@ internal fun AppSnackbar(data: SnackbarData, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
     val density = LocalDensity.current
     val reduced = rememberReducedMotion()
-    val scope = rememberCoroutineScope()
 
     val rise = remember { Animatable(if (reduced) 1f else 0f) }
     LaunchedEffect(Unit) { rise.animateTo(1f, tween(AppMotion.MEDIUM_MS, easing = AppMotion.enter)) }
 
-    val swipe = remember { Animatable(0f) }
+    // Where the finger has the snackbar, moved in step with every drag event; an Animatable only carries it on (or back)
+    // once the finger lifts. Moving it by launching a coroutine for each event dropped and reordered events, which made
+    // the snackbar lag, jump back and sometimes not follow the finger at all.
+    var dragX by remember { mutableFloatStateOf(0f) }
+    var settling by remember { mutableStateOf(false) }
     var width by remember { mutableIntStateOf(0) }
     val settle = AppMotion.spatial<Float>()
     val leaveMs = AppMotion.duration(AppMotion.SHORT_MS)
@@ -133,21 +139,30 @@ internal fun AppSnackbar(data: SnackbarData, modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .onSizeChanged { width = it.width }
             .graphicsLayer {
-                translationX = swipe.value
+                translationX = dragX
                 translationY = (1f - rise.value) * risePx
-                alpha = if (width > 0) 1f - (abs(swipe.value) / width).coerceIn(0f, 1f) else 1f
+                alpha = if (width > 0) 1f - (abs(dragX) / width).coerceIn(0f, 1f) else 1f
             }
             .draggable(
-                state = rememberDraggableState { delta -> scope.launch { swipe.snapTo(swipe.value + delta) } },
+                state = rememberDraggableState { delta -> if (!settling) dragX += delta },
                 orientation = Orientation.Horizontal,
                 onDragStopped = { velocity ->
-                    val gone = abs(swipe.value) > width * SWIPE_AWAY_FRACTION || abs(velocity) > flingPx
-                    if (gone && width > 0) {
-                        val direction = if (swipe.value != 0f) sign(swipe.value) else sign(velocity)
-                        swipe.animateTo(direction * width, tween(leaveMs, easing = AppMotion.exit))
-                        data.dismiss()
-                    } else {
-                        swipe.animateTo(0f, settle)
+                    // A fling decides the way it goes, even against a short drag the other way.
+                    val flung = abs(velocity) > flingPx
+                    val gone = width > 0 && (flung || abs(dragX) > width * SWIPE_AWAY_FRACTION)
+                    settling = true
+                    try {
+                        if (gone) {
+                            val direction = if (flung) sign(velocity) else sign(dragX)
+                            animate(dragX, direction * width, initialVelocity = velocity, animationSpec = tween(leaveMs, easing = AppMotion.exit)) { x, _ ->
+                                dragX = x
+                            }
+                            data.dismiss()
+                        } else {
+                            animate(dragX, 0f, initialVelocity = velocity, animationSpec = settle) { x, _ -> dragX = x }
+                        }
+                    } finally {
+                        settling = false
                     }
                 },
             ),

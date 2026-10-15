@@ -262,7 +262,10 @@ class BudgetActions(
                 BudgetSheet(categoryId = categoryId, current = current, pickCategory = pickCategory, onDone = dismiss)
             } ?: return@launch
             val month = MonthKey.of(LocalDateTime.now())
-            finance.setBudget(categoryId = result.categoryId, from = month, amount = result.amount)
+            val undo = finance.undoable {
+                setBudget(categoryId = result.categoryId, from = month, amount = result.amount)
+                emptyList()
+            }
             val state = finance.state.value
             val target = if (result.categoryId == null) {
                 "Monthly budget"
@@ -270,7 +273,7 @@ class BudgetActions(
                 "${state.category(result.categoryId)?.name ?: "Category"} budget"
             }
             if (result.amount == null) {
-                snackbars.show("$target removed from ${monthLabel(month)} on", SnackbarKind.Deleted)
+                snackbars.offerUndo("$target removed from ${monthLabel(month)} on", finance, undo, scope)
             } else {
                 snackbars.show("$target set to ${state.money.format(result.amount, trimZeroFraction = true)}")
             }

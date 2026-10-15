@@ -4,8 +4,11 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -23,14 +26,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
-import androidx.compose.material.icons.outlined.DocumentScanner
+import androidx.compose.material.icons.outlined.Autorenew
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.rounded.FitScreen
+import androidx.compose.material.icons.rounded.ZoomIn
+import androidx.compose.material.icons.rounded.ZoomOut
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -61,11 +70,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -81,12 +93,16 @@ import com.example.normpix.ui.components.AppLinearProgress
 import com.example.normpix.ui.components.AppOverlays
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.solidColorScheme
+import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
+import com.example.normpix.ui.theme.rememberReducedMotion
 import java.io.File
 import java.time.LocalDateTime
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -340,7 +356,7 @@ private fun ReadAgainButton(onClick: () -> Unit) {
         state = rememberTooltipState(),
     ) {
         IconButton(onClick = onClick) {
-            Icon(Icons.Outlined.DocumentScanner, contentDescription = "Read the picture again")
+            Icon(Icons.Outlined.Autorenew, contentDescription = "Read the picture again")
         }
     }
 }
@@ -401,9 +417,16 @@ fun PictureThumbnail(picture: File, modifier: Modifier = Modifier) {
     }
 }
 
+/** The most a picture zooms in, and how far a double tap or the + button takes it. */
+private const val MAX_ZOOM = 5f
+private const val DOUBLE_TAP_ZOOM = 2.5f
+private const val ZOOM_STEP = 1.5f
+
 /**
- * [picture] on its own, over the whole screen: pinch to zoom (up to 5x) and drag to move around a zoomed picture;
- * double-tap zooms in, or back out. Back or the close button leaves.
+ * [picture] on its own, over the whole screen, the way the app's own pages are dressed: a dark stage, the app's glass circle
+ * to close it at the top, and a toolbar at the bottom to zoom out, see how far it is zoomed (tap it to fit the picture
+ * again), and zoom in. Pinch zooms and drag moves around a zoomed picture; a double tap zooms in on where it is tapped, or
+ * back out. Zooming from the buttons glides; a zoomed picture only moves as far as its edges. Back or Close leaves.
  */
 @Composable
 fun PictureViewer(picture: File, onDismiss: () -> Unit) {
@@ -412,6 +435,9 @@ fun PictureViewer(picture: File, onDismiss: () -> Unit) {
         var scale by remember { mutableFloatStateOf(1f) }
         var offset by remember { mutableStateOf(Offset.Zero) }
         var size by remember { mutableStateOf(IntSize.Zero) }
+        val scope = rememberCoroutineScope()
+        var gliding by remember { mutableStateOf<Job?>(null) }
+        val reduced = rememberReducedMotion()
 
         // A zoomed picture moves only as far as its edges go.
         fun clamp(next: Offset, zoom: Float): Offset {
@@ -420,7 +446,31 @@ fun PictureViewer(picture: File, onDismiss: () -> Unit) {
             return Offset(next.x.coerceIn(-maxX, maxX), next.y.coerceIn(-maxY, maxY))
         }
 
-        Box(Modifier.fillMaxSize().background(Color.Black).onSizeChanged { size = it }) {
+        /** Glides to [target] zoom, keeping the point [focus] (on screen; the middle when null) where it is. */
+        fun zoomTo(target: Float, focus: Offset? = null) {
+            val to = target.coerceIn(1f, MAX_ZOOM)
+            val centre = Offset(size.width / 2f, size.height / 2f)
+            // Where the picture point under [focus] is now, unzoomed; it should end up under [focus] again.
+            val at = focus ?: centre
+            val point = centre + (at - centre - offset) / scale
+            val endOffset = if (to == 1f) Offset.Zero else clamp((at - centre) - (point - centre) * to, to)
+            val fromScale = scale
+            val fromOffset = offset
+            gliding?.cancel()
+            gliding = scope.launch {
+                if (reduced) {
+                    scale = to
+                    offset = endOffset
+                } else {
+                    animate(0f, 1f, animationSpec = tween(AppMotion.MEDIUM_MS, easing = AppMotion.standard)) { t, _ ->
+                        scale = fromScale + (to - fromScale) * t
+                        offset = fromOffset + (endOffset - fromOffset) * t
+                    }
+                }
+            }
+        }
+
+        Box(Modifier.fillMaxSize().background(ViewerStage).onSizeChanged { size = it }) {
             if (bitmap != null) {
                 Image(
                     bitmap,
@@ -429,20 +479,12 @@ fun PictureViewer(picture: File, onDismiss: () -> Unit) {
                     modifier = Modifier
                         .fillMaxSize()
                         .pointerInput(Unit) {
-                            detectTapGestures(
-                                onDoubleTap = {
-                                    if (scale > 1f) {
-                                        scale = 1f
-                                        offset = Offset.Zero
-                                    } else {
-                                        scale = 2.5f
-                                    }
-                                },
-                            )
+                            detectTapGestures(onDoubleTap = { at -> if (scale > 1.01f) zoomTo(1f) else zoomTo(DOUBLE_TAP_ZOOM, at) })
                         }
                         .pointerInput(Unit) {
                             detectTransformGestures { _, pan, zoom, _ ->
-                                scale = (scale * zoom).coerceIn(1f, 5f)
+                                gliding?.cancel()
+                                scale = (scale * zoom).coerceIn(1f, MAX_ZOOM)
                                 offset = if (scale == 1f) Offset.Zero else clamp(offset + pan, scale)
                             }
                         }
@@ -456,13 +498,78 @@ fun PictureViewer(picture: File, onDismiss: () -> Unit) {
             } else {
                 AppLinearProgress(Modifier.align(Alignment.Center).width(120.dp), color = Color.White)
             }
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.safeDrawing).padding(AppSpacing.sm),
+            // The header: the app's glass circle to close, and what this is.
+            Row(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(horizontal = AppSpacing.lg, vertical = AppSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Outlined.Close, contentDescription = "Close", tint = Color.White)
+                ViewerButton(Icons.AutoMirrored.Rounded.ArrowBack, "Close", onDismiss)
+                Spacer(Modifier.width(AppSpacing.md))
+                Text("Picture", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            }
+            // The zoom tools, a glass pill at the bottom.
+            if (bitmap != null) {
+                Row(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .padding(bottom = AppSpacing.lg)
+                        .clip(AppRadius.rFull)
+                        .background(ViewerGlass)
+                        .border(1.dp, ViewerEdge, AppRadius.rFull)
+                        .padding(horizontal = AppSpacing.xs, vertical = AppSpacing.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ViewerToolButton(Icons.Rounded.ZoomOut, "Zoom out", enabled = scale > 1.01f) { zoomTo(scale / ZOOM_STEP) }
+                    Box(
+                        Modifier
+                            .heightIn(min = 48.dp)
+                            .widthIn(min = 64.dp)
+                            .clip(AppRadius.rFull)
+                            .clickable(onClickLabel = "Fit the picture", role = Role.Button) { zoomTo(1f) }
+                            .semantics { contentDescription = "Zoomed to ${(scale * 100).roundToInt()} percent. Tap to fit" },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("${(scale * 100).roundToInt()}%", style = MaterialTheme.typography.labelLarge, color = Color.White)
+                    }
+                    ViewerToolButton(Icons.Rounded.ZoomIn, "Zoom in", enabled = scale < MAX_ZOOM - 0.01f) { zoomTo(scale * ZOOM_STEP) }
+                    ViewerToolButton(Icons.Rounded.FitScreen, "Fit to screen", enabled = scale > 1.01f) { zoomTo(1f) }
+                }
             }
         }
+    }
+}
+
+/** Behind the picture: near-black, so any picture reads, and the glass controls over it. */
+private val ViewerStage = Color(0xFF0B0C0E)
+private val ViewerGlass = Color.White.copy(alpha = 0.14f)
+private val ViewerEdge = Color.White.copy(alpha = 0.18f)
+
+/** The viewer's close button: the app's floating glass circle, in white over the dark stage. */
+@Composable
+private fun ViewerButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(ViewerGlass)
+            .border(1.dp, ViewerEdge, CircleShape)
+            .clickable(onClickLabel = label, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.White)
+    }
+}
+
+@Composable
+private fun ViewerToolButton(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick, enabled = enabled) {
+        Icon(icon, contentDescription = label, tint = Color.White.copy(alpha = if (enabled) 1f else 0.38f))
     }
 }
 

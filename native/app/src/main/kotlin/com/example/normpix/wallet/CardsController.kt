@@ -48,6 +48,11 @@ class CardsController(private val vault: CardVault) {
 
     suspend fun delete(id: String): Boolean = mutate { list -> list.filter { it.id != id } }
 
+    /** Puts a deleted [card] back where it was ([index], or at the end), unless one with its id is there already. */
+    suspend fun restore(card: StoredCard, index: Int): Boolean = mutate { list ->
+        if (list.any { it.id == card.id }) list else list.toMutableList().apply { add(index.coerceIn(0, size), card) }
+    }
+
     /**
      * Adds the cards read from a cards file, skipping any already saved (see [CardsTransfer.merge]). Null when the vault
      * couldn't be read or written, in which case nothing was added.

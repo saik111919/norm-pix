@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.ui.BudgetsView
 import com.example.normpix.finance.ui.RecurringView
 import com.example.normpix.finance.ui.TransactionHistory
+import com.example.normpix.navigation.AmountsVisibilityButton
 import com.example.normpix.navigation.AppDestination
 import com.example.normpix.navigation.LocalPageAnimation
 import com.example.normpix.navigation.LocalShellState
@@ -84,6 +85,7 @@ fun PlansAndTransactionsScreen(
                 when (tab) {
                     PlansAndTransactionsTab.Transactions -> TransactionHistory(
                         title = AppDestination.PlansAndTransactions.label,
+                        actions = { AmountsVisibilityButton() },
                         allTime = shell.transactionsAllTime,
                         onAllTimeChange = { shell.transactionsAllTime = it },
                         pinnedHeader = switch,
@@ -167,6 +169,7 @@ private fun Plans(listState: LazyListState, switch: @Composable () -> Unit) {
     val shell = LocalShellState.current
     AppPage(
         title = AppDestination.PlansAndTransactions.label,
+        actions = { AmountsVisibilityButton() },
         // Both levels stay pinned, so you can switch section from anywhere in a long list.
         pinnedHeader = {
             Column {
