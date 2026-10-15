@@ -44,21 +44,26 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # The output is kept so the step that names failures can point at a compile error too.
       - name: Unit and Robolectric UI tests
-        run: ./gradlew testDebugUnitTest
+        run: |
+          set -o pipefail
+          ./gradlew testDebugUnitTest 2>&1 | tee "$RUNNER_TEMP/tests.log"
 
       # Runs even when a test fails, so one run reports both.
       - name: Android Lint
         if: ${{ !cancelled() }}
         run: ./gradlew lintDebug
 
-      # Each failed test is named on the run's page, with the start of its stack trace, so a red run says what broke
-      # without downloading the reports.
-      - name: Name the failed tests
+      # Each Kotlin compile error and failed test is named on the run's page (a compile error at its line, a test with the
+      # start of what it reported), so a red run says what broke without downloading the reports.
+      - name: Name what failed
         if: ${{ failure() }}
+        env:
+          LOG: ${{ runner.temp }}/tests.log
         run: |
           python3 - <<'EOF'
-          import glob, xml.etree.ElementTree as ET
+          import glob, os, re, xml.etree.ElementTree as ET
 
           def data(text):
               return text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
@@ -66,15 +71,25 @@ jobs:
           def prop(text):
               return data(text).replace(':', '%3A').replace(',', '%2C')
 
+          root = os.environ['GITHUB_WORKSPACE'].rstrip('/') + '/'
+          errors = 0
+          if os.path.exists(os.environ['LOG']):
+              for line in open(os.environ['LOG'], errors='replace'):
+                  m = re.match(r'^e: (?:file://)?(\S+?):(\d+):(\d+) (.*)$', line.rstrip('\n'))
+                  if m:
+                      errors += 1
+                      path = m.group(1).removeprefix(root)
+                      print(f"::error file={prop(path)},line={m.group(2)},col={m.group(3)},title=Kotlin::{data(m.group(4))}")
+
           failed = 0
           for path in sorted(glob.glob('app/build/test-results/**/*.xml', recursive=True)):
               for case in ET.parse(path).getroot().iter('testcase'):
                   for problem in case.findall('failure') + case.findall('error'):
                       failed += 1
                       name = f"{case.get('classname', '').rsplit('.', 1)[-1]} > {case.get('name', '')}"
-                      trace = '\n'.join((problem.text or problem.get('message') or '').splitlines()[:30])
+                      trace = '\n'.join((problem.text or problem.get('message') or '').splitlines()[:120])
                       print(f"::error title={prop(name)}::{data(trace.strip())}")
-          print(f"{failed} failed test(s)")
+          print(f"{errors} compile error(s), {failed} failed test(s)")
           EOF
 
       - name: Upload test and lint reports
