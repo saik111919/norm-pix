@@ -68,7 +68,7 @@ class AppUpdaterTest {
         ).also { it.onForeground() }
     }
 
-    /** An updater that has found 1.0.3 and been told Update now, run until it stops. */
+    /** An updater that has found 1.0.3 and been told Update now, run until it stops (at Ready, when all went well). */
     private suspend fun TestScope.downloaded(): AppUpdater {
         Releases.publish(network)
         val updater = updater()
@@ -76,6 +76,13 @@ class AppUpdaterTest {
         updater.download()
         advanceUntilIdle()
         return updater
+    }
+
+    /** The same, then told Install: handed to Android's installer (or stopped on the way, run until it stops). */
+    private suspend fun TestScope.installing(): AppUpdater = downloaded().also { updater ->
+        assertIs<UpdateState.Ready>(updater.state.value)
+        updater.install()
+        advanceUntilIdle()
     }
 
     private val apkUrl = Releases.download("v1.0.3", Releases.apkName("1.0.3"))
@@ -170,21 +177,29 @@ class AppUpdaterTest {
     // ------------------------------------------------------------ download and install
 
     @Test
-    fun `Update now downloads the release, checks it and hands it to Android, which asks the user`() = runTest {
+    fun `Update now downloads the release and checks it, and only Install hands it to Android, which asks the user`() = runTest {
         val apk = Releases.publish(network)
         val updater = updater()
         updater.check()
         val states = mutableListOf<UpdateState>()
+        val announced = mutableListOf<UpdateRelease>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { updater.state.toList(states) }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { updater.downloaded.toList(announced) }
         updater.download()
         advanceUntilIdle()
 
-        val installing = assertIs<UpdateState.Installing>(updater.state.value)
-        assertContentEquals(apk, installing.apk.readBytes())
-        assertEquals(listOf(installing.apk), installer.installs)
+        // Downloaded and checked, it waits for the user: nothing is handed to Android yet.
+        val ready = assertIs<UpdateState.Ready>(updater.state.value)
+        assertContentEquals(apk, ready.apk.readBytes())
+        assertEquals(emptyList(), installer.installs)
+        assertEquals(listOf(ready.release), announced)
         assertTrue(states.any { it is UpdateState.Downloading && it.done == 0L })
         assertTrue(states.any { it is UpdateState.Downloading && it.done == apk.size.toLong() })
-        assertTrue(states.any { it is UpdateState.Ready })
+
+        updater.install()
+        advanceUntilIdle()
+        val installing = assertIs<UpdateState.Installing>(updater.state.value)
+        assertEquals(listOf(installing.apk), installer.installs)
 
         val confirm = Intent("android.content.pm.action.CONFIRM_INSTALL")
         updater.onInstallNeedsUser(1, confirm)
@@ -196,7 +211,7 @@ class AppUpdaterTest {
 
     @Test
     fun `the installer's word about another install is ignored`() = runTest {
-        val updater = downloaded()
+        val updater = installing()
         updater.onInstallFinished(99, InstallOutcome.Cancelled)
         updater.onInstallNeedsUser(99, Intent("x"))
         assertIs<UpdateState.Installing>(updater.state.value)
@@ -220,7 +235,8 @@ class AppUpdaterTest {
         Releases.serveFile(network, "v1.0.3", Releases.apkName("1.0.3"), apk)
         updater.retry()
         advanceUntilIdle()
-        assertIs<UpdateState.Installing>(updater.state.value)
+        assertIs<UpdateState.Ready>(updater.state.value)
+        assertEquals(emptyList(), installer.installs)
     }
 
     @Test
@@ -257,7 +273,7 @@ class AppUpdaterTest {
         network.answer(apkUrl, body = apk)
         updater.retry()
         advanceUntilIdle()
-        assertIs<UpdateState.Installing>(updater.state.value)
+        assertIs<UpdateState.Ready>(updater.state.value)
     }
 
     @Test
@@ -272,13 +288,13 @@ class AppUpdaterTest {
         network.answer(apkUrl, body = apk)
         updater.retry()
         advanceUntilIdle()
-        assertIs<UpdateState.Installing>(updater.state.value)
+        assertIs<UpdateState.Ready>(updater.state.value)
     }
 
     @Test
     fun `without leave to install apps, Android's setting opens and the update carries on once it is given`() = runTest {
         installer.allowed = false
-        val updater = downloaded()
+        val updater = installing()
         assertIs<UpdateState.NeedsPermission>(updater.state.value)
         assertEquals(emptyList(), installer.installs)
 
@@ -300,7 +316,7 @@ class AppUpdaterTest {
 
     @Test
     fun `the confirmation waits until NormPix is on screen to show it`() = runTest {
-        val updater = downloaded()
+        val updater = installing()
         updater.onBackground()
         updater.onInstallNeedsUser(1, Intent("confirm"))
         assertEquals(emptyList(), installer.confirmations)
@@ -310,7 +326,7 @@ class AppUpdaterTest {
 
     @Test
     fun `turning down the install keeps the download, to install later`() = runTest {
-        val updater = downloaded()
+        val updater = installing()
         updater.onInstallFinished(1, InstallOutcome.Cancelled)
         val cancelled = assertIs<UpdateState.Cancelled>(updater.state.value)
         assertNotNull(cancelled.apk)
@@ -322,7 +338,7 @@ class AppUpdaterTest {
 
     @Test
     fun `backing out of Android's confirmation without a word from it counts as turned down`() = runTest {
-        val updater = downloaded()
+        val updater = installing()
         updater.onInstallNeedsUser(1, Intent("confirm"))
         updater.onBackground()
         // Back while the install is still under way (the user said yes): it is left alone.
@@ -341,7 +357,7 @@ class AppUpdaterTest {
 
     @Test
     fun `an install that fails says why, and keeps the download only where trying again can help`() = runTest {
-        val updater = downloaded()
+        val updater = installing()
         updater.onInstallFinished(1, InstallOutcome.Failed(UpdateProblem.InstallBlocked))
         assertNotNull(assertIs<UpdateState.Failed>(updater.state.value).apk)
         updater.retry()
@@ -357,7 +373,7 @@ class AppUpdaterTest {
     @Test
     fun `an install Android won't start says why`() = runTest {
         installer.failWith = UpdateProblem.InstallFailed("Session commit failed")
-        val updater = downloaded()
+        val updater = installing()
         val failed = assertIs<UpdateState.Failed>(updater.state.value)
         assertEquals(UpdateProblem.InstallFailed("Session commit failed"), failed.problem)
         assertNotNull(failed.apk)
@@ -368,14 +384,29 @@ class AppUpdaterTest {
     }
 
     @Test
-    fun `a download the system cleared from the cache is downloaded again`() = runTest {
-        val updater = downloaded()
+    fun `a download the system cleared from the cache is downloaded again, and the Install that found it gone goes on`() = runTest {
+        val updater = installing()
         updater.onInstallFinished(1, InstallOutcome.Cancelled)
         dir.listFiles()!!.forEach { it.delete() }
         updater.install()
         advanceUntilIdle()
         assertIs<UpdateState.Installing>(updater.state.value)
         assertTrue(downloads().isNotEmpty())
+    }
+
+    @Test
+    fun `a finished download waits for Install however long it takes, and Later doesn't lose it`() = runTest {
+        val updater = downloaded()
+        advanceTimeBy(60 * 60 * 1000L)
+        runCurrent()
+        assertIs<UpdateState.Ready>(updater.state.value)
+        assertEquals(emptyList(), installer.installs)
+        updater.later()
+        assertIs<UpdateState.Ready>(updater.state.value, "Later only keeps it from being offered at launch")
+        updater.install()
+        advanceUntilIdle()
+        assertIs<UpdateState.Installing>(updater.state.value)
+        assertEquals(1, installer.installs.size)
     }
 }
 

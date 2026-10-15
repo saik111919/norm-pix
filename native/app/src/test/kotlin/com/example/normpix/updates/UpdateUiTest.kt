@@ -29,12 +29,14 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -100,12 +102,12 @@ class UpdateUiTest {
         compose.waitUntil(10_000) { compose.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty() }
 
     /** An updater on the fake network that does everything on the main thread, as the screen's own work does under test. */
-    private fun updater(enabled: Boolean = true) = AppUpdater(
+    private fun updater(enabled: Boolean = true, installer: FakeInstaller = FakeInstaller()) = AppUpdater(
         installed = Releases.installed,
         checker = UpdateChecker(GitHubAccess(network, "NormPix/test"), Releases.REPO, Releases.installed),
         downloads = UpdateDownloader(GitHubAccess(network, "NormPix/test"), dir),
         inspector = FakeInspector(),
-        installer = FakeInstaller(),
+        installer = installer,
         records = records,
         scope = scope,
         io = Dispatchers.Main.immediate,
@@ -261,6 +263,36 @@ class UpdateUiTest {
         tap("Later")
         assertEquals(10003L, records.dismissedVersionCode)
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Update available").fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun `a download finished with the sheet closed brings it back once unlocked, and only Install installs it`() {
+        Releases.publish(network)
+        val installer = FakeInstaller()
+        val updater = updater(installer = installer)
+        val environment = environment(updater)
+        // No offer at launch: only the finished download brings the sheet up.
+        environment.preferences.setUpdateChecksEnabled(false)
+        var locked by mutableStateOf(true)
+        compose.setContent { environment.Content { OfferAppUpdates(updater, appLocked = locked) } }
+        compose.waitForIdle()
+        scope.launch { updater.check() }
+        compose.waitForIdle()
+        assertIs<UpdateState.Available>(updater.state.value)
+
+        updater.download()
+        compose.waitForIdle()
+        assertIs<UpdateState.Ready>(updater.state.value)
+        absent("Ready to install")
+
+        locked = false
+        compose.waitUntil(10_000) {
+            compose.waitForIdle()
+            compose.onAllNodesWithText("Ready to install").fetchSemanticsNodes().isNotEmpty()
+        }
+        assertEquals(emptyList(), installer.installs, "nothing is installed until the user says so")
+        tap("Install")
+        assertEquals(1, installer.installs.size)
     }
 
     @Test

@@ -1,9 +1,9 @@
 name: Android
 
 # Pull requests into main are tested and built. A push to main (or a manual run on main) also publishes its APK as a
-# prerelease: a test build to download by hand, which the app never offers as an update. Pushing a version tag (v1.0.3,
-# matching versionName in native/app/build.gradle.kts) publishes a release: signed with the release key, marked latest,
-# with the update.json the app's updater reads (native/app/src/main/kotlin/com/example/normpix/updates/).
+# release, at the next free version (see MAIN_BUILDS below): signed with the release key, marked latest, with the
+# update.json the app's updater reads (native/app/src/main/kotlin/com/example/normpix/updates/). Pushing a version tag
+# (v1.1.0, matching versionName in native/app/build.gradle.kts) publishes that version as a release.
 on:
   push:
     branches: [main]
@@ -24,6 +24,9 @@ env:
   # Where releases are published, and where the app looks for updates: this repository, or the one named by the
   # UPDATE_REPOSITORY variable. The app reads releases without signing in, so they have to be public (README.md, Releases).
   UPDATE_REPOSITORY: ${{ vars.UPDATE_REPOSITORY || github.repository }}
+  # What a push to main publishes: "release" (the app offers it as an update) or "prerelease" (a test build to install by
+  # hand, which the app never offers).
+  MAIN_BUILDS: release
 
 jobs:
   verify:
@@ -128,7 +131,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # A tag is a release, and has to name the version being built; anything else is a test build of main.
+      # A tag is a release, and has to name the version being built. A build of main is a release too (with MAIN_BUILDS set
+      # to release), at the next free version: versionName, or the patch after the highest vX.Y.Z tag of its X.Y if that is
+      # as high - so every release is newer than the one before, and raising versionName (to 1.1.0, say) starts there.
+      # Anything else (a pull request, a branch) is a test build.
       - name: Read the app version
         id: version
         run: |
@@ -136,6 +142,24 @@ jobs:
           if [ -z "$version" ]; then
             echo "::error::versionName not found in app/build.gradle.kts"
             exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = "branch" ] && [ "$GITHUB_REF_NAME" = "main" ] && [ "$GITHUB_EVENT_NAME" != "pull_request" ] && [ "$MAIN_BUILDS" = "release" ]; then
+            IFS=. read -r major minor patch <<< "$version"
+            highest=$(git tag -l "v$major.$minor.*" | sed -n "s/^v$major\.$minor\.\([0-9][0-9]*\)$/\1/p" | sort -n | tail -n 1)
+            if [ -n "$highest" ] && [ "$highest" -ge "$patch" ]; then patch=$((highest + 1)); fi
+            if [ "$patch" -ge 100 ]; then
+              echo "::error title=Out of patch versions::$major.$minor.$patch is past $major.$minor.99. Raise the minor version in versionName (app/build.gradle.kts)."
+              exit 1
+            fi
+            version="$major.$minor.$patch"
+            echo "kind=release" >> "$GITHUB_OUTPUT"
+            echo "tag=v$version" >> "$GITHUB_OUTPUT"
+            echo "apk=NormPix-$version.apk" >> "$GITHUB_OUTPUT"
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            # The build takes this version instead of versionName.
+            echo "override=$version" >> "$GITHUB_OUTPUT"
+            echo "Releasing main as $version"
+            exit 0
           fi
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
             if [ "$GITHUB_REF_NAME" != "v$version" ]; then
@@ -178,6 +202,8 @@ jobs:
           NORMPIX_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           # The app looks for updates where this workflow publishes them.
           NORMPIX_UPDATE_REPOSITORY: ${{ env.UPDATE_REPOSITORY }}
+          # A release of main is built as the version worked out above; empty otherwise (versionName as written).
+          NORMPIX_VERSION_NAME: ${{ steps.version.outputs.override }}
         run: ./gradlew assembleRelease
 
       - name: Collect the APK
@@ -259,16 +285,21 @@ jobs:
         run: |
           notes="$RUNNER_TEMP/notes.md"
           mandatory=false
-          # The checkout can hold the tag without its message: fetch the tag itself.
-          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
-          if [ "$(git cat-file -t "$TAG")" = "tag" ]; then
-            message=$(git tag -l --format='%(contents)' "$TAG" | sed '/-----BEGIN PGP SIGNATURE-----/,$d')
-            if grep -qiE '^mandatory:[[:space:]]*true[[:space:]]*$' <<< "$message"; then mandatory=true; fi
-            grep -viE '^mandatory:' <<< "$message" > "$notes" || true
+          # A pushed tag already exists; a release of main gets its tag when it is published, so its notes start from the commit.
+          ref="$GITHUB_SHA"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            ref="$TAG"
+            # The checkout can hold the tag without its message: fetch the tag itself.
+            git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+            if [ "$(git cat-file -t "$TAG")" = "tag" ]; then
+              message=$(git tag -l --format='%(contents)' "$TAG" | sed '/-----BEGIN PGP SIGNATURE-----/,$d')
+              if grep -qiE '^mandatory:[[:space:]]*true[[:space:]]*$' <<< "$message"; then mandatory=true; fi
+              grep -viE '^mandatory:' <<< "$message" > "$notes" || true
+            fi
           fi
           if [ ! -s "$notes" ] || ! grep -q '[^[:space:]]' "$notes"; then
-            previous=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' "$TAG^" 2>/dev/null || true)
-            if [ -n "$previous" ]; then range="$previous..$TAG"; else range="$TAG"; fi
+            previous=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' "$ref^" 2>/dev/null || true)
+            if [ -n "$previous" ]; then range="$previous..$ref"; else range="$ref"; fi
             git log --no-merges -n 60 --pretty='- %s' "$range" > "$notes"
           fi
           cp "$notes" "$GITHUB_WORKSPACE/release-notes.md"
