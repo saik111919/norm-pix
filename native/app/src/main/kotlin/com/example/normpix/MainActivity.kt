@@ -75,6 +75,20 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
+     * Back from Android's installer or its "Install unknown apps" setting (both cover this activity without always
+     * stopping it): an update waiting on the user carries on.
+     */
+    override fun onResume() {
+        super.onResume()
+        container.updates?.onForeground()
+    }
+
+    override fun onPause() {
+        container.updates?.onBackground()
+        super.onPause()
+    }
+
+    /**
      * A copied card detail whose time ran out while the app was away is dealt with once the window has focus: only
      * the app in focus may look at the clipboard, so this is the moment it can tell whether the clip is still its own
      * or something newer that must be left alone.

@@ -1,0 +1,302 @@
+package com.example.normpix.updates
+
+import android.content.Context
+import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.test.core.app.ApplicationProvider
+import com.example.normpix.navigation.SettingsPage
+import com.example.normpix.settings.AppPreferences
+import com.example.normpix.settings.ui.SettingsCatalog
+import com.example.normpix.settings.ui.SettingsScreen
+import com.example.normpix.settings.ui.SettingsSpecial
+import com.example.normpix.testing.TestEnvironment
+import com.example.normpix.ui.theme.NormPixTheme
+import com.example.normpix.updates.ui.OfferAppUpdates
+import com.example.normpix.updates.ui.UpdateSheetActions
+import com.example.normpix.updates.ui.UpdateSheetContent
+import java.io.File
+import java.time.Instant
+import kotlin.io.path.createTempDirectory
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import org.junit.Rule
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+/** The update sheet in each state, the Settings rows, and the offer at launch. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], qualifiers = "w411dp-h891dp")
+class UpdateUiTest {
+    @get:Rule
+    val compose = createAndroidComposeRule<ComponentActivity>()
+
+    private val release = UpdateRelease(
+        versionCode = 10003, versionName = "1.0.3", tag = "v1.0.3", publishedAt = Instant.parse("2026-10-15T09:00:00Z"),
+        notes = "- Faster receipts", apkName = "NormPix-1.0.3.apk",
+        apkUrl = "https://github.com/owner/normpix/releases/download/v1.0.3/NormPix-1.0.3.apk", size = 12_582_912,
+        sha256 = "0".repeat(64), mandatory = false,
+    )
+    private val apk = File("NormPix-10003.apk")
+    private val taps = mutableListOf<String>()
+    private val actions = UpdateSheetActions(
+        update = { taps += "update" },
+        later = { taps += "later" },
+        cancelDownload = { taps += "cancel" },
+        install = { taps += "install" },
+        allow = { taps += "allow" },
+        retry = { taps += "retry" },
+        close = { taps += "close" },
+    )
+
+    private val network = FakeNetwork()
+    private val dir: File = createTempDirectory("updates").toFile()
+    private val records = MemoryUpdateRecords()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var env: TestEnvironment? = null
+
+    @AfterTest
+    fun tearDown() {
+        scope.cancel()
+        env?.close()
+        dir.deleteRecursively()
+    }
+
+    private var shown by mutableStateOf<UpdateState?>(null)
+
+    /** Shows the sheet in [state]: the content is set once, then follows [shown]. */
+    private fun show(state: UpdateState) {
+        if (shown == null) {
+            compose.setContent { NormPixTheme { shown?.let { UpdateSheetContent(it, Releases.installed, actions) } } }
+        }
+        shown = state
+        compose.waitForIdle()
+    }
+
+    private fun tap(text: String) {
+        compose.onNodeWithText(text).performClick()
+        compose.waitForIdle()
+    }
+
+    private fun absent(text: String) = assertTrue(compose.onAllNodesWithText(text).fetchSemanticsNodes().isEmpty(), "\"$text\" is not shown")
+
+    private fun waitFor(text: String, substring: Boolean = false) =
+        compose.waitUntil(10_000) { compose.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty() }
+
+    /** An updater on the fake network that does everything on the main thread, as the screen's own work does under test. */
+    private fun updater(enabled: Boolean = true) = AppUpdater(
+        installed = Releases.installed,
+        checker = UpdateChecker(GitHubAccess(network, "NormPix/test"), Releases.REPO, Releases.installed),
+        downloads = UpdateDownloader(GitHubAccess(network, "NormPix/test"), dir),
+        inspector = FakeInspector(),
+        installer = FakeInstaller(),
+        records = records,
+        scope = scope,
+        io = Dispatchers.Main.immediate,
+        enabled = enabled,
+    )
+
+    private fun environment(updater: AppUpdater?) = TestEnvironment(prefsName = "update_ui_test", updates = updater).also { env = it }
+
+    // ------------------------------------------------------------ the sheet
+
+    @Test
+    fun `an update shows both versions, when it came out, what's new, and Update now or Later`() {
+        show(UpdateState.Available(release))
+        compose.onNodeWithText("Update available").assertIsDisplayed()
+        compose.onNodeWithText("1.0.2").assertIsDisplayed()
+        compose.onNodeWithText("1.0.3").assertIsDisplayed()
+        compose.onNodeWithText("Released", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("What's new").assertIsDisplayed()
+        compose.onNodeWithText("- Faster receipts").assertIsDisplayed()
+        tap("Update now")
+        tap("Later")
+        assertEquals(listOf("update", "later"), taps)
+    }
+
+    @Test
+    fun `a mandatory update can be closed, not put off`() {
+        show(UpdateState.Available(release.copy(mandatory = true)))
+        absent("Later")
+        tap("Not now")
+        assertEquals(listOf("close"), taps)
+    }
+
+    @Test
+    fun `a download shows how far it got and can be stopped`() {
+        show(UpdateState.Downloading(release, release.size / 2, release.size))
+        compose.onNodeWithText("Downloading update").assertIsDisplayed()
+        compose.onNodeWithText("50%", substring = true).assertIsDisplayed()
+        absent("Update now")
+        tap("Cancel download")
+        assertEquals(listOf("cancel"), taps)
+    }
+
+    @Test
+    fun `ready, waiting for leave, and installing`() {
+        show(UpdateState.Ready(release, apk))
+        tap("Install")
+        show(UpdateState.NeedsPermission(release, apk))
+        compose.onNodeWithText("Allow NormPix to install updates").assertIsDisplayed()
+        tap("Open settings")
+        show(UpdateState.Installing(release, apk))
+        compose.onNodeWithText("Confirm on the screen Android shows", substring = true).assertIsDisplayed()
+        tap("Close")
+        assertEquals(listOf("install", "allow", "close"), taps)
+    }
+
+    @Test
+    fun `stopped and turned down updates can be taken up again`() {
+        show(UpdateState.Cancelled(release, null))
+        tap("Download again")
+        show(UpdateState.Cancelled(release, apk))
+        tap("Install")
+        assertEquals(listOf("retry", "install"), taps)
+    }
+
+    @Test
+    fun `a failure says why, and offers Try again only where it can help`() {
+        show(UpdateState.Failed(UpdateProblem.Offline))
+        compose.onNodeWithText("Couldn't check for updates").assertIsDisplayed()
+        compose.onNodeWithText("Couldn't reach GitHub", substring = true).assertIsDisplayed()
+        tap("Try again")
+        show(UpdateState.Failed(UpdateProblem.SignatureMismatch, release))
+        compose.onNodeWithText("Couldn't update").assertIsDisplayed()
+        compose.onNodeWithText("signed with a different key", substring = true).assertIsDisplayed()
+        absent("Try again")
+        assertEquals(listOf("retry"), taps)
+    }
+
+    @Test
+    fun `up to date`() {
+        show(UpdateState.UpToDate("1.0.2"))
+        compose.onNodeWithText("NormPix is up to date").assertIsDisplayed()
+        tap("Done")
+        assertEquals(listOf("close"), taps)
+    }
+
+    // ------------------------------------------------------------ Settings
+
+    @Test
+    fun `Settings checks on a tap and opens the update it finds`() {
+        Releases.publish(network)
+        val environment = environment(updater())
+        compose.setContent { environment.Content { SettingsScreen() } }
+        compose.onNodeWithText("Check for updates").performScrollTo()
+        compose.onNodeWithText("Version 1.0.2").assertIsDisplayed()
+        tap("Check for updates")
+        waitFor("Update available")
+        compose.onNodeWithText("Update now").assertIsDisplayed()
+        assertTrue(compose.onAllNodesWithText("Version 1.0.3 is available").fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
+    fun `being up to date is said in a snackbar`() {
+        Releases.publish(network, "1.0.2", 10002)
+        val environment = environment(updater())
+        compose.setContent { environment.Content { SettingsScreen() } }
+        compose.onNodeWithText("Check for updates").performScrollTo()
+        tap("Check for updates")
+        waitFor("NormPix 1.0.2 is up to date")
+    }
+
+    @Test
+    fun `automatic checks can be turned off`() {
+        val environment = environment(updater())
+        compose.setContent { environment.Content { SettingsScreen() } }
+        compose.onNodeWithText("Check for updates automatically").performScrollTo()
+        assertTrue(environment.preferences.state.value.updateChecksEnabled)
+        tap("Check for updates automatically")
+        assertFalse(environment.preferences.state.value.updateChecksEnabled)
+    }
+
+    @Test
+    fun `a debug build says updates come with release builds, and has nothing to switch`() {
+        val environment = environment(updater(enabled = false))
+        compose.setContent { environment.Content { SettingsScreen() } }
+        compose.onNodeWithText("Check for updates").performScrollTo()
+        compose.onNodeWithText("Version 1.0.2 · updates come with release builds").assertIsDisplayed()
+        absent("Check for updates automatically")
+        assertEquals(emptyList(), network.asked)
+    }
+
+    @Test
+    fun `settings search finds it`() {
+        for (query in listOf("update", "upgrade", "new version", "apk")) {
+            assertEquals(SettingsSpecial.Updates, SettingsCatalog.search(query).single { it.title == "Check for updates" }.special, query)
+        }
+        assertTrue(SettingsCatalog.search("update").none { it.page == SettingsPage.Security })
+    }
+
+    // ------------------------------------------------------------ at launch
+
+    @Test
+    fun `a newer release is offered at launch once unlocked, and Later puts it off`() {
+        Releases.publish(network)
+        val updater = updater()
+        val environment = environment(updater)
+        var locked by mutableStateOf(true)
+        compose.setContent { environment.Content { OfferAppUpdates(updater, appLocked = locked) } }
+        compose.waitForIdle()
+        assertEquals(emptyList(), network.asked, "nothing is asked while the app is locked")
+
+        locked = false
+        waitFor("Update available")
+        tap("Later")
+        assertEquals(10003L, records.dismissedVersionCode)
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Update available").fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun `nothing is asked at launch with automatic checks off`() {
+        Releases.publish(network)
+        val updater = updater()
+        val environment = environment(updater)
+        environment.preferences.setUpdateChecksEnabled(false)
+        compose.setContent { environment.Content { OfferAppUpdates(updater, appLocked = false) } }
+        compose.waitForIdle()
+        assertEquals(emptyList(), network.asked)
+        assertNull(updater.state.value.release)
+    }
+}
+
+/** The automatic-check switch: on until the user turns it off, remembered, and back on with the other defaults. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
+class UpdatePreferenceTest {
+    private fun store() = ApplicationProvider.getApplicationContext<Context>()
+        .getSharedPreferences("update_preference_test", Context.MODE_PRIVATE)
+        .also { it.edit().clear().commit() }
+
+    @Test
+    fun `automatic checks are on until turned off, and the choice is remembered`() {
+        val store = store()
+        assertTrue(AppPreferences(store).state.value.updateChecksEnabled)
+        AppPreferences(store).setUpdateChecksEnabled(false)
+        assertFalse(AppPreferences(store).state.value.updateChecksEnabled, "read back by the next launch")
+    }
+
+    @Test
+    fun `resetting settings turns them back on`() {
+        val preferences = AppPreferences(store())
+        preferences.setUpdateChecksEnabled(false)
+        preferences.resetToDefaults()
+        assertTrue(preferences.state.value.updateChecksEnabled)
+    }
+}

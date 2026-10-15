@@ -46,8 +46,8 @@ object NoSharedPictureReader : SharedPictureReader {
 
 /**
  * Reads a shared picture's text on this phone with ML Kit's bundled recognizer - the one card scanning uses - so the
- * picture never leaves the device (the app has no network access at all). The picture is read straight from the app
- * that shared it and is never copied or kept.
+ * picture never leaves the device (the app reaches no server but GitHub, for its own updates). The picture is read
+ * straight from the app that shared it and is never copied or kept.
  */
 class MlKitSharedPictureReader(private val context: Context) : SharedPictureReader {
     override suspend fun read(picture: Uri): PictureText? = try {

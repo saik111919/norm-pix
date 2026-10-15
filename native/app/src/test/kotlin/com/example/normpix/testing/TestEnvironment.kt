@@ -30,6 +30,7 @@ import com.example.normpix.reminders.RemindersDatabase
 import com.example.normpix.settings.AppPreferences
 import com.example.normpix.ui.theme.Appearance
 import com.example.normpix.ui.theme.NormPixTheme
+import com.example.normpix.updates.AppUpdater
 import com.example.normpix.wallet.CardVault
 import com.example.normpix.wallet.CardsController
 import com.example.normpix.wallet.RegisteredTags
@@ -131,6 +132,8 @@ class TestEnvironment(
     val receipts: RecordingReceiptSharer = RecordingReceiptSharer(),
     /** What reads the text in pictures (ML Kit doesn't run under Robolectric). */
     val pictures: SharedPictureReader = NoSharedPictureReader,
+    /** Checks for and installs updates; none unless a test brings one. */
+    val updates: AppUpdater? = null,
 ) {
     val context: Context = ApplicationProvider.getApplicationContext()
     private val financeDb = FinanceDatabase(context, name = null)
@@ -164,6 +167,7 @@ class TestEnvironment(
             registeredTags = registeredTags,
             receipts = receipts,
             sharedPictures = pictures,
+            updates = updates,
         )
         runBlocking {
             container.finance.load()

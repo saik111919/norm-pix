@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.SettingsBackupRestore
+import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -34,6 +36,7 @@ import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.SearchField
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.AppTheme
+import com.example.normpix.updates.ui.updateSummary
 
 val SettingsGroups = SettingsPage.entries
 
@@ -130,6 +133,30 @@ fun SettingsScreen() {
                                     hue = 5,
                                     onClick = { system.resetSettings() },
                                 )
+                            }
+                            container.updates?.let { updater ->
+                                item {
+                                    val update by updater.state.collectAsState()
+                                    SettingsRow(
+                                        headline = "Check for updates",
+                                        supporting = updateSummary(update, updater),
+                                        icon = Icons.Outlined.SystemUpdate,
+                                        hue = 6,
+                                        onClick = { system.checkForUpdates() },
+                                    )
+                                }
+                                if (updater.enabled) {
+                                    item {
+                                        SettingsSwitchRow(
+                                            headline = "Check for updates automatically",
+                                            supporting = "Once a day, when you open NormPix. Only GitHub is contacted.",
+                                            icon = Icons.Outlined.Update,
+                                            hue = 6,
+                                            checked = prefs.updateChecksEnabled,
+                                            onCheckedChange = container.preferences::setUpdateChecksEnabled,
+                                        )
+                                    }
+                                }
                             }
                             item {
                                 SettingsRow(

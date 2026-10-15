@@ -188,6 +188,8 @@ data class AppPrefsState(
     val profilePhoto: String = "",
     /** Where the account button at the top of each tab leads. Settings, as it always has; Profile is the user's to choose. */
     val accountButtonTarget: AccountButtonTarget = AccountButtonTarget.Settings,
+    /** Once a day, at launch, ask GitHub whether a newer release is out (Settings > Check for updates automatically). */
+    val updateChecksEnabled: Boolean = true,
 ) {
     fun availabilityOf(feature: ScheduledFeature): AvailabilityRule = availability[feature] ?: AvailabilityRule()
 }
@@ -230,6 +232,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
             profileEmoji = prefs.getString(K_PROFILE_EMOJI, defaults.profileEmoji).orEmpty(),
             profilePhoto = prefs.getString(K_PROFILE_PHOTO, defaults.profilePhoto).orEmpty().takeIf(::isProfilePhotoName).orEmpty(),
             accountButtonTarget = prefs.enum(K_ACCOUNT_BUTTON, defaults.accountButtonTarget),
+            updateChecksEnabled = prefs.getBoolean(K_UPDATE_CHECKS, defaults.updateChecksEnabled),
             // Only features the user has configured; the rest read as the default (always on) through availabilityOf.
             availability = ScheduledFeature.entries.filter { prefs.contains(it.key("mode")) }.associateWith { prefs.readRule(it) },
         )
@@ -341,6 +344,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
         putInt(feature.key("end"), rule.schedule.end.minuteOfDay())
     }
 
+    fun setUpdateChecksEnabled(enabled: Boolean) =
+        change({ copy(updateChecksEnabled = enabled) }) { putBoolean(K_UPDATE_CHECKS, enabled) }
+
     /** Whether the user was already sent to the system page for exact-alarm access (asked once, then never nagged). */
     var exactAlarmPrompted: Boolean
         get() = prefs.getBoolean(K_EXACT_ALARM_PROMPTED, false)
@@ -392,6 +398,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_PROFILE_EMOJI = "profile_emoji"
         const val K_PROFILE_PHOTO = "profile_photo"
         const val K_ACCOUNT_BUTTON = "account_button_target"
+        const val K_UPDATE_CHECKS = "update_checks_enabled"
 
         fun ScheduledFeature.key(field: String) = "availability_${name.lowercase()}_$field"
         fun LocalTime.minuteOfDay() = hour * 60 + minute

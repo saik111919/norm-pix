@@ -1,21 +1,29 @@
 name: Android
 
-# Pull requests into main are tested and built; every push to main (and a manual run on main) also publishes the
-# release APK as a GitHub release.
+# Pull requests into main are tested and built. A push to main (or a manual run on main) also publishes its APK as a
+# prerelease: a test build to download by hand, which the app never offers as an update. Pushing a version tag (v1.0.3,
+# matching versionName in native/app/build.gradle.kts) publishes a release: signed with the release key, marked latest,
+# with the update.json the app's updater reads (native/app/src/main/kotlin/com/example/normpix/updates/).
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # A newer push to a pull request replaces its running checks; runs on main always finish, so no release is skipped.
+  # A newer push to a pull request replaces its running checks; runs on main and on tags always finish.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
+
+env:
+  # Where releases are published, and where the app looks for updates: this repository, or the one named by the
+  # UPDATE_REPOSITORY variable. The app reads releases without signing in, so they have to be public (README.md, Releases).
+  UPDATE_REPOSITORY: ${{ vars.UPDATE_REPOSITORY || github.repository }}
 
 jobs:
   verify:
@@ -65,9 +73,13 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
+      kind: ${{ steps.version.outputs.kind }}
       signed: ${{ steps.key.outputs.signed }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          # A release's notes list the commits since the release before it.
+          fetch-depth: 0
 
       - uses: actions/setup-java@v5
         with:
@@ -76,6 +88,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # A tag is a release, and has to name the version being built; anything else is a test build of main.
       - name: Read the app version
         id: version
         run: |
@@ -84,20 +97,35 @@ jobs:
             echo "::error::versionName not found in app/build.gradle.kts"
             exit 1
           fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+              echo "::error title=Tag and version differ::The tag $GITHUB_REF_NAME doesn't name versionName $version (app/build.gradle.kts). Tag v$version, or change versionName first."
+              exit 1
+            fi
+            echo "kind=release" >> "$GITHUB_OUTPUT"
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "apk=NormPix-$version.apk" >> "$GITHUB_OUTPUT"
+          else
+            echo "kind=prerelease" >> "$GITHUB_OUTPUT"
+            echo "tag=v$version-build.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "apk=NormPix-$version-build.$GITHUB_RUN_NUMBER.apk" >> "$GITHUB_OUTPUT"
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=v$version-build.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "apk=NormPix-$version-build.$GITHUB_RUN_NUMBER.apk" >> "$GITHUB_OUTPUT"
 
       # Every release has to be signed with the same key, or a new APK won't install over the one on the phone.
       - name: Load the signing key
         id: key
         env:
           KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          KIND: ${{ steps.version.outputs.kind }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
             echo "NORMPIX_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
             echo "signed=true" >> "$GITHUB_OUTPUT"
+          elif [ "$KIND" = "release" ]; then
+            echo "::error title=No release key::A release has to be signed with the release key. Set the RELEASE_KEYSTORE_* secrets (README.md, Signing key)."
+            exit 1
           else
             echo "::warning title=No release key::RELEASE_KEYSTORE_BASE64 is not set, so this APK is signed with the debug key and won't install over the app. See README.md, Signing key."
             echo "signed=false" >> "$GITHUB_OUTPUT"
@@ -108,11 +136,15 @@ jobs:
           NORMPIX_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           NORMPIX_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           NORMPIX_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          # The app looks for updates where this workflow publishes them.
+          NORMPIX_UPDATE_REPOSITORY: ${{ env.UPDATE_REPOSITORY }}
         run: ./gradlew assembleRelease
 
       - name: Collect the APK
+        id: apk
         env:
           APK: ${{ steps.version.outputs.apk }}
+          VERSION: ${{ steps.version.outputs.version }}
           SIGNED: ${{ steps.key.outputs.signed }}
           # The release key's certificate (README.md, Signing key): the one the installed app carries.
           RELEASE_CERT_SHA256: 96b30aae17b879b4854337043b458c2ce6f22ed67b7966384374e7bbb95a3488
@@ -126,20 +158,102 @@ jobs:
           cp "$built" "$GITHUB_WORKSPACE/dist/$APK"
           cd "$GITHUB_WORKSPACE/dist"
           sha256sum "$APK" > "$APK.sha256"
-          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
-          certs=$("$apksigner" verify --print-certs "$APK")
+          build_tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)"
+          certs=$("$build_tools/apksigner" verify --print-certs "$APK")
           echo "$certs"
           # An APK signed with any other key would not install over the app, so it is never published as the release.
           if [ "$SIGNED" = "true" ] && ! echo "$certs" | grep -q "certificate SHA-256 digest: $RELEASE_CERT_SHA256"; then
             echo "::error title=Wrong signing key::The APK is not signed with the release key ($RELEASE_CERT_SHA256). Check the RELEASE_KEYSTORE_* secrets."
             exit 1
           fi
+          # What the APK itself says it is: update.json is written from this, not from the build script.
+          badging=$("$build_tools/aapt2" dump badging "$APK")
+          package=$(echo "$badging" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+          code=$(echo "$badging" | sed -n "s/^package: .*versionCode='\([0-9]*\)'.*/\1/p")
+          name=$(echo "$badging" | sed -n "s/^package: .*versionName='\([^']*\)'.*/\1/p")
+          min_sdk=$(grep -m 1 -oE "^(minSdkVersion|sdkVersion):'[0-9]+'" <<< "$badging" | grep -oE '[0-9]+')
+          if [ "$name" != "$VERSION" ] || [ -z "$code" ] || [ -z "$package" ] || [ -z "$min_sdk" ]; then
+            echo "::error::The APK says $package $name ($code, minSdk $min_sdk); expected versionName $VERSION"
+            exit 1
+          fi
+          {
+            echo "package=$package"
+            echo "code=$code"
+            echo "min_sdk=$min_sdk"
+            echo "size=$(stat -c %s "$APK")"
+            echo "sha256=$(cut -d ' ' -f 1 "$APK.sha256")"
+          } >> "$GITHUB_OUTPUT"
+
+      # The app updates only to a release with a higher versionCode than its own: a release that isn't higher than the
+      # one before it would never reach anyone.
+      - name: Check the version is newer than the latest release
+        if: ${{ steps.version.outputs.kind == 'release' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODE: ${{ steps.apk.outputs.code }}
+        run: |
+          if gh release download --repo "$UPDATE_REPOSITORY" --pattern update.json --dir "$RUNNER_TEMP/previous" 2>/dev/null; then
+            previous=$(jq -r '.versionCode' "$RUNNER_TEMP/previous/update.json")
+            if [ "$CODE" -le "$previous" ]; then
+              echo "::error title=Version not newer::versionCode $CODE is not above the latest release's $previous. Raise versionName."
+              exit 1
+            fi
+            echo "versionCode $CODE follows $previous"
+          else
+            echo "No earlier release with update.json: this is the first."
+          fi
+
+      # What changed: an annotated tag's message, or else the commits since the previous release. A line
+      # "mandatory: true" in the tag's message marks the release as one the app offers at every launch, even after Later.
+      - name: Write the release notes and update.json
+        if: ${{ steps.version.outputs.kind == 'release' }}
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          APK: ${{ steps.version.outputs.apk }}
+          PACKAGE: ${{ steps.apk.outputs.package }}
+          CODE: ${{ steps.apk.outputs.code }}
+          MIN_SDK: ${{ steps.apk.outputs.min_sdk }}
+          SIZE: ${{ steps.apk.outputs.size }}
+          SHA256: ${{ steps.apk.outputs.sha256 }}
+        run: |
+          notes="$RUNNER_TEMP/notes.md"
+          mandatory=false
+          # The checkout can hold the tag without its message: fetch the tag itself.
+          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          if [ "$(git cat-file -t "$TAG")" = "tag" ]; then
+            message=$(git tag -l --format='%(contents)' "$TAG" | sed '/-----BEGIN PGP SIGNATURE-----/,$d')
+            if grep -qiE '^mandatory:[[:space:]]*true[[:space:]]*$' <<< "$message"; then mandatory=true; fi
+            grep -viE '^mandatory:' <<< "$message" > "$notes" || true
+          fi
+          if [ ! -s "$notes" ] || ! grep -q '[^[:space:]]' "$notes"; then
+            previous=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' "$TAG^" 2>/dev/null || true)
+            if [ -n "$previous" ]; then range="$previous..$TAG"; else range="$TAG"; fi
+            git log --no-merges -n 60 --pretty='- %s' "$range" > "$notes"
+          fi
+          cp "$notes" "$GITHUB_WORKSPACE/release-notes.md"
+          jq -n \
+            --arg app "$PACKAGE" --argjson code "$CODE" --arg name "$VERSION" --arg tag "$TAG" --arg apk "$APK" \
+            --argjson size "$SIZE" --arg sha "$SHA256" --argjson minSdk "$MIN_SDK" --argjson mandatory "$mandatory" \
+            --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --rawfile notes "$notes" \
+            '{schema: 1, applicationId: $app, versionCode: $code, versionName: $name, tag: $tag, apk: $apk, size: $size,
+              sha256: $sha, minSdk: $minSdk, publishedAt: $at, mandatory: $mandatory, notes: ($notes | rtrimstr("\n"))}' \
+            > "$GITHUB_WORKSPACE/dist/update.json"
+          cat "$GITHUB_WORKSPACE/dist/update.json"
 
       - name: Upload the APK
         uses: actions/upload-artifact@v4
         with:
           name: apk
           path: dist/
+          if-no-files-found: error
+
+      - name: Upload the release notes
+        if: ${{ steps.version.outputs.kind == 'release' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
           if-no-files-found: error
 
       # R8's mapping turns an obfuscated stack trace from this build back into readable code.
@@ -152,7 +266,7 @@ jobs:
 
   release:
     name: GitHub release
-    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    if: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
     needs: [verify, build]
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -164,23 +278,45 @@ jobs:
           name: apk
           path: dist
 
-      - name: Publish the release
+      - uses: actions/download-artifact@v4
+        if: ${{ needs.build.outputs.kind == 'release' }}
+        with:
+          name: release-notes
+          path: notes
+
+      - name: Publish
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Publishing to another repository (UPDATE_REPOSITORY) takes a token allowed to write its releases.
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
           TAG: ${{ needs.build.outputs.tag }}
           VERSION: ${{ needs.build.outputs.version }}
+          KIND: ${{ needs.build.outputs.kind }}
           SIGNED: ${{ needs.build.outputs.signed }}
         run: |
-          if [ "$SIGNED" = "true" ]; then
-            notes="Signed with the NormPix release key: installs over the previous release and keeps your data."
+          here=()
+          # The commit and generated notes only mean something in this repository; elsewhere the tag is made there.
+          if [ "$UPDATE_REPOSITORY" = "$GITHUB_REPOSITORY" ]; then here=(--target "$GITHUB_SHA"); fi
+          if [ "$KIND" = "release" ]; then
+            gh release create "$TAG" dist/*.apk dist/*.sha256 dist/update.json \
+              --repo "$UPDATE_REPOSITORY" "${here[@]}" \
+              --title "NormPix $VERSION" \
+              --notes-file notes/release-notes.md \
+              --latest
           else
-            notes="> [!WARNING]
-          > Signed with the debug key: it won't install over the app. Set the release-key secrets (README.md, Signing key) for updates that keep your data."
+            if [ "$SIGNED" = "true" ]; then
+              signing="Signed with the NormPix release key: installs over the app and keeps your data."
+            else
+              signing="> [!WARNING]
+          > Signed with the debug key: it won't install over the app."
+            fi
+            notes="A test build of main ($GITHUB_SHA), not a release: the app doesn't offer it as an update. Install it by hand to try it.
+
+          $signing"
+            if [ "$UPDATE_REPOSITORY" = "$GITHUB_REPOSITORY" ]; then here+=(--generate-notes); fi
+            gh release create "$TAG" dist/*.apk dist/*.sha256 \
+              --repo "$UPDATE_REPOSITORY" "${here[@]}" \
+              --title "NormPix $VERSION (build $GITHUB_RUN_NUMBER)" \
+              --notes "$notes" \
+              --prerelease \
+              --latest=false
           fi
-          gh release create "$TAG" dist/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "NormPix $VERSION (build $GITHUB_RUN_NUMBER)" \
-            --notes "$notes" \
-            --generate-notes \
-            --latest

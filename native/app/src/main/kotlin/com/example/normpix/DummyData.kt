@@ -86,6 +86,8 @@ class DummyData private constructor(
         // A share that arrives while the sample set is showing is the user's own: the UI offers to switch back for it.
         sharedText = real.sharedText,
         sharedPictures = real.sharedPictures,
+        // Updates are the app's, not the data's: the same updater whichever set is showing.
+        updates = real.updates,
     )
 
     /** Drops the sample set and frees its stores, its pictures too. */

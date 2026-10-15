@@ -13,17 +13,22 @@ import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.example.normpix.BuildConfig
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.navigation.SettingsPage
 import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
+import com.example.normpix.updates.UpdateState
+import com.example.normpix.updates.release
+import com.example.normpix.updates.ui.showUpdateSheet
 import kotlinx.coroutines.launch
 
 /**
@@ -41,7 +46,7 @@ data class SettingsEntry(
     val icon: ImageVector get() = if (special != null) SettingsCatalog.iconFor(special) else SettingsCatalog.iconFor(page)
 }
 
-enum class SettingsSpecial { Profile, Categories, People, Reset, About }
+enum class SettingsSpecial { Profile, Categories, People, Reset, Updates, About }
 
 object SettingsCatalog {
     val entries: List<SettingsEntry> = listOf(
@@ -90,6 +95,7 @@ object SettingsCatalog {
 
         // System
         SettingsEntry("Reset all settings", null, listOf("defaults", "reset", "clear preferences"), special = SettingsSpecial.Reset),
+        SettingsEntry("Check for updates", null, listOf("update", "upgrade", "new version", "latest", "download", "install", "apk", "release", "github", "automatic"), special = SettingsSpecial.Updates),
         SettingsEntry("About NormPix", null, listOf("licenses", "version", "privacy"), special = SettingsSpecial.About),
     )
 
@@ -118,6 +124,7 @@ object SettingsCatalog {
         SettingsSpecial.Categories -> Icons.Outlined.Payments
         SettingsSpecial.People -> Icons.Outlined.Groups
         SettingsSpecial.Reset -> Icons.Outlined.DeleteOutline
+        SettingsSpecial.Updates -> Icons.Outlined.SystemUpdate
         SettingsSpecial.About -> Icons.Outlined.Info
         null -> Icons.Outlined.Tune
     }
@@ -141,6 +148,7 @@ fun rememberSettingsActivator(): SettingsActivator {
                 entry.special == SettingsSpecial.Categories -> navigator.openCategories()
                 entry.special == SettingsSpecial.People -> navigator.openPeople()
                 entry.special == SettingsSpecial.Reset -> system.resetSettings()
+                entry.special == SettingsSpecial.Updates -> system.checkForUpdates()
                 entry.special == SettingsSpecial.About -> system.showAbout()
                 else -> navigator.openSettings()
             }
@@ -148,9 +156,10 @@ fun rememberSettingsActivator(): SettingsActivator {
     }
 }
 
-/** \"Reset settings\" and \"About\", shared by the Settings page and search. */
+/** \"Reset settings\", \"Check for updates\" and \"About\", shared by the Settings page and search. */
 class SettingsSystemActions(
     val resetSettings: () -> Unit,
+    val checkForUpdates: () -> Unit,
     val showAbout: () -> Unit,
 )
 
@@ -174,17 +183,37 @@ fun rememberSettingsSystemActions(): SettingsSystemActions {
         }
     }
 
+    /**
+     * An update already found (downloading, ready, waiting on the user) opens its sheet. Otherwise GitHub is asked while
+     * a sheet says so: an update opens its sheet, as does a check that failed (it says why, with Try again), and being up
+     * to date is a snackbar.
+     */
+    fun checkForUpdates() {
+        val updater = container.updates ?: return
+        scope.launch {
+            if (updater.state.value.release != null) return@launch showUpdateSheet(overlays, updater)
+            val result = overlays.loading("Checking for updates", "Asking GitHub for the latest release.") { updater.check() }
+                ?: return@launch
+            if (result is UpdateState.UpToDate) {
+                snackbars.show("NormPix ${updater.installed.versionName} is up to date")
+            } else {
+                showUpdateSheet(overlays, updater)
+            }
+        }
+    }
+
     fun showAbout() {
         scope.launch {
             overlays.alert(
                 title = "About NormPix",
-                message = "NormPix v1.0.0\nModern finance, cards & reminders on Android.\nOffline-first, encrypted, on-device.",
+                message = "NormPix ${BuildConfig.VERSION_NAME}\nModern finance, cards & reminders on Android.\n" +
+                    "Your data stays on this phone, encrypted. NormPix connects only to GitHub, to check for updates and download them.",
                 okLabel = "OK",
             )
         }
     }
 
     return remember(container, overlays, snackbars, scope) {
-        SettingsSystemActions(::resetSettings, ::showAbout)
+        SettingsSystemActions(::resetSettings, ::checkForUpdates, ::showAbout)
     }
 }

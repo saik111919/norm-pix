@@ -68,6 +68,7 @@ import com.example.normpix.finance.ui.PeoplePage
 import com.example.normpix.finance.ui.PersonDetailPage
 import com.example.normpix.finance.ui.rememberFinanceState
 import com.example.normpix.finance.share.ReceiveSharedTransactions
+import com.example.normpix.updates.ui.OfferAppUpdates
 import com.example.normpix.settings.PageAnimationType
 import kotlinx.coroutines.launch
 import com.example.normpix.ui.components.AppErrorState
@@ -366,6 +367,8 @@ private fun AppNavigation(
      CompositionLocalProvider(LocalReminderLauncher provides rememberReminderFlows()) {
       // Text shared from another app (ShareTransactionActivity) opens as a new-transaction draft, once unlocked.
       ReceiveSharedTransactions(container.sharedText, container.sharedPictures, appLocked = appLocked, sampleData = sampleData)
+      // Once a day at launch, once unlocked: a newer release on GitHub is offered (Settings > Check for updates).
+      OfferAppUpdates(container.updates, appLocked = appLocked)
       // The app's own background behind every page: while one page leaves and another arrives (or a tab is still
       // composing for the first time) it is what shows between them, never the window's - which follows the
       // *system's* light or dark, not the app's.

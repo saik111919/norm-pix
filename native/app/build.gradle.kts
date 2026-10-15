@@ -3,6 +3,29 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+/** A build setting: CI passes it as an environment variable, a machine of its own as a Gradle property. */
+fun setting(variable: String, property: String): String? =
+    providers.environmentVariable(variable).orNull?.takeIf { it.isNotBlank() } ?: providers.gradleProperty(property).orNull
+
+/**
+ * The versionCode for a versionName: 1.0.3 is 10003, 1.12.0 is 11200. A higher version always has the higher code, so
+ * every release installs over the one before it, and the in-app updater compares releases by this number, never by text.
+ */
+fun versionCodeOf(name: String): Int {
+    val parts = Regex("""(\d+)\.(\d+)\.(\d+)""").matchEntire(name)?.groupValues?.drop(1)?.map(String::toInt)
+        ?: error("versionName must be major.minor.patch, like 1.0.3, not \"$name\"")
+    val (major, minor, patch) = parts
+    check(minor < 100 && patch < 100) { "versionName $name: minor and patch have to stay below 100" }
+    return major * 10_000 + minor * 100 + patch
+}
+
+/**
+ * The GitHub repository whose releases the app updates from ("owner/name"). Its releases have to be public: the app asks
+ * GitHub without signing in and carries no token. CI sets it to the repository it publishes to.
+ */
+val updateRepository = setting("NORMPIX_UPDATE_REPOSITORY", "normpixUpdateRepository") ?: "saik111919/norm-pix"
+check(Regex("""[A-Za-z0-9-]+/[A-Za-z0-9._-]+""").matches(updateRepository)) { "Not a GitHub repository: $updateRepository" }
+
 android {
     namespace = "com.example.normpix"
     compileSdk = 37
@@ -11,12 +34,16 @@ android {
         applicationId = "com.example.normpix"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
         versionName = "1.0.2"
+        versionCode = versionCodeOf(versionName!!)
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = "NormPix"
         buildConfigField("boolean", "SECURE_WINDOW", "false")
+        buildConfigField("String", "UPDATE_REPOSITORY", "\"$updateRepository\"")
+        // Only a release updates itself: debug and qa builds carry another key (and qa another package), so no release
+        // could ever install over them.
+        buildConfigField("boolean", "UPDATES_ENABLED", "false")
     }
 
     signingConfigs {
@@ -31,8 +58,6 @@ android {
         // Every release is signed with one fixed key, so each new APK installs over the last and keeps the user's data.
         // CI reads it from repository secrets (the NORMPIX_* variables); a machine of its own from the normpix* Gradle
         // properties (~/.gradle/gradle.properties). Without either, a release is signed with the debug key above.
-        fun setting(variable: String, property: String): String? =
-            providers.environmentVariable(variable).orNull ?: providers.gradleProperty(property).orNull
         val keystore = setting("NORMPIX_KEYSTORE_FILE", "normpixKeystoreFile")
         if (keystore != null) {
             create("release") {
@@ -51,6 +76,7 @@ android {
             isShrinkResources = true
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             buildConfigField("boolean", "SECURE_WINDOW", "true")
+            buildConfigField("boolean", "UPDATES_ENABLED", "true")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

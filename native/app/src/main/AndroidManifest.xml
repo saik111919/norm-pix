@@ -13,11 +13,13 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- NormPix is fully offline. Libraries (ML Kit telemetry transport) may
-         declare network permissions the app never uses; strip them so the
-         installed app cannot reach the network at all. -->
-    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <!-- Everything NormPix holds stays on the device. Its one connection is to GitHub, to check for and download
+         updates (`updates/`): network_security_config.xml refuses every other host, and the telemetry upload ML Kit
+         brings along is taken out below. The network state permission libraries declare is never needed. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+    <!-- Hands a downloaded update to Android's installer, which asks the user before it installs anything. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <queries>
         <intent>
@@ -33,6 +35,7 @@
         android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher"
         android:label="${appLabel}"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"
         android:theme="@style/Theme.NormPix">
 
@@ -239,6 +242,22 @@
         <receiver
             android:name=".wallet.clipboard.ClipboardClearReceiver"
             android:exported="false" />
+
+        <!-- Updates: Android's installer reports here how installing a downloaded update went (or that it needs the
+             user to confirm). Only the installer, through the app's own PendingIntent, can reach it. -->
+        <receiver
+            android:name=".updates.UpdateInstallReceiver"
+            android:exported="false" />
+
+        <!-- ML Kit's telemetry transport would upload usage logs to Google once the app may use the network. Without
+             its backend it has nowhere to send them, and drops them. -->
+        <service
+            android:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery"
+            tools:node="merge">
+            <meta-data
+                android:name="backend:com.google.android.datatransport.cct.CctBackendFactory"
+                tools:node="remove" />
+        </service>
 
     </application>
 </manifest>

@@ -35,6 +35,7 @@ import com.example.normpix.finance.share.MlKitSharedPictureReader
 import com.example.normpix.finance.share.NoSharedPictureReader
 import com.example.normpix.finance.share.SharedPictureReader
 import com.example.normpix.finance.share.SharedTextInbox
+import com.example.normpix.updates.AppUpdater
 import com.example.normpix.wallet.clipboard.NoClipboard
 import com.example.normpix.wallet.clipboard.SecureClipboard
 import com.example.normpix.wallet.clipboard.androidSecureClipboard
@@ -84,6 +85,8 @@ class AppContainer(
     val sharedText: SharedTextInbox = SharedTextInbox(),
     /** Reads the text of a shared picture on the device; reads nothing where there is no recognizer (tests). */
     val sharedPictures: SharedPictureReader = NoSharedPictureReader,
+    /** Checks GitHub for a newer release and installs it with the user's say-so; null where nothing is updated (tests). */
+    val updates: AppUpdater? = null,
 ) {
     /** A reminder whose alert screen should open (notification tapped), consumed by the UI. */
     val reminderAlerts = MutableStateFlow<Long?>(null)
@@ -107,6 +110,7 @@ class NormPixApplication : Application() {
         }
         followCardsForExpiry()
         followCardsForBanks()
+        container.updates?.start()
     }
 
     /**
@@ -144,11 +148,13 @@ class NormPixApplication : Application() {
             val prefs = app.getSharedPreferences("normpix_preferences", Context.MODE_PRIVATE)
             val alarms = AlarmReminderScheduler(app)
             val host = ActivityHost()
+            val lock = AppLockService()
             return AppContainer(
                 preferences = AppPreferences(prefs),
                 finance = FinanceController(FinanceRepository(FinanceDatabase(app)), TransactionPictures(app)),
                 reminders = RemindersController(ReminderDao(RemindersDatabase(app)), alarms),
                 vault = FileCardVault(File(app.filesDir, "card_vault.bin")),
+                lock = lock,
                 host = host,
                 nfc = ReaderModeNfcTagReveal(host),
                 registeredTags = RegisteredTags(
@@ -160,6 +166,7 @@ class NormPixApplication : Application() {
                 clipboard = androidSecureClipboard(app),
                 receipts = AndroidReceiptSharer(app, host),
                 sharedPictures = MlKitSharedPictureReader(app),
+                updates = AppUpdater.forApp(app, host, lock),
                 expiry = CardExpiryTracker(
                     store = PrefsCardExpiryStore(app.getSharedPreferences("normpix_card_expiry", Context.MODE_PRIVATE)),
                     scheduler = AlarmExpiryScheduler(app),
