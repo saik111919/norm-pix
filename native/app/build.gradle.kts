@@ -35,6 +35,8 @@ android {
         minSdk = 26
         targetSdk = 35
         versionName = "1.0.2"
+        // A release of main is built as the next free version, which CI works out from the tags (android.yml).
+        setting("NORMPIX_VERSION_NAME", "normpixVersionName")?.let { versionName = it }
         versionCode = versionCodeOf(versionName!!)
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

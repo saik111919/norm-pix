@@ -31,14 +31,14 @@ cd native
 [`.github/workflows/android.yml`](.github/workflows/android.yml) runs on GitHub Actions:
 
 - **Pull requests into `main`**: unit and Robolectric UI tests, Android Lint, and a release build. The APK is attached to the run as the `apk` artifact.
-- **Every push to `main`** (or a manual run on `main` from the Actions tab): the same checks, then a **prerelease** tagged `v<versionName>-build.<run number>` with the APK and its SHA-256 checksum. It is a test build to install by hand; the app never offers a prerelease as an update.
-- **A version tag** (`v1.0.3`): the same checks, then the **release** the app updates to (see below).
+- **Every push to `main`** (or a manual run on `main` from the Actions tab): the same checks, then a **release** the app updates to, at the next free version: `versionName`, or the patch after the highest `vX.Y.Z` tag of its `X.Y` if that is as high (with `versionName` 1.0.2 and `v1.0.8` tagged, the next is `v1.0.9`). Raise `versionName` (to `1.1.0`, say) to start a new line. To publish `main`'s builds as test builds instead (**prereleases**, tagged `v<versionName>-build.<run number>`, which the app never offers as an update), set `MAIN_BUILDS: prerelease` at the top of the workflow.
+- **A version tag** (`v1.1.0`, matching `versionName`): the same checks, then that version as a **release** (see below).
 
 ### Releases and in-app updates
 
 The app checks GitHub for a newer release once a day at launch (Settings → Check for updates automatically, on by default; turn it off and the app only checks when asked) or when asked (Settings → Check for updates). It never downloads or installs on its own. **Update now** downloads the APK and checks its size, SHA-256, package name, version and signing key; the sheet then says it's ready, coming back if it was closed during the download, and only **Install** hands it to Android's installer, which asks the user to confirm. Nothing is installed silently, and the app is never uninstalled. Only release builds update themselves: debug and qa builds carry another key, so no release could install over them.
 
-To publish a release:
+Every push to `main` publishes one on its own. To publish a version of your choosing, with notes of your own:
 
 1. Raise `versionName` in [`native/app/build.gradle.kts`](native/app/build.gradle.kts). `versionCode` is made from it (`1.0.3` → `10003`), so a newer version always has the higher code; the app compares releases by that number.
 2. Commit, then tag that commit `v<versionName>` and push the tag:
