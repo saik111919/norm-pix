@@ -32,6 +32,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -62,26 +64,49 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
+import java.util.WeakHashMap
+import kotlinx.coroutines.flow.first
+
+/** How many update sheets are on screen, for each updater (only ever touched on the main thread). */
+private val openSheets = WeakHashMap<AppUpdater, Int>()
+
+/** True while an update sheet for [updater] is on screen. */
+fun isUpdateSheetOpen(updater: AppUpdater): Boolean = (openSheets[updater] ?: 0) > 0
 
 /** Opens the update sheet over whatever is on screen; it follows [updater] until the user closes it. */
 suspend fun showUpdateSheet(overlays: AppOverlays, updater: AppUpdater) {
-    overlays.sheet<Unit>(expandable = true) { dismiss -> UpdateSheet(updater, onClose = { dismiss(null) }) }
+    openSheets[updater] = (openSheets[updater] ?: 0) + 1
+    try {
+        overlays.sheet<Unit>(expandable = true) { dismiss -> UpdateSheet(updater, onClose = { dismiss(null) }) }
+    } finally {
+        val left = (openSheets[updater] ?: 1) - 1
+        if (left > 0) openSheets[updater] = left else openSheets.remove(updater)
+    }
 }
 
 /**
  * At launch, once the app is unlocked: a newer release found by the daily check is offered in the update sheet (see
- * [AppUpdater.launchOffer]). Nothing at all while the user has automatic checks off.
+ * [AppUpdater.launchOffer]); nothing is asked while the user has automatic checks off. And whenever a download finishes
+ * with no update sheet on screen (it was closed to let the download carry on), the sheet comes back, once the app is
+ * unlocked, ready to install: nothing is installed until the user taps Install.
  */
 @Composable
 fun OfferAppUpdates(updater: AppUpdater?, appLocked: Boolean) {
     if (updater == null) return
     val overlays = LocalOverlays.current
     val preferences = LocalAppPreferences.current
+    val locked by rememberUpdatedState(appLocked)
     LaunchedEffect(updater, appLocked) {
         if (appLocked) return@LaunchedEffect
         val allowed = preferences?.state?.value?.updateChecksEnabled ?: false
         updater.launchOffer(allowed) ?: return@LaunchedEffect
         showUpdateSheet(overlays, updater)
+    }
+    LaunchedEffect(updater) {
+        updater.downloaded.collect {
+            snapshotFlow { locked }.first { !it }
+            if (updater.state.value is UpdateState.Ready && !isUpdateSheetOpen(updater)) showUpdateSheet(overlays, updater)
+        }
     }
 }
 
@@ -92,7 +117,7 @@ fun UpdateSheet(updater: AppUpdater, onClose: () -> Unit) {
         state = state,
         installed = updater.installed,
         actions = UpdateSheetActions(
-            update = updater::download,
+            update = { updater.download() },
             later = {
                 updater.later()
                 onClose()
@@ -273,14 +298,15 @@ private fun sheetView(state: UpdateState, installed: InstalledApp, actions: Upda
         is UpdateState.Downloading -> SheetView(
             Icons.Outlined.Download,
             "Downloading update",
-            "You can close this: the download carries on, and Android asks you to install it when it's done.",
+            "You can close this: the download carries on, and NormPix shows it again here when it's ready to install.",
             null,
             "Cancel download" to actions.cancelDownload,
         )
         is UpdateState.Ready -> SheetView(
             Icons.Outlined.InstallMobile,
             "Ready to install",
-            "Android asks you to confirm. NormPix closes while it updates; your data stays as it is.",
+            "Downloaded and checked. Tap Install, then confirm on the screen Android shows. NormPix closes while it " +
+                "updates; your data stays as it is.",
             "Install" to actions.install,
             laterFor(state.release),
             showsNotes = true,

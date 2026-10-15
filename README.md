@@ -36,7 +36,7 @@ cd native
 
 ### Releases and in-app updates
 
-The app checks GitHub for a newer release once a day at launch (Settings → Check for updates automatically) or when asked (Settings → Check for updates). It downloads the APK, checks its size, SHA-256, package name, version and signing key, and hands it to Android's installer, which asks the user to confirm. Nothing is installed silently, and the app is never uninstalled. Only release builds update themselves: debug and qa builds carry another key, so no release could install over them.
+The app checks GitHub for a newer release once a day at launch (Settings → Check for updates automatically, on by default; turn it off and the app only checks when asked) or when asked (Settings → Check for updates). It never downloads or installs on its own. **Update now** downloads the APK and checks its size, SHA-256, package name, version and signing key; the sheet then says it's ready, coming back if it was closed during the download, and only **Install** hands it to Android's installer, which asks the user to confirm. Nothing is installed silently, and the app is never uninstalled. Only release builds update themselves: debug and qa builds carry another key, so no release could install over them.
 
 To publish a release:
 

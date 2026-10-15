@@ -129,6 +129,9 @@ class SessionUpdateInstallerTest {
         updater.check()
         updater.download()
         advanceUntilIdle()
+        assertIs<UpdateState.Ready>(updater.state.value)
+        updater.install()
+        advanceUntilIdle()
         assertIs<UpdateState.Installing>(updater.state.value)
 
         val confirm = Intent("android.content.pm.action.CONFIRM_INSTALL")

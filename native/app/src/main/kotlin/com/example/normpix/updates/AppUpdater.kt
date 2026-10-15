@@ -16,10 +16,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -51,7 +54,8 @@ class MemoryUpdateRecords(override var lastCheckAt: Long = 0, override var dismi
 
 /**
  * Keeps NormPix up to date from its GitHub releases. It checks at launch (at most once a day, when the user lets it) or
- * when asked in Settings. Then it downloads and checks the APK, and hands it to Android's installer, which asks the user.
+ * when asked in Settings. Nothing more happens on its own: Update now downloads and checks the APK, and only Install
+ * hands it to Android's installer, which asks the user to confirm.
  *
  * It lives as long as the process, so the update sheet can close and open again, the screen rotate or the app go to the
  * background without losing a download or an install under way. [state] is what the UI shows. Network and file work run
@@ -72,6 +76,14 @@ class AppUpdater(
 ) {
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
+
+    private val _downloaded = Channel<UpdateRelease>(Channel.CONFLATED)
+
+    /**
+     * Each release whose download has just finished and passed its checks, now waiting for the user's Install - so the UI
+     * can say so even when the sheet was closed while it downloaded. Kept until collected, the latest only.
+     */
+    val downloaded: Flow<UpdateRelease> = _downloaded.receiveAsFlow()
 
     /** When GitHub last answered a check (epoch millis), 0 for never. */
     val lastCheckAt: Long get() = records.lastCheckAt
@@ -143,8 +155,11 @@ class AppUpdater(
         return result
     }
 
-    /** Update now: downloads the release, checks the file, and hands it to Android's installer. */
-    fun download() {
+    /**
+     * Update now: downloads the release and checks the file, then waits at [UpdateState.Ready] for the user's Install.
+     * [thenInstall] is for an Install that found its download gone: the user has already asked for it, so it goes on.
+     */
+    fun download(thenInstall: Boolean = false) {
         val release = _state.value.release ?: return
         if (downloading?.isActive == true) return
         downloading = scope.launch {
@@ -174,7 +189,7 @@ class AppUpdater(
                 throw e
             }
             _state.value = UpdateState.Ready(release, apk)
-            install()
+            if (thenInstall) install() else _downloaded.trySend(release)
         }
     }
 
@@ -187,14 +202,14 @@ class AppUpdater(
         val (release, apk) = when (val current = _state.value) {
             is UpdateState.Ready -> current.release to current.apk
             is UpdateState.NeedsPermission -> current.release to current.apk
-            is UpdateState.Cancelled -> current.release to (current.apk ?: return download())
-            is UpdateState.Failed -> (current.release ?: return) to (current.apk ?: return download())
+            is UpdateState.Cancelled -> current.release to (current.apk ?: return download(thenInstall = true))
+            is UpdateState.Failed -> (current.release ?: return) to (current.apk ?: return download(thenInstall = true))
             else -> return
         }
         // The system may have cleared the cache since: download it again.
         if (!apk.isFile) {
             _state.value = UpdateState.Available(release)
-            return download()
+            return download(thenInstall = true)
         }
         if (!installer.canInstall()) {
             _state.value = UpdateState.NeedsPermission(release, apk)
