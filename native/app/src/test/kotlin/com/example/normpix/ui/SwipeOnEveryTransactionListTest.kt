@@ -88,24 +88,27 @@ class SwipeOnEveryTransactionListTest {
     private fun waitForRow() {
         try {
             compose.waitUntil(timeoutMillis = 30_000) {
+                // Home reads in several steps on the database's thread, and each comes back through the main looper, which
+                // only runs here when the test lets it. Without idling on every check, a step that lands after the last
+                // idle is never delivered and Home stays on "Loading your month" (it did, now and then, on CI).
+                compose.waitForIdle()
                 compose.onAllNodes(hasContentDescription("Corner Cafe", substring = true)).fetchSemanticsNodes().isNotEmpty()
             }
         } catch (e: ComposeTimeoutException) {
-            // This wait has failed now and then on CI only: say what the screen was showing and where the threads were, so
-            // a load that is slow can be told from one that is stuck.
+            // Say what the screen was showing and where the database threads were, so a slow load can be told from a stuck one.
             throw AssertionError("No Corner Cafe row after 30 s. Showing: ${showing()}\n${threads()}", e)
         }
     }
 
-    private fun showing(): String = listOf("Loading your month", "Loading", "Couldn't open your finances", "Recent", "Search").joinToString { text ->
+    private fun showing(): String = listOf("Loading your month", "Couldn't open your finances", "Recent").joinToString { text ->
         val matcher = hasText(text, substring = true) or hasContentDescription(text, substring = true)
         "\"$text\" ×${compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes(atLeastOneRootRequired = false).size}"
     }
 
     private fun threads(): String = Thread.getAllStackTraces()
-        .filterKeys { it.name.startsWith("test-") || "Dispatcher" in it.name || "Main" in it.name || it.name == "main" }
+        .filterKeys { it.name.startsWith("test-") }
         .entries.joinToString("\n") { (thread, frames) ->
-            "--- ${thread.name} (${thread.state})\n" + frames.take(20).joinToString("\n") { "    at $it" }
+            "--- ${thread.name} (${thread.state})\n" + frames.take(15).joinToString("\n") { "    at $it" }
         }
 
     // Ends well outside the row: a drag that stops inside a clickable still counts as its tap, and the tap opens the
