@@ -1,9 +1,11 @@
 package com.example.normpix.ui
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextInput
@@ -83,9 +85,28 @@ class SwipeOnEveryTransactionListTest {
     // The tile reads as one phrase for screen readers ("Expense, ₹125.00, Corner Cafe, ..."), so find it by that.
     private fun row() = compose.onNode(hasContentDescription("Corner Cafe", substring = true))
 
-    private fun waitForRow() = compose.waitUntil(timeoutMillis = 30_000) {
-        compose.onAllNodes(hasContentDescription("Corner Cafe", substring = true)).fetchSemanticsNodes().isNotEmpty()
+    private fun waitForRow() {
+        try {
+            compose.waitUntil(timeoutMillis = 30_000) {
+                compose.onAllNodes(hasContentDescription("Corner Cafe", substring = true)).fetchSemanticsNodes().isNotEmpty()
+            }
+        } catch (e: ComposeTimeoutException) {
+            // This wait has failed now and then on CI only: say what the screen was showing and where the threads were, so
+            // a load that is slow can be told from one that is stuck.
+            throw AssertionError("No Corner Cafe row after 30 s. Showing: ${showing()}\n${threads()}", e)
+        }
     }
+
+    private fun showing(): String = listOf("Loading your month", "Loading", "Couldn't open your finances", "Recent", "Search").joinToString { text ->
+        val matcher = hasText(text, substring = true) or hasContentDescription(text, substring = true)
+        "\"$text\" ×${compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes(atLeastOneRootRequired = false).size}"
+    }
+
+    private fun threads(): String = Thread.getAllStackTraces()
+        .filterKeys { it.name.startsWith("test-") || "Dispatcher" in it.name || "Main" in it.name || it.name == "main" }
+        .entries.joinToString("\n") { (thread, frames) ->
+            "--- ${thread.name} (${thread.state})\n" + frames.take(20).joinToString("\n") { "    at $it" }
+        }
 
     // Ends well outside the row: a drag that stops inside a clickable still counts as its tap, and the tap opens the
     // details sheet (which has an Edit button of its own).
