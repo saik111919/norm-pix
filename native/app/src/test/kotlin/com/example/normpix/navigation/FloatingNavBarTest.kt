@@ -57,10 +57,10 @@ class FloatingNavBarTest {
         composeTestRule.onNodeWithContentDescription("Home").assertIsSelected()
 
         // Other destinations are present but not selected; Plans and Transactions are one item.
-        composeTestRule.onNodeWithContentDescription("Plans & Transactions").assertIsDisplayed().assertIsNotSelected()
+        composeTestRule.onNodeWithContentDescription("Plans & Activity").assertIsDisplayed().assertIsNotSelected()
         composeTestRule.onNodeWithContentDescription("Insights").assertIsDisplayed().assertIsNotSelected()
         composeTestRule.onNodeWithContentDescription("Wallet").assertIsDisplayed().assertIsNotSelected()
-        composeTestRule.onAllNodesWithContentDescription("Transactions").assertCountEquals(0)
+        composeTestRule.onAllNodesWithContentDescription("Activity").assertCountEquals(0)
         composeTestRule.onAllNodesWithContentDescription("Plan").assertCountEquals(0)
     }
 
@@ -79,7 +79,7 @@ class FloatingNavBarTest {
             }
         }
 
-        composeTestRule.onNodeWithContentDescription("Plans & Transactions").performClick()
+        composeTestRule.onNodeWithContentDescription("Plans & Activity").performClick()
         assertEquals(AppDestination.PlansAndTransactions, selectedDestination)
     }
 
@@ -120,7 +120,7 @@ class FloatingNavBarTest {
         }
 
         // However compact the dock looks, nothing in it is smaller than a 48dp target.
-        for (label in listOf("Home", "Plans & Transactions", "Insights", "Wallet", "Settings")) {
+        for (label in listOf("Home", "Plans & Activity", "Insights", "Wallet", "Settings")) {
             composeTestRule.onNodeWithContentDescription(label).assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp)
         }
 
@@ -166,7 +166,7 @@ class FloatingNavBarTest {
 
         // The pill shows which view is open, while the item keeps its one destination name.
         composeTestRule.onNodeWithText("Plans", useUnmergedTree = true).assertIsDisplayed()
-        composeTestRule.onNodeWithContentDescription("Plans & Transactions").assertIsSelected()
+        composeTestRule.onNodeWithContentDescription("Plans & Activity").assertIsSelected()
         composeTestRule.onNodeWithContentDescription("Settings").assertIsDisplayed()
     }
 
@@ -184,9 +184,9 @@ class FloatingNavBarTest {
             }
         }
 
-        // Screen readers hear "Plans & Transactions, selected, Showing Transactions"; plain tabs add nothing.
+        // Screen readers hear "Plans & Activity, selected, Showing Activity"; plain tabs add nothing.
         composeTestRule.onNode(
-            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Showing Transactions"),
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Showing Activity"),
         ).assertIsDisplayed()
         composeTestRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.StateDescription)).assertCountEquals(1)
     }

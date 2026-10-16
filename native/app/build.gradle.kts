@@ -114,7 +114,11 @@ android {
             // Robolectric keeps a sandbox for each SDK the tests ask for, and the Compose tests render real bitmaps: on
             // Gradle's default 512 MB the worker thrashes the garbage collector (a screen's first load took 30 s and then
             // timed out) and, late in a full run, dies.
-            all { test -> test.maxHeapSize = "2g" }
+            all { test ->
+                test.maxHeapSize = "2g"
+                // `-Pscreenshots=<folder>`: ReadmeScreenshots renders the README's pictures there (it is skipped otherwise).
+                providers.gradleProperty("screenshots").orNull?.let { test.systemProperty("normpix.screenshots", it) }
+            }
         }
     }
 }

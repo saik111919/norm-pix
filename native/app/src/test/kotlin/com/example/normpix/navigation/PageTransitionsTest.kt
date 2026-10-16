@@ -221,7 +221,7 @@ class PageTransitionsTest {
     }
 
     @Test
-    fun theLinuxWindowSinksTowardsTheBottomEdgeWhileClosing() {
+    fun theLinuxWindowShrinksAwayWhileClosing() {
         container.preferences.setPageAnimation(PageAnimationType.LinuxWindow)
         start()
         openSettings()
@@ -232,7 +232,7 @@ class PageTransitionsTest {
         step(60)
         val closing = boundsOf("Search settings")!!
         assertTrue(closing.width < rest.width, "closing: shrinking (${closing.width} < ${rest.width})")
-        assertTrue(closing.top > rest.top, "closing: sinking towards the bottom edge")
+        assertTrue(closing.top > rest.top, "closing: shrinking into itself, a little low")
     }
 
     @Test

@@ -28,9 +28,6 @@ import com.example.normpix.navigation.SettingsPage
 import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
-import com.example.normpix.updates.UpdateState
-import com.example.normpix.updates.release
-import com.example.normpix.updates.ui.showUpdateSheet
 import kotlinx.coroutines.launch
 
 /**
@@ -177,6 +174,7 @@ class SettingsSystemActions(
 @Composable
 fun rememberSettingsSystemActions(): SettingsSystemActions {
     val container = LocalAppContainer.current
+    val navigator = LocalNavigator.current
     val overlays = LocalOverlays.current
     val snackbars = LocalSnackbars.current
     val scope = LocalAppScope.current
@@ -195,22 +193,12 @@ fun rememberSettingsSystemActions(): SettingsSystemActions {
     }
 
     /**
-     * An update already found (downloading, ready, waiting on the user) opens its sheet. Otherwise GitHub is asked while
-     * a sheet says so: an update opens its sheet, as does a check that failed (it says why, with Try again), and being up
-     * to date is a snackbar.
+     * The update page: it asks GitHub (unless an update is already found, downloading or waiting) and shows where updating
+     * stands - an update to download, its progress, ready to install, or up to date.
      */
     fun checkForUpdates() {
-        val updater = container.updates ?: return
-        scope.launch {
-            if (updater.state.value.release != null) return@launch showUpdateSheet(overlays, updater)
-            val result = overlays.loading("Checking for updates", "Asking GitHub for the latest release.") { updater.check() }
-                ?: return@launch
-            if (result is UpdateState.UpToDate) {
-                snackbars.show("NormPix ${updater.installed.versionName} is up to date")
-            } else {
-                showUpdateSheet(overlays, updater)
-            }
-        }
+        if (container.updates == null) return
+        navigator.openUpdates()
     }
 
     fun showAbout() {
@@ -226,7 +214,7 @@ fun rememberSettingsSystemActions(): SettingsSystemActions {
         }
     }
 
-    return remember(container, overlays, snackbars, scope) {
+    return remember(container, navigator, overlays, snackbars, scope) {
         SettingsSystemActions(::resetSettings, ::checkForUpdates, ::showAbout)
     }
 }

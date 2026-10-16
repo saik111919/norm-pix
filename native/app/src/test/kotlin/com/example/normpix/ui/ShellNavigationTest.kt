@@ -105,13 +105,13 @@ class ShellNavigationTest {
         compose.waitForIdle()
 
         // Four primary destinations: no separate Plan or Transactions items.
-        for (label in listOf("Home", "Plans & Transactions", "Insights", "Wallet")) navItem(label).assertIsDisplayed()
+        for (label in listOf("Home", "Plans & Activity", "Insights", "Wallet")) navItem(label).assertIsDisplayed()
         assertTrue(compose.onAllNodes(hasContentDescription("Plan") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)).fetchSemanticsNodes().isEmpty())
-        assertTrue(compose.onAllNodes(hasContentDescription("Transactions") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)).fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodes(hasContentDescription("Activity") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)).fetchSemanticsNodes().isEmpty())
 
         // Opens on the transaction history...
-        open("Plans & Transactions")
-        navItem("Plans & Transactions").assertIsSelected()
+        open("Plans & Activity")
+        navItem("Plans & Activity").assertIsSelected()
         // More actions opens contextual actions including Add expense
         compose.onNodeWithContentDescription("More actions").performClick()
         compose.waitForIdle()
@@ -122,7 +122,7 @@ class ShellNavigationTest {
         // ...and Plans is one switch away, with the same item still active.
         compose.onNodeWithText("Plans").performClick()
         compose.waitForIdle()
-        navItem("Plans & Transactions").assertIsSelected()
+        navItem("Plans & Activity").assertIsSelected()
         compose.onNodeWithText("Budgets").assertIsDisplayed()
         compose.onNodeWithText("Reminders").performClick()
         compose.waitForIdle()
@@ -135,8 +135,8 @@ class ShellNavigationTest {
 
         // Leaving and coming back returns to the view you were on.
         open("Home")
-        open("Plans & Transactions")
-        navItem("Plans & Transactions").assertIsSelected()
+        open("Plans & Activity")
+        navItem("Plans & Activity").assertIsSelected()
         compose.onNodeWithText("No reminders yet").assertIsDisplayed()
     }
 
@@ -145,7 +145,7 @@ class ShellNavigationTest {
         compose.setContent { NormPixRoot(container = container) }
         compose.waitForIdle()
 
-        for (label in listOf("Home", "Plans & Transactions", "Insights", "Wallet")) {
+        for (label in listOf("Home", "Plans & Activity", "Insights", "Wallet")) {
             open(label)
             // Exactly one way into More actions on every screen: the navigation bar's companion item.
             compose.onAllNodesWithContentDescription("More actions").assertCountEquals(1)
@@ -181,7 +181,7 @@ class ShellNavigationTest {
         compose.onNodeWithText("ICICI Credit Card").assertIsDisplayed()
 
         // Plans & Transactions shows the sample plans too.
-        open("Plans & Transactions")
+        open("Plans & Activity")
         compose.onNodeWithText("Plans").performClick()
         compose.onNodeWithText("Recurring").performClick()
         // Each recurring row speaks as one unit: "Expense, ₹649.00, Netflix, Monthly · …".

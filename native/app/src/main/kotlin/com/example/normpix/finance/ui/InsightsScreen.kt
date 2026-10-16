@@ -294,13 +294,14 @@ fun InsightsScreen(listState: LazyListState = rememberLazyListState()) {
     }
 
     if (picking) {
-        DateRangePickerDialogFor(
+        DateRangePickerFor(
             initial = picked,
             onPicked = {
                 picked = it
                 picking = false
             },
             onDismiss = { picking = false },
+            latest = LocalDate.now(),
         )
     }
 }

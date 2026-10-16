@@ -17,9 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Button
-import androidx.compose.material3.DatePickerDefaults
-import androidx.compose.material3.DateRangePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -30,9 +27,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,17 +46,9 @@ import com.example.normpix.finance.domain.inTreeOrder
 import com.example.normpix.finance.domain.pathName
 import com.example.normpix.finance.domain.minorToInputText
 import com.example.normpix.finance.domain.parseMinorUnits
-import com.example.normpix.finance.domain.startOfDay
-import com.example.normpix.navigation.LocalAppPreferences
-import com.example.normpix.ui.components.DialogBackdropBlur
 import com.example.normpix.ui.components.SheetHeader
 import com.example.normpix.ui.components.rememberAppHaptics
-import com.example.normpix.ui.components.SeeThroughColors
-import com.example.normpix.ui.components.rememberDialogSurface
 import com.example.normpix.ui.theme.AppSpacing
-import java.time.Instant
-import java.time.LocalDateTime
-import java.time.ZoneOffset
 
 /**
  * The advanced filters. Calls [onDone] with the new filters (search text is
@@ -261,7 +248,7 @@ fun TransactionFilterSheet(
     }
 
     if (pickingRange) {
-        DateRangePickerDialogFor(
+        DateRangePickerFor(
             initial = range,
             onPicked = {
                 range = it
@@ -271,52 +258,3 @@ fun TransactionFilterSheet(
         )
     }
 }
-
-/**
- * A Material date range picker dialog with frosted styling: a start day and an end day (one tap twice for a single day).
- * [onPicked] gets the whole days from the start of the first to the end of the last, as a [DateRange].
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DateRangePickerDialogFor(initial: DateRange?, onPicked: (DateRange) -> Unit, onDismiss: () -> Unit) {
-    val now = LocalDateTime.now()
-    val pickerState = rememberDateRangePickerState(
-        initialSelectedStartDateMillis = initial?.start?.toUtcMillis(),
-        initialSelectedEndDateMillis = initial?.end?.minusDays(1)?.let(::startOfDay)?.toUtcMillis(),
-        yearRange = 2000..(now.year + 10),
-    )
-    val preferences = LocalAppPreferences.current
-    val prefsState = preferences?.state?.collectAsState()
-    val sheetBlurEnabled = prefsState?.value?.sheetBlurEnabled ?: true
-    val surface = rememberDialogSurface(enabled = sheetBlurEnabled)
-
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        colors = DatePickerDefaults.colors(containerColor = surface.container),
-        shape = surface.shape,
-        confirmButton = {
-            TextButton(
-                enabled = pickerState.selectedStartDateMillis != null,
-                onClick = {
-                    val start = pickerState.selectedStartDateMillis
-                    val end = pickerState.selectedEndDateMillis ?: start
-                    if (start != null && end != null) {
-                        onPicked(DateRange(startOfDay(start.fromUtcMillis()), startOfDay(end.fromUtcMillis()).plusDays(1)))
-                    } else {
-                        onDismiss()
-                    }
-                },
-            ) { Text("OK") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    ) {
-        DialogBackdropBlur(surface.blurBehind)
-        SeeThroughColors(surface.blurBehind, surface.ground) {
-            DateRangePicker(state = pickerState, modifier = Modifier.height(500.dp))
-        }
-    }
-}
-
-private fun LocalDateTime.toUtcMillis(): Long = toInstant(ZoneOffset.UTC).toEpochMilli()
-
-private fun Long.fromUtcMillis(): LocalDateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(this), ZoneOffset.UTC)

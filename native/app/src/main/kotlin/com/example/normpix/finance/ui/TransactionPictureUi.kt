@@ -4,6 +4,8 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -53,6 +55,8 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -62,6 +66,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -75,6 +80,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -83,12 +89,16 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import com.example.normpix.finance.data.TransactionPictures
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.share.ShareNotice
 import com.example.normpix.finance.share.SharedTransactionPrefill
 import com.example.normpix.finance.share.decodePicture
 import com.example.normpix.navigation.LocalAppContainer
+import com.example.normpix.navigation.LocalPageAnimation
+import com.example.normpix.navigation.PageTransitions
+import com.example.normpix.navigation.PageWindow
 import com.example.normpix.ui.components.AppLinearProgress
 import com.example.normpix.ui.components.AppOverlays
 import com.example.normpix.ui.components.LocalOverlays
@@ -103,6 +113,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -427,10 +438,41 @@ private const val ZOOM_STEP = 1.5f
  * to close it at the top, and a toolbar at the bottom to zoom out, see how far it is zoomed (tap it to fit the picture
  * again), and zoom in. Pinch zooms and drag moves around a zoomed picture; a double tap zooms in on where it is tapped, or
  * back out. Zooming from the buttons glides; a zoomed picture only moves as far as its edges. Back or Close leaves.
+ *
+ * It opens and closes as a page does, in the style the user picked (Settings > Appearance): [onDismiss] is called once it
+ * has gone.
  */
 @Composable
 fun PictureViewer(picture: File, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    val style = LocalPageAnimation.current
+    val reduced = rememberReducedMotion()
+    val transitions = remember(style, reduced) { PageTransitions(style, reduced) }
+    val shown = remember { MutableTransitionState(false) }
+    var closing by remember { mutableStateOf(false) }
+    shown.targetState = !closing
+    val dismiss by rememberUpdatedState(onDismiss)
+    LaunchedEffect(closing) {
+        if (!closing) return@LaunchedEffect
+        snapshotFlow { shown.isIdle && !shown.currentState }.first { it }
+        dismiss()
+    }
+    val close = { closing = true }
+    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        // The window itself neither animates nor dims the app: all that moves is the page in it, as a page would.
+        val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+        SideEffect {
+            window?.setWindowAnimations(0)
+            window?.setDimAmount(0f)
+        }
+        AnimatedVisibility(visibleState = shown, enter = transitions.opening, exit = transitions.closing) {
+            PageWindow { PictureStage(picture, onDismiss = close) }
+        }
+    }
+}
+
+@Composable
+private fun PictureStage(picture: File, onDismiss: () -> Unit) {
+    Box(Modifier.fillMaxSize()) {
         val bitmap = rememberPictureBitmap(picture, TransactionPictures.MAX_SIDE)
         var scale by remember { mutableFloatStateOf(1f) }
         var offset by remember { mutableStateOf(Offset.Zero) }

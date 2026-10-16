@@ -50,6 +50,7 @@ class FinanceDatabase(
         if (oldVersion < 8) addTransactionPictures(db)
         if (oldVersion < 9) addBillingDays(db)
         if (oldVersion < 10) addAccountNumbers(db)
+        if (oldVersion < 11) addNewDefaultCategories(db, clock())
     }
 
     override fun onOpen(db: SQLiteDatabase) {
@@ -59,7 +60,7 @@ class FinanceDatabase(
 
     companion object {
         const val DB_NAME = "normpix_finance.db"
-        const val VERSION = 10
+        const val VERSION = 11
 
         const val ACCOUNTS = "accounts"
         const val PEOPLE = "people"
@@ -282,6 +283,79 @@ class FinanceDatabase(
                     arrayOf<Any>(brandKey, name, brandKey),
                 )
             }
+        }
+
+        /**
+         * Version 11: the categories a later release added to the ready-made set ([CategorySuggestions.addedLater], with their
+         * sub-categories) reach a database that was filled before them. Seeding only ever runs on the first launch, so an
+         * update never brought them: a phone that had NormPix kept the older, shorter list.
+         *
+         * Nothing is doubled or moved: a family is added only where no category of its kind already goes by its name (one
+         * the user made, renamed to it, or archived, or an older sub-category of that name, which stays where it is), and each
+         * of its sub-categories likewise. A database first filled with them already is left alone, so one the user deleted
+         * since doesn't come back.
+         */
+        fun addNewDefaultCategories(db: SQLiteDatabase, now: LocalDateTime) {
+            if (seededWithLaterDefaults(db)) return
+            val stamp = now.toStorage()
+            val taken = mutableSetOf<Pair<String, String>>()
+            db.rawQuery("SELECT type, name FROM $CATEGORIES", null).use { cursor ->
+                while (cursor.moveToNext()) taken += cursor.getString(0) to cursor.getString(1).trim().lowercase()
+            }
+            var order = db.rawQuery("SELECT MAX(sort_order) FROM $CATEGORIES", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+            for (family in defaultCategories.filter { it.name in CategorySuggestions.addedLater }) {
+                if (!taken.add(family.type to family.name.lowercase())) continue
+                val parentId = db.insertOrThrow(
+                    CATEGORIES,
+                    null,
+                    ContentValues().apply {
+                        put("name", family.name)
+                        put("type", family.type)
+                        put("icon", family.icon)
+                        put("color", family.color)
+                        put("archived", 0)
+                        put("sort_order", ++order)
+                        put("created_at", stamp)
+                        put("updated_at", stamp)
+                    },
+                )
+                for (sub in CategorySuggestions.byParent[family.name].orEmpty()) {
+                    if (!taken.add(family.type to sub.name.trim().lowercase())) continue
+                    db.insertOrThrow(
+                        CATEGORIES,
+                        null,
+                        ContentValues().apply {
+                            put("name", sub.name)
+                            put("type", family.type)
+                            put("icon", sub.icon)
+                            put("color", family.color)
+                            put("archived", 0)
+                            put("sort_order", ++order)
+                            put("created_at", stamp)
+                            put("updated_at", stamp)
+                            put("parent_id", parentId)
+                        },
+                    )
+                }
+            }
+        }
+
+        /**
+         * Whether the database was first filled with the later families already: one of them is a top-level category seeded
+         * together with the first category of all (seeding stamps every row it writes alike). Only names no older release
+         * seeded count - an older sub-category of the same name, moved to the top, would say so wrongly.
+         */
+        private fun seededWithLaterDefaults(db: SQLiteDatabase): Boolean {
+            val seeded = db.rawQuery("SELECT created_at FROM $CATEGORIES ORDER BY id LIMIT 1", null)
+                .use { if (it.moveToFirst()) it.getLong(0) else null } ?: return false
+            val markers = (CategorySuggestions.addedLater - CategorySuggestions.formerSubCategories).map { it.lowercase() }.toSet()
+            db.rawQuery(
+                "SELECT name FROM $CATEGORIES WHERE parent_id IS NULL AND created_at = ?",
+                arrayOf(seeded.toString()),
+            ).use { cursor ->
+                while (cursor.moveToNext()) if (cursor.getString(0).trim().lowercase() in markers) return true
+            }
+            return false
         }
 
         /**

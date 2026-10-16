@@ -1,0 +1,92 @@
+name: Screenshots
+
+# The README's screenshots (docs/screenshots): the app's main screens with the sample data, light and dark, rendered by
+# Robolectric from the real screens (native/app/src/test/kotlin/com/example/normpix/ReadmeScreenshots.kt).
+#
+# - A push to main that changes the app commits them to main when they changed.
+# - A pull request (or a manual run on another branch) pushes them to the branch readme-screenshots/<branch>, one commit
+#   holding only the pictures, to look at - or to take into the pull request: git checkout origin/readme-screenshots/<branch>
+#   -- docs/screenshots. Nothing is pushed to the pull request's own branch, so its checks stay its own.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'native/app/src/main/**'
+      - 'native/app/src/test/kotlin/com/example/normpix/ReadmeScreenshots.kt'
+      - '.github/workflows/screenshots.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'native/app/src/main/**'
+      - 'native/app/src/test/kotlin/com/example/normpix/ReadmeScreenshots.kt'
+      - '.github/workflows/screenshots.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    name: Render
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # A fork's pull request can't push here; its pictures are still in the run's artifact.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The pull request's own commit, not the merge commit GitHub makes for it.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      # The Gradle daemon asks for JDK 25 (gradle/gradle-daemon-jvm.properties).
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Render the screenshots
+        working-directory: native
+        run: |
+          rm -rf "$GITHUB_WORKSPACE/docs/screenshots"
+          ./gradlew testDebugUnitTest --rerun --tests 'com.example.normpix.ReadmeScreenshots' \
+            -Pscreenshots="$GITHUB_WORKSPACE/docs/screenshots"
+          ls -l "$GITHUB_WORKSPACE/docs/screenshots"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: docs/screenshots/
+          retention-days: 14
+
+      - name: Keep them
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$BRANCH" = "main" ]; then
+            git add docs/screenshots
+            if git diff --cached --quiet; then
+              echo "The screenshots haven't changed."
+            else
+              git commit -m "Update the README screenshots"
+              git push origin HEAD:main
+            fi
+          else
+            pictures="$(mktemp -d)"
+            cp docs/screenshots/*.png "$pictures"/
+            git checkout --orphan readme-screenshots
+            git rm -rfq .
+            mkdir -p docs/screenshots
+            cp "$pictures"/*.png docs/screenshots/
+            git add docs/screenshots
+            git commit -m "README screenshots of $BRANCH at ${COMMIT::7}"
+            git push --force origin "HEAD:refs/heads/readme-screenshots/$BRANCH"
+          fi

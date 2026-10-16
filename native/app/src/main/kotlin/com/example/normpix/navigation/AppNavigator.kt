@@ -7,14 +7,14 @@ import com.example.normpix.finance.domain.MonthKey
 /** The top-level destinations of the app shell. */
 enum class AppDestination(val label: String) {
     Home("Home"),
-    PlansAndTransactions("Plans & Transactions"),
+    PlansAndTransactions("Plans & Activity"),
     Insights("Insights"),
     Wallet("Wallet"),
 }
 
-/** The two views inside Plans & Transactions. */
+/** The two views inside Plans & Activity. */
 enum class PlansAndTransactionsTab(val label: String) {
-    Transactions("Transactions"),
+    Transactions("Activity"),
     Plans("Plans"),
 }
 
@@ -62,6 +62,9 @@ interface AppNavigator {
 
     /** The full-screen alert for a reminder that just came due (or whose notification was tapped). */
     fun openReminderAlert(reminderId: Long)
+
+    /** The update page: checks GitHub for a newer NormPix, and downloads and installs it (a navigator without it does nothing). */
+    fun openUpdates() = Unit
 
     /** Switches the shell to [destination]. */
     fun go(destination: AppDestination)

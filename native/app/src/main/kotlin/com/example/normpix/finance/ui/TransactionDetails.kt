@@ -20,11 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.drawWithContent
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -89,11 +85,8 @@ fun TransactionDetailsSheet(
         }
         receipts.shareImage(png, "NormPix-receipt-${transaction.id?.let(::receiptReference) ?: "new"}.png")
     }
-    // The picture kept with it (a bill, a receipt, a payment screenshot): shown here, never part of the receipt that is shared.
-    val pictures = LocalFinance.current.pictures
-    val attached = remember(transaction.picture) { pictures?.file(transaction.picture) }
-    var viewingAttached by remember { mutableStateOf(false) }
-
+    // The picture kept with it (a bill, a receipt, a payment screenshot) isn't shown here: it is in the editor, where it is
+    // attached, replaced and read - the receipt is what was recorded, and what is shared.
     Column(
         Modifier
             .verticalScroll(rememberScrollState())
@@ -106,11 +99,6 @@ fun TransactionDetailsSheet(
                 drawLayer(layer)
             },
         )
-        if (attached != null) {
-            Spacer(Modifier.height(AppSpacing.lg))
-            PictureCard(attached, label = "Picture", value = "Kept with this transaction", onView = { viewingAttached = true })
-            if (viewingAttached) PictureViewer(attached, onDismiss = { viewingAttached = false })
-        }
         Spacer(Modifier.height(AppSpacing.lg))
         Button(
             // The options sheet opens over this one, so the receipt stays where it is behind it.

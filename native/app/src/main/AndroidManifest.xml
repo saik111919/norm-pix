@@ -24,6 +24,10 @@
          without asking. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
+    <!-- Keeps an update download the user asked for going with NormPix closed, its progress in a notification
+         (`UpdateDownloadService`). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <queries>
         <intent>
@@ -251,6 +255,16 @@
              user to confirm). Only the installer, through the app's own PendingIntent, can reach it. -->
         <receiver
             android:name=".updates.UpdateInstallReceiver"
+            android:exported="false" />
+
+        <!-- Updates: a download the user started carries on with NormPix closed, as a foreground service whose
+             notification shows how far it is (with Cancel); Download on the "update available" notification starts it too. -->
+        <service
+            android:name=".updates.UpdateDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+        <receiver
+            android:name=".updates.UpdateActionReceiver"
             android:exported="false" />
 
         <!-- Updates: the daily check in the background, run by Android's JobScheduler (only it can bind the service). -->

@@ -22,6 +22,7 @@ import com.example.normpix.settings.ui.UpdatesSettingsPage
 import com.example.normpix.testing.TestEnvironment
 import com.example.normpix.ui.theme.NormPixTheme
 import com.example.normpix.updates.ui.OfferAppUpdates
+import com.example.normpix.updates.ui.UpdatePage
 import com.example.normpix.updates.ui.UpdateSheetActions
 import com.example.normpix.updates.ui.UpdateSheetContent
 import java.io.File
@@ -44,7 +45,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** The update sheet in each state, the Settings rows, and the offer at launch. */
+/** The update sheet in each state (the update page shows the same), the update page, the Settings rows, and the offer at launch. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
 class UpdateUiTest {
@@ -204,26 +205,66 @@ class UpdateUiTest {
     // ------------------------------------------------------------ Settings
 
     @Test
-    fun `Settings checks on a tap and opens the update it finds`() {
-        Releases.publish(network)
+    fun `Check for updates in Settings opens the update page`() {
         val environment = environment(updater())
         compose.setContent { environment.Content { SettingsScreen() } }
         compose.onNodeWithText("Check for updates").performScrollTo()
         compose.onNodeWithText("Version 1.0.2").assertIsDisplayed()
         tap("Check for updates")
-        waitFor("Update available")
-        compose.onNodeWithText("Update now").assertIsDisplayed()
-        assertTrue(compose.onAllNodesWithText("Version 1.0.3 is available").fetchSemanticsNodes().isNotEmpty())
+        assertEquals(1, environment.navigator.updatesOpened)
+        assertEquals(emptyList(), network.asked, "the page asks GitHub, not the row")
     }
 
     @Test
-    fun `being up to date is said in a snackbar`() {
+    fun `Check now in Automatic updates opens the update page too`() {
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatesSettingsPage() } }
+        scrollTap("Check now")
+        assertEquals(1, environment.navigator.updatesOpened)
+    }
+
+    @Test
+    fun `the update page checks as it opens and shows the update it finds`() {
+        Releases.publish(network)
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("Update available")
+        compose.onNodeWithText("1.0.3").assertIsDisplayed()
+        compose.onNodeWithText("Update now").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `the update page says when NormPix is up to date`() {
         Releases.publish(network, "1.0.2", 10002)
         val environment = environment(updater())
-        compose.setContent { environment.Content { SettingsScreen() } }
-        compose.onNodeWithText("Check for updates").performScrollTo()
-        tap("Check for updates")
-        waitFor("NormPix 1.0.2 is up to date")
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("NormPix is up to date")
+        tap("Done")
+        assertEquals(1, environment.navigator.backs)
+    }
+
+    @Test
+    fun `the update page doesn't ask again for an update already found, and no sheet comes up over it`() {
+        Releases.publish(network)
+        val updater = updater()
+        val environment = environment(updater)
+        environment.preferences.setUpdateChecksEnabled(false)
+        compose.setContent {
+            environment.Content {
+                UpdatePage()
+                OfferAppUpdates(updater, appLocked = false)
+            }
+        }
+        waitFor("Update available")
+        val asked = network.asked.size
+        scrollTap("Update now")
+        compose.waitUntil(10_000) {
+            compose.waitForIdle()
+            updater.state.value is UpdateState.Ready
+        }
+        compose.waitForIdle()
+        assertEquals(1, compose.onAllNodesWithText("Ready to install").fetchSemanticsNodes().size, "the page says so, with no sheet over it")
+        assertTrue(network.asked.drop(asked).none { "releases/latest" in it }, "not asked again: ${network.asked.drop(asked)}")
     }
 
     @Test
@@ -278,8 +319,7 @@ class UpdateUiTest {
     }
 
     @Test
-    fun `a tapped update notification brings the sheet up once unlocked`() {
-        Releases.publish(network)
+    fun `a tapped update notification opens the update page once unlocked`() {
         val updater = updater()
         val environment = environment(updater)
         environment.preferences.setUpdateChecksEnabled(false)
@@ -289,11 +329,47 @@ class UpdateUiTest {
         }
         environment.container.updateRequests.value = true
         compose.waitForIdle()
-        absent("Update available")
+        assertEquals(0, environment.navigator.updatesOpened)
 
         locked = false
-        waitFor("Update available")
+        // Idled each time round: under Robolectric the screen only takes in the unlock as the main looper runs.
+        compose.waitUntil(10_000) {
+            compose.waitForIdle()
+            environment.navigator.updatesOpened == 1
+        }
         assertFalse(environment.container.updateRequests.value)
+    }
+
+    @Test
+    fun `Install on the ready notification opens the update page and installs what's ready`() {
+        Releases.publish(network)
+        val installer = FakeInstaller()
+        val updater = updater(installer = installer)
+        val environment = environment(updater)
+        environment.preferences.setUpdateChecksEnabled(false)
+        scope.launch { updater.check() }
+        compose.waitForIdle()
+        updater.download()
+        compose.waitForIdle()
+        assertIs<UpdateState.Ready>(updater.state.value)
+        compose.setContent {
+            environment.Content {
+                OfferAppUpdates(
+                    updater,
+                    appLocked = false,
+                    requests = environment.container.updateRequests,
+                    installRequests = environment.container.updateInstallRequests,
+                )
+            }
+        }
+        environment.container.updateInstallRequests.value = true
+        environment.container.updateRequests.value = true
+        compose.waitUntil(10_000) {
+            compose.waitForIdle()
+            installer.installs.isNotEmpty()
+        }
+        assertEquals(1, environment.navigator.updatesOpened)
+        assertFalse(environment.container.updateInstallRequests.value)
     }
 
     @Test

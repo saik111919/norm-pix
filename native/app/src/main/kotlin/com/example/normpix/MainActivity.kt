@@ -37,6 +37,8 @@ class MainActivity : FragmentActivity() {
         setContent {
             NormPixRoot(
                 container = container,
+                // A fresh start writes the app's name out first; coming back to a restored activity doesn't.
+                showSplash = savedInstanceState == null,
                 onDarkChanged = { dark ->
                     // The app's own light/dark choice can differ from the system's.
                     val transparent = android.graphics.Color.TRANSPARENT
@@ -57,7 +59,7 @@ class MainActivity : FragmentActivity() {
 
     /**
      * A tapped reminder notification asks for that reminder's alert screen; a tapped card-expiry one for Wallet; a tapped
-     * update one for the update sheet.
+     * update one for the update page (and its Install button for the update to be installed).
      */
     private fun handleIntent(intent: Intent?) {
         val id = intent?.getLongExtra(ReminderNotifications.EXTRA_REMINDER_ID, -1) ?: -1
@@ -70,8 +72,11 @@ class MainActivity : FragmentActivity() {
             intent.removeExtra(CardExpiryNotifications.EXTRA_OPEN_WALLET)
         }
         if (intent?.getBooleanExtra(SystemUpdateNotifier.EXTRA_OPEN_UPDATE, false) == true) {
+            // Install first, so the page that opens for the request knows to install.
+            if (intent.getBooleanExtra(SystemUpdateNotifier.EXTRA_INSTALL_UPDATE, false)) container.updateInstallRequests.value = true
             container.updateRequests.value = true
             intent.removeExtra(SystemUpdateNotifier.EXTRA_OPEN_UPDATE)
+            intent.removeExtra(SystemUpdateNotifier.EXTRA_INSTALL_UPDATE)
         }
     }
 
