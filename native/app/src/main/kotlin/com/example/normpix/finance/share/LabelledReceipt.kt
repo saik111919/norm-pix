@@ -87,7 +87,7 @@ internal class LabelledReceipt(
             receipt.labelled(words.amount)?.let { amountSighting(rupeeInFront(receipt.valueOf(it))) }?.let(::add)
             if (isEmpty()) addAll(receipt.markedFigures())
         }
-        val amount = settle(sightings, ledger.decimals)
+        val amount = receipt.settleAmount(sightings, ledger.decimals)
 
         val date = receipt.labelled(words.date)?.let { SharedTransactionParser.dateIn(receipt.valueOf(it), today) }
             ?.takeIf { it.date != null || it.unreadable }
@@ -218,7 +218,6 @@ internal val SbiReceipt = LabelledReceipt(
  */
 internal object BrandedReceipts {
     val all = listOf(
-        LabelledReceipt("Paytm", listOf(Tell.brand(2, "paytm"))),
         LabelledReceipt("Navi", listOf(Tell.piece(2, Regex("""(?i)^\W*navi\W*$""")))),
         LabelledReceipt("super.money", listOf(Tell.brand(2, """super\.?\s?money"""))),
         LabelledReceipt("BHIM", listOf(Tell.brand(2, "bhim"))),

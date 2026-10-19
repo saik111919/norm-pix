@@ -2,7 +2,9 @@ package com.example.normpix.finance.share
 
 import com.example.normpix.finance.domain.CurrencySpec
 import com.example.normpix.finance.domain.TransactionType
+import java.time.DateTimeException
 import java.time.LocalDate
+import java.time.LocalTime
 
 /**
  * PhonePe's transaction screen, and the receipt picture its Share makes of it:
@@ -23,7 +25,12 @@ import java.time.LocalDate
  * Powered by UPI | AXIS BANK                      PhonePe's bank, not the user's
  * ```
  *
- * The amount is printed twice, at the size of the text around it, so it is read from both places (see [settle]).
+ * The amount is printed twice, at the size of the text around it, so it is read from both places (see [settle]); PhonePe
+ * puts a ₹ before it every time, so a first digit of 7 or 2 with no ₹ in front is that ₹ misread or a digit, and a reading
+ * where it can't be told is left to the user. A name is printed in capitals and is written back as a name ([tidyName]).
+ * The date is the one printed beside the status; where that can't be read, the one inside PhonePe's own transaction id
+ * (`T` and the year, month, day, hour and minute, then digits: T2610152233… is 15 Oct 2026, 10:33 pm) - only when that is a
+ * real date, not after today.
  */
 internal object PhonePeReceipt : PaymentAppReceipt {
     override val name = "PhonePe"
@@ -43,7 +50,7 @@ internal object PhonePeReceipt : PaymentAppReceipt {
     private val utr = Regex("""(?i)\butr\b(?:\s*no\.?)?\s*[:.\-]?\s*([A-Za-z0-9]{6,35})?""")
     private val loneReference = Regex("""^[A-Za-z0-9]{8,35}$""")
     private val status = Regex(
-        """(?i)^\W*(?:transaction|payment|transfer)\s+(successful|success|completed|failed|declined|pending|processing|in\s+progress)\b.*""",
+        """(?i)^\W*(?:[\p{L}\d]{1,2}\s+)?(?:transaction|payment|transfer)\s+(succ\w*|completed|failed|declined|pending|processing|in\s+progress)\b.*""",
     )
 
     /**
@@ -78,7 +85,7 @@ internal object PhonePeReceipt : PaymentAppReceipt {
             else -> null
         }
 
-        val party = if (heading >= 0) receipt.nameBelow(heading, NAME_REACH) { it.has(partTitle) } else NamedRow(null, null)
+        val party = if (heading >= 0) receipt.nameBelow(heading, NAME_REACH, rupeePrinted = true) { it.has(partTitle) } else NamedRow(null, null)
 
         // The user's account: below "Debited from", down to the UTR. Its last digits, and the amount once more.
         val accountRows = if (accountHeading >= 0) {
@@ -86,19 +93,20 @@ internal object PhonePeReceipt : PaymentAppReceipt {
         } else {
             emptyList()
         }
-        val accountRead = accountRows.map(::amountAtEnd)
+        val accountRead = accountRows.map { amountAtEnd(it, rupeePrinted = true) }
         val accountText = accountRead.joinToString("\n") { (_, rest) -> rest.joinToString(" ") }
         val masks = SharedTransactionParser.maskedNumbers(accountText)
 
-        val amount = settle(listOfNotNull(party.amount) + accountRead.mapNotNull { it.first }, ledger.decimals)
-        val date = SharedTransactionParser.dateIn(receipt.text, today)
+        val amount = receipt.settleAmount(listOfNotNull(party.amount) + accountRead.mapNotNull { it.first }, ledger.decimals, rupeePrinted = true)
+        val printed = SharedTransactionParser.dateIn(receipt.text, today)
+        val date = if (printed.date == null && !printed.unreadable) idDate(receipt, today) ?: printed else printed
         return ParsedTransactionDraft(
             amount = amount.amount,
             ambiguousAmounts = amount.ambiguous,
             type = type,
             kind = kindOf(type),
             status = statusOf(rows),
-            counterparty = party.name,
+            counterparty = party.name?.let(::tidyName),
             date = date.date,
             time = date.time,
             dateUnreadable = date.unreadable,
@@ -110,11 +118,29 @@ internal object PhonePeReceipt : PaymentAppReceipt {
     }
 
     private fun statusOf(rows: List<ReceiptRow>): SharedStatus {
-        val word = rows.firstNotNullOfOrNull { status.matchEntire(it.text)?.groupValues?.get(1)?.lowercase() } ?: return SharedStatus.Unknown
+        val word = rows.firstNotNullOfOrNull { row ->
+            (listOf(row.text) + row.cells.map { it.text.trim() }).firstNotNullOfOrNull { status.matchEntire(it)?.groupValues?.get(1)?.lowercase() }
+        } ?: return SharedStatus.Unknown
         return when {
             word.startsWith("fail") || word == "declined" -> SharedStatus.Failed
             word == "pending" || word == "processing" || word.startsWith("in") -> SharedStatus.Pending
             else -> SharedStatus.Completed
+        }
+    }
+
+    /**
+     * When PhonePe's own transaction id says the payment was made: `T` + yyMMddHHmm + digits. Only an id read cleanly, naming
+     * a real moment from 2016 on that is not after [today]; the printed date is always preferred to it.
+     */
+    private fun idDate(receipt: ReceiptLayout, today: LocalDate): SharedTransactionParser.When? {
+        val id = receipt.rows.firstNotNullOfOrNull { row -> row.cells.map { it.text.trim() }.firstOrNull(ownId::matches) } ?: return null
+        val part = { from: Int -> id.substring(from, from + 2).toInt() }
+        return try {
+            val date = LocalDate.of(2000 + part(1), part(3), part(5))
+            val time = LocalTime.of(part(7), part(9))
+            if (date.year < 2016 || date.isAfter(today)) null else SharedTransactionParser.When(date, time, unreadable = false)
+        } catch (_: DateTimeException) {
+            null
         }
     }
 

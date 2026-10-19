@@ -60,7 +60,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -139,8 +139,6 @@ fun AppShell(
 ) {
     val navigator = LocalNavigator.current
     val snackbars = LocalSnackbars.current
-    val pageAnimation = LocalPageAnimation.current
-
     val current = AppDestination.entries[shell.selected.coerceIn(0, AppDestination.entries.lastIndex)]
     val size = rememberWindowSize()
     val scope = rememberCoroutineScope()
@@ -551,9 +549,21 @@ val LocalTabVisible = staticCompositionLocalOf { true }
  * frame: that is for the tabs that arrive together with the shell, whose entrance belongs to the page transition.
  */
 @Composable
-internal fun TabHost(visible: Boolean, enterOffset: Dp = 0.dp, animateArrival: Boolean = true, content: @Composable () -> Unit) {
+internal fun TabHost(
+    visible: Boolean,
+    enterOffset: Dp = 0.dp,
+    animateArrival: Boolean = true,
+    back: TabBackPreview? = null,
+    ordinal: Int = -1,
+    content: @Composable () -> Unit,
+) {
     val animation = LocalPageAnimation.current
     val reduced = rememberReducedMotion()
+    // While the back gesture is taking the app to the previous tab: the tab on screen is moved as the page style closes a page,
+    // and the tab it goes back to is laid out, whole, beneath it. Reduced motion shows neither: the gesture just goes back.
+    val preview = back?.takeIf { !reduced && it.target != TabBackPreview.NO_TAB }
+    // What the tab being left is drawn on, so the tab beneath does not show through it as it fades or slides away.
+    val surface = MaterialTheme.colorScheme.surface
     val animate = animateArrival && !reduced
     val density = LocalDensity.current
     val travel = remember(visible) { with(density) { enterOffset.toPx() } }
@@ -583,6 +593,9 @@ internal fun TabHost(visible: Boolean, enterOffset: Dp = 0.dp, animateArrival: B
             .zIndex(if (visible) 1f else 0f)
             .then(
                 when {
+                    visible && preview != null -> Modifier
+                        .graphicsLayer { applyBackPose(BackPreview.leaving(animation, preview.progress, preview.direction)) }
+                        .background(surface)
                     visible -> Modifier.graphicsLayer {
                         val t = arrival.value
                         val p = TabMotion.ease(animation, t)
@@ -593,6 +606,9 @@ internal fun TabHost(visible: Boolean, enterOffset: Dp = 0.dp, animateArrival: B
                         transformOrigin = TabMotion.origin(animation)
                         translationX = if (TabMotion.slides(animation)) (1f - p) * travel else 0f
                     }
+                    preview != null && preview.target == ordinal -> Modifier
+                        .graphicsLayer { applyBackPose(BackPreview.revealed(animation, preview.progress, preview.direction)) }
+                        .clearAndSetSemantics {}
                     departing -> Modifier
                         .graphicsLayer {
                             val t = departure.value
@@ -610,4 +626,35 @@ internal fun TabHost(visible: Boolean, enterOffset: Dp = 0.dp, animateArrival: B
             ),
         contentAlignment = Alignment.TopStart,
     ) { CompositionLocalProvider(LocalTabVisible provides visible) { content() } }
+}
+
+/**
+ * The back gesture as the tabs draw it: how far it has gone ([progress], 0..1 - scrubbed by the finger, then finished or
+ * eased back by the shell), the side it came from ([direction], see [BackPreview.directionOf]) and the tab it takes the
+ * app back to ([target], an [AppDestination] ordinal, or [NO_TAB] when the gesture does not change tab). Read in the
+ * tabs' draw phase, so a gesture moves layers, not compositions.
+ */
+@Stable
+internal class TabBackPreview {
+    var progress by mutableFloatStateOf(0f)
+    var direction by mutableFloatStateOf(1f)
+    var target by mutableIntStateOf(NO_TAB)
+
+    companion object {
+        const val NO_TAB = -1
+    }
+}
+
+/** Draws a tab in [pose]: the shape, shadow and motion of the user's page style part-way through going back. */
+private fun GraphicsLayerScope.applyBackPose(pose: BackPose) {
+    scaleX = pose.scale
+    scaleY = pose.scale
+    alpha = pose.alpha
+    translationX = pose.shiftX * size.width
+    transformOrigin = pose.origin
+    if (pose.corners > 0f) {
+        clip = true
+        shape = RoundedCornerShape(PageCornerRadius.toPx() * pose.corners)
+    }
+    shadowElevation = BACK_LIFT.toPx() * pose.lift
 }

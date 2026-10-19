@@ -386,7 +386,11 @@ class SheetHold {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Modifier.sheetMotion(state: SheetState, style: SheetAnimationType, enabled: Boolean, hold: SheetHold? = null): Modifier {
-    if (!enabled || style == SheetAnimationType.Slide) return this
+    if (!enabled || style == SheetAnimationType.Slide) {
+        // Not moved by us: if it was a moment ago (the style was changed with a sheet open), it no longer is.
+        hold?.shift = 0f
+        return this
+    }
     val statusTop = WindowInsets.statusBars.getTop(LocalDensity.current).toFloat()
     // The window's height and the sheet's own, as laid out (neither changes with the scaling below).
     val sizes = remember { floatArrayOf(0f, 0f) }

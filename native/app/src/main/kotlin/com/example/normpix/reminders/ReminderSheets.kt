@@ -63,7 +63,11 @@ import com.example.normpix.finance.ui.ChoicePickerField
 import com.example.normpix.finance.ui.IconBadge
 import com.example.normpix.ui.components.BankGlyph
 import com.example.normpix.finance.ui.ChoiceOption
+import com.example.normpix.finance.domain.RepeatEnd
+import com.example.normpix.finance.domain.notBefore
 import com.example.normpix.finance.ui.ConnectedChoiceRow
+import com.example.normpix.finance.ui.RepeatEndField
+import com.example.normpix.finance.ui.RepeatNoun
 import com.example.normpix.finance.ui.TonalFieldShape
 import com.example.normpix.finance.ui.PickerField
 import com.example.normpix.finance.ui.PickerFieldRow
@@ -116,6 +120,9 @@ fun SnoozeOptionsSheet(onDone: (Duration?) -> Unit) {
         Spacer(Modifier.height(AppSpacing.lg))
     }
 }
+
+/** What a reminder's occurrences are called by "Ends": "After 12 times". */
+private val ReminderNoun = RepeatNoun(one = "time", many = "times", lastBy = "Last reminder by")
 
 private val WEEKDAY_SHORT = listOf("M", "T", "W", "T", "F", "S", "S")
 private val WEEKDAY_FULL = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -288,7 +295,10 @@ fun AddReminderSheet(
     var customLabel by remember { mutableStateOf(seed?.customCategoryLabel.orEmpty()) }
     var category by remember { mutableStateOf(seed?.category ?: ReminderCategory.Personal) }
     var dueAt by remember { mutableStateOf(seed?.dueAt ?: defaultInitialDueAt()) }
-    var repeat by remember { mutableStateOf(seed?.repeatRule ?: RepeatRule.Once) }
+    // How often it repeats and where it stops are held apart: changing the rhythm leaves the end as it was set, and a count
+    // ("after 12 times") is worked out into the day of the last one from the date as it is when the reminder is saved.
+    var repeat by remember { mutableStateOf(seed?.repeatRule?.unending ?: RepeatRule.Once) }
+    var ends by remember { mutableStateOf(seed?.repeatRule?.ends ?: RepeatEnd.Never) }
     var linked by remember { mutableStateOf(seed?.link) }
     var pickingDate by remember { mutableStateOf(false) }
     var pickingTime by remember { mutableStateOf(false) }
@@ -299,7 +309,7 @@ fun AddReminderSheet(
     val is24Hour = android.text.format.DateFormat.is24HourFormat(androidx.compose.ui.platform.LocalContext.current)
     val attached = rememberResolvedLink(linked)
 
-    fun snapshot() = listOf(title, notes, customLabel, category, dueAt, repeat, linked).joinToString("|")
+    fun snapshot() = listOf(title, notes, customLabel, category, dueAt, repeat, ends, linked).joinToString("|")
     // A draft as it was handed in is unchanged: leaving it untouched asks nothing.
     val initialSnapshot = remember { snapshot() }
     DiscardChangesGuard(dirty = snapshot() != initialSnapshot, isEditing = isEditing, keptMessage = "The reminder stays as it was.")
@@ -338,7 +348,7 @@ fun AddReminderSheet(
                 category = category,
                 customCategoryLabel = if (category == ReminderCategory.Custom) customLabel.trim() else null,
                 dueAt = dueAt,
-                repeatRule = repeat,
+                repeatRule = repeat.ending(ends, dueAt),
                 status = existing?.status ?: ReminderStatus.Active,
                 snoozedUntil = existing?.snoozedUntil,
                 link = linked,
@@ -427,12 +437,16 @@ fun AddReminderSheet(
             onCreate = ::openCustomRepeat,
         )
         if (repeat.repeats) {
+            val rule = repeat.ending(ends, dueAt)
             Text(
-                repeat.label,
+                rule.label,
                 style = MaterialTheme.typography.bodySmall,
                 color = scheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = AppSpacing.lg, top = AppSpacing.xs),
             )
+            Spacer(Modifier.height(AppSpacing.lg))
+            // The same "Ends" as a repeating payment has: never unless it is set to stop.
+            RepeatEndField(ends = ends, onChange = { ends = it }, start = dueAt, next = repeat::nextOccurrence, noun = ReminderNoun)
         }
         Spacer(Modifier.height(AppSpacing.lg))
         // What it is about: an expense, an income, a repeating payment, an account or a card - not only a card.
@@ -472,6 +486,8 @@ fun AddReminderSheet(
             onPicked = { date ->
                 pickingDate = false
                 dueAt = LocalDateTime.of(date, dueAt.toLocalTime())
+                // An end can't come before the first reminder.
+                ends = ends.notBefore(date)
             },
             onDismiss = { pickingDate = false },
         )

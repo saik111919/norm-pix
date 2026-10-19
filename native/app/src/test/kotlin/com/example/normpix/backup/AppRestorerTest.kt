@@ -3,6 +3,9 @@ package com.example.normpix.backup
 import android.content.Context
 import com.example.normpix.finance.data.FinanceBackupArchive
 import com.example.normpix.finance.data.FinanceBackupCodec
+import com.example.normpix.finance.domain.Account
+import com.example.normpix.finance.domain.AccountKind
+import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.reminders.Reminder
@@ -88,21 +91,26 @@ class AppRestorerTest {
         updatedAt = now,
     )
 
-    private fun spend(env: TestEnvironment, payee: String) = runBlocking {
+    /** One expense at [payee] from the account called Bank (made the first time), in the first expense category the app starts with. */
+    private fun spend(env: TestEnvironment, payee: String) {
         val finance = env.container.finance
-        finance.saveTransaction(
-            FinanceTransaction(
-                type = TransactionType.Expense,
-                amount = 40_000,
-                accountId = finance.repository.accounts().first().id!!,
-                categoryId = finance.repository.categories().first { it.name == "Food & dining" }.id,
-                occurredAt = now,
-                payee = payee,
-                createdAt = now,
-                updatedAt = now,
-            ),
-        )
-        Unit
+        runBlocking {
+            val bank = finance.state.value.accounts.firstOrNull { it.name == "Bank" }
+                ?: finance.saveAccount(Account(name = "Bank", kind = AccountKind.Bank, createdAt = now, updatedAt = now))
+            val category = finance.state.value.categories.first { it.type == CategoryType.Expense }
+            finance.saveTransaction(
+                FinanceTransaction(
+                    type = TransactionType.Expense,
+                    amount = 40_000,
+                    accountId = bank.id!!,
+                    categoryId = category.id,
+                    occurredAt = now,
+                    payee = payee,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            )
+        }
     }
 
     private fun payees(env: TestEnvironment): List<String?> =
@@ -312,7 +320,6 @@ class AppRestorerTest {
         assertEquals("", state.customFontName)
         assertEquals(InterfaceFont.GsFlex, state.interfaceFont)
         assertEquals(setOf("Only on this phone"), titles(target))
-        assertEquals(setOf("Only on this phone"), runBlocking { target.container.reminders.state.value.reminders.map { it.title }.toSet() })
     }
 
     @Test
@@ -383,8 +390,6 @@ class AppRestorerTest {
     @Test
     fun `cards are added from the locked file, once, and are never plain text in the backup`() {
         val cards = listOf(card("a", "4111111111111111"), card("b", "5500005555555559"))
-        source.vault.cards = cards
-        runBlocking { source.container.cards.load() }
         fillSource()
         val bytes = backup(lockedCards(cards))
 
@@ -429,21 +434,16 @@ class AppRestorerTest {
 
         // Save CVV off: the cards arrive without one.
         target.preferences.setCardCvvEnabled(false)
-        val noCvv = restore(planOf(oneCardBackup(cards)), setOf(BackupPart.Cards), cards)
+        val noCvv = restore(planOf(backup(lockedCards(cards))), setOf(BackupPart.Cards), cards)
         assertEquals(1, assertNotNull(noCvv.cards).added.size)
         assertEquals(listOf(""), target.vault.cards.map { it.cvv })
 
         // Store cards off: nothing is added, and it is said so.
         runBlocking { target.container.cards.deleteAll() }
         target.preferences.setWalletCardsEnabled(false)
-        val refused = restore(planOf(oneCardBackup(cards)), setOf(BackupPart.Cards), cards)
+        val refused = restore(planOf(backup(lockedCards(cards))), setOf(BackupPart.Cards), cards)
         assertTrue(assertNotNull(refused.cards).refused)
         assertTrue(target.vault.cards.isEmpty())
-    }
-
-    private fun oneCardBackup(cards: List<StoredCard>): ByteArray {
-        source.vault.cards = cards
-        return backup(lockedCards(cards))
     }
 
     @Test

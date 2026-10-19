@@ -130,7 +130,9 @@ private fun RuleTile(rule: RecurringRule) {
         else -> "Next ${shortDate(rule.nextDate)}"
     }
     val where = if (isTransfer) "${account?.name ?: "Unknown"} → ${to?.name ?: "Unknown"}" else account?.name ?: "Unknown account"
-    val subtitle = "$schedule · $status · $where"
+    // Where it stops, while it is still going: a finished one already says "Ended".
+    val until = rule.endDate?.takeIf { !rule.isFinished }?.let { " · until ${shortDate(it)}" }.orEmpty()
+    val subtitle = "$schedule · $status$until · $where"
     val amount = finance.money.format(rule.amount)
 
     ListRow(

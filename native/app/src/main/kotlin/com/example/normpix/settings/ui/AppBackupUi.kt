@@ -100,7 +100,7 @@ internal class AppBackupFlows(
         val contents = buildList {
             add(if (pictures > 0) "finance data with ${count(pictures, "picture")}" else "finance data")
             add("settings")
-            add(count(source.reminderCount, "reminder"))
+            if (source.reminderCount > 0) add(count(source.reminderCount, "reminder"))
             if (source.hasPhoto) add("your profile picture")
             if (source.hasFont) add("your font")
             if (locked != null) add("${count(locked.count, "card")}, locked with your password")

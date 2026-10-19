@@ -8,7 +8,7 @@ import java.time.LocalDate
 /**
  * A payment app whose receipt NormPix reads by that app's own layout - which line is the payee, which figure the amount,
  * which part the user's own account - instead of by the rules [SharedTransactionParser] applies to any message. Each app
- * has a reader of its own ([PhonePeReceipt], [GooglePayReceipt], [MutualFundOrderReceipt]), or - where its layout is the
+ * has a reader of its own ([PhonePeReceipt], [PaytmReceipt], [KreditPeReceipt], [GooglePayReceipt], [MutualFundOrderReceipt]), or - where its layout is the
  * common one - a [LabelledReceipt] that knows it by its [tells]; what they all share is in ReceiptVocabulary.kt. Another app
  * is added by listing its reader in [PaymentAppReceipts.readers].
  */
@@ -30,7 +30,8 @@ internal interface PaymentAppReceipt {
 object PaymentAppReceipts {
     /** The apps with a reader of their own. */
     internal val readers: List<PaymentAppReceipt> =
-        listOf(PhonePeReceipt, GooglePayReceipt, CredReceipt, PayZappReceipt, SbiReceipt, MutualFundOrderReceipt) + BrandedReceipts.all
+        listOf(PhonePeReceipt, PaytmReceipt, KreditPeReceipt, GooglePayReceipt, CredReceipt, PayZappReceipt, SbiReceipt, MutualFundOrderReceipt) +
+            BrandedReceipts.all
 
     /** Below this, a picture only looks a little like an app's receipt: one tell-tale line another app could print too. */
     private const val MIN_SIGNATURE = 2
@@ -82,6 +83,7 @@ object PaymentAppReceipts {
             reference = reference ?: other.reference,
             instrument = instrument ?: other.instrument,
             maskedNumbers = maskedNumbers.ifEmpty { other.maskedNumbers },
+            message = message ?: other.message,
         )
     }
 }
@@ -168,14 +170,20 @@ private fun minorOf(whole: String, fraction: String, decimals: Int): Long? {
 /**
  * A piece of text that is a figure and nothing else, behind a currency mark or what the recognizer made of a ₹ (`Z`,
  * `%`, `*`), perhaps with a sign: `₹1,250.50`, `Z10`, `+₹500`, `45 50` (a point read as a space), `1O` (a zero read as
- * the letter).
+ * the letter), `Rs.500/-`, `500 INR`.
  */
 private val figurePiece = Regex(
-    """^[+\-]?\s*(₹|rs\.?|inr|[zrf](?=[\dOo])|[^\p{L}\p{N}\s.,+\-]{1,2})?\s*(\d[\dOo]*(?:[ ,.]\s?[\dOo]+)*)\s*(?:/-)?$""",
+    """^[+\-]?\s*(₹|rs\.?|inr|रु\.?|[zrf](?=[\dOo])|[^\p{L}\p{N}\s.,+\-]{1,2})?\s*(\d[\dOo]*(?:[ ,.]\s?[\dOo]+)*)\s*(/-|inr|rs\.?)?$""",
     RegexOption.IGNORE_CASE,
 )
 private val figureSeparator = Regex("""([ ,.])\s?""")
 private val bareYear = Regex("""(?:19|20)\d\d""")
+
+/**
+ * What a green tick or an info badge beside a figure comes out as when the recognizer runs it into the figure's line:
+ * "₹74 ©", "₹74 @", "₹74 O".
+ */
+private val badgeTail = Regex("""(?:\s*[©®@✓✔√]+|\s+[Oo0Q])$""")
 
 /** Longest whole part taken as an amount: a figure of more digits is an id, not an amount. */
 private const val MAX_FIGURE_DIGITS = 7
@@ -184,10 +192,19 @@ private const val MAX_FIGURE_DIGITS = 7
  * [piece] as one sighting of an amount, or null when it isn't just a figure. Rupee amounts have two decimals at most,
  * so a last group of one or two digits is the paise, whatever separates it ("45.50", "45,50", "45 50"); a last group of
  * three is thousands ("1,250", "1.250", "1 250"). The whole part may be grouped the Indian way or the international one.
+ * A badge the recognizer ran into the figure's line ("₹74 ©") is left off, but only from a figure with a ₹ in front.
  */
 internal fun amountSighting(piece: String): AmountSighting? {
-    val m = figurePiece.matchEntire(SharedTransactionParser.normalize(piece).trim()) ?: return null
-    val marked = m.groupValues[1].isNotEmpty()
+    val text = SharedTransactionParser.normalize(piece).trim()
+    figureIn(text)?.let { return it }
+    val bare = text.replace(badgeTail, "")
+    return if (bare != text) figureIn(bare)?.takeIf { it.marked } else null
+}
+
+private fun figureIn(text: String): AmountSighting? {
+    val m = figurePiece.matchEntire(text) ?: return null
+    val suffix = m.groupValues[3].lowercase()
+    val marked = m.groupValues[1].isNotEmpty() || suffix.startsWith("inr") || suffix.startsWith("rs")
     val number = m.groupValues[2].replace('O', '0').replace('o', '0')
     val groups = number.split(figureSeparator)
     val separators = figureSeparator.findAll(number).map { it.groupValues[1] }.toList()
@@ -210,7 +227,10 @@ internal fun amountSighting(piece: String): AmountSighting? {
     return AmountSighting(digits, fraction, marked)
 }
 
-/** What a receipt's sightings of its amount come to: the [amount], or - when they disagree - the [ambiguous] values. */
+/**
+ * What a receipt's sightings of its amount come to: the [amount], or - when they disagree, or can't be told apart - the
+ * [ambiguous] values, for the user to choose from. Never a value the figures only might be.
+ */
 internal class SettledAmount(val amount: Long?, val ambiguous: List<Long> = emptyList())
 
 /** Digits the recognizer reads a ₹ as. */
@@ -221,9 +241,18 @@ private const val RUPEE_AS_DIGIT = "72"
  * mark in front and that digit is one a ₹ is read as ("730" for "₹30"), or with its point put back when it has no
  * decimals ("4550" for "45.50"); the value every sighting can be read as is the amount. When more than one fits them
  * all, the one most of them were read as; when none does, they disagree and the amount is left to the user.
+ *
+ * Two more things settle it, where they are known:
+ * - [inWords] is the amount the receipt spells out under the figure (see [AmountWords]). It is a second copy in another shape,
+ *   so where it is one of the ways a sighting can be read it is the amount - a "774" is "Seventy Four" whatever its first
+ *   digit was - and where it is none of them, the figures and the words are in doubt and both are offered.
+ * - [rupeePrinted] says the app prints a ₹ before every figure. Then a first digit that is a 7 or a 2 on a figure with no
+ *   mark in front is as likely to be that ₹ as a real digit, and neither is taken: both are offered. (Without it a lone
+ *   "730" is 730, as it reads.)
  */
-internal fun settle(sightings: List<AmountSighting>, decimals: Int): SettledAmount {
-    if (sightings.isEmpty()) return SettledAmount(null)
+internal fun settle(sightings: List<AmountSighting>, decimals: Int, inWords: Long? = null, rupeePrinted: Boolean = false): SettledAmount {
+    val asRead = sightings.mapNotNull { it.minor(decimals) }
+    if (asRead.isEmpty()) return SettledAmount(inWords)
     fun readings(s: AmountSighting): Set<Long> = buildSet {
         val wholes = listOfNotNull(s.whole, s.whole.drop(1).takeIf { !s.marked && s.whole.length > 1 && s.whole.first() in RUPEE_AS_DIGIT })
         for (whole in wholes) {
@@ -231,29 +260,53 @@ internal fun settle(sightings: List<AmountSighting>, decimals: Int): SettledAmou
             if (s.fraction.isEmpty() && whole.length >= 3) minorOf(whole.dropLast(2), whole.takeLast(2), decimals)?.let(::add)
         }
     }
-    val asRead = sightings.mapNotNull { it.minor(decimals) }
-    if (asRead.isEmpty()) return SettledAmount(null)
-    val fitting = sightings.map(::readings).reduce { all, next -> all intersect next }
-    return when {
-        fitting.size == 1 -> SettledAmount(fitting.single())
-        fitting.isEmpty() -> SettledAmount(null, asRead.distinct())
-        else -> SettledAmount(asRead.filter { it in fitting }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: asRead.first())
+    val each = sightings.map(::readings)
+    val fitting = each.reduce { all, next -> all intersect next }
+    if (inWords != null) {
+        return if (inWords in fitting || each.any { inWords in it }) SettledAmount(inWords) else SettledAmount(null, (asRead + inWords).distinct())
     }
+    if (fitting.size == 1) return SettledAmount(fitting.single())
+    if (fitting.isEmpty()) return SettledAmount(null, asRead.distinct())
+    if (rupeePrinted) {
+        // Every figure begins with a digit a ₹ is read as, and none has a ₹: the first digit of each is a ₹ or is not.
+        val withoutFirst = sightings.map { s ->
+            if (!s.marked && s.whole.length >= 3 && s.whole.first() in RUPEE_AS_DIGIT) minorOf(s.whole.drop(1), s.fraction, decimals) else null
+        }
+        if (withoutFirst.all { it != null }) {
+            val either = (withoutFirst.filterNotNull() + asRead).distinct().filter { it in fitting }
+            return if (either.size == 1) SettledAmount(either.single()) else SettledAmount(null, either)
+        }
+    }
+    val chosen = asRead.filter { it in fitting }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+    return if (chosen != null) SettledAmount(chosen) else SettledAmount(null, asRead.distinct())
 }
+
+/** The amount this receipt spells out in words ("Rupees Seventy Four Only"), in minor units, or null when it spells none. */
+internal fun ReceiptLayout.amountInWords(decimals: Int): Long? = AmountWords.find(rows.map { it.text }, decimals)
+
+/**
+ * [settle] for this receipt: the amount it spells out in words, where it does, settles what the figures leave open.
+ * [rupeePrinted] is whether the app prints a ₹ before its figures.
+ */
+internal fun ReceiptLayout.settleAmount(sightings: List<AmountSighting>, decimals: Int, rupeePrinted: Boolean = false): SettledAmount =
+    settle(sightings, decimals, amountInWords(decimals), rupeePrinted)
 
 /**
  * The amount printed at the right end of [row] - its last piece, or the last two when the paise came out as a piece of
  * their own ("45", ".50") - and the pieces left of it. A last piece that has a name in front of a marked figure
- * ("Suman Sharma ₹10", run together by the recognizer) gives the figure, and the name stays.
+ * ("Suman Sharma ₹10", run together by the recognizer) gives the figure, and the name stays; so does one with a figure
+ * of no mark in front of a name, where [rupeePrinted] says the app prints a ₹ there and the recognizer made it a digit.
  */
-internal fun amountAtEnd(row: ReceiptRow): Pair<AmountSighting?, List<String>> {
+internal fun amountAtEnd(row: ReceiptRow, rupeePrinted: Boolean = false): Pair<AmountSighting?, List<String>> {
     val pieces = row.cells.map { it.text.trim() }
     if (pieces.size >= 2 && paiseAlone.matches(pieces.last())) {
         amountSighting(pieces[pieces.size - 2] + pieces.last())?.let { return it to pieces.dropLast(2) }
     }
     amountSighting(pieces.last())?.let { return it to pieces.dropLast(1) }
     val trailing = trailingFigure.find(pieces.last()) ?: return null to pieces
-    val sighting = amountSighting(trailing.groupValues[2])?.takeIf { it.marked } ?: return null to pieces
+    val sighting = amountSighting(trailing.groupValues[2])
+        ?.takeIf { it.marked || (rupeePrinted && it.whole.length >= 2 && trailing.groupValues[1].count(Char::isLetter) >= 2) }
+        ?: return null to pieces
     return sighting to pieces.dropLast(1) + trailing.groupValues[1]
 }
 
@@ -265,34 +318,68 @@ private val trailingFigure = Regex("""^(.*\S)\s+(\S+)$""")
 /** An avatar's initials beside a name ("UL"): not a name. */
 private val initials = Regex("""^\p{Lu}{1,2}$""")
 
-/** [piece] as a person's or business's name, or null: no UPI id, phone number ("+91 ••••• •6411"), label or initials. */
+/**
+ * [piece] as a person's or business's name, or null: no UPI id, phone number ("+91 ••••• •6411"), label, initials, or a
+ * few characters with a digit among them (an avatar's initials the recognizer read as "S5").
+ */
 internal fun nameIn(piece: String): String? {
-    if ('@' in piece || initials.matches(piece.trim()) || piece.count(Char::isDigit) > piece.count(Char::isLetter)) return null
+    val text = piece.trim()
+    if ('@' in text || initials.matches(text) || text.count(Char::isDigit) > text.count(Char::isLetter)) return null
+    if (text.length <= 3 && text.any(Char::isDigit)) return null
     return SharedTransactionParser.cleanName(piece)
 }
+
+/**
+ * [name] as the person's or business's name is written, when the receipt printed it all in capitals: "BELLS AND PEPPERS"
+ * is "Bells And Peppers". A name with any lowercase letter is as its writer meant it, and so is a word with no vowel in
+ * it ("HDFC", "BSNL") - an abbreviation, not a word - except the company suffixes "LTD" and "PVT".
+ */
+internal fun tidyName(name: String): String {
+    if (name.any(Char::isLowerCase)) return name
+    return letterRun.replace(name) { m ->
+        val word = m.value
+        val afterApostrophe = m.range.first > 0 && name[m.range.first - 1] in "'’"
+        val abbreviation = word.length >= 2 && word.none { it in "AEIOUaeiou" } && word !in companySuffixes
+        when {
+            afterApostrophe -> word.lowercase()
+            abbreviation -> word
+            else -> word.lowercase().replaceFirstChar { it.uppercase() }
+        }
+    }
+}
+
+private val letterRun = Regex("""\p{L}+""")
+private val companySuffixes = setOf("LTD", "PVT")
 
 /** A name found on a receipt, and the amount printed beside it (when one is). */
 internal class NamedRow(val name: String?, val amount: AmountSighting?)
 
 /**
  * The name on the rows just below the row at [heading] - PhonePe's "Paid to", then the payee - looked for down to
- * [reach] rows, and not past a row [stop] accepts; with the amount printed at its right. A name the receipt runs on to
- * the next line (directly below, starting where it starts) is joined back together: "UBER INDIA SYSTEMS PRIVATE" over
- * "LIMITED".
+ * [reach] rows, and not past a row [stop] accepts; with the amount printed at its right, or else on a row of its own
+ * above it. A name the receipt runs on to the next line (directly below, starting where it starts) is joined back
+ * together: "UBER INDIA SYSTEMS PRIVATE" over "LIMITED". [rupeePrinted] is as for [amountAtEnd].
  */
-internal fun ReceiptLayout.nameBelow(heading: Int, reach: Int, stop: (ReceiptRow) -> Boolean): NamedRow {
+internal fun ReceiptLayout.nameBelow(heading: Int, reach: Int, rupeePrinted: Boolean = false, stop: (ReceiptRow) -> Boolean): NamedRow {
     val below = rows.drop(heading + 1).take(reach).takeWhile { !stop(it) }
+    var alone: AmountSighting? = null
     for ((i, row) in below.withIndex()) {
-        val (amount, rest) = amountAtEnd(row)
-        val at = rest.indexOfFirst { partyName(it) != null }
-        if (at < 0) continue
+        val (amount, rest) = amountAtEnd(row, rupeePrinted)
+        // A few characters left of a real name are an avatar's, whatever the recognizer made of them ("Ss").
+        val at = rest.indices.firstOrNull { j ->
+            partyName(rest[j]) != null && !(rest[j].trim().length <= 3 && rest.drop(j + 1).any { partyName(it) != null })
+        } ?: -1
+        if (at < 0) {
+            if (amount != null && rest.isEmpty() && alone == null) alone = amount
+            continue
+        }
         var name = partyName(rest[at])!!
         val first = row.cells.getOrNull(at)
         if (placed && first != null) {
             var last: PictureLine = first
             for (next in below.drop(i + 1)) {
-                // An avatar's initials on a row of their own, left of the name: passed over.
-                val pieces = next.cells.filterNot { initials.matches(it.text.trim()) && it.right <= first.left }
+                // An avatar's initials on a row of their own, left of the name: passed over - as letters, or as whatever they were read as.
+                val pieces = next.cells.filterNot { it.right <= first.left && (initials.matches(it.text.trim()) || it.text.trim().length <= 3) }
                 if (pieces.isEmpty()) continue
                 val more = pieces.singleOrNull() ?: break
                 val aligned = kotlin.math.abs(more.left - first.left) <= first.height && more.top - last.bottom <= first.height
@@ -301,9 +388,9 @@ internal fun ReceiptLayout.nameBelow(heading: Int, reach: Int, stop: (ReceiptRow
                 last = more
             }
         }
-        return NamedRow(name, amount)
+        return NamedRow(name, amount ?: alone)
     }
-    return NamedRow(null, null)
+    return NamedRow(null, alone)
 }
 
 private const val MAX_NAME = 60

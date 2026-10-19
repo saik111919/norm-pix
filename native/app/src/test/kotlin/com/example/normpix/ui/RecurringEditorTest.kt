@@ -8,6 +8,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -24,7 +25,11 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.normpix.AppContainer
 import com.example.normpix.finance.data.FinanceDatabase
 import com.example.normpix.finance.data.FinanceRepository
+import com.example.normpix.finance.domain.RecurrenceFrequency
+import com.example.normpix.finance.domain.nthOccurrence
+import com.example.normpix.finance.domain.recurrenceStep
 import com.example.normpix.finance.ui.FinanceController
+import com.example.normpix.finance.ui.dayLabel
 import com.example.normpix.navigation.NormPixRoot
 import com.example.normpix.reminders.NoOpReminderScheduler
 import com.example.normpix.reminders.ReminderDao
@@ -33,7 +38,9 @@ import com.example.normpix.reminders.RemindersDatabase
 import com.example.normpix.settings.AppPreferences
 import com.example.normpix.wallet.CardVault
 import com.example.normpix.wallet.StoredCard
+import java.time.LocalDate
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -179,5 +186,72 @@ class RecurringEditorTest {
         val rules = runBlocking { container.finance.repository.recurringRules() }
         assertEquals(1, rules.size)
         assertEquals(64_900L, rules.single().amount)
+    }
+
+    // --- how it ends -----------------------------------------------------------------------------------------------
+
+    private fun fillRule() {
+        compose.onNodeWithContentDescription("Amount in INR").performTextInput("649")
+        compose.onNodeWithText("Category").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Food & dining").performClick()
+        compose.waitForIdle()
+    }
+
+    private fun ends(label: String): SemanticsNodeInteraction = compose.onNode(
+        hasText(label) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton),
+    )
+
+    private fun saveRule() {
+        compose.onNodeWithText("Save recurring").performScrollTo().performClick()
+        compose.waitUntil(timeoutMillis = 10_000) { gone("New recurring") }
+    }
+
+    @Test
+    fun aNewPaymentNeverEndsUnlessItIsToldTo_andHasNoEndDateSwitchAnyMore() {
+        openEditor()
+        ends("Never").performScrollTo().assertIsSelected()
+        ends("On a date").assertIsNotSelected()
+        ends("After").assertIsNotSelected()
+        assertTrue(gone("Has an end date"))
+        fillRule()
+        saveRule()
+        assertNull(runBlocking { container.finance.repository.recurringRules() }.single().endDate)
+    }
+
+    @Test
+    fun endingAfterANumberOfPayments_isSavedAsTheDateOfTheLastOne() {
+        openEditor()
+        fillRule()
+        ends("After").performScrollTo().performClick()
+        compose.waitForIdle()
+        // Twelve to start with; nine fewer is three.
+        compose.onNode(hasText("After 12 payments", substring = true)).performScrollTo().assertIsDisplayed()
+        repeat(9) { compose.onNodeWithContentDescription("Fewer").performScrollTo().performClick() }
+        compose.waitForIdle()
+        compose.onNode(hasText("After 3 payments", substring = true)).performScrollTo().assertIsDisplayed()
+        saveRule()
+        val rule = runBlocking { container.finance.repository.recurringRules() }.single()
+        val third = nthOccurrence(rule.startDate, 3, recurrenceStep(rule.startDate, RecurrenceFrequency.Monthly, 1))
+        assertEquals(third, rule.endDate)
+    }
+
+    @Test
+    fun endingOnADate_isPickedWithTheDateSheet_andSavedAsThatDay() {
+        openEditor()
+        fillRule()
+        ends("On a date").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNode(hasContentDescription("Last payment by", substring = true)).performScrollTo().performClick()
+        compose.waitForIdle()
+        val tomorrow = LocalDate.now().plusDays(1)
+        // The date sheet, as everywhere: a quick pick, then the one button that uses it.
+        compose.onNode(hasContentDescription("Tomorrow", substring = true)).performClick()
+        compose.onNodeWithText("Use ${dayLabel(tomorrow)}").performClick()
+        compose.waitForIdle()
+        // A day before the second payment holds only the first.
+        compose.onNodeWithText("Just the first payment").performScrollTo().assertIsDisplayed()
+        saveRule()
+        assertEquals(tomorrow, runBlocking { container.finance.repository.recurringRules() }.single().endDate?.toLocalDate())
     }
 }
