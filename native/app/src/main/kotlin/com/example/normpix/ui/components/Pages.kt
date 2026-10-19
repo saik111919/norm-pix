@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -417,6 +418,10 @@ private object FloatingTopControls {
  * [actionsVisible] says whether the [actions] are there at the moment: a page whose action only makes sense part of the time
  * (Settings' search icon, once the search field has scrolled away) turns it on and off, and the pill grows and shrinks around
  * it - rather than staying on as an empty capsule while there is nothing in it.
+ *
+ * A [bottomBar] is pinned at the foot of the page, under the list (which ends where it starts), on the page's colour: the
+ * update page's buttons, say. It clears the navigation bar and, in the bottom dock style, the floating back dock as well.
+ * None by default.
  */
 @Composable
 fun AppSubPage(
@@ -430,6 +435,7 @@ fun AppSubPage(
     showTopBack: Boolean = false,
     showFloatingBack: Boolean = true,
     displayTitle: Boolean = false,
+    bottomBar: (@Composable () -> Unit)? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val navigator = LocalNavigator.current
@@ -457,31 +463,56 @@ fun AppSubPage(
     val backdrop = rememberFrostedBackdrop()
 
     Box(modifier.fillMaxSize()) {
-        AppPage(
-            title = title,
-            modifier = modifier
-                .fillMaxSize()
-                .nestedScroll(barScroll.connection)
-                .frostedSource(backdrop),
-            navigationIcon = if (showTopBackEffective && !isTopFloatingCircle) {
-                { BackButton(onBack) }
-            } else {
-                {}
-            },
-            actions = {
-                if (!isTopFloatingCircle && actions != null) {
-                    AnimatedVisibility(visible = actionsVisible, enter = ActionsEnter, exit = ActionsExit) {
-                        Row(verticalAlignment = Alignment.CenterVertically, content = actions)
+        Column(Modifier.fillMaxSize()) {
+            AppPage(
+                title = title,
+                modifier = modifier
+                    .weight(1f)
+                    .nestedScroll(barScroll.connection)
+                    .frostedSource(backdrop),
+                navigationIcon = if (showTopBackEffective && !isTopFloatingCircle) {
+                    { BackButton(onBack) }
+                } else {
+                    {}
+                },
+                actions = {
+                    if (!isTopFloatingCircle && actions != null) {
+                        AnimatedVisibility(visible = actionsVisible, enter = ActionsEnter, exit = ActionsExit) {
+                            Row(verticalAlignment = Alignment.CenterVertically, content = actions)
+                        }
                     }
+                },
+                listState = listState,
+                imeAware = imeAware,
+                // With a bottom bar the list ends where the bar starts, which has cleared the navigation bar and the dock already.
+                bottomPadding = when {
+                    bottomBar != null -> AppSpacing.lg
+                    showFloatingBackEffective -> AppLayout.navClearance + 24.dp
+                    else -> AppLayout.navClearance
+                },
+                insetBottom = bottomBar == null,
+                floatingTopBar = isTopFloatingCircle,
+                displayTitle = displayTitle,
+                content = content,
+            )
+            if (bottomBar != null) {
+                // The floating back dock sits over the foot of the screen: the bar rests above it (measured, once the dock has been).
+                val dockClearance = if (barHeightPx > 0) {
+                    with(LocalDensity.current) { barHeightPx.toDp() } + AppSpacing.sm
+                } else {
+                    WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + DOCK_FALLBACK_HEIGHT
                 }
-            },
-            listState = listState,
-            imeAware = imeAware,
-            bottomPadding = if (showFloatingBackEffective) AppLayout.navClearance + 24.dp else AppLayout.navClearance,
-            floatingTopBar = isTopFloatingCircle,
-            displayTitle = displayTitle,
-            content = content,
-        )
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface)
+                        .then(if (showFloatingBackEffective) Modifier.padding(bottom = dockClearance) else Modifier.navigationBarsPadding()),
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    Box(Modifier.widthIn(max = AppLayout.maxContentWidth).fillMaxWidth()) { bottomBar() }
+                }
+            }
+        }
         if (isTopFloatingCircle) {
             FloatingTopHeader(
                 title = title,
@@ -623,6 +654,9 @@ private fun BoxScope.FloatingTopHeader(
         }
     }
 }
+
+/** Until the floating back dock has been measured: its height above the navigation bar (60dp, 12dp up) and a gap above it. */
+private val DOCK_FALLBACK_HEIGHT = 80.dp
 
 private val ActionsEnter = fadeIn() + scaleIn(initialScale = 0.6f) + expandHorizontally(expandFrom = Alignment.End)
 private val ActionsExit = fadeOut() + scaleOut(targetScale = 0.6f) + shrinkHorizontally(shrinkTowards = Alignment.End)

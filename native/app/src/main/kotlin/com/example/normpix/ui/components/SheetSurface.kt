@@ -46,6 +46,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.WindowCompat
+import com.example.normpix.settings.SheetAnimationType
 import com.example.normpix.ui.theme.AppFrostedTokens
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppRadius
@@ -159,28 +160,41 @@ fun SheetWindowChrome() {
  * For the content of a sheet: while [enabled], reports how much of the sheet is on screen as [owner]'s share of the page
  * blur (see [AppOverlays.backdropBlur]). It is read from where the content actually is each frame, so the blur rises
  * with the sheet, follows a drag and falls as it closes - never ahead of it or after it.
+ *
+ * A sheet whose motion holds it where it rests while it appears (see [sheetMotion]) tells where it really is, by [hold]: the
+ * blur follows the sheet's own rise, not the place it is drawn at.
  */
 @Composable
-fun Modifier.blursBackdrop(overlays: AppOverlays, owner: Any, enabled: Boolean): Modifier {
+fun Modifier.blursBackdrop(overlays: AppOverlays, owner: Any, enabled: Boolean, hold: SheetHold? = null): Modifier {
     DisposableEffect(overlays, owner, enabled) { onDispose { overlays.clearBackdropBlur(owner) } }
     if (!enabled) return this
-    return onGloballyPositioned { overlays.setBackdropBlur(owner, sheetShareOnScreen(it)) }
+    return onGloballyPositioned { overlays.setBackdropBlur(owner, sheetShareOnScreen(it, hold?.shift ?: 0f)) }
 }
 
-private fun sheetShareOnScreen(content: LayoutCoordinates): Float {
+private fun sheetShareOnScreen(content: LayoutCoordinates, shift: Float): Float {
     var root = content
     while (true) root = root.parentLayoutCoordinates ?: break
-    return sheetShareOnScreen(root.size.height.toFloat(), content.positionInRoot().y, content.size.height.toFloat())
+    // Drawn [shift] px from where it is laid out: the layout place is that much the other way.
+    return sheetShareOnScreen(root.size.height.toFloat(), content.positionInRoot().y - shift, content.size.height.toFloat())
 }
 
 /**
- * How far a sheet has risen in the window style, 0..1: 0 while its top ([top]) is at or below the bottom of a window
- * [windowHeight] tall, 1 once all [height] of it is up - or half the window, where a tall sheet stops half way. Spread over
- * the whole rise (unlike the blur's share, which is full well before), so the window is seen growing all the way up.
+ * How far a sheet has risen, 0..1: 0 while its top ([top]) is at or below the bottom of a window [windowHeight] tall, 1 once
+ * all [height] of it is up - or half the window, where a tall sheet stops half way. Spread over the whole rise (unlike the
+ * blur's share, which is full well before), so a sheet that grows or fades is seen doing it all the way up.
  */
-internal fun windowRiseShare(windowHeight: Float, top: Float, height: Float): Float {
+internal fun sheetRiseShare(windowHeight: Float, top: Float, height: Float): Float {
     val full = minOf(height, windowHeight * 0.5f)
     return if (full <= 0f) 0f else ((windowHeight - top) / full).coerceIn(0f, 1f)
+}
+
+/**
+ * How far, in pixels, a sheet is below the place it comes to rest at (where [sheetRiseShare] is 1): all of its rise while it
+ * is hidden, nothing once it is up - and nothing while it is dragged higher than that.
+ */
+internal fun sheetLag(windowHeight: Float, top: Float, height: Float): Float {
+    val full = minOf(height, windowHeight * 0.5f)
+    return if (full <= 0f) 0f else (top - (windowHeight - full)).coerceAtLeast(0f)
 }
 
 /**
@@ -290,22 +304,93 @@ private fun rememberCrossWindowBlur(): Boolean {
     return enabled
 }
 
-/** How small a sheet or decision is as it starts to rise in the window style: it grows to full size as it comes up. */
+/** How small a sheet or decision is as it starts to rise in the Window style: it grows to full size as it comes up. */
 private const val SHEET_WINDOW_SCALE = 0.85f
 
+/** How small a sheet is as it starts to appear in the Scale style. */
+private const val SHEET_SCALE_FROM = 0.9f
+
+/** How much of its rise a sheet takes to become fully visible in the Window style, and in the Scale style. */
+private const val WINDOW_FADE_SPAN = 0.5f
+private const val SCALE_FADE_SPAN = 0.6f
+
 /**
- * A sheet that opens and closes like a window, for the Linux window page style: it grows out of the bottom edge as it
- * rises - quick to fade in, decelerating into place - and shrinks back towards it, fading, as it is dragged down or
- * closed, the way a page opens and closes in that style. Read from where [state] has the sheet each frame, so it follows
- * the finger and the sheet's own motion exactly; at rest it is the sheet as it is. Off ([enabled] false) it changes nothing.
+ * How a sheet is drawn at one moment: how big ([scale], about the height [pivotY] of its own, as a fraction of its height), how
+ * visible ([alpha]) and how far it is moved ([translationY], px, down is positive) from where Material draws it.
+ */
+@Immutable
+internal class SheetPose(val scale: Float, val alpha: Float, val translationY: Float, val pivotY: Float) {
+    companion object {
+        /** Material's own sheet, untouched: it slides. */
+        val Rest = SheetPose(scale = 1f, alpha = 1f, translationY = 0f, pivotY = 0.5f)
+    }
+}
+
+/**
+ * The pose of a sheet in [style] when its top is [top] below the top of a window [windowHeight] tall, and it is [height] tall.
+ * Material lays a sheet out at the top of the window and draws it [top] lower, and slides it between hidden and open; the
+ * styles are what is done to that:
+ * - [SheetAnimationType.Slide]: nothing. Material's own slide.
+ * - [SheetAnimationType.Window]: it still rises, and grows out of the window's bottom edge as it does, quick to fade in -
+ *   and shrinks back into it, fading, as it is dragged down or closed.
+ * - [SheetAnimationType.Fade]: it does not rise; it is held where it rests and fades in (and out) there.
+ * - [SheetAnimationType.Scale]: held where it rests, it grows from its bottom edge as it fades in, and shrinks back into it.
  *
- * Material's sheet is laid out at the top of its window and drawn [SheetState.requireOffset] lower, so the window's
- * bottom-edge pivot is worked out from that offset rather than from where the sheet is laid out.
+ * Because it is worked out from where the sheet is, it follows a finger dragging it, and the sheet's own motion, exactly.
+ */
+internal fun sheetPose(style: SheetAnimationType, windowHeight: Float, top: Float, height: Float): SheetPose {
+    if (height <= 0f) return SheetPose.Rest
+    val share = sheetRiseShare(windowHeight, top, height)
+    // The bottom of the sheet as drawn: it grows out of, and shrinks back into, that edge.
+    val bottom = (top + height) / height
+    return when (style) {
+        SheetAnimationType.Slide -> SheetPose.Rest
+        SheetAnimationType.Window -> SheetPose(
+            scale = SHEET_WINDOW_SCALE + (1f - SHEET_WINDOW_SCALE) * share,
+            alpha = (share / WINDOW_FADE_SPAN).coerceIn(0f, 1f),
+            translationY = 0f,
+            pivotY = bottom,
+        )
+        SheetAnimationType.Fade -> SheetPose(
+            scale = 1f,
+            alpha = share,
+            translationY = -sheetLag(windowHeight, top, height),
+            pivotY = 0.5f,
+        )
+        SheetAnimationType.Scale -> SheetPose(
+            scale = SHEET_SCALE_FROM + (1f - SHEET_SCALE_FROM) * share,
+            alpha = (share / SCALE_FADE_SPAN).coerceIn(0f, 1f),
+            translationY = -sheetLag(windowHeight, top, height),
+            pivotY = bottom,
+        )
+    }
+}
+
+/**
+ * Where a sheet's motion has put its drawing, for whatever needs to know where the sheet really is ([blursBackdrop]): [shift]
+ * is how many pixels it is drawn from where it is laid out, as of the last frame (negative: higher). Not state: only read.
+ */
+class SheetHold {
+    var shift = 0f
+}
+
+/**
+ * Makes a sheet - or a decision, which is the same surface - open and close in [style] (see [sheetPose]); every sheet and
+ * decision the app shows has it, so they all move alike. Read from where [state] has the sheet each frame, so it follows the
+ * finger and the sheet's own motion exactly; at rest it is the sheet as it is. [enabled] false (reduced motion) or
+ * [SheetAnimationType.Slide] changes nothing: no motion beyond Material's own. [hold] is told where the drawing is.
+ *
+ * Material's sheet is laid out at the top of its window and drawn [SheetState.requireOffset] lower, so the pivots and the rise
+ * are worked out from that offset rather than from where the sheet is laid out.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Modifier.windowRise(state: SheetState, enabled: Boolean): Modifier {
-    if (!enabled) return this
+fun Modifier.sheetMotion(state: SheetState, style: SheetAnimationType, enabled: Boolean, hold: SheetHold? = null): Modifier {
+    if (!enabled || style == SheetAnimationType.Slide) {
+        // Not moved by us: if it was a moment ago (the style was changed with a sheet open), it no longer is.
+        hold?.shift = 0f
+        return this
+    }
     val statusTop = WindowInsets.statusBars.getTop(LocalDensity.current).toFloat()
     // The window's height and the sheet's own, as laid out (neither changes with the scaling below).
     val sizes = remember { floatArrayOf(0f, 0f) }
@@ -316,12 +401,12 @@ fun Modifier.windowRise(state: SheetState, enabled: Boolean): Modifier {
         val height = sizes[1]
         val offset = runCatching { state.requireOffset() }.getOrNull()
         if (offset == null || height <= 0f) return@graphicsLayer
-        val share = windowRiseShare(sizes[0] - statusTop, offset, height)
-        val scale = SHEET_WINDOW_SCALE + (1f - SHEET_WINDOW_SCALE) * share
-        scaleX = scale
-        scaleY = scale
-        alpha = (share / 0.5f).coerceIn(0f, 1f)
-        // The bottom of the sheet as drawn: it grows out of, and shrinks back into, the bottom edge.
-        transformOrigin = TransformOrigin(0.5f, (offset + height) / height)
+        val pose = sheetPose(style, sizes[0] - statusTop, offset, height)
+        scaleX = pose.scale
+        scaleY = pose.scale
+        alpha = pose.alpha
+        translationY = pose.translationY
+        transformOrigin = TransformOrigin(0.5f, pose.pivotY)
+        hold?.shift = pose.translationY
     }
 }

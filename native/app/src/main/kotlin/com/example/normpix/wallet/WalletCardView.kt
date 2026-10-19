@@ -154,6 +154,8 @@ fun WalletCardView(
         }
     }
 
+    // The back shows the CVV, when one is kept; a card without one still turns over, to nothing but "No CVV".
+    val showBack = if (card.hasCvv) "Shows the back and CVV" else "Shows the back"
     val kind = if (card.kind == CardKind.Credit) "credit" else "debit"
     val number = if (revealed) "number ${groupDigits(card.cardNumber)}" else "ending in ${card.last4}"
     val spoken = "${card.bankName} $kind card, $number, expires ${card.expiryMonth}/${card.expiryYear}, ${card.cardholderName}"
@@ -170,16 +172,16 @@ fun WalletCardView(
                 Modifier
                     .fillMaxWidth()
                     .aspectRatio(CARD_ASPECT)
-                    .clickable(onClickLabel = if (showingBack) "Shows the front" else "Shows the back and CVV", onClick = ::doFlip)
+                    .clickable(onClickLabel = if (showingBack) "Shows the front" else showBack, onClick = ::doFlip)
                     .clearAndSetSemantics {
                         contentDescription = spoken
                         role = Role.Button
                         stateDescription = if (showingBack) "Showing the back" else "Showing the front"
-                        onClick(label = if (showingBack) "Shows the front" else "Shows the back and CVV") { doFlip(); true }
+                        onClick(label = if (showingBack) "Shows the front" else showBack) { doFlip(); true }
                         customActions = listOfNotNull(
                             CustomAccessibilityAction(revealLabel) { onToggleReveal(); true },
                             onShareNfc?.let { share -> CustomAccessibilityAction("Share via NFC") { share(); true } },
-                        ) + CardField.entries.mapNotNull { field ->
+                        ) + CardField.entries.filter { it != CardField.Cvv || card.hasCvv }.mapNotNull { field ->
                             onCopy?.let { copy -> CustomAccessibilityAction("Copy ${field.label.lowercase()}") { copy(field); true } }
                         } + listOf(
                             CustomAccessibilityAction("Edit card") { onEdit(); true },
@@ -453,18 +455,32 @@ private fun CardBack(card: StoredCard, theme: BankBrandTheme, revealed: Boolean)
                         .border(1.dp, Color.Black.copy(alpha = 0.12f), RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        if (revealed) card.cvv else "•".repeat(card.cvv.length),
-                        style = TextStyle(
-                            color = Color.Black.copy(alpha = 0.87f),
-                            fontWeight = FontWeight.ExtraBold,
-                            fontStyle = FontStyle.Italic,
-                            letterSpacing = 1.5.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 13.sp,
-                        ),
-                        maxLines = 1,
-                    )
+                    if (card.hasCvv) {
+                        Text(
+                            if (revealed) card.cvv else "•".repeat(card.cvv.length),
+                            style = TextStyle(
+                                color = Color.Black.copy(alpha = 0.87f),
+                                fontWeight = FontWeight.ExtraBold,
+                                fontStyle = FontStyle.Italic,
+                                letterSpacing = 1.5.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 13.sp,
+                            ),
+                            maxLines = 1,
+                        )
+                    } else {
+                        // Nothing is kept, so nothing is drawn as if it were: no dots.
+                        Text(
+                            "No CVV",
+                            style = TextStyle(
+                                color = Color.Black.copy(alpha = 0.45f),
+                                fontWeight = FontWeight.SemiBold,
+                                fontStyle = FontStyle.Italic,
+                                fontSize = 10.sp,
+                            ),
+                            maxLines = 1,
+                        )
+                    }
                 }
             }
             Spacer(Modifier.weight(1f))

@@ -98,6 +98,21 @@ class CardExpiryTracker(
         rearm()
     }
 
+    /**
+     * Forgets every card: each one's alarm and notification are cancelled and its record removed, so nothing about a card's
+     * expiry is left once the cards are deleted (Store cards turned off). The record goes last: if cancelling fails, the
+     * record is still there to be found, and clearing again finishes the job.
+     */
+    @Synchronized
+    fun clear() {
+        for (id in store.all().keys) {
+            scheduler.cancel(id)
+            notifier.cancel(id)
+            store.remove(id)
+        }
+        rearm()
+    }
+
     /** The user marked this card done: no more reminders for this expiry. */
     @Synchronized
     fun markDone(cardId: String) {

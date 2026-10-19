@@ -37,6 +37,7 @@ import com.example.normpix.finance.share.SharedPictureReader
 import com.example.normpix.finance.share.SharedTextInbox
 import com.example.normpix.updates.AppUpdater
 import com.example.normpix.updates.UpdateSchedule
+import com.example.normpix.updates.updateCheckPlan
 import com.example.normpix.wallet.clipboard.NoClipboard
 import com.example.normpix.wallet.clipboard.SecureClipboard
 import com.example.normpix.wallet.clipboard.androidSecureClipboard
@@ -105,6 +106,11 @@ class AppContainer(
 
     /** Set with [updateRequests] by Install on the "ready to install" notification: the update page installs it, too. */
     val updateInstallRequests = MutableStateFlow(false)
+
+    init {
+        // What the vault may keep is the user's say (Store cards, Save CVV): every way a card gets in is held to it.
+        cards.followSettings(preferences)
+    }
 }
 
 class NormPixApplication : Application() {
@@ -126,15 +132,19 @@ class NormPixApplication : Application() {
         followUpdateSettings()
     }
 
-    /** The daily check in the background follows Settings > Automatic updates: scheduled, changed or cancelled with it. */
+    /**
+     * The check in the background follows Settings > Automatic updates (whether, how often, at what time, and on what network):
+     * scheduled, changed or cancelled with it, and set again at every start - which a run at a set time relies on, as it
+     * waits for one time only.
+     */
     private fun followUpdateSettings() {
-        if (container.updates?.enabled != true) return
+        val updater = container.updates?.takeIf { it.enabled } ?: return
         val preferences = container.preferences
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             preferences.state
-                .map { Triple(it.updateChecksEnabled, it.backgroundUpdates, it.updateOnMobileData) }
+                .map { it.updateCheckPlan() }
                 .distinctUntilChanged()
-                .collect { (enabled, mode, mobileData) -> UpdateSchedule.sync(this@NormPixApplication, enabled, mode, mobileData) }
+                .collect { plan -> UpdateSchedule.sync(this@NormPixApplication, plan, updater.lastCheckAt) }
         }
     }
 

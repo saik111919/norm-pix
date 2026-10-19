@@ -93,7 +93,8 @@ class StackedOverlayBlurTest {
         compose.waitForIdle()
     }
 
-    private val formRequest get() = overlays.sheets.single()
+    /** The form, the first sheet opened: a picker opened from it (also a sheet) is the one above. */
+    private val formRequest get() = overlays.sheets.first()
 
     /** Blue bled 8dp left of the form's seam: 0 while the form is sharp. */
     private fun bleed(): Float {

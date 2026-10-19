@@ -41,22 +41,33 @@ object ReminderDrafts {
 
     /**
      * About a repeating payment: due when its next occurrence is, and repeating the way it does when a reminder can say so
-     * (every day, every week, every month, or every N days), so one reminder keeps pace with the payment.
+     * (every day, every week, every month, or every N days), so one reminder keeps pace with the payment - and stops where it
+     * does, when the payment has an end date of its own (never earlier than the first reminder).
      */
-    fun aboutRecurring(rule: RecurringRule, name: String, summary: String, now: LocalDateTime): Reminder = Reminder(
-        title = name,
-        notes = summary,
-        category = when (rule.type) {
-            TransactionType.Expense -> ReminderCategory.Payments
-            TransactionType.Income -> ReminderCategory.Income
-            TransactionType.Transfer -> ReminderCategory.Accounts
-        },
-        dueAt = rule.nextDate.takeIf { it.isAfter(now) } ?: tomorrowMorning(now),
-        repeatRule = reminderRepeatFor(rule),
-        link = rule.id?.let(ReminderLink::recurring),
-        createdAt = now,
-        updatedAt = now,
-    )
+    fun aboutRecurring(rule: RecurringRule, name: String, summary: String, now: LocalDateTime): Reminder {
+        val dueAt = rule.nextDate.takeIf { it.isAfter(now) } ?: tomorrowMorning(now)
+        return Reminder(
+            title = name,
+            notes = summary,
+            category = when (rule.type) {
+                TransactionType.Expense -> ReminderCategory.Payments
+                TransactionType.Income -> ReminderCategory.Income
+                TransactionType.Transfer -> ReminderCategory.Accounts
+            },
+            dueAt = dueAt,
+            repeatRule = reminderRepeatFor(rule).endingWithPayment(rule, dueAt),
+            link = rule.id?.let(ReminderLink::recurring),
+            createdAt = now,
+            updatedAt = now,
+        )
+    }
+
+    /** This rhythm, ending on the last day of [rule]'s payments if it has one; a rhythm that does not repeat has no end. */
+    private fun RepeatRule.endingWithPayment(rule: RecurringRule, first: LocalDateTime): RepeatRule {
+        val last = rule.endDate?.toLocalDate() ?: return this
+        if (!repeats) return this
+        return copy(endDate = if (last.isBefore(first.toLocalDate())) first.toLocalDate() else last)
+    }
 
     /**
      * About an account: a card with something owed - or one with a due day - is a bill to pay; any other is just remembered by

@@ -62,7 +62,7 @@ internal object MutualFundOrderReceipt : PaymentAppReceipt {
 
         val printed = receipt.headline?.let(::amountSighting)
             ?: heading.flatMap { it.cells }.firstNotNullOfOrNull { cell -> amountSighting(cell.text)?.takeIf { it.marked } }
-        val amount = settle(listOfNotNull(printed), ledger.decimals)
+        val amount = receipt.settleAmount(listOfNotNull(printed), ledger.decimals)
 
         val status = heading.firstNotNullOfOrNull { orderStatus.find(it.text)?.groupValues?.get(1) }?.let(::statusOf) ?: SharedStatus.Unknown
 

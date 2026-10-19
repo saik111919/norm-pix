@@ -17,6 +17,7 @@ import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.ui.FinanceController
 import com.example.normpix.navigation.AppDestination
 import com.example.normpix.navigation.AppNavigator
+import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.navigation.LocalShellState
 import com.example.normpix.navigation.PlanSection
@@ -32,6 +33,7 @@ import com.example.normpix.ui.theme.Appearance
 import com.example.normpix.ui.theme.NormPixTheme
 import com.example.normpix.updates.AppUpdater
 import com.example.normpix.wallet.CardVault
+import com.example.normpix.wallet.CardVaultException
 import com.example.normpix.wallet.CardsController
 import com.example.normpix.wallet.RegisteredTags
 import com.example.normpix.wallet.StoredCard
@@ -44,6 +46,7 @@ import kotlinx.coroutines.runBlocking
 /** A navigator that only remembers where it was asked to go. */
 class RecordingNavigator : AppNavigator {
     val settingsPages = mutableListOf<SettingsPage?>()
+    val appearanceSections = mutableListOf<AppearanceSection>()
     val plansSections = mutableListOf<PlanSection?>()
     val categoryHistories = mutableListOf<Pair<Long, MonthKey>>()
     val accountHistories = mutableListOf<Long>()
@@ -71,6 +74,9 @@ class RecordingNavigator : AppNavigator {
     }
     override fun openSettings(page: SettingsPage?) {
         settingsPages += page
+    }
+    override fun openAppearance(section: AppearanceSection) {
+        appearanceSections += section
     }
     override fun openProfile() {
         profileOpened++
@@ -102,6 +108,14 @@ class RecordingClipboard(private val works: Boolean = true) : SecureClipboard {
     }
 
     override fun reconcile() = Unit
+
+    /** How many times the copied card detail was asked to come off the clipboard. */
+    var clears = 0
+        private set
+
+    override fun clear() {
+        clears++
+    }
 }
 
 /** A share sheet that remembers what it was asked to offer, so a test can see exactly what would have been sent. */
@@ -117,9 +131,21 @@ class RecordingReceiptSharer(private val works: Boolean = true) : ReceiptSharer 
 }
 
 class InMemoryVault(var cards: List<StoredCard> = emptyList()) : CardVault {
+    /** Make [clear] fail the way a vault file that can't be deleted does; the cards stay where they are. */
+    var failToClear = false
+
+    /** Make [saveCards] fail, so a test can see nothing is half-written. */
+    var failToSave = false
+
     override suspend fun loadCards(): List<StoredCard> = cards
     override suspend fun saveCards(cards: List<StoredCard>) {
+        if (failToSave) throw CardVaultException("The vault could not be written.")
         this.cards = cards
+    }
+
+    override suspend fun clear() {
+        if (failToClear) throw CardVaultException("The vault could not be erased.")
+        cards = emptyList()
     }
 }
 

@@ -10,7 +10,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,29 +21,18 @@ import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDefaults
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -58,10 +46,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.navigation.LocalAppContainer
-import com.example.normpix.navigation.LocalAppPreferences
-import com.example.normpix.ui.components.DialogBackdropBlur
-import com.example.normpix.ui.components.SeeThroughColors
-import com.example.normpix.ui.components.rememberDialogSurface
 
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
@@ -74,7 +58,7 @@ import com.example.normpix.finance.domain.FinanceConflictException
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.FinanceValidationException
 import com.example.normpix.finance.domain.Person
-import com.example.normpix.finance.domain.RepeatSchedule
+import com.example.normpix.finance.domain.RepeatPlan
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.cardBillTarget
 import com.example.normpix.finance.domain.creditRoom
@@ -100,9 +84,7 @@ import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.rememberReducedMotion
 import java.io.File
-import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.ZoneOffset
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -224,7 +206,8 @@ private fun TransactionEditor(
     // A shared message's date that couldn't be read is never quietly replaced by today: it has to be picked.
     var dateUnset by remember { mutableStateOf(prefill?.dateNeedsChoice == true) }
     // How it repeats, if it does: saving then records it as the first of a repeating payment. Not offered to one that already belongs to one.
-    var repeat by remember { mutableStateOf<RepeatSchedule?>(null) }
+    // Never set from a shared receipt or picture: a bill says what was paid, not that it repeats or when that stops.
+    var repeat by remember { mutableStateOf<RepeatPlan?>(null) }
     var showDetails by remember {
         mutableStateOf(existing?.payee != null || existing?.note != null || prefill?.payee != null || prefill?.note != null)
     }
@@ -376,7 +359,8 @@ private fun TransactionEditor(
         scope.launch {
             try {
                 if (!notADuplicate(draft)) return@launch
-                val schedule = repeat?.takeIf { existing?.recurringId == null }
+                // The end is worked out from the date as it is now, so "after 12 payments" is 12 from the date that is saved.
+                val schedule = repeat?.takeIf { existing?.recurringId == null }?.schedule(draft.occurredAt)
                 val saved = if (schedule != null) {
                     controller.saveTransactionAndRepeat(draft, schedule, pictureEdit)
                 } else {
@@ -627,7 +611,6 @@ private fun TransactionEditor(
     LaunchedEffect(Unit) { if (!isEditing && prefill?.amount == null) runCatching { amountFocus.requestFocus() } }
     val topOfForm = remember { BringIntoViewRequester() }
     LaunchedEffect(picturesRead) { if (picturesRead > 0) topOfForm.bringIntoView() }
-    val (dateShape, timeShape) = remember { connectedFieldShapes() }
     val reduced = rememberReducedMotion()
 
     EditorSheet(
@@ -788,24 +771,10 @@ private fun TransactionEditor(
             }
         }
         Spacer(Modifier.height(AppSpacing.lg))
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            TonalPickerField(
-                label = "Date",
-                value = if (dateUnset) "Choose" else shortDate(occurredAt),
-                icon = Icons.Outlined.CalendarToday,
-                onClick = { pickingDate = true },
-                modifier = Modifier.weight(1f),
-                shape = dateShape,
-            )
-            TonalPickerField(
-                label = "Time",
-                value = timeLabel(occurredAt, is24Hour),
-                icon = Icons.Outlined.Schedule,
-                onClick = { pickingTime = true },
-                modifier = Modifier.weight(1f),
-                shape = timeShape,
-            )
-        }
+        PickerFieldRow(
+            first = PickerField("Date", if (dateUnset) "Choose" else shortDate(occurredAt)) { pickingDate = true },
+            second = PickerField("Time", timeLabel(occurredAt, is24Hour)) { pickingTime = true },
+        )
         FieldError(dateError)
         Spacer(Modifier.height(AppSpacing.lg))
         RepeatField(repeat = repeat, onChange = { repeat = it }, from = occurredAt, ruleId = existing?.recurringId)
@@ -909,65 +878,6 @@ private fun balanceWithout(existing: FinanceTransaction?, accountId: Long, balan
         else -> 0L
     }
     return balance - effect
-}
-
-/** A Material date picker dialog for plain calendar dates with frosted styling. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DatePickerDialogFor(initial: LocalDate, onPicked: (LocalDate) -> Unit, onDismiss: () -> Unit, yearsAhead: Int = 10) {
-    val state = rememberDatePickerState(
-        initialSelectedDateMillis = initial.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli(),
-        yearRange = 2000..(LocalDate.now().year + yearsAhead),
-    )
-    val preferences = LocalAppPreferences.current
-    val prefsState = preferences?.state?.collectAsState()
-    val sheetBlurEnabled = prefsState?.value?.sheetBlurEnabled ?: true
-    val surface = rememberDialogSurface(enabled = sheetBlurEnabled)
-
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        colors = DatePickerDefaults.colors(containerColor = surface.container),
-        shape = surface.shape,
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val millis = state.selectedDateMillis
-                    if (millis != null) {
-                        onPicked(java.time.Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate())
-                    } else {
-                        onDismiss()
-                    }
-                },
-            ) { Text("OK") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    ) {
-        DialogBackdropBlur(surface.blurBehind)
-        SeeThroughColors(surface.blurBehind, surface.ground) { DatePicker(state = state) }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TimePickerDialogFor(initial: LocalDateTime, onPicked: (hour: Int, minute: Int) -> Unit, onDismiss: () -> Unit) {
-    val is24Hour = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
-    val state = rememberTimePickerState(initial.hour, initial.minute, is24Hour)
-    val preferences = LocalAppPreferences.current
-    val prefsState = preferences?.state?.collectAsState()
-    val sheetBlurEnabled = prefsState?.value?.sheetBlurEnabled ?: true
-    val surface = rememberDialogSurface(enabled = sheetBlurEnabled)
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = surface.container,
-        shape = surface.shape,
-        confirmButton = { TextButton(onClick = { onPicked(state.hour, state.minute) }) { Text("OK") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-        text = {
-            DialogBackdropBlur(surface.blurBehind)
-            SeeThroughColors(surface.blurBehind, surface.ground) { TimePicker(state = state) }
-        },
-    )
 }
 
 /** What reading a picture again came to: the text read off it (null when none was), and what it says as a payment. */

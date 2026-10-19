@@ -18,6 +18,9 @@ import java.util.zip.ZipOutputStream
  * Inside: `normpix-backup.json`, and `pictures/<name>` for every picture the backup's transactions name. Reading takes only
  * those two kinds of entry, only pictures named the way the app names its own ([isPictureName]) and only JPEGs, each of a
  * size a picture can be - anything else in the zip is ignored, and no entry can write outside the folder it is read into.
+ *
+ * An app backup (see `AppBackupArchive`) is this same zip with more entries under `app/`: [write] lets it add them and [read]
+ * hands it the ones it doesn't know, so a NormPix from before app backups still restores the finance part of one.
  */
 object FinanceBackupArchive {
     const val BACKUP_ENTRY = "normpix-backup.json"
@@ -37,10 +40,16 @@ object FinanceBackupArchive {
         head.size >= 4 && head[0] == 'P'.code.toByte() && head[1] == 'K'.code.toByte() && head[2] == 3.toByte() && head[3] == 4.toByte()
 
     /**
-     * Writes a full backup to [out]: [json], then each of [pictures] that [fileOf] finds on this phone. Returns how many
-     * pictures went in (one that is missing is simply left out; the backup still names it).
+     * Writes a full backup to [out]: [json], then each of [pictures] that [fileOf] finds on this phone, then whatever [extras]
+     * adds to the zip. Returns how many pictures went in (one that is missing is simply left out; the backup still names it).
      */
-    fun write(out: OutputStream, json: String, pictures: Collection<String>, fileOf: (String) -> File?): Int {
+    fun write(
+        out: OutputStream,
+        json: String,
+        pictures: Collection<String>,
+        extras: (ZipOutputStream) -> Unit = {},
+        fileOf: (String) -> File?,
+    ): Int {
         val zip = ZipOutputStream(out)
         zip.setLevel(Deflater.DEFAULT_COMPRESSION)
         zip.putNextEntry(ZipEntry(BACKUP_ENTRY))
@@ -56,6 +65,7 @@ object FinanceBackupArchive {
             zip.closeEntry()
             written++
         }
+        extras(zip)
         zip.finish()
         zip.flush()
         return written
@@ -64,8 +74,12 @@ object FinanceBackupArchive {
     /** What a full backup held: its JSON (null when it had none), and the pictures it carried, read into files. */
     class Contents(val json: String?, val pictures: Map<String, File>)
 
-    /** Reads a full backup from [input], its pictures into [into] (a folder of their own, which the caller cleans up). */
-    fun read(input: InputStream, into: File): Contents {
+    /**
+     * Reads a full backup from [input], its pictures into [into] (a folder of their own, which the caller cleans up). An entry
+     * that is neither the backup's JSON nor a picture is given to [other], with its name and its bytes to read; it may read
+     * them or not, but not past the entry.
+     */
+    fun read(input: InputStream, into: File, other: (name: String, data: InputStream) -> Unit = { _, _ -> }): Contents {
         into.mkdirs()
         var json: String? = null
         val pictures = LinkedHashMap<String, File>()
@@ -82,13 +96,15 @@ object FinanceBackupArchive {
                         val target = File(into, name)
                         if (copyPicture(zip, target)) pictures[name] = target else target.delete()
                     }
+                    else -> other(entry.name, zip)
                 }
             }
         }
         return Contents(json, pictures)
     }
 
-    private fun readLimited(input: InputStream, limit: Long): ByteArray {
+    /** All of [input], unless it is longer than [limit]: then an [IOException] with the message [TOO_LARGE]. */
+    internal fun readLimited(input: InputStream, limit: Long): ByteArray {
         val out = java.io.ByteArrayOutputStream()
         val buffer = ByteArray(64 * 1024)
         var total = 0L

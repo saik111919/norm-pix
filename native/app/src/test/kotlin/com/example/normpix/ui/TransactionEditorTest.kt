@@ -29,6 +29,8 @@ import com.example.normpix.finance.data.FinanceDatabase
 import com.example.normpix.finance.data.FinanceRepository
 import com.example.normpix.finance.data.TransactionQuery
 import com.example.normpix.finance.domain.FinanceTransaction
+import com.example.normpix.finance.domain.nthOccurrence
+import com.example.normpix.finance.domain.recurrenceStep
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.ui.CATEGORY_PICKER_TAG
 import com.example.normpix.finance.ui.FinanceController
@@ -394,5 +396,68 @@ class TransactionEditorTest {
         compose.waitForIdle()
         dismissSheet()
         compose.onNodeWithText("Discard this entry?").assertIsDisplayed()
+    }
+
+    // --- how a repeat ends ---------------------------------------------------------------------------------------
+
+    @Test
+    fun repeat_hasNoEndsUntilItRepeats_thenEndsNeverUntilToldOtherwise() {
+        openEditor()
+        assertTrue(compose.onAllNodesWithText("Ends").fetchSemanticsNodes().isEmpty())
+        openRepeatMenu()
+        compose.onNodeWithText("Every month").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Ends").performScrollTo().assertIsDisplayed()
+        chip("Never").performScrollTo().assertIsSelected()
+    }
+
+    @Test
+    fun repeat_endingAfterANumberOfPayments_isSavedAsTheDateOfTheLastOne() {
+        openEditor()
+        typeAmount("649")
+        chooseFoodCategory()
+        openRepeatMenu()
+        compose.onNodeWithText("Every month").performClick()
+        compose.waitForIdle()
+        chip("After").performScrollTo().performClick()
+        compose.waitForIdle()
+        // Twelve to start with; eight fewer is four.
+        repeat(8) { compose.onNodeWithContentDescription("Fewer").performScrollTo().performClick() }
+        compose.waitForIdle()
+        compose.onNode(hasText("After 4 payments", substring = true)).performScrollTo().assertIsDisplayed()
+
+        compose.onNodeWithText("Save expense").performClick()
+        compose.waitUntil(timeoutMillis = 10_000) { compose.onAllNodesWithText("New expense").fetchSemanticsNodes().isEmpty() }
+        val rule = runBlocking { container.finance.repository.recurringRules() }.single()
+        val fourth = nthOccurrence(rule.startDate, 4, recurrenceStep(rule.startDate, com.example.normpix.finance.domain.RecurrenceFrequency.Monthly, 1))
+        assertEquals(fourth, rule.endDate)
+    }
+
+    @Test
+    fun repeat_aCustomRepeatEndsInItsOwnSheetToo() {
+        openEditor()
+        typeAmount("300")
+        chooseFoodCategory()
+        openRepeatMenu()
+        compose.onNodeWithText("Custom…").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Custom repeat").assertIsDisplayed()
+        chip("After").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Fewer").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNode(hasText("After 11 payments", substring = true)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Done").performClick()
+        compose.waitForIdle()
+        // What was chosen in the sheet is what the editor holds: still every month, ending after eleven.
+        compose.onNodeWithText("Every month").performScrollTo().assertIsDisplayed()
+        chip("After").performScrollTo().assertIsSelected()
+        compose.onNode(hasText("After 11 payments", substring = true)).performScrollTo().assertIsDisplayed()
+
+        compose.onNodeWithText("Save expense").performClick()
+        compose.waitUntil(timeoutMillis = 10_000) { compose.onAllNodesWithText("New expense").fetchSemanticsNodes().isEmpty() }
+        val rule = runBlocking { container.finance.repository.recurringRules() }.single()
+        val eleventh = nthOccurrence(rule.startDate, 11, recurrenceStep(rule.startDate, com.example.normpix.finance.domain.RecurrenceFrequency.Monthly, 1))
+        assertEquals(eleventh, rule.endDate)
     }
 }

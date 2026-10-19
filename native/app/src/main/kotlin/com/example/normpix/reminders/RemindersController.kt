@@ -124,6 +124,22 @@ class RemindersController(
         armDueTimer()
     }
 
+    /**
+     * Replaces every reminder with [reminders] - a restored backup, or one taken back: the alarms and notifications of the ones
+     * going are cancelled, and the new ones are scheduled as any added reminder is. All or nothing: if the new ones can't be
+     * stored, the old ones stay as they were. Returns the reminders as stored (a reminder without an id gets one).
+     */
+    suspend fun replaceAll(reminders: List<Reminder>): List<Reminder> = mutex.withLock {
+        if (!loaded) loadLocked()
+        val going = _state.value.reminders
+        val stored = dao.replaceAll(reminders)
+        for (reminder in going) reminder.id?.let { scheduler.cancel(it) }
+        _state.update { it.copy(reminders = stored, loading = false) }
+        for (reminder in stored) scheduleIfNeeded(reminder)
+        armDueTimer()
+        stored
+    }
+
     suspend fun completeReminder(id: Long) = applyAndPersist(id) { ReminderActions.complete(it, clock()) }
 
     suspend fun snoozeReminder(id: Long, by: Duration) = applyAndPersist(id) { ReminderActions.snooze(it, by, clock()) }

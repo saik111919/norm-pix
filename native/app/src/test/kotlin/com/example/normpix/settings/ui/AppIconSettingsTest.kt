@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.settings.AppIcon
 import com.example.normpix.settings.AppIcons
 import com.example.normpix.testing.TestEnvironment
@@ -20,7 +21,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Settings > Appearance > App icon: every icon on offer, the one in the launcher picked, and a change asked about first. */
+/** Settings > Appearance > App icon (its own screen): every icon on offer, the one in the launcher picked, and a change asked about first. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp")
 class AppIconSettingsTest {
@@ -33,7 +34,7 @@ class AppIconSettingsTest {
     fun tearDown() = env.close()
 
     private fun open() {
-        compose.setContent { env.Content { AppearanceSettingsPage() } }
+        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.AppIcon) } }
         compose.waitForIdle()
     }
 
@@ -42,7 +43,6 @@ class AppIconSettingsTest {
     @Test
     fun everyIconIsOffered_theOneInTheLauncherPicked() {
         open()
-        compose.onNodeWithText("App icon").performScrollTo()
         for (each in AppIcon.entries) icon(each).assertIsDisplayed()
         icon(AppIcon.Default).assertIsSelected()
         icon(AppIcon.Comic).assertIsNotSelected()

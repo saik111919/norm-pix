@@ -27,6 +27,7 @@ import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.FinanceValidationException
 import com.example.normpix.finance.domain.MAX_PERSON_NAME
 import com.example.normpix.finance.domain.NUMBER_ENDING_LENGTH
+import com.example.normpix.finance.domain.NUMBER_START_LENGTH
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.MonthTotals
 import com.example.normpix.finance.domain.PeopleSpending
@@ -36,6 +37,7 @@ import com.example.normpix.finance.domain.PersonTotal
 import com.example.normpix.finance.domain.cleanPersonName
 import com.example.normpix.finance.domain.isSingleEmoji
 import com.example.normpix.finance.domain.numberEndingOrNull
+import com.example.normpix.finance.domain.numberStartOrNull
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.RepeatSchedule
 import com.example.normpix.finance.domain.TransactionType
@@ -205,6 +207,11 @@ class FinanceRepository(
         if (typedEnding != null && numberEndingOrNull(typedEnding) == null) {
             throw FinanceValidationException("Enter the last $NUMBER_ENDING_LENGTH digits of the number, or leave it empty.")
         }
+        // Its start - the first six digits, as a card number begins - is six digits or nothing, on the same terms.
+        val typedStart = account.numberStart?.trim()?.takeIf { it.isNotEmpty() }
+        if (typedStart != null && numberStartOrNull(typedStart) == null) {
+            throw FinanceValidationException("Enter the first $NUMBER_START_LENGTH digits of the number, or leave it empty.")
+        }
         val hasNumber = account.kind != AccountKind.Cash
         val cardId = account.cardId?.takeIf { it.isNotBlank() && hasNumber }
         if (cardId != null) {
@@ -221,6 +228,7 @@ class FinanceRepository(
             statementDay = account.statementDay?.takeIf { isCard },
             dueDay = account.dueDay?.takeIf { isCard },
             numberEnding = typedEnding?.takeIf { hasNumber },
+            numberStart = typedStart?.takeIf { hasNumber },
             cardId = cardId,
             updatedAt = clock(),
         )

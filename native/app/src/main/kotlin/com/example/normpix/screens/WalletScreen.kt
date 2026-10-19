@@ -127,7 +127,8 @@ import kotlinx.coroutines.launch
  *
  * Cards live in an encrypted, local-only vault and nothing here touches the
  * network. When the wallet lock is on, the whole tab stays behind [LockGate]
- * until the user authenticates.
+ * until the user authenticates. With Settings > Wallet & Cards > Store cards off
+ * the tab shows the accounts alone.
  *
  * @param active whether the tab is the one on screen; each new visit may
  *   prompt for unlock once.
@@ -138,6 +139,8 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
     val prefs by container.preferences.state.collectAsState()
     val lockVersion by container.lock.version.collectAsState()
     val cardsState by container.cards.state.collectAsState()
+    // With "Store cards" off the Wallet is accounts only: no cards, no way to add one, nothing about their expiry.
+    val cardsOn = prefs.walletCardsEnabled
     val snackbars = LocalSnackbars.current
     val haptics = rememberAppHaptics()
     val scope = rememberCoroutineScope()
@@ -151,12 +154,12 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
     val reveal = rememberCardReveal(flows)
     val revealed = reveal.revealed
 
-    LaunchedEffect(Unit) { if (container.cards.state.value is CardsState.Loading) container.cards.load() }
+    LaunchedEffect(cardsOn) { if (cardsOn && container.cards.state.value is CardsState.Loading) container.cards.load() }
 
     // Expiry reminders follow the card list. The app keeps them in step on its own (so they work without this tab
     // ever opening); doing it here too covers the sample-data cards, which have their own, silent tracker.
-    LaunchedEffect(cardsState, container.expiry) {
-        (cardsState as? CardsState.Ready)?.let { container.expiry.sync(it.cards) }
+    LaunchedEffect(cardsState, container.expiry, cardsOn) {
+        if (cardsOn) (cardsState as? CardsState.Ready)?.let { container.expiry.sync(it.cards) }
     }
     val expiryStates by container.expiry.states.collectAsState()
     var notificationsOn by remember { mutableStateOf(container.expiry.notificationsEnabled()) }
@@ -170,7 +173,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
     val locked = container.lock.isWalletLocked(prefs)
 
     // Cards lean with the phone only while they can be seen: this tab in front, unlocked, and the setting on.
-    val tilt = rememberCardTilt(enabled = prefs.cardTiltEnabled && LocalTabVisible.current && !locked)
+    val tilt = rememberCardTilt(enabled = cardsOn && prefs.cardTiltEnabled && LocalTabVisible.current && !locked)
     // Whether the cards are spread out of their stack; the layout selector's "Stack" segment gathers them again.
     val cardsDeck = rememberDeckStackState()
 
@@ -198,7 +201,11 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
             item {
                 LockGate(
                     title = "Wallet is locked",
-                    message = "Unlock with your fingerprint, face or screen lock to see your accounts and cards.",
+                    message = if (cardsOn) {
+                        "Unlock with your fingerprint, face or screen lock to see your accounts and cards."
+                    } else {
+                        "Unlock with your fingerprint, face or screen lock to see your accounts."
+                    },
                     unlockLabel = "Unlock",
                     onUnlock = ::attemptUnlock,
                     modifier = Modifier.height(480.dp),
@@ -212,8 +219,10 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
         title = "Wallet",
         actions = {
             AmountsVisibilityButton()
-            IconButton(onClick = { flows.openNfcExchange(ExchangeTab.Inlet) }) {
-                Icon(Icons.Outlined.Nfc, contentDescription = "NFC Card Exchange (Inlet / Outlet)")
+            if (cardsOn) {
+                IconButton(onClick = { flows.openNfcExchange(ExchangeTab.Inlet) }) {
+                    Icon(Icons.Outlined.Nfc, contentDescription = "NFC Card Exchange (Inlet / Outlet)")
+                }
             }
         },
         listState = listState,
@@ -223,8 +232,11 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
         item(key = "accounts") {
             Column(Modifier.padding(AppSpacing.page)) {
                 // How many cards each bank has: the other half of the account-to-bank link, seen from the account.
-                val cardsPerBank = (cardsState as? CardsState.Ready)?.cards.orEmpty()
-                    .mapNotNull { it.bankKey }.groupingBy { it }.eachCount()
+                val cardsPerBank = if (cardsOn) {
+                    (cardsState as? CardsState.Ready)?.cards.orEmpty().mapNotNull { it.bankKey }.groupingBy { it }.eachCount()
+                } else {
+                    emptyMap()
+                }
                 AccountsSection(
                     cardsPerBank = cardsPerBank,
                     showArchived = showArchived,
@@ -235,200 +247,203 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                 )
             }
         }
-        item(key = "cards-header") {
-            Box(Modifier.padding(AppSpacing.page)) {
-                SectionHeader(
-                    title = "Cards",
-                    actionLabel = "Add card",
-                    onAction = flows::addCard,
-                    padding = androidx.compose.foundation.layout.PaddingValues(
-                        start = AppSpacing.lg,
-                        top = AppSpacing.xxl,
-                        end = AppSpacing.sm,
-                        bottom = AppSpacing.sm,
-                    ),
-                )
+        // Cards are shown only while NormPix stores them (Settings > Wallet & Cards > Store cards).
+        if (cardsOn) {
+            item(key = "cards-header") {
+                Box(Modifier.padding(AppSpacing.page)) {
+                    SectionHeader(
+                        title = "Cards",
+                        actionLabel = "Add card",
+                        onAction = flows::addCard,
+                        padding = androidx.compose.foundation.layout.PaddingValues(
+                            start = AppSpacing.lg,
+                            top = AppSpacing.xxl,
+                            end = AppSpacing.sm,
+                            bottom = AppSpacing.sm,
+                        ),
+                    )
+                }
             }
-        }
-        when (val state = cardsState) {
-            is CardsState.Loading -> item(key = "cards-loading") { AppLoadingState(label = "Loading cards") }
-            is CardsState.Failed -> item(key = "cards-failed") {
-                AppErrorState(
-                    title = "Couldn't open the card vault",
-                    message = "Your cards are still stored on this device. Try again, or restart the app.",
-                    onRetry = { scope.launch { container.cards.load() } },
-                )
-            }
-            is CardsState.Ready -> {
-                val cards = state.cards
-                if (cards.isEmpty()) {
-                    item(key = "cards-empty") {
-                        Box(Modifier.padding(AppSpacing.page)) {
-                            ListSection {
-                                item {
-                                    ListRow(
-                                        headline = "Add your first card",
-                                        supporting = "Card details are encrypted and stay on this device.",
-                                        leading = { LeadingIcon(Icons.Outlined.AddCard) },
-                                        onClick = flows::addCard,
-                                    )
-                                }
-                                item {
-                                    ListRow(
-                                        headline = "Tap to add (NFC)",
-                                        supporting = "Tap a phone sharing a card from NormPix, or your contactless card.",
-                                        leading = { LeadingIcon(Icons.Outlined.Nfc) },
-                                        onClick = { flows.openNfcExchange(ExchangeTab.Inlet) },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // The banks the cards belong to - the same banks the accounts name, not names read off the cards.
-                    val banks = cards.mapNotNull { catalog.byKey(it.bankKey) }.distinct()
-                    // The filtered bank may have just lost its last card.
-                    val activeFilter = bankFilter?.takeIf { key -> banks.any { it.key == key } }
-                    val visible = if (activeFilter == null) cards else cards.filter { it.bankKey == activeFilter }
-                    item(key = "cards-layout") {
-                        // The same cards three ways, as the accounts above; the choice is the Wallet's own (Settings has it too).
-                        Box(Modifier.padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.md)) {
-                            ConnectedChoiceRow(
-                                options = cardsLayoutOptions,
-                                // Spread out, the cards are no longer the stack: none is chosen, and "Stack" puts them back.
-                                selected = if (cardsDeck.unfolded) null else prefs.cardsLayout,
-                                onSelect = {
-                                    haptics.selection()
-                                    if (it == CardsLayout.Stack && cardsDeck.unfolded) cardsDeck.fold() else container.preferences.setCardsLayout(it)
-                                },
-                            )
-                        }
-                    }
-                    if (banks.size > 1) {
-                        item(key = "cards-filter") {
-                            BankFilter(
-                                banks = banks,
-                                selected = activeFilter,
-                                onSelected = {
-                                    haptics.selection()
-                                    bankFilter = it
-                                },
-                            )
-                        }
-                    }
-                    if (prefs.cardsLayout != CardsLayout.Cards) {
-                        // A card's expiry needs saying whichever way the cards are laid out.
-                        if (visible.any { expiryStates[it.id]?.needsAttention == true }) {
-                            item(key = "cards-notices") {
-                                Column(Modifier.padding(horizontal = AppSpacing.lg)) {
-                                    for (card in visible) {
-                                        val expiry = expiryStates[card.id]?.takeIf { it.needsAttention } ?: continue
-                                        CardExpiryNotice(
-                                            state = expiry,
-                                            card = "${card.bankName} •••• ${card.last4}",
-                                            notificationsOn = notificationsOn,
-                                            onMarkDone = {
-                                                haptics.success()
-                                                container.expiry.markDone(card.id)
-                                            },
-                                            onTurnOnNotifications = flows::turnOnExpiryNotifications,
-                                            modifier = Modifier.padding(bottom = AppSpacing.md),
+            when (val state = cardsState) {
+                is CardsState.Loading -> item(key = "cards-loading") { AppLoadingState(label = "Loading cards") }
+                is CardsState.Failed -> item(key = "cards-failed") {
+                    AppErrorState(
+                        title = "Couldn't open the card vault",
+                        message = "Your cards are still stored on this device. Try again, or restart the app.",
+                        onRetry = { scope.launch { container.cards.load() } },
+                    )
+                }
+                is CardsState.Ready -> {
+                    val cards = state.cards
+                    if (cards.isEmpty()) {
+                        item(key = "cards-empty") {
+                            Box(Modifier.padding(AppSpacing.page)) {
+                                ListSection {
+                                    item {
+                                        ListRow(
+                                            headline = "Add your first card",
+                                            supporting = "Card details are encrypted and stay on this device.",
+                                            leading = { LeadingIcon(Icons.Outlined.AddCard) },
+                                            onClick = flows::addCard,
+                                        )
+                                    }
+                                    item {
+                                        ListRow(
+                                            headline = "Tap to add (NFC)",
+                                            supporting = "Tap a phone sharing a card from NormPix, or your contactless card.",
+                                            leading = { LeadingIcon(Icons.Outlined.Nfc) },
+                                            onClick = { flows.openNfcExchange(ExchangeTab.Inlet) },
                                         )
                                     }
                                 }
                             }
                         }
-                        if (prefs.cardsLayout == CardsLayout.Stack) {
-                            item(key = "cards-stack") {
-                                Column(Modifier.padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg)) {
-                                    CardStack(cards = visible, onOpen = flows::showCard, state = cardsDeck, bankIconStyle = prefs.bankIconStyle)
-                                    // The next card goes where this stack ends: a slim tile, as the cards behind the front one are slim.
-                                    Spacer(Modifier.height(AppSpacing.lg))
-                                    AddTile(title = "Add card", supporting = "Encrypted, and kept on this device", onClick = flows::addCard, compact = true)
-                                }
+                    } else {
+                        // The banks the cards belong to - the same banks the accounts name, not names read off the cards.
+                        val banks = cards.mapNotNull { catalog.byKey(it.bankKey) }.distinct()
+                        // The filtered bank may have just lost its last card.
+                        val activeFilter = bankFilter?.takeIf { key -> banks.any { it.key == key } }
+                        val visible = if (activeFilter == null) cards else cards.filter { it.bankKey == activeFilter }
+                        item(key = "cards-layout") {
+                            // The same cards three ways, as the accounts above; the choice is the Wallet's own (Settings has it too).
+                            Box(Modifier.padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.md)) {
+                                ConnectedChoiceRow(
+                                    options = cardsLayoutOptions,
+                                    // Spread out, the cards are no longer the stack: none is chosen, and "Stack" puts them back.
+                                    selected = if (cardsDeck.unfolded) null else prefs.cardsLayout,
+                                    onSelect = {
+                                        haptics.selection()
+                                        if (it == CardsLayout.Stack && cardsDeck.unfolded) cardsDeck.fold() else container.preferences.setCardsLayout(it)
+                                    },
+                                )
                             }
-                        } else {
-                            item(key = "cards-rows") {
-                                Box(Modifier.padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg)) {
-                                    ListSection {
+                        }
+                        if (banks.size > 1) {
+                            item(key = "cards-filter") {
+                                BankFilter(
+                                    banks = banks,
+                                    selected = activeFilter,
+                                    onSelected = {
+                                        haptics.selection()
+                                        bankFilter = it
+                                    },
+                                )
+                            }
+                        }
+                        if (prefs.cardsLayout != CardsLayout.Cards) {
+                            // A card's expiry needs saying whichever way the cards are laid out.
+                            if (visible.any { expiryStates[it.id]?.needsAttention == true }) {
+                                item(key = "cards-notices") {
+                                    Column(Modifier.padding(horizontal = AppSpacing.lg)) {
                                         for (card in visible) {
-                                            item {
-                                                ListRow(
-                                                    headline = "${card.bankName} •••• ${card.last4}",
-                                                    supporting = "${if (card.kind == CardKind.Credit) "Credit card" else "Debit card"} · Expires ${card.expiryMonth}/${card.expiryYear}",
-                                                    leading = { BankBadge(catalog.byKey(card.bankKey), Icons.Outlined.CreditCard) },
-                                                    onClick = { flows.showCard(card) },
-                                                )
-                                            }
-                                        }
-                                        item {
-                                            ListRow(
-                                                headline = "Add card",
-                                                leading = { LeadingIcon(Icons.Rounded.Add) },
-                                                onClick = flows::addCard,
+                                            val expiry = expiryStates[card.id]?.takeIf { it.needsAttention } ?: continue
+                                            CardExpiryNotice(
+                                                state = expiry,
+                                                card = "${card.bankName} •••• ${card.last4}",
+                                                notificationsOn = notificationsOn,
+                                                onMarkDone = {
+                                                    haptics.success()
+                                                    container.expiry.markDone(card.id)
+                                                },
+                                                onTurnOnNotifications = flows::turnOnExpiryNotifications,
+                                                modifier = Modifier.padding(bottom = AppSpacing.md),
                                             )
                                         }
                                     }
                                 }
                             }
-                        }
-                    } else {
-                      visible.forEachIndexed { index, card ->
-                        item(key = "card-${card.id}") {
-                            Box(Modifier.animateItem().fillMaxWidth().padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg), contentAlignment = Alignment.Center) {
-                                // Card art keeps a card's proportions; cap it on wide windows.
-                                Box(Modifier.widthIn(max = 440.dp)) {
-                                    AnimatedEntrance(delayMs = 40L * index) {
-                                        Column {
-                                            val expiry = expiryStates[card.id]?.takeIf { it.needsAttention }
-                                            // Keeps showing what it showed while the notice eases out after "Mark as done".
-                                            var lastShown by remember { mutableStateOf(expiry) }
-                                            if (expiry != null) lastShown = expiry
-                                            RevealVisibility(visible = expiry != null) {
-                                                lastShown?.let { shown ->
-                                                    CardExpiryNotice(
-                                                        state = shown,
-                                                        card = "${card.bankName} •••• ${card.last4}",
-                                                        notificationsOn = notificationsOn,
-                                                        onMarkDone = {
-                                                            haptics.success()
-                                                            container.expiry.markDone(card.id)
-                                                        },
-                                                        onTurnOnNotifications = flows::turnOnExpiryNotifications,
-                                                        modifier = Modifier.padding(bottom = AppSpacing.md),
+                            if (prefs.cardsLayout == CardsLayout.Stack) {
+                                item(key = "cards-stack") {
+                                    Column(Modifier.padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg)) {
+                                        CardStack(cards = visible, onOpen = flows::showCard, state = cardsDeck, bankIconStyle = prefs.bankIconStyle)
+                                        // The next card goes where this stack ends: a slim tile, as the cards behind the front one are slim.
+                                        Spacer(Modifier.height(AppSpacing.lg))
+                                        AddTile(title = "Add card", supporting = "Encrypted, and kept on this device", onClick = flows::addCard, compact = true)
+                                    }
+                                }
+                            } else {
+                                item(key = "cards-rows") {
+                                    Box(Modifier.padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg)) {
+                                        ListSection {
+                                            for (card in visible) {
+                                                item {
+                                                    ListRow(
+                                                        headline = "${card.bankName} •••• ${card.last4}",
+                                                        supporting = "${if (card.kind == CardKind.Credit) "Credit card" else "Debit card"} · Expires ${card.expiryMonth}/${card.expiryYear}",
+                                                        leading = { BankBadge(catalog.byKey(card.bankKey), Icons.Outlined.CreditCard) },
+                                                        onClick = { flows.showCard(card) },
                                                     )
                                                 }
                                             }
-                                            WalletCardView(
-                                                card = card,
-                                                revealed = card.id in revealed,
-                                                actionStyle = prefs.walletCardActionStyle,
-                                                nfcGated = prefs.nfcTagRevealEnabled,
-                                                bankIconStyle = prefs.bankIconStyle,
-                                                onToggleReveal = { reveal.toggle(card.id) },
-                                                onShareNfc = { flows.openNfcExchange(ExchangeTab.Outlet, card) },
-                                                onEdit = { flows.editCard(card) },
-                                                onDelete = {
-                                                    revealed.remove(card.id)
-                                                    flows.deleteCard(card)
-                                                },
-                                                tilt = tilt,
-                                                onCopy = { field -> reveal.copy(card, field) },
-                                            )
+                                            item {
+                                                ListRow(
+                                                    headline = "Add card",
+                                                    leading = { LeadingIcon(Icons.Rounded.Add) },
+                                                    onClick = flows::addCard,
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                      }
-                      // The next card is one more of them, drawn empty, where it would go.
-                      item(key = "cards-add") {
-                          Box(Modifier.animateItem().fillMaxWidth().padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg), contentAlignment = Alignment.Center) {
-                              Box(Modifier.widthIn(max = 440.dp)) {
-                                  AddTile(title = "Add card", supporting = "Encrypted, and kept on this device", onClick = flows::addCard)
+                        } else {
+                          visible.forEachIndexed { index, card ->
+                            item(key = "card-${card.id}") {
+                                Box(Modifier.animateItem().fillMaxWidth().padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg), contentAlignment = Alignment.Center) {
+                                    // Card art keeps a card's proportions; cap it on wide windows.
+                                    Box(Modifier.widthIn(max = 440.dp)) {
+                                        AnimatedEntrance(delayMs = 40L * index) {
+                                            Column {
+                                                val expiry = expiryStates[card.id]?.takeIf { it.needsAttention }
+                                                // Keeps showing what it showed while the notice eases out after "Mark as done".
+                                                var lastShown by remember { mutableStateOf(expiry) }
+                                                if (expiry != null) lastShown = expiry
+                                                RevealVisibility(visible = expiry != null) {
+                                                    lastShown?.let { shown ->
+                                                        CardExpiryNotice(
+                                                            state = shown,
+                                                            card = "${card.bankName} •••• ${card.last4}",
+                                                            notificationsOn = notificationsOn,
+                                                            onMarkDone = {
+                                                                haptics.success()
+                                                                container.expiry.markDone(card.id)
+                                                            },
+                                                            onTurnOnNotifications = flows::turnOnExpiryNotifications,
+                                                            modifier = Modifier.padding(bottom = AppSpacing.md),
+                                                        )
+                                                    }
+                                                }
+                                                WalletCardView(
+                                                    card = card,
+                                                    revealed = card.id in revealed,
+                                                    actionStyle = prefs.walletCardActionStyle,
+                                                    nfcGated = prefs.nfcTagRevealEnabled,
+                                                    bankIconStyle = prefs.bankIconStyle,
+                                                    onToggleReveal = { reveal.toggle(card.id) },
+                                                    onShareNfc = { flows.openNfcExchange(ExchangeTab.Outlet, card) },
+                                                    onEdit = { flows.editCard(card) },
+                                                    onDelete = {
+                                                        revealed.remove(card.id)
+                                                        flows.deleteCard(card)
+                                                    },
+                                                    tilt = tilt,
+                                                    onCopy = { field -> reveal.copy(card, field) },
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                          }
+                          // The next card is one more of them, drawn empty, where it would go.
+                          item(key = "cards-add") {
+                              Box(Modifier.animateItem().fillMaxWidth().padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg), contentAlignment = Alignment.Center) {
+                                  Box(Modifier.widthIn(max = 440.dp)) {
+                                      AddTile(title = "Add card", supporting = "Encrypted, and kept on this device", onClick = flows::addCard)
+                                  }
                               }
                           }
-                      }
+                        }
                     }
                 }
             }

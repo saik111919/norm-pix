@@ -27,6 +27,11 @@ interface CardVault {
 
     /** Replaces the stored cards. */
     suspend fun saveCards(cards: List<StoredCard>)
+
+    /** Erases every stored card, without reading any. Throws [CardVaultException] if it couldn't be erased. */
+    suspend fun clear() {
+        saveCards(emptyList())
+    }
 }
 
 /** Supplies the AES key the vault encrypts with. */
@@ -103,6 +108,18 @@ class FileCardVault(
                 }
             } catch (e: Exception) {
                 throw CardVaultException("The card vault couldn't be saved.", e)
+            }
+        }
+    }
+
+    /** Deletes the vault file (and a half-written one a crash may have left): no card is read, so an unreadable vault goes too. */
+    override suspend fun clear() = withContext(Dispatchers.IO) {
+        lock.withLock {
+            try {
+                File(file.parentFile, file.name + ".tmp").delete()
+                check(!file.exists() || file.delete()) { "could not delete the vault file" }
+            } catch (e: Exception) {
+                throw CardVaultException("The card vault couldn't be erased.", e)
             }
         }
     }

@@ -15,6 +15,7 @@ import com.example.normpix.finance.domain.CustomBank
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.NUMBER_ENDING_LENGTH
+import com.example.normpix.finance.domain.NUMBER_START_LENGTH
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.RecurrenceFrequency
 import com.example.normpix.finance.domain.RecurringRule
@@ -24,6 +25,7 @@ import com.example.normpix.finance.domain.isPictureName
 import com.example.normpix.finance.domain.isSingleEmoji
 import com.example.normpix.finance.domain.minorToDecimalString
 import com.example.normpix.finance.domain.numberEndingOrNull
+import com.example.normpix.finance.domain.numberStartOrNull
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -119,6 +121,7 @@ object FinanceBackupCodec {
                                 put("statementDay", a.statementDay)
                                 put("dueDay", a.dueDay)
                                 put("numberEnding", a.numberEnding)
+                                put("numberStart", a.numberStart)
                                 put("cardId", a.cardId)
                             },
                         )
@@ -304,6 +307,8 @@ object FinanceBackupCodec {
                     statementDay = m.dayOrNull("statementDay", "account"),
                     dueDay = m.dayOrNull("dueDay", "account"),
                     numberEnding = m.stringOrNull("numberEnding"),
+                    // Absent in backups made before a card account could keep the start of its number.
+                    numberStart = m.stringOrNull("numberStart"),
                     cardId = m.stringOrNull("cardId"),
                 )
             },
@@ -446,8 +451,9 @@ object FinanceBackupCodec {
             if (a.kind != AccountKind.Card) add("Account \"${a.name}\" has a statement or due date but is not a card.")
         }
         for (a in s.accounts) {
-            if (a.numberEnding == null && a.cardId == null) continue
+            if (a.numberEnding == null && a.numberStart == null && a.cardId == null) continue
             if (a.numberEnding != null && numberEndingOrNull(a.numberEnding) == null) add("Account \"${a.name}\" has a number ending that is not $NUMBER_ENDING_LENGTH digits.")
+            if (a.numberStart != null && numberStartOrNull(a.numberStart) == null) add("Account \"${a.name}\" has a number start that is not $NUMBER_START_LENGTH digits.")
             if (a.kind == AccountKind.Cash) add("Account \"${a.name}\" has a number or a card but is cash.")
         }
         val bankKeys = s.banks.mapTo(mutableSetOf()) { it.key }

@@ -91,6 +91,12 @@ data class Account(
      */
     val numberEnding: String? = null,
     /**
+     * The first [NUMBER_START_LENGTH] digits of a card's number (its bank identification number), kept with [numberEnding] so
+     * a receipt that shows both ends of the number ("652850XXXXXXXX55") can be told from another card's. Only these two
+     * pieces of a number are ever kept, never the whole of it. Null where not given, and for anything that is not a card.
+     */
+    val numberStart: String? = null,
+    /**
      * The Wallet card (`StoredCard.id`) that is this account's card - a credit card for a card account, a debit card for a bank
      * account - or null for none. The user says which is which; nothing links them by itself. The card's number then says what
      * the account's number is. May point at a card since deleted, which then counts for nothing.
@@ -103,6 +109,12 @@ const val NUMBER_ENDING_LENGTH = 4
 
 /** [text] as an account number's ending: its [NUMBER_ENDING_LENGTH] digits, or null when it isn't exactly that many digits. */
 fun numberEndingOrNull(text: String): String? = text.trim().takeIf { it.length == NUMBER_ENDING_LENGTH && it.all { c -> c in '0'..'9' } }
+
+/** How many leading digits of a card's number are kept (see [Account.numberStart]): the six that name the bank and the card's network. */
+const val NUMBER_START_LENGTH = 6
+
+/** [text] as a card number's start: its [NUMBER_START_LENGTH] digits, or null when it isn't exactly that many digits. */
+fun numberStartOrNull(text: String): String? = text.trim().takeIf { it.length == NUMBER_START_LENGTH && it.all { c -> c in '0'..'9' } }
 
 /** A bank the user added, for the ones the built-in directory doesn't list. Built-in banks are not stored; they are referred to by their directory id. */
 data class CustomBank(

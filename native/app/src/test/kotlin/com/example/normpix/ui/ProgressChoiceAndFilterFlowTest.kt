@@ -19,9 +19,10 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
+import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.screens.PlansAndTransactionsScreen
 import com.example.normpix.settings.ProgressStyle
-import com.example.normpix.settings.ui.AppearanceSettingsPage
+import com.example.normpix.settings.ui.AppearanceSectionPage
 import com.example.normpix.testing.TestEnvironment
 import kotlin.math.abs
 import kotlin.test.assertEquals
@@ -52,9 +53,8 @@ class ProgressChoiceAndFilterFlowTest {
 
     @Test
     fun appearanceOffersTheProgressStyles_wavySelectedToStartWith() {
-        compose.setContent { env.Content { AppearanceSettingsPage() } }
+        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.ProgressIndicators) } }
         compose.waitForIdle()
-        compose.onNodeWithText("Progress indicators").performScrollTo()
         compose.onNodeWithText("Wavy").performScrollTo().assertIsSelected()
         compose.onNodeWithText("Flat").performScrollTo()
         compose.onNodeWithText("Bars that fill with a moving wave, and a loader that morphs between shapes").performScrollTo()
@@ -63,7 +63,7 @@ class ProgressChoiceAndFilterFlowTest {
 
     @Test
     fun choosingFlatTakesEffectAtOnce_andWavyBringsItBack() {
-        compose.setContent { env.Content { AppearanceSettingsPage() } }
+        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.ProgressIndicators) } }
         compose.waitForIdle()
 
         compose.onNodeWithText("Flat").performScrollTo().performClick()

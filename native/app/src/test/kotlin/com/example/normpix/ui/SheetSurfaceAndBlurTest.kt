@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -23,8 +24,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import com.example.normpix.finance.ui.TimePickerDialogFor
 import com.example.normpix.ui.components.AppOverlays
+import com.example.normpix.ui.components.DialogBackdropBlur
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalWindowBlurOverride
 import com.example.normpix.ui.components.OverlayHost
@@ -35,7 +36,6 @@ import com.example.normpix.ui.components.sheetShareOnScreen
 import com.example.normpix.ui.theme.AppFrostedTokens
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.NormPixTheme
-import java.time.LocalDateTime
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -249,10 +249,22 @@ class SheetSurfaceAndBlurTest {
         assertEquals(statusBar.toFloat(), top.value, 1f, "the sheet's top edge sits just under the status bar")
     }
 
-    private fun showTimePicker(overlays: AppOverlays, blurAvailable: Boolean) {
+    /** A centred dialog over a page, blurring it as [DialogBackdropBlur] does (the app's pickers are sheets now, not dialogs). */
+    private fun showDialog(overlays: AppOverlays, blurAvailable: Boolean) {
         compose.setContent {
             CompositionLocalProvider(LocalWindowBlurOverride provides blurAvailable, LocalOverlays provides overlays) {
-                NormPixTheme { TimePickerDialogFor(LocalDateTime.of(2026, 10, 8, 9, 30), { _, _ -> }, {}) }
+                NormPixTheme {
+                    val surface = rememberDialogSurface(enabled = true)
+                    AlertDialog(
+                        onDismissRequest = {},
+                        confirmButton = {},
+                        containerColor = surface.container,
+                        text = {
+                            DialogBackdropBlur(surface.blurBehind)
+                            Text("A dialog")
+                        },
+                    )
+                }
             }
         }
         compose.waitForIdle()
@@ -261,7 +273,7 @@ class SheetSurfaceAndBlurTest {
     @Test
     fun aDialogBlursThePage_underASheetsLightDimNotTheWindowsDarkOne() {
         val overlays = AppOverlays()
-        showTimePicker(overlays, blurAvailable = true)
+        showDialog(overlays, blurAvailable = true)
         assertEquals(1f, overlays.backdropBlur, 0.01f)
         assertEquals(AppFrostedTokens.scrimAlpha, ShadowDialog.getLatestDialog().window!!.attributes.dimAmount, 0.01f)
     }
@@ -269,7 +281,7 @@ class SheetSurfaceAndBlurTest {
     @Test
     fun whereTheSystemDoesNotBlur_aDialogKeepsTheUsualDim() {
         val overlays = AppOverlays()
-        showTimePicker(overlays, blurAvailable = false)
+        showDialog(overlays, blurAvailable = false)
         assertEquals(0f, overlays.backdropBlur)
         assertTrue(ShadowDialog.getLatestDialog().window!!.attributes.dimAmount > 0.3f)
     }

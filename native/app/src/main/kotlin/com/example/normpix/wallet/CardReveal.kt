@@ -92,6 +92,8 @@ class CardReveal internal constructor(
      * [say] gets the confirmation (a snackbar when it is null).
      */
     fun copy(card: StoredCard, field: CardField?, say: ((String) -> Unit)? = null) {
+        // A card kept without a CVV has none to copy, so there is nothing to reveal for it either.
+        if (field == CardField.Cvv && !card.hasCvv) return
         scope.launch {
             if (prefs.nfcTagRevealEnabled && card.id !in revealed && !passedNfcGate()) return@launch
             if (field == null) flows.copyDetails(card) else flows.copyFieldAndSay(card, field, say)

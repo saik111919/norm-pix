@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
@@ -86,14 +87,15 @@ class AccountNumberUiTest {
     @Test
     fun `a card account says card, and cash is not asked`() {
         showForm(account("HDFC Credit", AccountKind.Card))
-        compose.onNodeWithText("Card number ends with (optional)").assertIsDisplayed()
+        compose.onNodeWithText("Card number (optional)").assertIsDisplayed()
+        compose.onAllNodesWithText("Account number ends with (optional)").assertCountEquals(0)
     }
 
     @Test
     fun `cash is not asked`() {
         showForm(account("Wallet cash", AccountKind.Cash))
         compose.onAllNodesWithText("Account number ends with (optional)").assertCountEquals(0)
-        compose.onAllNodesWithText("Card number ends with (optional)").assertCountEquals(0)
+        compose.onAllNodesWithText("Card number (optional)").assertCountEquals(0)
     }
 
     @Test
@@ -137,6 +139,135 @@ class AccountNumberUiTest {
 
         assertNull(assertNotNull(saved).numberEnding)
         assertNull(stored(salary.id).numberEnding)
+    }
+
+    // ----- a card account's whole number: only its first six and last four digits are kept -----
+
+    private fun cardAccount(numberEnding: String? = null, numberStart: String? = null) = runBlocking {
+        env.container.finance.saveAccount(
+            Account(
+                name = "HDFC Credit", kind = AccountKind.Card, numberEnding = numberEnding, numberStart = numberStart,
+                createdAt = now, updatedAt = now,
+            ),
+        )
+    }
+
+    @Test
+    fun `a whole card number is cut down to its first six and last four digits`() {
+        val credit = cardAccount()
+        var saved: Account? = null
+        showForm(credit) { saved = it }
+
+        compose.onNodeWithText("Card number (optional)").performTextInput("4111111111111111")
+        compose.onNodeWithText("Only the first 6 and last 4 digits are kept, to recognise this card on receipts").assertIsDisplayed()
+        compose.onNodeWithText("Save changes").performClick()
+        compose.waitUntil(10_000) { saved != null }
+
+        assertEquals("411111", assertNotNull(saved).numberStart)
+        assertEquals("1111", saved?.numberEnding)
+        val kept = stored(credit.id)
+        assertEquals("411111", kept.numberStart)
+        assertEquals("1111", kept.numberEnding)
+        // Nothing of the middle digits reached the account: ten digits at most.
+        assertEquals(10, kept.numberStart.orEmpty().length + kept.numberEnding.orEmpty().length)
+    }
+
+    @Test
+    fun `a card number is typed in groups of four`() {
+        showForm(cardAccount())
+        compose.onNodeWithText("Card number (optional)").performTextInput("4111111111111111")
+        compose.onNodeWithText("4111 1111 1111 1111").assertIsDisplayed()
+    }
+
+    @Test
+    fun `just the last four digits still work, and take the start away`() {
+        val credit = cardAccount(numberEnding = "9999", numberStart = "411111")
+        var saved: Account? = null
+        showForm(credit) { saved = it }
+
+        compose.onNodeWithText("Card number (optional)").performTextInput("4455")
+        compose.onNodeWithText("Save changes").performClick()
+        compose.waitUntil(10_000) { saved != null }
+
+        assertEquals("4455", assertNotNull(saved).numberEnding)
+        assertNull(saved?.numberStart, "a start belongs to the number it came from")
+    }
+
+    @Test
+    fun `typing nothing keeps what is already kept, and shows it masked`() {
+        val credit = cardAccount(numberEnding = "1111", numberStart = "411111")
+        var saved: Account? = null
+        showForm(credit) { saved = it }
+
+        compose.onNodeWithText("Kept: 4111 11•• •••• 1111. Type the number again to change it.").assertIsDisplayed()
+        compose.onNodeWithText("Save changes").performClick()
+        compose.waitUntil(10_000) { saved != null }
+
+        assertEquals("411111", stored(credit.id).numberStart)
+        assertEquals("1111", stored(credit.id).numberEnding)
+    }
+
+    @Test
+    fun `the clear button throws the kept digits away`() {
+        val credit = cardAccount(numberEnding = "1111", numberStart = "411111")
+        var saved: Account? = null
+        showForm(credit) { saved = it }
+
+        compose.onNodeWithContentDescription("Forget the kept digits").performClick()
+        compose.onNodeWithText("Save changes").performClick()
+        compose.waitUntil(10_000) { saved != null }
+
+        assertNull(stored(credit.id).numberStart)
+        assertNull(stored(credit.id).numberEnding)
+    }
+
+    @Test
+    fun `a number of the wrong length is not saved, and says what to do`() {
+        val credit = cardAccount()
+        var saved: Account? = null
+        showForm(credit) { saved = it }
+
+        compose.onNodeWithText("Card number (optional)").performTextInput("41111111")
+        compose.onNodeWithText("Save changes").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("Enter the whole card number, or just its last 4 digits, or leave it empty").assertIsDisplayed()
+        assertNull(saved)
+        assertNull(stored(credit.id).numberStart)
+    }
+
+    @Test
+    fun `a number that fails the check is flagged but is the user's to keep`() {
+        val credit = cardAccount()
+        var saved: Account? = null
+        showForm(credit) { saved = it }
+
+        compose.onNodeWithText("Card number (optional)").performTextInput("4111111111111112")
+        compose.onNodeWithText("That doesn't look like a card number. Check the digits.").assertIsDisplayed()
+        compose.onNodeWithText("Save changes").performClick()
+        compose.waitUntil(10_000) { saved != null }
+        assertEquals("411111", assertNotNull(saved).numberStart)
+    }
+
+    @Test
+    fun `with a Wallet card to choose, the link is still there and typing a number is the other way`() {
+        walletCard("rupay", "HDFC Bank", "6528505555554455")
+        showForm(cardAccount())
+        compose.onNodeWithText("Card in your Wallet (optional)").assertIsDisplayed()
+        compose.onNodeWithText("Card number (optional)").assertIsDisplayed()
+    }
+
+    @Test
+    fun `an account that is not a card keeps asking for the last four digits only`() {
+        val salary = account("HDFC Salary", AccountKind.Bank)
+        var saved: Account? = null
+        showForm(salary) { saved = it }
+        compose.onAllNodesWithText("Card number (optional)").assertCountEquals(0)
+        compose.onNodeWithText("Account number ends with (optional)").performTextInput("3588")
+        compose.onNodeWithText("Save changes").performClick()
+        compose.waitUntil(10_000) { saved != null }
+        assertNull(assertNotNull(saved).numberStart)
+        assertEquals("3588", saved?.numberEnding)
     }
 
     // ----- the Wallet card -----

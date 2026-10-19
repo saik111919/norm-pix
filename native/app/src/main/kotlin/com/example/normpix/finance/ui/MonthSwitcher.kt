@@ -161,7 +161,7 @@ internal fun relativeMonth(month: MonthKey, latest: MonthKey): String {
 
 /** The inner corner of a segment: small, opening up while it is pressed (the split button's motion). */
 @Composable
-private fun pressedCorner(press: MutableInteractionSource): Dp {
+internal fun pressedCorner(press: MutableInteractionSource): Dp {
     val pressed by press.collectIsPressedAsState()
     val corner by animateDpAsState(if (pressed) PressedInnerCorner else InnerCorner, AppMotion.spatial<Dp>(), label = "month_corner")
     return corner

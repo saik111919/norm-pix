@@ -161,19 +161,8 @@ fun TransactionCategoryField(
         placeholder = "Choose a category",
         modifier = modifier,
         errorText = errorText,
-        leading = {
-            if (current != null) {
-                val tone = paletteColor(current.color)
-                IconBadge(
-                    icon = null,
-                    container = tone.container,
-                    content = tone.onContainer,
-                    glyph = { CategoryGlyph(current.icon, tone.onContainer, 22.dp) },
-                )
-            } else {
-                IconBadge(Icons.Outlined.Category)
-            }
-        },
+        // The same avatar as in the lists, in the shape chosen in Settings > Appearance (none: the bare icon).
+        leading = { if (current != null) CategoryAvatar(current) else NeutralAvatar(Icons.Outlined.Category) },
         onClick = {
             scope.launch {
                 val picked = overlays.sheet<Set<Long>> { dismiss ->

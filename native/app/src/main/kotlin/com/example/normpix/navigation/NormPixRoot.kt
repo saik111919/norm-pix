@@ -11,6 +11,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.example.normpix.reminders.ReminderAlertScreen
 import com.example.normpix.settings.AppPreferences
+import com.example.normpix.settings.ui.AppearanceSectionPage
 import com.example.normpix.settings.ui.AppearanceSettingsPage
 import com.example.normpix.settings.ui.AvailabilitySettingsPage
 import com.example.normpix.settings.ui.DataSettingsPage
@@ -28,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
@@ -78,6 +80,7 @@ import com.example.normpix.updates.ui.OfferAppUpdates
 import com.example.normpix.updates.ui.UpdatePage
 import com.example.normpix.settings.PageAnimationType
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import com.example.normpix.ui.components.AppErrorState
 import com.example.normpix.ui.components.AppLoadingState
@@ -100,6 +103,7 @@ import com.example.normpix.ui.theme.Appearance
 import com.example.normpix.ui.theme.LocalSystemReducedMotion
 import com.example.normpix.ui.theme.NormPixTheme
 import com.example.normpix.ui.theme.isDark
+import com.example.normpix.ui.theme.rememberCustomFontFile
 import com.example.normpix.ui.theme.rememberReducedMotion
 import com.example.normpix.ui.theme.rememberSystemReducedMotion
 
@@ -117,6 +121,8 @@ object Routes {
     const val ACCOUNT_HISTORY = "account/{accountId}"
     const val SETTINGS = "settings"
     const val SETTINGS_PAGE = "settings/{page}"
+    /** One screen of Settings > Appearance, named by an [AppearanceSection]. */
+    const val APPEARANCE_SECTION = "appearance/{section}"
     const val PROFILE = "profile"
     const val SEARCH = "search"
     const val REMINDER_ALERT = "reminder/{reminderId}"
@@ -129,6 +135,7 @@ object Routes {
     fun accountHistory(accountId: Long) = "account/$accountId"
     fun person(personId: Long) = "person/$personId"
     fun settingsPage(page: SettingsPage) = "settings/${page.name}"
+    fun appearanceSection(section: AppearanceSection) = "appearance/${section.name}"
     fun reminderAlert(reminderId: Long) = "reminder/$reminderId"
 }
 
@@ -189,9 +196,14 @@ fun NormPixRoot(container: AppContainer, showSplash: Boolean = false, onDarkChan
     KeepRemindersArmed(container)
     val reducedMotion = rememberReducedMotion()
     var splashing by remember { mutableStateOf(showSplash && !reducedMotion) }
+    // The app below the splash is first composed once the name is written, not while its letters move: that composition is
+    // the heaviest thing a cold start does on the main thread, and a frame lost among the letters shows (see LaunchSplash).
+    var splashWritten by remember { mutableStateOf(!splashing) }
     val splashLeaving = remember { Animatable(0f) }
     val finance by data.finance.state.collectAsStateWithLifecycle()
-    NormPixTheme(Appearance(prefs.mode, prefs.colorSource, prefs.accent, AppFont(prefs.interfaceFont, prefs.fontShape))) {
+    // The user's own font file (Settings > Appearance > Interface font), made ready off the main thread; null for any other font.
+    val customFontFile = rememberCustomFontFile(prefs.interfaceFont, prefs.customFontRevision)
+    NormPixTheme(Appearance(prefs.mode, prefs.colorSource, prefs.accent, AppFont(prefs.interfaceFont, prefs.fontShape, customFontFile))) {
         val dark = MaterialTheme.colorScheme.isDark
         LaunchedEffect(dark) { onDarkChanged(dark) }
         Box(Modifier.fillMaxSize()) {
@@ -209,7 +221,17 @@ fun NormPixRoot(container: AppContainer, showSplash: Boolean = false, onDarkChan
             ) {
                 ProvideAppEnvironment(data) {
                     // Rebuilt for each data set, so no screen keeps reading or writing the other one.
-                    key(data) { AppContent(data, nav, shell, prefs.pageAnimation, sampleData = data !== container, splashing = splashing) }
+                    key(data) {
+                        AppContent(
+                            data,
+                            nav,
+                            shell,
+                            prefs.pageAnimation,
+                            sampleData = data !== container,
+                            splashing = splashing,
+                            holdBack = !splashWritten,
+                        )
+                    }
                 }
             }
             if (splashing) {
@@ -217,6 +239,7 @@ fun NormPixRoot(container: AppContainer, showSplash: Boolean = false, onDarkChan
                     ready = finance.status != FinanceStatus.Loading,
                     leaving = splashLeaving,
                     onFinished = { splashing = false },
+                    onWritten = { splashWritten = true },
                 )
             }
         }
@@ -265,14 +288,16 @@ private fun rememberDataContainer(real: AppContainer, dummy: Boolean): AppContai
 @Composable
 private fun KeepRemindersArmed(container: AppContainer) {
     val scope = rememberCoroutineScope()
+    // Loading waits on the database, which answers off the main thread; re-registering the alarms does not - it is a call to
+    // the system for each reminder, which has no business among the frames of the splash (or of the first screen).
     LaunchedEffect(container.reminders) {
         runCatching {
             container.reminders.load()
-            container.reminders.rearmAll()
+            withContext(Dispatchers.Default) { container.reminders.rearmAll() }
         }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_START) {
-        scope.launch { runCatching { container.reminders.rearmAll() } }
+        scope.launch(Dispatchers.Default) { runCatching { container.reminders.rearmAll() } }
     }
 }
 
@@ -343,6 +368,8 @@ private fun AppContent(
     pageAnimation: PageAnimationType,
     sampleData: Boolean,
     splashing: Boolean = false,
+    /** The splash is still writing its name: the data loads meanwhile, but nothing is composed until it is written. */
+    holdBack: Boolean = false,
 ) {
     val finance = container.finance
     val state = rememberFinanceState()
@@ -353,6 +380,11 @@ private fun AppContent(
         if (finance.state.value.status == FinanceStatus.Ready) {
             scope.launch { runCatching { finance.refreshRecurring() } }
         }
+    }
+    // Not even the loading indicator, which would animate every frame behind a splash that hides it.
+    if (holdBack) {
+        Spacer(Modifier.fillMaxSize())
+        return
     }
 
     when (state.status) {
@@ -497,6 +529,14 @@ private fun AppNavigation(
                     null -> SettingsScreen()
                 }
             }
+            page(
+                Routes.APPEARANCE_SECTION,
+                arguments = listOf(navArgument("section") { type = NavType.StringType }),
+            ) { entry ->
+                // A stale link (a name that is no section any more) lands on Appearance itself.
+                val section = AppearanceSection.named(entry.arguments?.getString("section"))
+                if (section == null) AppearanceSettingsPage() else AppearanceSectionPage(section)
+            }
             page(Routes.PROFILE) { ProfilePage() }
             page(Routes.UPDATE) { UpdatePage() }
             page(Routes.SEARCH) { AppSearchPage() }
@@ -578,6 +618,10 @@ class NavControllerNavigator(private val nav: NavHostController, private val she
     override fun openSettings(page: SettingsPage?) {
         if (page == null && returnTo(Routes.SETTINGS)) return
         nav.navigate(if (page == null) Routes.SETTINGS else Routes.settingsPage(page)) { launchSingleTop = true }
+    }
+
+    override fun openAppearance(section: AppearanceSection) {
+        nav.navigate(Routes.appearanceSection(section)) { launchSingleTop = true }
     }
 
     override fun openProfile() {

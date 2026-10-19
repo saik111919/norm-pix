@@ -50,11 +50,11 @@ class ConnectedChoiceSettingsTest {
         compose.setContent { env.Content { AppearanceSettingsPage() } }
         compose.waitForIdle()
 
-        // (The page has other radio rows too, such as the page animations - and the interface font's own "System", after the theme.)
+        // (The page is the theme and a row for each part of the look; the other choices are on screens of their own.)
         val themeChoices = radio and (hasText("Light") or hasText("Dark"))
         assertEquals(2, compose.onAllNodes(themeChoices).fetchSemanticsNodes().size, "Light and Dark")
         val systems = compose.onAllNodes(hasText("System") and radio)
-        assertEquals(2, systems.fetchSemanticsNodes().size, "the theme's System, and the font's")
+        assertEquals(1, systems.fetchSemanticsNodes().size, "only the theme's System")
         systems.onFirst().assertIsSelected()
         assertEquals(false, compose.onNode(hasText("Dark") and radio).fetchSemanticsNode().config[SemanticsProperties.Selected])
     }

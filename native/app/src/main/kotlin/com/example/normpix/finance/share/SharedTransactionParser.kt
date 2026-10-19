@@ -65,10 +65,13 @@ data class ParsedTransactionDraft(
      * that is (empty when it shows none); null when it can't tell, and the whole message is looked through instead.
      */
     val accountText: String? = null,
+    /** What the payer wrote with the payment ("Auto", "Rent"), when the receipt shows it: the first thing in the [note]. */
+    val message: String? = null,
 ) {
-    /** A short description for the note: what kind of entry this is, and its reference. Null when there is nothing to say. */
+    /** A short description for the note: the payer's message, what kind of entry this is, and its reference. Null when there is nothing to say. */
     val note: String?
         get() = listOfNotNull(
+            message,
             when (kind) {
                 SharedKind.Refund -> "Refund"
                 SharedKind.Reversal -> "Reversal"
@@ -160,11 +163,13 @@ object SharedTransactionParser {
         val printed = headlineAmount(headline, ledger.decimals)
             ?: if (movementCue.containsMatchIn(body)) figureAmount(body, ledger.decimals) else null
         // The printed figure settles it only where the words don't: no amount, or several of which it is one.
-        val choice = if (words.amount == null && words.foreign == null && printed != null && (words.ambiguous.isEmpty() || printed in words.ambiguous)) {
+        val figures = if (words.amount == null && words.foreign == null && printed != null && (words.ambiguous.isEmpty() || printed in words.ambiguous)) {
             AmountChoice(printed, emptyList(), null, null)
         } else {
             words
         }
+        // A receipt that also spells its amount out ("Rupees Seventy Four Only") has it twice, in two shapes.
+        val choice = withSpelledAmount(figures, AmountWords.find(body.lines(), ledger.decimals))
         val reference = reference(body) ?: reference(text)
         if (candidates.isEmpty() && printed == null && reference == null && !movementCue.containsMatchIn(body)) {
             return SharedTextReading.NotATransaction
@@ -372,11 +377,23 @@ object SharedTransactionParser {
     private class AmountChoice(val amount: Long?, val ambiguous: List<Long>, val foreign: String?, val at: Candidate?)
 
     /**
+     * [choice] checked against the amount the message spells out in words ([spelled], or null when it doesn't): it settles an
+     * amount the figures left open or missed - a ₹ the recognizer read as a 7 is no 7 in "Seventy Four" - and where the figure
+     * and the words are different amounts neither is taken, both are offered.
+     */
+    private fun withSpelledAmount(choice: AmountChoice, spelled: Long?): AmountChoice = when {
+        spelled == null || choice.foreign != null || choice.amount == spelled -> choice
+        choice.amount == null && (choice.ambiguous.isEmpty() || spelled in choice.ambiguous) -> AmountChoice(spelled, emptyList(), null, choice.at)
+        choice.amount == null -> AmountChoice(null, (choice.ambiguous + spelled).distinct(), null, choice.at)
+        else -> AmountChoice(null, listOf(choice.amount, spelled), null, choice.at)
+    }
+
+    /**
      * A line that is just a figure, perhaps behind a currency mark - or behind what the recognizer made of a `₹` (`%`, `*`,
      * `{`, `Z`, `R`). A bare year is not one.
      */
     private val headlineShape = Regex(
-        """^\s*(?:₹|rs\.?|inr|[zr]|[^\p{L}\p{N}\s]{1,2})?\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(?:/-)?\s*$""",
+        """^\s*(?:₹|rs\.?|inr|[zr]|[^\p{L}\p{N}\s]{1,2})?\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(?:/-)?\s*(?:[©®@✓✔√]+\s*)?$""",
         RegexOption.IGNORE_CASE,
     )
     private val yearLike = Regex("""(?:19|20)\d\d""")
@@ -406,7 +423,7 @@ object SharedTransactionParser {
 
     /** [headlineShape] again, but only with something in front of the figure: a rupee sign, or what the recognizer made of one. */
     private val markedFigureShape = Regex(
-        """^\s*(?:₹|rs\.?|inr|[zr]|[^\p{L}\p{N}\s]{1,2})\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(?:/-)?\s*$""",
+        """^\s*(?:₹|rs\.?|inr|[zr]|[^\p{L}\p{N}\s]{1,2})\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(?:/-)?\s*(?:[©®@✓✔√]+\s*)?$""",
         RegexOption.IGNORE_CASE,
     )
     private val bareFigureShape = Regex("""^\s*(\d[\d,]*(?:\.\d{1,2})?)\s*$""")
@@ -672,16 +689,16 @@ object SharedTransactionParser {
 
     // -------------------------------------------------------- masked numbers
 
-    private const val MASK_CHARS = "xX*•●·"
+    private const val MASK_CHARS = "xX*•●·×✕∗"
 
     /** One run of digits and mask characters, as printed: "XXXXXXXXXX3588", "652850XXXXXXXX55", "****1234". */
     private val maskedRun = Regex(
-        """(?<![\p{L}\d@+.,/\-$MASK_CHARS])([\d$MASK_CHARS]{4,24})(?![\p{L}\d@\-]|\s?@|\.\d)""",
+        """(?<![\p{L}\d@+.,/\-$MASK_CHARS])([\d$MASK_CHARS]{4,24})(?![\p{L}\d@\-]|\s*@|\.\d)""",
     )
 
     /** A card printed in groups of four: "5282 XXXX XXXX 1234". */
     private val maskedGroups = Regex(
-        """(?<![\p{L}\d@+.,/\-$MASK_CHARS])((?:[\d$MASK_CHARS]{4}[ \-]){3}[\d$MASK_CHARS]{4})(?![\p{L}\d@\-]|\s?@)""",
+        """(?<![\p{L}\d@+.,/\-$MASK_CHARS])((?:[\d$MASK_CHARS]{4}[ \-]){3}[\d$MASK_CHARS]{4})(?![\p{L}\d@\-]|\s*@)""",
     )
 
     /** "ending 1234", "ends with 1234", "last 4 digits: 1234" - the digits are all that is said. */
@@ -706,17 +723,25 @@ object SharedTransactionParser {
             val shape = maskedShape.matchEntire(group.value.replace(" ", "").replace("-", "")) ?: return
             val (prefix, mask, suffix) = shape.destructured
             // A phone number: after a "+91" or "mobile", or ten characters with digits in front ("98XXXXXX10").
-            if (phoneCue.containsMatchIn(text.substring(maxOf(0, group.range.first - 12), group.range.first))) return
+            val before = text.substring(maxOf(0, group.range.first - 12), group.range.first)
+            if (phoneCue.containsMatchIn(before)) return
+            // A UPI id's start, as the label says it is ("UPI ID: xxxxxx4864-1@kphdfc"): never a number of the user's.
+            if (handleCue.containsMatchIn(before)) return
             if (prefix.isNotEmpty() && prefix.length + mask.length + suffix.length == 10) return
             add(MaskedNumber(prefix, suffix))
         }
         maskedGroups.findAll(text).forEach { add(it) }
         maskedRun.findAll(text).forEach { add(it) }
         endingCue.findAll(text).forEach { add(MaskedNumber("", it.groupValues[1])) }
+        bankDashEnding.findAll(text).forEach { add(MaskedNumber("", it.groupValues[1])) }
         return found
     }
 
+    /** "HDFC Bank - 3588", "State Bank Of India - 1234" (Paytm's): a bank's name, a dash, then the account's last four digits and nothing else. */
+    private val bankDashEnding = Regex("""(?im)\bbank\b[^\n]*?\s?[-–—_~]\s*(\d{4})[ \t]*$""")
+
     private val phoneCue = Regex("""(?:\+\d{1,3}[ \-]?|\b(?:mobile|mob|phone|ph|contact|tel)\b[ .:\-no]*)$""", RegexOption.IGNORE_CASE)
+    private val handleCue = Regex("""\b(?:upi\s*id|vpa|upi\s*handle)\W{0,3}$""", RegexOption.IGNORE_CASE)
 
     // ------------------------------------------------------------ instrument
 
@@ -753,15 +778,53 @@ object SharedTransactionParser {
         "jan" to 1, "feb" to 2, "mar" to 3, "apr" to 4, "may" to 5, "jun" to 6,
         "jul" to 7, "aug" to 8, "sep" to 9, "oct" to 10, "nov" to 11, "dec" to 12,
     )
-    private const val MONTH = """(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?"""
+    private val monthNames = listOf(
+        "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december",
+    )
+
+    /**
+     * A month's name - whole, or cut short at three letters or more ("Sept") - or null for any other word. A zero the
+     * recognizer made of the O in "Oct", a 5 of the S in "Sep", is put right.
+     */
+    private fun monthOf(word: String): Int? {
+        val w = word.lowercase().trimEnd('.').replace('0', 'o').replace('5', 's')
+        val month = months[w.take(3)] ?: return null
+        return month.takeIf { w.length >= 3 && monthNames[it - 1].startsWith(w) }
+    }
+
+    /**
+     * What a month is written as: its name, whole or cut short, as a word of its own; also the ones the recognizer
+     * misspells with a digit ("0ct", "5ep", "n0v").
+     */
+    private const val MONTH = """(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|""" +
+        """oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|0ct|5ep|n0v)(?![\p{L}])"""
+
+    /**
+     * A day of the month, or a year, as the recognizer reads it: an O for a 0, an I or l or | for a 1. A day has a real digit
+     * in it, so that a word ("I may") is never one.
+     */
+    private const val DAY = """([0-3][\dOIl|]|[OIl|]\d|\d)"""
+    private const val YEAR = """(2[0O][\dOIl]{2}|\d{2})"""
 
     private val isoDate = Regex("""(?<![\d/.-])(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)""")
     private val numericDate = Regex("""(?<![\d/.:,-])(\d{1,2})([-/.])(\d{1,2})\2(\d{4}|\d{2})(?![\d])""")
-    // "14 Oct '26", "23rd sep'26": a two-digit year can have an apostrophe in front.
-    private val dayMonthDate = Regex("""(?<!\d)(\d{1,2})(?:st|nd|rd|th)?[\s-]?$MONTH(?:[\s,'’-]*(\d{4}|\d{2})(?![\d:]))?""", RegexOption.IGNORE_CASE)
-    private val monthDayDate = Regex("""\b$MONTH\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})(?![\d:])""", RegexOption.IGNORE_CASE)
+
+    // "14 Oct '26", "23rd sep'26": a two-digit year can have an apostrophe in front. Not after a letter or a digit, so that
+    // "I5 Oct" is not read as the 5th, nor the "3dec" in an id as a December.
+    private val dayMonthDate = Regex(
+        """(?<![\p{L}\d])$DAY(?:st|nd|rd|th)?[\s-]?$MONTH\.?(?:[\s,'’-]*$YEAR(?![\p{L}\d:]))?""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    // "Oct 12, 2026", and "Oct 07, 1:25 PM": Google's and Kredit.Pe's, with no year.
+    private val monthDayDate = Regex(
+        """(?<![\p{L}\d])$MONTH\.?\s+$DAY(?:st|nd|rd|th)?(?:,?\s+(2[0O][\dOIl]{2}))?(?![\p{L}\d:])""",
+        RegexOption.IGNORE_CASE,
+    )
     private val relativeDay = Regex("""\b(today|yesterday)\b""", RegexOption.IGNORE_CASE)
-    private val time = Regex("""(?<![\d.])(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([ap])\.?\s?m\b\.?)?""", RegexOption.IGNORE_CASE)
+
+    /** A time: "10:33 pm", "13:05:22", or - with its am or pm - "10.33 pm". The recognizer reads the m of "pm" as "rn". */
+    private val time = Regex("""(?<![\d.])(\d{1,2})([:.])(\d{2})(?:\2(\d{2}))?(?:\s*([ap])\.?\s?(?:m|rn)\b\.?)?""", RegexOption.IGNORE_CASE)
 
     /** Dates that aren't when the money moved - a card's due date, an offer's end, an expiry: the words right before them. */
     private val notTheDateCue = Regex(
@@ -773,6 +836,9 @@ object SharedTransactionParser {
     /** A date written in the message: where it is, and the day it names (null when it isn't a real day). */
     private class Found(val range: IntRange, val date: LocalDate?)
 
+    /** [text] with the letters the recognizer wrote for digits put back: an O for a 0, an I or l or | for a 1. */
+    private fun digitsOf(text: String): String = text.map { if (it in "Oo") '0' else if (it in "IilL|") '1' else it }.joinToString("")
+
     internal fun dateIn(text: String, today: LocalDate): When {
         val found = buildList {
             isoDate.findAll(text).forEach { add(Found(it.range, day(it.groupValues[1], it.groupValues[2], it.groupValues[3], today))) }
@@ -780,10 +846,12 @@ object SharedTransactionParser {
                 add(Found(it.range, day(it.groupValues[4], it.groupValues[3], it.groupValues[1], today)))
             }
             dayMonthDate.findAll(text).forEach {
-                add(Found(it.range, day(it.groupValues[3], months[it.groupValues[2].lowercase()].toString(), it.groupValues[1], today)))
+                val month = monthOf(it.groupValues[2]) ?: return@forEach
+                add(Found(it.range, day(digitsOf(it.groupValues[3]), month.toString(), digitsOf(it.groupValues[1]), today)))
             }
             monthDayDate.findAll(text).forEach {
-                add(Found(it.range, day(it.groupValues[3], months[it.groupValues[1].lowercase()].toString(), it.groupValues[2], today)))
+                val month = monthOf(it.groupValues[1]) ?: return@forEach
+                add(Found(it.range, day(digitsOf(it.groupValues[3]), month.toString(), digitsOf(it.groupValues[2]), today)))
             }
         }.filterNot { notTheDateCue.containsMatchIn(clauseBefore(text, it.range.first, 24)) }
         // The first date written is the transaction's; a later valid one is never swapped in for a first one that isn't real.
@@ -820,15 +888,34 @@ object SharedTransactionParser {
         }
     }
 
-    /** A time written just after (or else just before) the date at [dateAt]. */
+    /**
+     * The time written with the date at [dateAt]: just after it, or else just before it, on the same line; only then on
+     * the lines around it ("12 Oct 2026" with "8:55 pm" under it).
+     */
     private fun timeNear(text: String, dateAt: IntRange): LocalTime? {
-        val after = text.substring(dateAt.last + 1, minOf(text.length, dateAt.last + 1 + 30))
-        val before = text.substring(maxOf(0, dateAt.first - 30), dateAt.first)
-        val match = time.find(after) ?: time.findAll(before).lastOrNull() ?: return null
+        val lineStart = text.lastIndexOf('\n', dateAt.first - 1) + 1
+        val lineEnd = text.indexOf('\n', dateAt.last + 1).let { if (it < 0) text.length else it }
+        fun after(limit: Int) = text.substring(dateAt.last + 1, minOf(limit, dateAt.last + 1 + 30))
+        fun before(limit: Int) = text.substring(maxOf(limit, dateAt.first - 30), dateAt.first)
+        val match = timeIn(after(lineEnd), last = false) ?: timeIn(before(lineStart), last = true)
+            ?: timeIn(after(text.length), last = false) ?: timeIn(before(0), last = true) ?: return null
+        return match
+    }
+
+    /** The first (or [last]) time written in [text] that is a real one, or null. */
+    private fun timeIn(text: String, last: Boolean): LocalTime? {
+        val times = time.findAll(text).mapNotNull(::timeOf).toList()
+        return if (last) times.lastOrNull() else times.firstOrNull()
+    }
+
+    private fun timeOf(match: MatchResult): LocalTime? {
+        val meridiem = match.groupValues[5].lowercase()
+        // "10.33" is a time only with its am or pm: without, it is the decimals of a figure.
+        if (match.groupValues[2] == "." && meridiem.isEmpty()) return null
         var hour = match.groupValues[1].toInt()
-        val minute = match.groupValues[2].toInt()
-        val second = match.groupValues[3].toIntOrNull() ?: 0
-        when (match.groupValues[4].lowercase()) {
+        val minute = match.groupValues[3].toInt()
+        val second = match.groupValues[4].toIntOrNull() ?: 0
+        when (meridiem) {
             "a" -> if (hour in 1..12) hour %= 12 else return null
             "p" -> if (hour in 1..12) hour = hour % 12 + 12 else return null
         }

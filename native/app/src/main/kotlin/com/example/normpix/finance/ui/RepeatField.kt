@@ -1,6 +1,5 @@
 package com.example.normpix.finance.ui
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,8 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CalendarToday
-import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.rounded.Tune
@@ -33,11 +30,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.domain.RecurrenceFrequency
 import com.example.normpix.finance.domain.RecurringRule
+import com.example.normpix.finance.domain.RepeatEnd
+import com.example.normpix.finance.domain.RepeatPlan
 import com.example.normpix.finance.domain.RepeatSchedule
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.dueOccurrences
 import com.example.normpix.finance.domain.nextRecurrence
-import com.example.normpix.finance.domain.startOfDay
 import com.example.normpix.finance.domain.upcomingOccurrences
 import com.example.normpix.ui.components.EditorSheet
 import com.example.normpix.ui.components.LocalOverlays
@@ -48,15 +46,17 @@ import kotlinx.coroutines.launch
 
 /*
  * Repeating a payment from where it is entered. The editor offers the usual choices in one dropdown - the same "Repeat"
- * the reminder form has - and "Custom" for every-N and an end date. Saving then records this transaction as the first of
- * a repeating payment, which appears under Plans > Recurring like any other.
+ * the reminder form has - and "Custom" for every-N. Whichever is chosen, "Ends" says when it stops: never, on a date or after
+ * a number of payments. Saving then records this transaction as the first of a repeating payment, which appears under
+ * Plans > Recurring like any other.
  */
 
 private enum class RepeatPreset { None, Daily, Weekly, Monthly, Yearly, Custom }
 
-private fun RepeatSchedule?.preset(): RepeatPreset = when {
+/** The dropdown's choice for a plan. How it ends is not part of it: "Every month" stays chosen with an end set. */
+private fun RepeatPlan?.preset(): RepeatPreset = when {
     this == null -> RepeatPreset.None
-    interval == 1 && endDate == null -> when (frequency) {
+    interval == 1 -> when (frequency) {
         RecurrenceFrequency.Daily -> RepeatPreset.Daily
         RecurrenceFrequency.Weekly -> RepeatPreset.Weekly
         RecurrenceFrequency.Monthly -> RepeatPreset.Monthly
@@ -65,15 +65,19 @@ private fun RepeatSchedule?.preset(): RepeatPreset = when {
     else -> RepeatPreset.Custom
 }
 
+/** "Every month", "Every 2 weeks": how often, without the end. */
+private fun everyLabel(frequency: RecurrenceFrequency, interval: Int): String =
+    if (interval == 1) "Every ${frequency.unit(1)}" else "Every $interval ${frequency.unit(interval)}"
+
 /** "Every month", "Every 2 weeks", "Every day until 3 Mar 2027" - what a schedule means, in a line. */
 fun describeRepeat(schedule: RepeatSchedule, now: LocalDateTime = LocalDateTime.now()): String {
-    val every = if (schedule.interval == 1) {
-        "Every ${schedule.frequency.unit(1)}"
-    } else {
-        "Every ${schedule.interval} ${schedule.frequency.unit(schedule.interval)}"
-    }
+    val every = everyLabel(schedule.frequency, schedule.interval)
     return schedule.endDate?.let { "$every until ${shortDate(it, now)}" } ?: every
 }
+
+/** [describeRepeat] for a plan whose first payment is on [from]: a count has become the day of its last payment by then. */
+fun describeRepeat(plan: RepeatPlan, from: LocalDateTime, now: LocalDateTime = LocalDateTime.now()): String =
+    describeRepeat(plan.schedule(from), now)
 
 /** The schedule as the rule it would become when [from] is its first occurrence, for working out the dates it would give. */
 private fun previewRule(schedule: RepeatSchedule, from: LocalDateTime) = RecurringRule(
@@ -91,14 +95,18 @@ private fun previewRule(schedule: RepeatSchedule, from: LocalDateTime) = Recurri
 
 /**
  * The editor's "Repeat" choice. [repeat] is null for a one-off; [from] is the transaction's own date, which is the first
- * occurrence. Under the field, the next dates it will be recorded on - and, when [from] is in the past, how many repeats are
- * recorded straight away, so nothing is a surprise after Save. A transaction that already belongs to a repeating payment
- * ([ruleId]) is not offered another: it says so, and leads to that payment's own editor.
+ * occurrence. Once it repeats, "Ends" says when it stops (never, unless the user says so) and, under them, the next dates it
+ * will be recorded on - and, when [from] is in the past, how many repeats are recorded straight away, so nothing is a surprise
+ * after Save. A transaction that already belongs to a repeating payment ([ruleId]) is not offered another: it says so, and
+ * leads to that payment's own editor.
+ *
+ * The plan keeps "after 12 payments" as a count, not a date, so it still means 12 if the date or the frequency changes; the
+ * editor turns it into the schedule to save with [RepeatPlan.schedule] once the date is final.
  */
 @Composable
 fun RepeatField(
-    repeat: RepeatSchedule?,
-    onChange: (RepeatSchedule?) -> Unit,
+    repeat: RepeatPlan?,
+    onChange: (RepeatPlan?) -> Unit,
     from: LocalDateTime,
     modifier: Modifier = Modifier,
     ruleId: Long? = null,
@@ -132,12 +140,14 @@ fun RepeatField(
         add(ChoiceOption(RepeatPreset.Monthly, "Every month", Icons.Outlined.EventRepeat))
         add(ChoiceOption(RepeatPreset.Yearly, "Every year", Icons.Outlined.EventRepeat))
         // A schedule made with "Custom" shows as its own choice, so the field can say what it is.
-        if (current == RepeatPreset.Custom && repeat != null) add(ChoiceOption(RepeatPreset.Custom, describeRepeat(repeat), Icons.Rounded.Tune))
+        if (current == RepeatPreset.Custom && repeat != null) {
+            add(ChoiceOption(RepeatPreset.Custom, everyLabel(repeat.frequency, repeat.interval), Icons.Rounded.Tune))
+        }
     }
 
     fun openCustom() {
         scope.launch {
-            val picked = overlays.sheet<RepeatSchedule> { dismiss -> RepeatSheet(initial = repeat, from = from, onDone = dismiss) }
+            val picked = overlays.sheet<RepeatPlan> { dismiss -> RepeatSheet(initial = repeat, from = from, onDone = dismiss) }
             if (picked != null) onChange(picked)
         }
     }
@@ -148,13 +158,15 @@ fun RepeatField(
             options = options,
             selected = current,
             onSelect = { choice ->
+                // Changing how often it repeats leaves the end as it was set.
+                val ends = repeat?.ends ?: RepeatEnd.Never
                 onChange(
                     when (choice) {
                         RepeatPreset.None -> null
-                        RepeatPreset.Daily -> RepeatSchedule(RecurrenceFrequency.Daily)
-                        RepeatPreset.Weekly -> RepeatSchedule(RecurrenceFrequency.Weekly)
-                        RepeatPreset.Monthly -> RepeatSchedule(RecurrenceFrequency.Monthly)
-                        RepeatPreset.Yearly -> RepeatSchedule(RecurrenceFrequency.Yearly)
+                        RepeatPreset.Daily -> RepeatPlan(RecurrenceFrequency.Daily, ends = ends)
+                        RepeatPreset.Weekly -> RepeatPlan(RecurrenceFrequency.Weekly, ends = ends)
+                        RepeatPreset.Monthly -> RepeatPlan(RecurrenceFrequency.Monthly, ends = ends)
+                        RepeatPreset.Yearly -> RepeatPlan(RecurrenceFrequency.Yearly, ends = ends)
                         RepeatPreset.Custom -> repeat
                     },
                 )
@@ -164,10 +176,19 @@ fun RepeatField(
             emptyIcon = Icons.Outlined.EventRepeat,
         )
         if (repeat != null) {
+            val step = remember(repeat.frequency, repeat.interval, from) { repeat.step(from) }
+            Spacer(Modifier.height(AppSpacing.lg))
+            RepeatEndField(
+                ends = repeat.ends,
+                onChange = { onChange(repeat.copy(ends = it)) },
+                start = from,
+                next = step,
+                noun = PaymentNoun,
+            )
             RepeatPreview(
-                schedule = repeat,
+                schedule = repeat.schedule(from),
                 from = from,
-                modifier = Modifier.padding(start = AppSpacing.lg, top = AppSpacing.xs, end = AppSpacing.lg),
+                modifier = Modifier.padding(start = AppSpacing.lg, top = AppSpacing.sm, end = AppSpacing.lg),
             )
         }
     }
@@ -209,24 +230,24 @@ private fun RepeatPreview(schedule: RepeatSchedule, from: LocalDateTime, modifie
 }
 
 /**
- * "Custom repeat": how often (every N days / weeks / months / years) and whether it stops on a date. Calls [onDone] with the
- * schedule, or null when dismissed.
+ * "Custom repeat": how often (every N days / weeks / months / years) and when it ends (never, on a date, or after a number of
+ * payments). Calls [onDone] with the plan, or null when dismissed.
  */
 @Composable
-fun RepeatSheet(initial: RepeatSchedule?, from: LocalDateTime, onDone: (RepeatSchedule?) -> Unit) {
+fun RepeatSheet(initial: RepeatPlan?, from: LocalDateTime, onDone: (RepeatPlan?) -> Unit) {
     val haptics = rememberAppHaptics()
     var frequency by remember { mutableStateOf(initial?.frequency ?: RecurrenceFrequency.Monthly) }
     var interval by remember { mutableStateOf(initial?.interval ?: 1) }
-    var end by remember { mutableStateOf(initial?.endDate) }
-    var pickingEnd by remember { mutableStateOf(false) }
+    var ends by remember { mutableStateOf(initial?.ends ?: RepeatEnd.Never) }
     val frequencies = remember { RecurrenceFrequency.entries.map { ChoiceOption(it, it.label, it.icon) } }
-    val schedule = RepeatSchedule(frequency, interval, end)
+    val plan = RepeatPlan(frequency, interval, ends)
+    val step = remember(frequency, interval, from) { plan.step(from) }
 
     EditorSheet(
         title = "Custom repeat",
-        subtitle = describeRepeat(schedule),
+        subtitle = describeRepeat(plan, from),
         saveLabel = "Done",
-        onSave = { onDone(schedule) },
+        onSave = { onDone(plan) },
     ) {
         ConnectedChoiceRow(frequencies, selected = frequency, onSelect = { frequency = it })
         Spacer(Modifier.height(AppSpacing.lg))
@@ -239,39 +260,9 @@ fun RepeatSheet(initial: RepeatSchedule?, from: LocalDateTime, onDone: (RepeatSc
                 interval = it
             },
         )
+        Spacer(Modifier.height(AppSpacing.xl))
+        RepeatEndField(ends = ends, onChange = { ends = it }, start = from, next = step, noun = PaymentNoun)
         Spacer(Modifier.height(AppSpacing.lg))
-        SwitchRow(
-            title = "Stops on a date",
-            checked = end != null,
-            onChange = { on ->
-                haptics.selection()
-                end = if (on) startOfDay(from.plusYears(1)) else null
-            },
-        )
-        end?.let { endDate ->
-            Spacer(Modifier.height(AppSpacing.sm))
-            TonalPickerField(
-                label = "Last repeat by",
-                value = shortDate(endDate),
-                icon = Icons.Outlined.Event,
-                onClick = { pickingEnd = true },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        Spacer(Modifier.height(AppSpacing.lg))
-        RepeatPreview(schedule, from)
-    }
-
-    if (pickingEnd) {
-        DatePickerDialogFor(
-            initial = (end ?: from.plusYears(1)).toLocalDate(),
-            onPicked = { date ->
-                pickingEnd = false
-                // Never before the first payment: that would be a repeat that never happens.
-                end = maxOf(date.atStartOfDay(), startOfDay(from))
-            },
-            onDismiss = { pickingEnd = false },
-            yearsAhead = 50,
-        )
+        RepeatPreview(plan.schedule(from), from)
     }
 }

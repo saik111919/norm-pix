@@ -1,11 +1,14 @@
 package com.example.normpix.navigation
 
+import androidx.activity.BackEventCompat
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -22,6 +25,7 @@ import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.AddAlert
 import androidx.compose.material.icons.outlined.CreditCard
+import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Settings
@@ -31,6 +35,7 @@ import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Text
@@ -41,17 +46,21 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -89,6 +98,7 @@ import com.example.normpix.ui.theme.rememberWindowSize
 import com.example.normpix.wallet.rememberCardFlows
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 val AppDestination.icon: ImageVector
@@ -107,15 +117,11 @@ val AppDestination.selectedIcon: ImageVector
         AppDestination.Wallet -> AppIcons.WalletFilled
     }
 
-/** How far the content shrinks and dims at the end of a back gesture: a hint of recession, not a zoom. */
-private const val BACK_SCALE = 0.05f
-private const val BACK_DIM = 0.25f
-
-/** How far into the back gesture (0..1) the previewed content's corners are fully round. */
-private const val BACK_CORNERS_BY = 0.25f
-
-/** The shadow under the previewed content at the end of the gesture. */
+/** The shadow under the tab the back gesture is moving, at the end of the gesture. */
 private val BACK_LIFT = 8.dp
+
+/** How long a committed back gesture takes to finish the tab's close, from wherever the finger let go. */
+private const val BACK_FINISH_MS = 160
 
 /**
  * The app frame: the top-level destinations with a floating navigation bar on
@@ -133,8 +139,6 @@ fun AppShell(
 ) {
     val navigator = LocalNavigator.current
     val snackbars = LocalSnackbars.current
-    val pageAnimation = LocalPageAnimation.current
-
     val current = AppDestination.entries[shell.selected.coerceIn(0, AppDestination.entries.lastIndex)]
     val size = rememberWindowSize()
     val scope = rememberCoroutineScope()
@@ -157,8 +161,17 @@ fun AppShell(
     // The gesture tracks the system predictive-back progress and scales the content back slightly;
     // releasing early animates back to rest without navigating.
     val tabHistory = remember { mutableStateListOf(shell.selected) }
-    val backProgress = remember { Animatable(0f) }
+    // The back gesture as the tabs draw it (see TabBackPreview): the tab being left moves as the user's page style closes a
+    // page, scrubbed by the finger, over the tab it goes back to.
+    val backPreview = remember { TabBackPreview() }
     val backSettle = tween<Float>(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.standard)
+    val backFinish = tween<Float>(AppMotion.duration(BACK_FINISH_MS), easing = AppMotion.standard)
+    // The ease back to rest after a gesture is let go early, so a new gesture can stop it.
+    val backSettling = remember { arrayOfNulls<Job>(1) }
+    // True from a committed gesture until the tab it went back to has taken over; a gesture started then is let go by.
+    var backFinishing by remember { mutableStateOf(false) }
+    // True for the moment of the switch a committed gesture makes: that tab is already there, whole, so it does not arrive again.
+    var tabHandoff by remember { mutableStateOf(false) }
 
     // Inside Plans back steps up first - section to Budgets, then to the transaction history - and only then
     // falls back to the previous tab. The steps live on ShellState so the rule has one definition.
@@ -172,21 +185,55 @@ fun AppShell(
     val handlesBack = canClimbWithinTab() || hasHistory
 
     PredictiveBackHandler(enabled = handlesBack) { progress ->
+        if (backFinishing) {
+            progress.collect { }
+            return@PredictiveBackHandler
+        }
+        backSettling[0]?.cancel()
+        val toPreviousTab = !canClimbWithinTab() && hasHistory
+        backPreview.target = if (toPreviousTab) tabHistory[tabHistory.lastIndex - 1] else TabBackPreview.NO_TAB
+        fun easeBackToRest() {
+            backSettling[0] = scope.launch {
+                animate(backPreview.progress, 0f, animationSpec = backSettle) { value, _ -> backPreview.progress = value }
+                backPreview.target = TabBackPreview.NO_TAB
+            }
+        }
         try {
             progress.collect { backEvent ->
-                backProgress.snapTo(backEvent.progress)
+                backPreview.direction = BackPreview.directionOf(backEvent.swipeEdge == BackEventCompat.EDGE_RIGHT)
+                backPreview.progress = backEvent.progress
             }
-            // Gesture completed: carry out the navigation, while the content eases back to full size under it.
-            scope.launch { backProgress.animateTo(0f, backSettle) }
-            if (canClimbWithinTab()) {
+            // Gesture completed.
+            if (toPreviousTab) {
+                // The close is finished from where the finger let go, and the switch is made when the tab is gone: the tab
+                // it returns to is already on screen, whole, so it is switched to without arriving - nothing flashes.
+                backFinishing = true
+                scope.launch {
+                    try {
+                        animate(backPreview.progress, 1f, animationSpec = backFinish) { value, _ -> backPreview.progress = value }
+                        tabHandoff = true
+                        Snapshot.withMutableSnapshot {
+                            tabHistory.removeAt(tabHistory.lastIndex)
+                            shell.selected = tabHistory.last()
+                            backPreview.target = TabBackPreview.NO_TAB
+                            backPreview.progress = 0f
+                        }
+                        // Two frames: the one that draws the switch, and the one after it.
+                        withFrameNanos { }
+                        withFrameNanos { }
+                    } finally {
+                        tabHandoff = false
+                        backFinishing = false
+                    }
+                }
+            } else {
+                // A step up inside the tab: its content eases back to full size while the section changes under it.
                 climbWithinTab()
-            } else if (hasHistory) {
-                tabHistory.removeAt(tabHistory.lastIndex)
-                shell.selected = tabHistory.last()
+                easeBackToRest()
             }
         } catch (_: CancellationException) {
             // Finger dragged back to the edge and released: the content eases back to rest instead of jumping.
-            scope.launch { backProgress.animateTo(0f, backSettle) }
+            easeBackToRest()
         }
     }
 
@@ -207,7 +254,7 @@ fun AppShell(
     BackHandler(enabled = isMoreOpen) { isMoreOpen = false }
 
     // Contextual actions surfaced inside the More / Actions bottom action area:
-    val contextualActions = remember(current, shell.tab, walletLocked) {
+    val contextualActions = remember(current, shell.tab, shell.section, walletLocked, prefs.walletCardsEnabled) {
         buildList {
             when (current) {
                 AppDestination.Home -> {
@@ -249,11 +296,23 @@ fun AppShell(
                             )
                         }
                         PlansAndTransactionsTab.Plans -> {
+                            // On Recurring the thing to add is a recurring payment, whenever the list has some: a reminder stays one tap behind it.
+                            val onRecurring = shell.section == PlanSection.Recurring
+                            if (onRecurring) {
+                                add(
+                                    FooterAction(
+                                        label = "Add recurring payment",
+                                        icon = Icons.Outlined.EventRepeat,
+                                        isPrimary = true,
+                                        onClick = { expenseFlows.addRecurring() },
+                                    ),
+                                )
+                            }
                             add(
                                 FooterAction(
                                     label = "Add reminder",
                                     icon = Icons.Outlined.AddAlert,
-                                    isPrimary = true,
+                                    isPrimary = !onRecurring,
                                     onClick = { reminderFlows.add() },
                                 ),
                             )
@@ -280,19 +339,22 @@ fun AppShell(
                 }
                 AppDestination.Wallet -> {
                     if (!walletLocked) {
-                        add(
-                            FooterAction(
-                                label = "Add card",
-                                icon = Icons.Outlined.CreditCard,
-                                isPrimary = true,
-                                onClick = { cardFlows.addCard() },
-                            ),
-                        )
+                        // With Store cards off there are no cards to add, and adding an account is the Wallet's main action.
+                        if (prefs.walletCardsEnabled) {
+                            add(
+                                FooterAction(
+                                    label = "Add card",
+                                    icon = Icons.Outlined.CreditCard,
+                                    isPrimary = true,
+                                    onClick = { cardFlows.addCard() },
+                                ),
+                            )
+                        }
                         add(
                             FooterAction(
                                 label = "Add account",
                                 icon = Icons.Outlined.AccountBalanceWallet,
-                                isPrimary = false,
+                                isPrimary = !prefs.walletCardsEnabled,
                                 onClick = { expenseFlows.addAccount() },
                             ),
                         )
@@ -366,32 +428,18 @@ fun AppShell(
 
     val tabs: @Composable (Modifier) -> Unit = { tabModifier ->
         Box(
+            // The back gesture's preview is drawn by the tabs themselves (see TabHost): the tab being left over the one it returns to.
             modifier = tabModifier
                 .fillMaxSize()
-                .nestedScroll(barScroll.connection)
-                .graphicsLayer {
-                    // Back gesture feedback: the content is previewed as a window, in the chosen style - it shrinks
-                    // (towards where that style closes a page) and dims as you pull, its corners rounding and a shadow
-                    // lifting it off the background, as a pushed page's do.
-                    val progress = backProgress.value
-                    val scale = 1f - progress * BACK_SCALE
-                    scaleX = scale
-                    scaleY = scale
-                    alpha = 1f - progress * BACK_DIM
-                    transformOrigin = TabMotion.origin(pageAnimation)
-                    val corner = PageCornerRadius.toPx() * (progress / BACK_CORNERS_BY).coerceAtMost(1f)
-                    clip = corner > 0f
-                    shape = if (corner > 0f) RoundedCornerShape(corner) else RectangleShape
-                    shadowElevation = progress * BACK_LIFT.toPx()
-                },
+                .nestedScroll(barScroll.connection),
         ) {
             if (visited.contains(0)) {
-                TabHost(visible = current == AppDestination.Home, enterOffset = enterOffset, animateArrival = shellSettled) {
+                TabHost(visible = current == AppDestination.Home, enterOffset = enterOffset, animateArrival = shellSettled && !tabHandoff, back = backPreview, ordinal = 0) {
                     HomeScreen(listState = listStates[0])
                 }
             }
             if (visited.contains(1)) {
-                TabHost(visible = current == AppDestination.PlansAndTransactions, enterOffset = enterOffset, animateArrival = shellSettled) {
+                TabHost(visible = current == AppDestination.PlansAndTransactions, enterOffset = enterOffset, animateArrival = shellSettled && !tabHandoff, back = backPreview, ordinal = 1) {
                     PlansAndTransactionsScreen(
                         transactionsListState = listStates[1],
                         plansListState = plansListState,
@@ -399,12 +447,12 @@ fun AppShell(
                 }
             }
             if (visited.contains(2)) {
-                TabHost(visible = current == AppDestination.Insights, enterOffset = enterOffset, animateArrival = shellSettled) {
+                TabHost(visible = current == AppDestination.Insights, enterOffset = enterOffset, animateArrival = shellSettled && !tabHandoff, back = backPreview, ordinal = 2) {
                     InsightsScreen(listState = listStates[2])
                 }
             }
             if (visited.contains(3)) {
-                TabHost(visible = current == AppDestination.Wallet, enterOffset = enterOffset, animateArrival = shellSettled) {
+                TabHost(visible = current == AppDestination.Wallet, enterOffset = enterOffset, animateArrival = shellSettled && !tabHandoff, back = backPreview, ordinal = 3) {
                     WalletScreen(listState = listStates[3])
                 }
             }
@@ -501,9 +549,21 @@ val LocalTabVisible = staticCompositionLocalOf { true }
  * frame: that is for the tabs that arrive together with the shell, whose entrance belongs to the page transition.
  */
 @Composable
-internal fun TabHost(visible: Boolean, enterOffset: Dp = 0.dp, animateArrival: Boolean = true, content: @Composable () -> Unit) {
+internal fun TabHost(
+    visible: Boolean,
+    enterOffset: Dp = 0.dp,
+    animateArrival: Boolean = true,
+    back: TabBackPreview? = null,
+    ordinal: Int = -1,
+    content: @Composable () -> Unit,
+) {
     val animation = LocalPageAnimation.current
     val reduced = rememberReducedMotion()
+    // While the back gesture is taking the app to the previous tab: the tab on screen is moved as the page style closes a page,
+    // and the tab it goes back to is laid out, whole, beneath it. Reduced motion shows neither: the gesture just goes back.
+    val preview = back?.takeIf { !reduced && it.target != TabBackPreview.NO_TAB }
+    // What the tab being left is drawn on, so the tab beneath does not show through it as it fades or slides away.
+    val surface = MaterialTheme.colorScheme.surface
     val animate = animateArrival && !reduced
     val density = LocalDensity.current
     val travel = remember(visible) { with(density) { enterOffset.toPx() } }
@@ -533,6 +593,9 @@ internal fun TabHost(visible: Boolean, enterOffset: Dp = 0.dp, animateArrival: B
             .zIndex(if (visible) 1f else 0f)
             .then(
                 when {
+                    visible && preview != null -> Modifier
+                        .graphicsLayer { applyBackPose(BackPreview.leaving(animation, preview.progress, preview.direction)) }
+                        .background(surface)
                     visible -> Modifier.graphicsLayer {
                         val t = arrival.value
                         val p = TabMotion.ease(animation, t)
@@ -543,6 +606,9 @@ internal fun TabHost(visible: Boolean, enterOffset: Dp = 0.dp, animateArrival: B
                         transformOrigin = TabMotion.origin(animation)
                         translationX = if (TabMotion.slides(animation)) (1f - p) * travel else 0f
                     }
+                    preview != null && preview.target == ordinal -> Modifier
+                        .graphicsLayer { applyBackPose(BackPreview.revealed(animation, preview.progress, preview.direction)) }
+                        .clearAndSetSemantics {}
                     departing -> Modifier
                         .graphicsLayer {
                             val t = departure.value
@@ -560,4 +626,35 @@ internal fun TabHost(visible: Boolean, enterOffset: Dp = 0.dp, animateArrival: B
             ),
         contentAlignment = Alignment.TopStart,
     ) { CompositionLocalProvider(LocalTabVisible provides visible) { content() } }
+}
+
+/**
+ * The back gesture as the tabs draw it: how far it has gone ([progress], 0..1 - scrubbed by the finger, then finished or
+ * eased back by the shell), the side it came from ([direction], see [BackPreview.directionOf]) and the tab it takes the
+ * app back to ([target], an [AppDestination] ordinal, or [NO_TAB] when the gesture does not change tab). Read in the
+ * tabs' draw phase, so a gesture moves layers, not compositions.
+ */
+@Stable
+internal class TabBackPreview {
+    var progress by mutableFloatStateOf(0f)
+    var direction by mutableFloatStateOf(1f)
+    var target by mutableIntStateOf(NO_TAB)
+
+    companion object {
+        const val NO_TAB = -1
+    }
+}
+
+/** Draws a tab in [pose]: the shape, shadow and motion of the user's page style part-way through going back. */
+private fun GraphicsLayerScope.applyBackPose(pose: BackPose) {
+    scaleX = pose.scale
+    scaleY = pose.scale
+    alpha = pose.alpha
+    translationX = pose.shiftX * size.width
+    transformOrigin = pose.origin
+    if (pose.corners > 0f) {
+        clip = true
+        shape = RoundedCornerShape(PageCornerRadius.toPx() * pose.corners)
+    }
+    shadowElevation = BACK_LIFT.toPx() * pose.lift
 }

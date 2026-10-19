@@ -29,6 +29,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,8 +79,8 @@ import java.time.LocalDateTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-/** Inserts a space after every four digits while keeping the cursor where the user expects it. */
-private object CardNumberTransformation : VisualTransformation {
+/** Inserts a space after every four digits while keeping the cursor where the user expects it. Shared with the account form's card number. */
+internal object CardNumberTransformation : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         val digits = text.text
         val out = StringBuilder()
@@ -110,6 +111,9 @@ private fun tappedNotice(info: PaymentCardInfo, canScan: Boolean): String =
  *
  * Laid out like the transaction editor (see `EditorSheet`). A new card can be filled from a camera
  * scan or an NFC tap; [tapped] is a bank card identified by a tap before the form opened.
+ *
+ * The CVV is optional: a card can be saved without one, and with Settings > Wallet & Cards > Save CVV off the field is not
+ * offered at all and a CVV that arrives with a tap is not kept.
  */
 @Composable
 fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: PaymentCardInfo? = null) {
@@ -120,6 +124,8 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
     val scope = rememberCoroutineScope()
     val isEditing = initial != null
     val catalog = rememberFinanceState().catalog
+    val prefs by container.preferences.state.collectAsState()
+    val keepCvv = prefs.cardCvvEnabled
 
     // The bank is one of the banks the app knows - the same list accounts use - not free text. A card from before banks
     // were shared opens on the bank its name refers to, or on its old name to be turned into one.
@@ -135,7 +141,7 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
     var number by remember { mutableStateOf(initial?.cardNumber.orEmpty()) }
     var month by remember { mutableStateOf(initial?.expiryMonth.orEmpty()) }
     var year by remember { mutableStateOf(initial?.expiryYear.orEmpty()) }
-    var cvv by remember { mutableStateOf(initial?.cvv.orEmpty()) }
+    var cvv by remember { mutableStateOf(if (keepCvv) initial?.cvv.orEmpty() else "") }
     var kind by remember { mutableStateOf(initial?.kind ?: tapped?.kind ?: CardKind.Credit) }
     var submitted by remember { mutableStateOf(false) }
     var scanning by remember { mutableStateOf(false) }
@@ -222,9 +228,13 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
                     number = digitsOnly(card.cardNumber, 19)
                     month = card.expiryMonth
                     year = card.expiryYear.takeLast(2)
-                    cvv = card.cvv
+                    cvv = if (keepCvv) card.cvv else ""
                     kind = card.kind
-                    scanMessage = StatusTone.Success to "Filled from the other phone. Check the details before saving."
+                    scanMessage = StatusTone.Success to if (card.hasCvv && !keepCvv) {
+                        "Filled from the other phone. Its CVV isn't kept, because Save CVV is off. Check the details before saving."
+                    } else {
+                        "Filled from the other phone. Check the details before saving."
+                    }
                 }
                 is NfcTapResult.Payment -> {
                     result.info.kind?.let { kind = it }
@@ -253,14 +263,15 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
     }
     val monthError = if (submitted && (month.toIntOrNull() ?: 0) !in 1..12) "01–12" else null
     val yearError = if (submitted && year.length != 2) "2 digits" else null
-    val cvvError = if (submitted && cvv.length < 3) "3–4 digits" else null
+    // Optional: empty is fine, but a CVV that is started must be all of it.
+    val cvvError = if (submitted && keepCvv && cvv.isNotEmpty() && cvv.length < 3) "3–4 digits" else null
 
     fun submit() {
         submitted = true
         val picked = catalog.byKey(bank.key)
         val valid = name.isNotBlank() &&
             (if (expectedDigits != null) number.length == expectedDigits else number.length in 12..19) &&
-            (month.toIntOrNull() ?: 0) in 1..12 && year.length == 2 && cvv.length >= 3
+            (month.toIntOrNull() ?: 0) in 1..12 && year.length == 2 && (!keepCvv || cvv.isEmpty() || cvv.length >= 3)
         if (picked == null || !valid) return
         onDone(
             StoredCard(
@@ -270,7 +281,7 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
                 cardNumber = number,
                 expiryMonth = month.padStart(2, '0'),
                 expiryYear = year.padStart(2, '0'),
-                cvv = cvv,
+                cvv = if (keepCvv) cvv else "",
                 kind = kind,
                 createdAt = initial?.createdAt ?: LocalDateTime.now(),
                 bankKey = picked.key,
@@ -286,7 +297,8 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
         cardNumber = number.ifEmpty { "••••••••••••••••" },
         expiryMonth = if (month.isEmpty()) "MM" else month.padStart(2, '0'),
         expiryYear = if (year.isEmpty()) "YY" else year.padStart(2, '0'),
-        cvv = cvv.ifEmpty { "•••" },
+        // As typed: a card without a CVV shows none, not dots standing in for one.
+        cvv = if (keepCvv) cvv else "",
         kind = kind,
         createdAt = LocalDateTime.now(),
     )
@@ -398,25 +410,27 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
                     isError = yearError != null,
                     supportingText = yearError?.let { { Text(it) } },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = if (keepCvv) ImeAction.Next else ImeAction.Done),
                     colors = typedFieldColors(),
                     shape = yearShape,
                 )
             }
-            Spacer(Modifier.width(AppSpacing.md))
-            OutlinedTextField(
-                value = cvv,
-                onValueChange = { cvv = digitsOnly(it, 4) },
-                modifier = Modifier.weight(1f),
-                label = { Text("CVV") },
-                isError = cvvError != null,
-                supportingText = cvvError?.let { { Text(it) } },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done, autoCorrectEnabled = false),
-                colors = typedFieldColors(),
-                shape = TonalFieldShape,
-            )
+            if (keepCvv) {
+                Spacer(Modifier.width(AppSpacing.md))
+                OutlinedTextField(
+                    value = cvv,
+                    onValueChange = { cvv = digitsOnly(it, 4) },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("CVV") },
+                    isError = cvvError != null,
+                    supportingText = { Text(cvvError ?: "Optional") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done, autoCorrectEnabled = false),
+                    colors = typedFieldColors(),
+                    shape = TonalFieldShape,
+                )
+            }
         }
     }
 }

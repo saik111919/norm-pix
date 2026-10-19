@@ -14,8 +14,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.domain.Person
@@ -60,11 +60,13 @@ fun PersonGlyph(person: Person, tint: Color, size: Dp, modifier: Modifier = Modi
     Box(modifier.size(size).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
         Text(
             personInitial(person.name),
-            style = TextStyle(
+            // Based on the theme's type scale, not a bare TextStyle, so the initial is in the font the user chose.
+            style = MaterialTheme.typography.titleMedium.copy(
                 color = tint,
                 fontSize = fontSize,
                 lineHeight = fontSize,
                 fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.sp,
                 platformStyle = PlatformTextStyle(includeFontPadding = false),
             ),
             maxLines = 1,

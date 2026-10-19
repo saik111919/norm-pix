@@ -12,10 +12,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-/** The typeface the interface is set in: the phone's own, or the bundled variable GS Flex (Google Sans Flex, SIL OFL). */
+/**
+ * The typeface the interface is set in: the phone's own, the bundled variable GS Flex (Google Sans Flex, SIL OFL), or a font
+ * file the user picked ([Custom]; its copy and name are kept by `CustomFont` and [AppPrefsState.customFontName]). Not to be
+ * mixed up with [AppPrefsState.customFont], which is GS Flex set by hand.
+ */
 enum class InterfaceFont(val label: String, val description: String) {
     GsFlex("GS Flex", "A variable font with adjustable weight, width and roundness"),
     System("System", "Your phone's own font"),
+    Custom("Your font", "A .ttf or .otf file from your phone"),
 }
 
 /**
@@ -59,6 +64,28 @@ enum class PageAnimationType(val label: String, val description: String) {
     FadeThrough("Fade through", "Pages fade and scale gently into place"),
     SharedAxis("Shared axis", "Pages glide a short distance while crossfading"),
     ScaleAndFade("Scale and fade", "Pages grow into place as they fade in"),
+}
+
+/**
+ * How bottom sheets and decisions (the confirm sheets) open and close - chosen apart from the [PageAnimationType], which
+ * moves pages. They are the same surface, so every sheet and every decision follows the one chosen. With animations turned
+ * off in system settings none of them adds any motion of its own.
+ */
+enum class SheetAnimationType(val label: String, val description: String) {
+    Window("Window", "Grows out of the bottom edge as it rises, and shrinks back into it as it goes"),
+    Slide("Slide", "The standard bottom sheet: it slides up from the bottom edge"),
+    Fade("Fade", "Stays where it rests and fades in, then fades out as it goes"),
+    Scale("Scale", "Stays where it rests and grows from its bottom edge as it fades in, then shrinks back as it goes"),
+    ;
+
+    companion object {
+        /**
+         * The style sheets have when none was ever picked: what they showed before they had a setting of their own - the window
+         * style with the Linux window pages, the plain sheet with any other.
+         */
+        fun defaultFor(pages: PageAnimationType): SheetAnimationType =
+            if (pages == PageAnimationType.LinuxWindow) Window else Slide
+    }
 }
 
 /** Style and placement of a page's back button - and, in the floating style, of its whole header. [TopFloatingCircle] is the default. */
@@ -184,7 +211,7 @@ enum class AccountButtonTarget(val label: String, val description: String) {
 }
 
 /**
- * What NormPix does with an update its daily check finds on its own (Settings > Automatic updates). Every update is
+ * What NormPix does with an update its automatic check finds on its own (Settings > Automatic updates). Every update is
  * still checked against its release and has to be signed with the same key as the app on the phone.
  */
 enum class BackgroundUpdates(val label: String, val description: String, val short: String) {
@@ -206,8 +233,31 @@ enum class BackgroundUpdates(val label: String, val description: String, val sho
     val downloads: Boolean get() = this != Notify
 }
 
+/**
+ * How often NormPix looks for an update by itself (Settings > Automatic updates > How often): in the background, and when it
+ * is opened. [intervalMs] is the wait between two checks, [short] the word the Settings summary uses.
+ */
+enum class UpdateCheckEvery(val label: String, val intervalMs: Long, val short: String) {
+    TwiceADay("Twice a day", 12L * 60 * 60 * 1000, "Twice daily"),
+    OnceADay("Once a day", 24L * 60 * 60 * 1000, "Daily"),
+    EveryThreeDays("Every 3 days", 3L * 24 * 60 * 60 * 1000, "Every 3 days"),
+    OnceAWeek("Once a week", 7L * 24 * 60 * 60 * 1000, "Weekly"),
+}
+
+/** When the background check runs: whenever Android finds fit, as it always has, or around a time of day the user sets. */
+enum class UpdateCheckWhen(val label: String, val description: String) {
+    AnyTime("Any time", "Android picks a quiet moment"),
+    AtSetTime("At a set time", "Around a time you choose"),
+}
+
+/** The time of day a check at a set time is made around until the user picks another: 9:00 PM, as minutes since midnight. */
+const val DEFAULT_UPDATE_CHECK_MINUTE = 21 * 60
+
 /** The longest name the profile keeps: enough for a full name, short enough for a header. */
 const val MAX_PROFILE_NAME = 40
+
+/** The longest file name kept for the user's own font: more than any real file has, so only an odd one is cut. */
+const val MAX_CUSTOM_FONT_NAME = 80
 
 /** Everything the user can tune about how the app looks and how the wallet is protected. */
 data class AppPrefsState(
@@ -215,6 +265,8 @@ data class AppPrefsState(
     val colorSource: ColorSource = ColorSource.System,
     val accent: AccentColor = AccentColor.Volt,
     val pageAnimation: PageAnimationType = PageAnimationType.LinuxWindow,
+    /** How sheets and decisions open and close. Never picked, it is what the page style made it before (see [SheetAnimationType.defaultFor]). */
+    val sheetAnimation: SheetAnimationType = SheetAnimationType.defaultFor(PageAnimationType.LinuxWindow),
     val walletCardActionStyle: WalletCardActionStyle = WalletCardActionStyle.Bar,
     val bankIconStyle: BankIconStyle = BankIconStyle.Full,
     val accountsLayout: AccountsLayout = AccountsLayout.Stack,
@@ -232,6 +284,16 @@ data class AppPrefsState(
     val clipboardTimeout: ClipboardTimeout = ClipboardTimeout.Sec10,
     /** Cards tilt a few degrees with the phone's motion. Off, or with animations removed system-wide, they stay flat. */
     val cardTiltEnabled: Boolean = true,
+    /**
+     * Settings > Wallet & Cards > Save CVV. Off, no card keeps a CVV: the field is gone from the card form, and a card from a
+     * scan, an NFC tap or a cards file is kept without one. Turning it off deletes the CVVs already saved, after asking.
+     */
+    val cardCvvEnabled: Boolean = true,
+    /**
+     * Settings > Wallet & Cards > Store cards. Off, NormPix keeps no cards at all: the vault is emptied (after asking), the Wallet
+     * shows accounts only, and everything about cards leaves the settings and the search. Turning it back on starts empty.
+     */
+    val walletCardsEnabled: Boolean = true,
     /** Blurs the background behind bottom sheets on supported devices. */
     val sheetBlurEnabled: Boolean = true,
     /** Back button style and placement on sub-pages. */
@@ -253,14 +315,25 @@ data class AppPrefsState(
     /** Where the account button at the top of each tab leads. Settings, as it always has; Profile is the user's to choose. */
     val accountButtonTarget: AccountButtonTarget = AccountButtonTarget.Settings,
     /**
-     * Once a day, in the background and at launch, ask GitHub whether a newer release is out (Settings > Automatic updates).
-     * Off, NormPix only checks when asked.
+     * In the background and at launch, as often as [updateCheckEvery] says, ask GitHub whether a newer release is out
+     * (Settings > Automatic updates). Off, NormPix only checks when asked.
      */
     val updateChecksEnabled: Boolean = true,
     /** What happens to an update found in the background: downloaded, and then the user installs it, unless they choose otherwise. */
     val backgroundUpdates: BackgroundUpdates = BackgroundUpdates.Download,
-    /** Background downloads may use mobile data; off, they wait for Wi-Fi (or another network that isn't metered). */
+    /**
+     * Background downloads may use mobile data; off, they wait for Wi-Fi (or another network that isn't metered, so a metered
+     * Wi-Fi such as a hotspot counts as mobile data). A download the user starts in the app uses any network.
+     */
     val updateOnMobileData: Boolean = false,
+    /** How often the automatic check is made, in the background and at launch: once a day, as it always was, unless the user chooses. */
+    val updateCheckEvery: UpdateCheckEvery = UpdateCheckEvery.OnceADay,
+    /** Whether the background check runs whenever Android finds fit, or around [updateCheckMinuteOfDay]. */
+    val updateCheckWhen: UpdateCheckWhen = UpdateCheckWhen.AnyTime,
+    /** The time of day a check at a set time is made around, as minutes since midnight (see [updateCheckTime]). */
+    val updateCheckMinuteOfDay: Int = DEFAULT_UPDATE_CHECK_MINUTE,
+    /** NormPix also checks, quietly, when it is opened - at most once per [updateCheckEvery]. Off, only the background check looks. */
+    val updateCheckOnOpen: Boolean = true,
     /** NormPix may post notifications: reminders that come due and card-expiry reminders. Android's own switch still applies. */
     val notificationsEnabled: Boolean = true,
     /** Every amount is shown as dots (the eye button at the top of Home and Wallet) until shown again. */
@@ -277,6 +350,10 @@ data class AppPrefsState(
     val fontWidth: Int = 100,
     /** GS Flex's roundness axis: 0 sharp corners, 100 fully rounded. */
     val fontRoundness: Int = 0,
+    /** The name of the font file the user picked for [InterfaceFont.Custom], as the file manager showed it; empty when there is none. */
+    val customFontName: String = "",
+    /** Counts the times the font file was replaced or removed, so what draws with it loads it again. Not saved. */
+    val customFontRevision: Int = 0,
 ) {
     /** The GS Flex values in force: the custom ones while [customFont] is on, else the [fontPreset]'s. */
     val fontShape: FontShape
@@ -287,6 +364,10 @@ data class AppPrefsState(
         }
 
     fun availabilityOf(feature: ScheduledFeature): AvailabilityRule = availability[feature] ?: AvailabilityRule()
+
+    /** The time of day a check at a set time is made around (see [updateCheckWhen]). */
+    val updateCheckTime: LocalTime
+        get() = updateCheckMinuteOfDay.coerceIn(0, 24 * 60 - 1).let { LocalTime.of(it / 60, it % 60) }
 }
 
 /** How GS Flex is drawn: the weight shift, width and roundness (see [FontPreset]). */
@@ -303,11 +384,14 @@ class AppPreferences(private val prefs: SharedPreferences) {
 
     private fun read(): AppPrefsState {
         val defaults = AppPrefsState()
+        val pages = prefs.enum(K_PAGE_ANIMATION, defaults.pageAnimation)
         return AppPrefsState(
             mode = prefs.enum(K_MODE, defaults.mode),
             colorSource = prefs.enum(K_COLOR_SOURCE, defaults.colorSource),
             accent = prefs.enum(K_ACCENT, defaults.accent),
-            pageAnimation = prefs.enum(K_PAGE_ANIMATION, defaults.pageAnimation),
+            pageAnimation = pages,
+            // Sheets used to follow the page style: until one is picked they keep doing what they did.
+            sheetAnimation = prefs.enum(K_SHEET_ANIMATION, SheetAnimationType.defaultFor(pages)),
             walletCardActionStyle = prefs.enum(K_WALLET_ACTION_STYLE, defaults.walletCardActionStyle),
             bankIconStyle = prefs.enum(K_BANK_ICON_STYLE, defaults.bankIconStyle),
             accountsLayout = prefs.enum(K_ACCOUNTS_LAYOUT, defaults.accountsLayout),
@@ -322,6 +406,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
             transactionSwipeActions = prefs.enum(K_TRANSACTION_SWIPE, defaults.transactionSwipeActions),
             clipboardTimeout = prefs.enum(K_CLIPBOARD_TIMEOUT, defaults.clipboardTimeout),
             cardTiltEnabled = prefs.getBoolean(K_CARD_TILT, defaults.cardTiltEnabled),
+            cardCvvEnabled = prefs.getBoolean(K_CARD_CVV, defaults.cardCvvEnabled),
+            walletCardsEnabled = prefs.getBoolean(K_WALLET_CARDS, defaults.walletCardsEnabled),
             sheetBlurEnabled = prefs.getBoolean(K_SHEET_BLUR, defaults.sheetBlurEnabled),
             backButtonStyle = prefs.enum(K_BACK_STYLE, defaults.backButtonStyle),
             progressStyle = prefs.enum(K_PROGRESS_STYLE, defaults.progressStyle),
@@ -334,6 +420,10 @@ class AppPreferences(private val prefs: SharedPreferences) {
             updateChecksEnabled = prefs.getBoolean(K_UPDATE_CHECKS, defaults.updateChecksEnabled),
             backgroundUpdates = prefs.enum(K_BACKGROUND_UPDATES, defaults.backgroundUpdates),
             updateOnMobileData = prefs.getBoolean(K_UPDATE_MOBILE_DATA, defaults.updateOnMobileData),
+            updateCheckEvery = prefs.enum(K_UPDATE_CHECK_EVERY, defaults.updateCheckEvery),
+            updateCheckWhen = prefs.enum(K_UPDATE_CHECK_WHEN, defaults.updateCheckWhen),
+            updateCheckMinuteOfDay = prefs.getInt(K_UPDATE_CHECK_MINUTE, defaults.updateCheckMinuteOfDay).coerceIn(0, 24 * 60 - 1),
+            updateCheckOnOpen = prefs.getBoolean(K_UPDATE_CHECK_ON_OPEN, defaults.updateCheckOnOpen),
             notificationsEnabled = prefs.getBoolean(K_NOTIFICATIONS, defaults.notificationsEnabled),
             amountsHidden = prefs.getBoolean(K_AMOUNTS_HIDDEN, defaults.amountsHidden),
             interfaceFont = prefs.enum(K_FONT, defaults.interfaceFont),
@@ -342,6 +432,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
             fontWeightShift = prefs.getInt(K_FONT_WEIGHT, defaults.fontWeightShift).coerceIn(FontAxes.WEIGHT_SHIFT),
             fontWidth = prefs.getInt(K_FONT_WIDTH, defaults.fontWidth).coerceIn(FontAxes.WIDTH),
             fontRoundness = prefs.getInt(K_FONT_ROUNDNESS, defaults.fontRoundness).coerceIn(FontAxes.ROUNDNESS),
+            customFontName = prefs.getString(K_CUSTOM_FONT_NAME, defaults.customFontName).orEmpty(),
             // Only features the user has configured; the rest read as the default (always on) through availabilityOf.
             availability = ScheduledFeature.entries.filter { prefs.contains(it.key("mode")) }.associateWith { prefs.readRule(it) },
         )
@@ -374,8 +465,19 @@ class AppPreferences(private val prefs: SharedPreferences) {
         putString(K_COLOR_SOURCE, ColorSource.Custom.name)
     }
 
-    fun setPageAnimation(animation: PageAnimationType) =
-        change({ copy(pageAnimation = animation) }) { putString(K_PAGE_ANIMATION, animation.name) }
+    fun setPageAnimation(animation: PageAnimationType) {
+        // Sheets used to follow the page style. One whose style was never picked is fixed to what it shows now, so changing
+        // the pages leaves the sheets as they are - now, and after a restart, when a missing choice is worked out afresh.
+        val sheets = state.value.sheetAnimation
+        val pinSheets = !prefs.contains(K_SHEET_ANIMATION)
+        change({ copy(pageAnimation = animation) }) {
+            putString(K_PAGE_ANIMATION, animation.name)
+            if (pinSheets) putString(K_SHEET_ANIMATION, sheets.name)
+        }
+    }
+
+    fun setSheetAnimation(animation: SheetAnimationType) =
+        change({ copy(sheetAnimation = animation) }) { putString(K_SHEET_ANIMATION, animation.name) }
 
     fun setWalletCardActionStyle(style: WalletCardActionStyle) =
         change({ copy(walletCardActionStyle = style) }) { putString(K_WALLET_ACTION_STYLE, style.name) }
@@ -414,6 +516,14 @@ class AppPreferences(private val prefs: SharedPreferences) {
 
     fun setCardTiltEnabled(enabled: Boolean) =
         change({ copy(cardTiltEnabled = enabled) }) { putBoolean(K_CARD_TILT, enabled) }
+
+    /** Only the settings flow that has dealt with the CVVs already saved should call this (see `CardsSettingsFlows`). */
+    fun setCardCvvEnabled(enabled: Boolean) =
+        change({ copy(cardCvvEnabled = enabled) }) { putBoolean(K_CARD_CVV, enabled) }
+
+    /** Only the settings flow that has erased the cards already saved should call this with false (see `CardsSettingsFlows`). */
+    fun setWalletCardsEnabled(enabled: Boolean) =
+        change({ copy(walletCardsEnabled = enabled) }) { putBoolean(K_WALLET_CARDS, enabled) }
 
     fun setSheetBlurEnabled(enabled: Boolean) =
         change({ copy(sheetBlurEnabled = enabled) }) { putBoolean(K_SHEET_BLUR, enabled) }
@@ -465,12 +575,54 @@ class AppPreferences(private val prefs: SharedPreferences) {
     fun setUpdateOnMobileData(allowed: Boolean) =
         change({ copy(updateOnMobileData = allowed) }) { putBoolean(K_UPDATE_MOBILE_DATA, allowed) }
 
+    fun setUpdateCheckEvery(every: UpdateCheckEvery) =
+        change({ copy(updateCheckEvery = every) }) { putString(K_UPDATE_CHECK_EVERY, every.name) }
+
+    fun setUpdateCheckWhen(whenToCheck: UpdateCheckWhen) =
+        change({ copy(updateCheckWhen = whenToCheck) }) { putString(K_UPDATE_CHECK_WHEN, whenToCheck.name) }
+
+    /** Sets the time of day a check at a set time is made around. */
+    fun setUpdateCheckTime(hour: Int, minute: Int) {
+        val minuteOfDay = (hour * 60 + minute).coerceIn(0, 24 * 60 - 1)
+        change({ copy(updateCheckMinuteOfDay = minuteOfDay) }) { putInt(K_UPDATE_CHECK_MINUTE, minuteOfDay) }
+    }
+
+    fun setUpdateCheckOnOpen(enabled: Boolean) =
+        change({ copy(updateCheckOnOpen = enabled) }) { putBoolean(K_UPDATE_CHECK_ON_OPEN, enabled) }
+
     fun setNotificationsEnabled(enabled: Boolean) =
         change({ copy(notificationsEnabled = enabled) }) { putBoolean(K_NOTIFICATIONS, enabled) }
 
     fun setAmountsHidden(hidden: Boolean) = change({ copy(amountsHidden = hidden) }) { putBoolean(K_AMOUNTS_HIDDEN, hidden) }
 
     fun setInterfaceFont(font: InterfaceFont) = change({ copy(interfaceFont = font) }) { putString(K_FONT, font.name) }
+
+    /**
+     * The font file [CustomFont] just saved is now the interface's font. [name] is what the file was called (as the file
+     * manager showed it), kept to show the user which font is in use. Also what a restore of the file calls.
+     */
+    fun useCustomFont(name: String) {
+        val clean = name.trim().take(MAX_CUSTOM_FONT_NAME)
+        change({ copy(interfaceFont = InterfaceFont.Custom, customFontName = clean, customFontRevision = customFontRevision + 1) }) {
+            putString(K_FONT, InterfaceFont.Custom.name)
+            putString(K_CUSTOM_FONT_NAME, clean)
+        }
+    }
+
+    /** The font file is gone (removed by the user, or lost): its name is forgotten, and GS Flex takes over if the file was in use. */
+    fun clearCustomFont() {
+        val wasInUse = state.value.interfaceFont == InterfaceFont.Custom
+        change({
+            copy(
+                interfaceFont = if (wasInUse) InterfaceFont.GsFlex else interfaceFont,
+                customFontName = "",
+                customFontRevision = customFontRevision + 1,
+            )
+        }) {
+            remove(K_CUSTOM_FONT_NAME)
+            if (wasInUse) putString(K_FONT, InterfaceFont.GsFlex.name)
+        }
+    }
 
     /** Picking a style also leaves the custom values: the style is what is then used. */
     fun setFontPreset(preset: FontPreset) = change({ copy(fontPreset = preset, customFont = false) }) {
@@ -530,6 +682,64 @@ class AppPreferences(private val prefs: SharedPreferences) {
         }.apply()
     }
 
+    /**
+     * Every preference there is, with its type, for an app backup (see [PrefValue]). It is whatever the file holds, not a list
+     * of the ones known today, so a preference added later is carried without anyone listing it - minus [BACKUP_EXCLUDED].
+     */
+    fun exportAll(): Map<String, PrefValue> {
+        val out = LinkedHashMap<String, PrefValue>()
+        for ((key, raw) in prefs.all) {
+            if (key in BACKUP_EXCLUDED) continue
+            PrefValue.of(raw)?.let { out[key] = it }
+        }
+        return out
+    }
+
+    /**
+     * Puts a backup's preferences ([exportAll]'s) in place of the ones stored, and has [state] read them again, so the theme,
+     * the font and the rest change at once. [inScope] says which keys the backup speaks for (all, unless told): of those, the
+     * ones [values] has are written, and the ones it doesn't have go back to their default. Keys out of scope, and
+     * [BACKUP_EXCLUDED] ones, are never touched, whatever [values] says.
+     *
+     * A key the backup doesn't know is written all the same - a newer NormPix may have made it, and keeping it does no harm.
+     * A value of another kind than the one stored for that key, or that the app can't read its own preference from, is
+     * skipped and the phone keeps what it had (reading a preference as the wrong kind would otherwise throw at every start).
+     * Returns how many were skipped.
+     *
+     * To take an import back, import what [exportAll] gave before it, with the same [inScope].
+     */
+    fun importAll(values: Map<String, PrefValue>, inScope: (String) -> Boolean = { true }): Int {
+        val before = prefs.all
+        prefs.edit().apply {
+            for (key in before.keys) if (key !in BACKUP_EXCLUDED && inScope(key) && key !in values) remove(key)
+        }.apply()
+        var skipped = 0
+        for ((key, value) in values) {
+            if (key in BACKUP_EXCLUDED || !inScope(key)) continue
+            val had = PrefValue.of(before[key])
+            if (had != null && had.type != value.type) {
+                skipped++
+                continue
+            }
+            prefs.edit().also { value.putInto(it, key) }.apply()
+            if (!readsCleanly()) {
+                prefs.edit().also { editor -> if (had == null) editor.remove(key) else had.putInto(editor, key) }.apply()
+                skipped++
+            }
+        }
+        // The font may have been replaced along with the preferences: what draws with it loads it again.
+        _state.value = read().copy(customFontRevision = _state.value.customFontRevision + 1)
+        return skipped
+    }
+
+    /** Whether the app can still read all its preferences (a value of the wrong kind makes [read] throw). */
+    private fun readsCleanly(): Boolean = try {
+        read()
+        true
+    } catch (_: RuntimeException) {
+        false
+    }
+
     private inline fun change(crossinline update: AppPrefsState.() -> AppPrefsState, write: SharedPreferences.Editor.() -> Unit) {
         _state.update { it.update() }
         prefs.edit().apply(write).apply()
@@ -540,6 +750,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_COLOR_SOURCE = "color_source"
         const val K_ACCENT = "accent_color"
         const val K_PAGE_ANIMATION = "page_animation"
+        const val K_SHEET_ANIMATION = "sheet_animation"
         const val K_WALLET_ACTION_STYLE = "wallet_card_action_style"
         const val K_BANK_ICON_STYLE = "bank_icon_style"
         const val K_ACCOUNTS_LAYOUT = "accounts_layout"
@@ -555,6 +766,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_TRANSACTION_SWIPE = "transaction_swipe_actions"
         const val K_CLIPBOARD_TIMEOUT = "clipboard_timeout"
         const val K_CARD_TILT = "card_tilt_enabled"
+        const val K_CARD_CVV = "card_cvv_enabled"
+        const val K_WALLET_CARDS = "wallet_cards_enabled"
         const val K_SHEET_BLUR = "sheet_blur_enabled"
         const val K_BACK_STYLE = "back_button_style"
         const val K_PROGRESS_STYLE = "progress_style"
@@ -567,6 +780,10 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_UPDATE_CHECKS = "update_checks_enabled"
         const val K_BACKGROUND_UPDATES = "background_updates"
         const val K_UPDATE_MOBILE_DATA = "update_on_mobile_data"
+        const val K_UPDATE_CHECK_EVERY = "update_check_every"
+        const val K_UPDATE_CHECK_WHEN = "update_check_when"
+        const val K_UPDATE_CHECK_MINUTE = "update_check_minute_of_day"
+        const val K_UPDATE_CHECK_ON_OPEN = "update_check_on_open"
         const val K_NOTIFICATIONS = "notifications_enabled"
         const val K_AMOUNTS_HIDDEN = "amounts_hidden"
         const val K_FONT = "interface_font"
@@ -575,6 +792,35 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_FONT_WEIGHT = "font_weight_shift"
         const val K_FONT_WIDTH = "font_width"
         const val K_FONT_ROUNDNESS = "font_roundness"
+
+        /** The file name of the font the user picked (the file itself is kept by [CustomFont]); backed up with it. */
+        const val K_CUSTOM_FONT_NAME = "custom_font_name"
+
+        /**
+         * The preferences an app backup neither carries nor changes (see [exportAll] and [importAll]): they describe this phone,
+         * or guard it, and a file must not be able to set them.
+         * - [K_EXACT_ALARM_PROMPTED]: whether this phone's user was sent to Android's exact-alarm page.
+         * - [K_DUMMY_DATA]: sample-data mode is a way of looking at the app right now, not a setting to bring back.
+         * - [K_WALLET_LOCK], [K_LOCK_SCOPE], [K_LOCK_TIMEOUT]: the biometric lock. Turning it on has to prove this phone can
+         *   unlock, and turning it off or loosening it has to prove it is the owner (see Security & privacy), which a restored
+         *   file would get around.
+         * - [K_NFC_REVEAL], [K_NFC_REVEAL_REGISTERED]: the NFC gate for revealing a card. It needs this phone's NFC and the tags
+         *   registered here (kept apart, under a key that never leaves this phone), and it is a lock like the one above.
+         * - [K_CARD_CVV], [K_WALLET_CARDS]: whether this phone keeps CVVs and cards at all. Each is tied to what is stored here
+         *   (turning one off deletes it, after asking), so a file must neither switch it off over saved cards nor back on.
+         * Update records and the card vault are in files of their own, not in these preferences.
+         */
+        val BACKUP_EXCLUDED: Set<String> = setOf(
+            K_EXACT_ALARM_PROMPTED,
+            K_DUMMY_DATA,
+            K_WALLET_LOCK,
+            K_LOCK_SCOPE,
+            K_LOCK_TIMEOUT,
+            K_NFC_REVEAL,
+            K_NFC_REVEAL_REGISTERED,
+            K_CARD_CVV,
+            K_WALLET_CARDS,
+        )
 
         fun ScheduledFeature.key(field: String) = "availability_${name.lowercase()}_$field"
         fun LocalTime.minuteOfDay() = hour * 60 + minute

@@ -26,8 +26,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.heightIn
@@ -237,7 +237,8 @@ internal fun CardsOnHome() {
 
     // The app loads the vault at start; this only covers Home being up before that finished.
     LaunchedEffect(Unit) { if (container.cards.state.value is CardsState.Loading) container.cards.load() }
-    val cards = (cardsState as? CardsState.Ready)?.cards.orEmpty()
+    // With Store cards off (Settings > Wallet & Cards) there is nothing to show, even if a sample set holds cards.
+    val cards = if (prefs.walletCardsEnabled) (cardsState as? CardsState.Ready)?.cards.orEmpty() else emptyList()
     if (cards.isEmpty()) return
 
     @Suppress("UNUSED_EXPRESSION")
@@ -309,32 +310,35 @@ private fun MonthOverview(data: HomeData, onClick: () -> Unit) {
 }
 
 /**
- * The month's budget as a tile of the hero: a ring showing how much is used, and beside it what is left (or how far over).
- * Words carry the state; the ring's color only reinforces it.
+ * The month's budget as a tile of the hero: what is left to spend (or how far over, in the error colour and without a minus
+ * sign), with a ring beside it showing how much is used. The label is a word or two - the tile is half the card, and it should
+ * read on one line - so the full sentence is for a screen reader. Words carry the state; the colour only reinforces it.
  */
 @Composable
-private fun BudgetTile(slot: HeroSlot, status: BudgetStatus, money: MoneyFormatter, onClick: () -> Unit) {
+internal fun BudgetTile(slot: HeroSlot, status: BudgetStatus, money: MoneyFormatter, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val percent = status.usedPercent
     val over = status.health == BudgetHealth.Exceeded
     val tone = if (status.health == BudgetHealth.Healthy) scheme.tertiary else budgetTone(status.health).resolve().color
-    val label = if (over) "Over budget by" else "Left in budget"
     val value = money.format(if (over) -status.remaining else status.remaining)
+    val spoken = "${if (over) "Over budget by" else "Left to spend"} $value, $percent% of ${money.format(status.allocated)} used"
 
     HeroTile(slot, HeroTone.Tertiary, onClick = onClick) {
-        Row(
-            Modifier.clearAndSetSemantics { contentDescription = "$label $value, $percent% of ${money.format(status.allocated)} used" },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ProgressRing(
-                progress = status.utilization.toFloat(),
-                color = tone,
-                trackColor = LocalContentColor.current.copy(alpha = 0.16f),
-                size = 44.dp,
-                thickness = 5.dp,
+        Column(Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = spoken }) {
+            HeroFigure(
+                label = if (over) "Over budget" else "Left to spend",
+                value = value,
+                valueColor = if (over) tone else Color.Unspecified,
+                leading = {
+                    ProgressRing(
+                        progress = status.utilization.toFloat(),
+                        color = tone,
+                        trackColor = LocalContentColor.current.copy(alpha = 0.16f),
+                        size = 36.dp,
+                        thickness = 4.dp,
+                    )
+                },
             )
-            Spacer(Modifier.width(AppSpacing.md))
-            HeroFigure(label = label, value = value)
         }
     }
 }

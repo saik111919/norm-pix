@@ -23,6 +23,9 @@ import kotlinx.coroutines.withContext
 /** Thrown when a picked file is bigger than any real backup could be. */
 class BackupTooLargeException : IOException("File too large")
 
+/** Thrown when a picked backup is one the app won't read, and [reason] says why in words for the user (it is shown as they are). */
+class BackupRejectedException(val reason: String) : IOException(reason)
+
 /**
  * Where backups go and come from: the system's own save/open dialogs (Storage
  * Access Framework). The user picks every location, so the app needs no

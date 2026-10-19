@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
@@ -49,15 +50,23 @@ import com.example.normpix.ui.theme.rememberReducedMotion
  * - Only the page on top moves and changes opacity as it comes or goes. The page under it stays whole - at most it
  *   shifts or recedes a little, never fades - so two pages are never half-visible over each other, and nothing the
  *   user chose to see (their theme's background) is ever replaced by the window's.
- * - The styles that do fade a page (fade through, shared axis) follow Material's sequencing: the page that leaves
- *   fades out first, then the page that arrives fades in, instead of both at once.
+ * - The styles that do fade a page (fade through, shared axis) follow Material's sequencing on the way in: the page that
+ *   leaves fades out first, then the page that arrives fades in, instead of both at once. On the way out - going back - the
+ *   page on top simply fades out over the page beneath, which is already whole.
+ *
+ * Going back has no delays and no keyframes in it: the back gesture plays the same animations by hand (the navigation
+ * library seeks them to where the finger is), and a delay would be a stretch of the gesture in which nothing happens, a
+ * fade that waits for another would leave nothing at all on screen half way. What the finger shows at 40% is what the
+ * animation shows at 40%. The same motions are the model for the back preview of a tab ([BackPreview]).
  *
  * - [PageAnimationType.System]: the platform's own feel. A page slides in from the edge a short way as it fades in
  *   while the one under it shifts back; going back (or previewing it with the back gesture) the top page shrinks
  *   and slides away, uncovering the page beneath.
  * - [PageAnimationType.SlideHorizontal]: the new page slides in from the side, over the old one, which shifts back.
- * - [PageAnimationType.FadeThrough]: the old page fades out, then the new one fades in and scales up gently.
- * - [PageAnimationType.SharedAxis]: the same, with both pages gliding a short distance along the horizontal axis.
+ * - [PageAnimationType.FadeThrough]: the old page fades out, then the new one fades in and scales up gently; going back
+ *   the page on top fades out over the one beneath, which settles up to full size.
+ * - [PageAnimationType.SharedAxis]: the same, with both pages gliding a short distance along the horizontal axis; going
+ *   back the page on top glides away as it fades out, over the one beneath gliding in.
  * - [PageAnimationType.ScaleAndFade]: the new page grows into place as it fades in, over the old one.
  * - [PageAnimationType.LinuxWindow]: a desktop window manager's open and close (GNOME's, near enough). A page opens by
  *   growing out of the bottom edge (where a dock would be) as it fades in, over a page that stays solid and recedes a
@@ -78,6 +87,9 @@ class PageTransitions(type: PageAnimationType, reduced: Boolean) {
     private fun <T> fadeOutFirst() = tween<T>(outMs, easing = FastOutLinearInEasing)
 
     private fun <T> fadeInAfter() = tween<T>(inMs, delayMillis = outMs, easing = LinearOutSlowInEasing)
+
+    /** A fade that runs evenly over the whole time, with no wait: what going back uses, so the gesture can scrub it. */
+    private fun <T> evenly() = tween<T>(duration, easing = LinearEasing)
 
     private val forward: Pair<EnterTransition, ExitTransition>
     private val backward: Pair<EnterTransition, ExitTransition>
@@ -121,13 +133,16 @@ class PageTransitions(type: PageAnimationType, reduced: Boolean) {
             PageAnimationType.FadeThrough -> {
                 val arrive = fadeIn(fadeInAfter()) + scaleIn(fadeInAfter(), initialScale = FADE_THROUGH_SCALE)
                 forward = arrive to fadeOut(fadeOutFirst())
-                backward = arrive to fadeOut(fadeOutFirst())
+                // Going back, the page on top fades out over the page beneath (whole, only settling up to full size). Not the
+                // other way round, with the page beneath fading in after it: the gesture would show nothing half way.
+                backward = scaleIn(slide(AppMotion.standard), initialScale = FADE_THROUGH_BACK_SCALE) to fadeOut(evenly())
             }
             PageAnimationType.SharedAxis -> {
                 forward = (slideInHorizontally(fadeInAfter()) { it / AXIS_SHIFT } + fadeIn(fadeInAfter())) to
                     (slideOutHorizontally(fadeOutFirst()) { -it / AXIS_SHIFT } + fadeOut(fadeOutFirst()))
-                backward = (slideInHorizontally(fadeInAfter()) { -it / AXIS_SHIFT } + fadeIn(fadeInAfter())) to
-                    (slideOutHorizontally(fadeOutFirst()) { it / AXIS_SHIFT } + fadeOut(fadeOutFirst()))
+                // Going back: the page on top glides away as it fades out, over the page beneath, which glides into place whole.
+                backward = slideInHorizontally(slide(AppMotion.standard)) { -it / AXIS_SHIFT } to
+                    (slideOutHorizontally(slide(AppMotion.standard)) { it / AXIS_SHIFT } + fadeOut(evenly()))
             }
             PageAnimationType.ScaleAndFade -> {
                 // The new page grows over a page that stays (a fade to full opacity: nothing visible, but it keeps the page
@@ -154,24 +169,27 @@ class PageTransitions(type: PageAnimationType, reduced: Boolean) {
         const val WINDOW_OPEN_MS = 340
         const val WINDOW_CLOSE_MS = 240
         private const val WINDOW_OPEN_SCALE = 0.8f
-        private const val WINDOW_CLOSE_SCALE = 0.85f
-        private const val WINDOW_BEHIND_SCALE = 0.94f
+        internal const val WINDOW_CLOSE_SCALE = 0.85f
+        internal const val WINDOW_BEHIND_SCALE = 0.94f
 
         // Divisors of the page width: how far a page travels (a larger divisor is a shorter way).
         private const val SYSTEM_SLIDE = 6
-        private const val SYSTEM_PARALLAX = 8
-        private const val SYSTEM_BACK_SLIDE = 10
-        private const val SYSTEM_BACK_SCALE = 0.9f
-        private const val SLIDE_PARALLAX = 4
-        private const val AXIS_SHIFT = 14
+        internal const val SYSTEM_PARALLAX = 8
+        internal const val SYSTEM_BACK_SLIDE = 10
+        internal const val SYSTEM_BACK_SCALE = 0.9f
+        internal const val SLIDE_PARALLAX = 4
+        internal const val AXIS_SHIFT = 14
         private const val FADE_THROUGH_SCALE = 0.92f
-        private const val GROW_SCALE = 0.9f
+
+        /** The page beneath a fading page that goes back settles up from this size. */
+        internal const val FADE_THROUGH_BACK_SCALE = 0.96f
+        internal const val GROW_SCALE = 0.9f
 
         /** Windows grow from the bottom edge, where a dock would be... */
         private val FROM_BOTTOM = TransformOrigin(0.5f, 1f)
 
         /** ...and shrink into themselves, a little low: towards it. */
-        private val CLOSING_ORIGIN = TransformOrigin(0.5f, 0.75f)
+        internal val CLOSING_ORIGIN = TransformOrigin(0.5f, 0.75f)
     }
 }
 
@@ -238,6 +256,89 @@ internal object TabMotion {
 
     fun origin(type: PageAnimationType): TransformOrigin =
         if (type == PageAnimationType.LinuxWindow) TransformOrigin(0.5f, 1f) else TransformOrigin.Center
+}
+
+/**
+ * How a page or tab is drawn at one moment of the back gesture: [scale] about [origin], [alpha], [shiftX] (a fraction of its
+ * width, positive to the right), how round its corners are ([corners], 0..1 of [PageCornerRadius]) and how high the shadow
+ * under it is ([lift], 0..1 of the app's lift).
+ */
+@Immutable
+internal class BackPose(
+    val scale: Float = 1f,
+    val alpha: Float = 1f,
+    val shiftX: Float = 0f,
+    val origin: TransformOrigin = TransformOrigin.Center,
+    val corners: Float = 0f,
+    val lift: Float = 0f,
+)
+
+/**
+ * What the back gesture shows when it takes the app back to the previous tab: the tab being left, drawn as the user's
+ * [PageAnimationType] closes a page ([leaving]), over the tab it returns to ([revealed]) - the motions of
+ * [PageTransitions]' own going-back, worked out from how far the gesture has gone ([progress], 0..1) instead of from the
+ * clock, so a finger drags them to and fro and letting go finishes them: at 1 the tab being left is gone.
+ *
+ * [direction] is the way the finger came from: 1 from the left edge, -1 from the right ([directionOf]). The styles that move a
+ * page sideways move it towards the side the finger is on, the way Android's own back preview does.
+ */
+internal object BackPreview {
+    /** How far into the gesture (0..1) the previewed tab's corners are fully round. */
+    const val CORNERS_BY = 0.25f
+
+    /** 1 for a swipe from the left edge, -1 from the right edge. */
+    fun directionOf(fromRightEdge: Boolean): Float = if (fromRightEdge) -1f else 1f
+
+    /** The tab being left, [progress] of the way through its close. */
+    fun leaving(type: PageAnimationType, progress: Float, direction: Float): BackPose {
+        val p = progress.coerceIn(0f, 1f)
+        val corners = (p / CORNERS_BY).coerceAtMost(1f)
+        return when (type) {
+            // A window shrinks into itself, a little low, as it fades - late, so it is seen shrinking before it goes.
+            PageAnimationType.LinuxWindow -> BackPose(
+                scale = 1f + (PageTransitions.WINDOW_CLOSE_SCALE - 1f) * p,
+                alpha = 1f - WindowEasing.close.transform(p),
+                origin = PageTransitions.CLOSING_ORIGIN,
+                corners = corners,
+                lift = p,
+            )
+            PageAnimationType.ScaleAndFade -> BackPose(
+                scale = 1f + (PageTransitions.GROW_SCALE - 1f) * p,
+                alpha = 1f - p,
+                corners = corners,
+                lift = p,
+            )
+            // The platform's: shrinks and slides a short way towards the finger, fading out as it goes.
+            PageAnimationType.System -> BackPose(
+                scale = 1f + (PageTransitions.SYSTEM_BACK_SCALE - 1f) * p,
+                alpha = 1f - FastOutLinearInEasing.transform(p),
+                shiftX = direction * p / PageTransitions.SYSTEM_BACK_SLIDE,
+                corners = corners,
+                lift = p,
+            )
+            PageAnimationType.SlideHorizontal -> BackPose(shiftX = direction * p, corners = corners, lift = p)
+            // Changes opacity only: it fades out over the tab beneath.
+            PageAnimationType.FadeThrough -> BackPose(alpha = 1f - p)
+            // A short glide towards the finger, crossfading with the tab beneath.
+            PageAnimationType.SharedAxis -> BackPose(alpha = 1f - p, shiftX = direction * p / PageTransitions.AXIS_SHIFT)
+        }
+    }
+
+    /** The tab it goes back to, beneath: whole at all times, at most moved or receded a little, never faded. */
+    fun revealed(type: PageAnimationType, progress: Float, direction: Float): BackPose {
+        val p = progress.coerceIn(0f, 1f)
+        return when (type) {
+            PageAnimationType.LinuxWindow -> BackPose(
+                scale = PageTransitions.WINDOW_BEHIND_SCALE + (1f - PageTransitions.WINDOW_BEHIND_SCALE) * WindowEasing.open.transform(p),
+            )
+            PageAnimationType.ScaleAndFade -> BackPose()
+            PageAnimationType.System -> BackPose(shiftX = -direction * (1f - p) / PageTransitions.SYSTEM_PARALLAX)
+            PageAnimationType.SlideHorizontal -> BackPose(shiftX = -direction * (1f - p) / PageTransitions.SLIDE_PARALLAX)
+            PageAnimationType.FadeThrough ->
+                BackPose(scale = PageTransitions.FADE_THROUGH_BACK_SCALE + (1f - PageTransitions.FADE_THROUGH_BACK_SCALE) * p)
+            PageAnimationType.SharedAxis -> BackPose(shiftX = -direction * (1f - p) / PageTransitions.AXIS_SHIFT)
+        }
+    }
 }
 
 /** How round a page's corners are while it moves: a window's, the same as a sheet's. */

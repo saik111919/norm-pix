@@ -201,100 +201,103 @@ fun SecuritySettingsPage() {
                         }
                     }
                 }
-                ListSection(
-                    title = "Cards",
-                    footer = if (prefs.nfcTagRevealEnabled && prefs.nfcRevealRegisteredOnly) {
-                        "Lost your tag? Turn \"Only my registered tags\" off here - you'll be asked to confirm it's you."
-                    } else {
-                        null
-                    },
-                ) {
-                    item {
-                        SwitchRow(
-                            headline = "Tap an NFC tag to reveal",
-                            supporting = when (nfc) {
-                                NfcAvailability.Available -> if (prefs.nfcRevealRegisteredOnly) {
-                                    "Only a tag you've registered will work"
-                                } else {
-                                    "Hold any NFC tag near your phone to show a card number"
-                                }
-                                NfcAvailability.Disabled -> "Turn on NFC in system settings to use this"
-                                NfcAvailability.Unsupported -> "Not available on this device"
-                            },
-                            leading = { Icon(Icons.Rounded.Nfc, contentDescription = null) },
-                            checked = prefs.nfcTagRevealEnabled,
-                            enabled = nfc != NfcAvailability.Unsupported,
-                            onCheckedChange = { on ->
-                                haptics.selection()
-                                preferences.setNfcTagRevealEnabled(on)
-                            },
-                        )
-                    }
-                    if (prefs.nfcTagRevealEnabled) {
+                // Revealing a card is about saved cards, so it is not offered while NormPix stores none.
+                if (prefs.walletCardsEnabled) {
+                    ListSection(
+                        title = "Cards",
+                        footer = if (prefs.nfcTagRevealEnabled && prefs.nfcRevealRegisteredOnly) {
+                            "Lost your tag? Turn \"Only my registered tags\" off here - you'll be asked to confirm it's you."
+                        } else {
+                            null
+                        },
+                    ) {
                         item {
                             SwitchRow(
-                                headline = "Only my registered tags",
-                                supporting = when {
-                                    prefs.nfcRevealRegisteredOnly -> "Other tags and phones won't reveal a card"
-                                    tagCount == 0 -> "Register your own tag, and only it will work"
-                                    else -> "Only your $tagCount registered ${if (tagCount == 1) "tag" else "tags"} will work"
-                                },
-                                leading = { Icon(Icons.Outlined.Key, contentDescription = null) },
-                                checked = prefs.nfcRevealRegisteredOnly,
-                                // Turning it off stays possible whatever NFC is doing, so a lost tag never locks you out.
-                                enabled = nfc == NfcAvailability.Available || prefs.nfcRevealRegisteredOnly,
-                                onCheckedChange = { on ->
-                                    when {
-                                        // Tightening needs nothing; with no tag yet there is nothing to ask for, so register one first.
-                                        on && tagCount > 0 -> {
-                                            haptics.selection()
-                                            preferences.setNfcRevealRegisteredOnly(true)
-                                        }
-                                        on -> withIdentity("Confirm it's you to register a tag") {
-                                            registerTag { preferences.setNfcRevealRegisteredOnly(true) }
-                                        }
-                                        else -> withIdentity("Confirm it's you to allow any NFC tag") {
-                                            preferences.setNfcRevealRegisteredOnly(false)
-                                        }
+                                headline = "Tap an NFC tag to reveal",
+                                supporting = when (nfc) {
+                                    NfcAvailability.Available -> if (prefs.nfcRevealRegisteredOnly) {
+                                        "Only a tag you've registered will work"
+                                    } else {
+                                        "Hold any NFC tag near your phone to show a card number"
                                     }
+                                    NfcAvailability.Disabled -> "Turn on NFC in system settings to use this"
+                                    NfcAvailability.Unsupported -> "Not available on this device"
+                                },
+                                leading = { Icon(Icons.Rounded.Nfc, contentDescription = null) },
+                                checked = prefs.nfcTagRevealEnabled,
+                                enabled = nfc != NfcAvailability.Unsupported,
+                                onCheckedChange = { on ->
+                                    haptics.selection()
+                                    preferences.setNfcTagRevealEnabled(on)
                                 },
                             )
                         }
-                        if (tagCount > 0) {
-                            if (tagCount < container.registeredTags.limit) {
-                                item {
-                                    ListRow(
-                                        headline = "Register another tag",
-                                        supporting = "Up to ${container.registeredTags.limit}; any one of them will do",
-                                        leading = { Icon(Icons.Outlined.AddCircleOutline, contentDescription = null) },
-                                        onClick = { withIdentity("Confirm it's you to register a tag") { registerTag() } },
-                                    )
-                                }
-                            }
+                        if (prefs.nfcTagRevealEnabled) {
                             item {
-                                ListRow(
-                                    headline = "Remove registered tags",
-                                    supporting = "$tagCount registered. Any NFC tag will work again until you register one",
-                                    leading = { Icon(Icons.Outlined.DeleteOutline, contentDescription = null) },
-                                    supportingMaxLines = 3,
-                                    onClick = {
-                                        scope.launch {
-                                            val sure = overlays.confirm(
-                                                title = "Remove your registered tags?",
-                                                message = "Any NFC tag will reveal a card again until you register one.",
-                                                confirmLabel = "Remove",
-                                                destructive = true,
-                                            )
-                                            if (sure) {
-                                                withIdentity("Confirm it's you to remove your tags") {
-                                                    container.registeredTags.clear()
-                                                    preferences.setNfcRevealRegisteredOnly(false)
-                                                    snackbars.show("Registered tags removed", SnackbarKind.Deleted)
-                                                }
+                                SwitchRow(
+                                    headline = "Only my registered tags",
+                                    supporting = when {
+                                        prefs.nfcRevealRegisteredOnly -> "Other tags and phones won't reveal a card"
+                                        tagCount == 0 -> "Register your own tag, and only it will work"
+                                        else -> "Only your $tagCount registered ${if (tagCount == 1) "tag" else "tags"} will work"
+                                    },
+                                    leading = { Icon(Icons.Outlined.Key, contentDescription = null) },
+                                    checked = prefs.nfcRevealRegisteredOnly,
+                                    // Turning it off stays possible whatever NFC is doing, so a lost tag never locks you out.
+                                    enabled = nfc == NfcAvailability.Available || prefs.nfcRevealRegisteredOnly,
+                                    onCheckedChange = { on ->
+                                        when {
+                                            // Tightening needs nothing; with no tag yet there is nothing to ask for, so register one first.
+                                            on && tagCount > 0 -> {
+                                                haptics.selection()
+                                                preferences.setNfcRevealRegisteredOnly(true)
+                                            }
+                                            on -> withIdentity("Confirm it's you to register a tag") {
+                                                registerTag { preferences.setNfcRevealRegisteredOnly(true) }
+                                            }
+                                            else -> withIdentity("Confirm it's you to allow any NFC tag") {
+                                                preferences.setNfcRevealRegisteredOnly(false)
                                             }
                                         }
                                     },
                                 )
+                            }
+                            if (tagCount > 0) {
+                                if (tagCount < container.registeredTags.limit) {
+                                    item {
+                                        ListRow(
+                                            headline = "Register another tag",
+                                            supporting = "Up to ${container.registeredTags.limit}; any one of them will do",
+                                            leading = { Icon(Icons.Outlined.AddCircleOutline, contentDescription = null) },
+                                            onClick = { withIdentity("Confirm it's you to register a tag") { registerTag() } },
+                                        )
+                                    }
+                                }
+                                item {
+                                    ListRow(
+                                        headline = "Remove registered tags",
+                                        supporting = "$tagCount registered. Any NFC tag will work again until you register one",
+                                        leading = { Icon(Icons.Outlined.DeleteOutline, contentDescription = null) },
+                                        supportingMaxLines = 3,
+                                        onClick = {
+                                            scope.launch {
+                                                val sure = overlays.confirm(
+                                                    title = "Remove your registered tags?",
+                                                    message = "Any NFC tag will reveal a card again until you register one.",
+                                                    confirmLabel = "Remove",
+                                                    destructive = true,
+                                                )
+                                                if (sure) {
+                                                    withIdentity("Confirm it's you to remove your tags") {
+                                                        container.registeredTags.clear()
+                                                        preferences.setNfcRevealRegisteredOnly(false)
+                                                        snackbars.show("Registered tags removed", SnackbarKind.Deleted)
+                                                    }
+                                                }
+                                            }
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -309,13 +312,15 @@ fun SecuritySettingsPage() {
                             supportingMaxLines = 4,
                         )
                     }
-                    item {
-                        ListRow(
-                            headline = "Cards are encrypted",
-                            supporting = "Card details are encrypted with AES-256-GCM, with the key kept in the Android Keystore.",
-                            leading = { Icon(Icons.Outlined.Lock, contentDescription = null) },
-                            supportingMaxLines = 4,
-                        )
+                    if (prefs.walletCardsEnabled) {
+                        item {
+                            ListRow(
+                                headline = "Cards are encrypted",
+                                supporting = "Card details are encrypted with AES-256-GCM, with the key kept in the Android Keystore.",
+                                leading = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+                                supportingMaxLines = 4,
+                            )
+                        }
                     }
                     if (BuildConfig.SECURE_WINDOW) {
                         item {

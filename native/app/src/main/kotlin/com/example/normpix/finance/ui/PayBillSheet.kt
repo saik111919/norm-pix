@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -210,13 +208,7 @@ fun PayBillSheet(card: Account, onDone: (Boolean?) -> Unit) {
             )
         }
         Spacer(Modifier.height(AppSpacing.lg))
-        TonalPickerField(
-            label = "Date",
-            value = shortDate(date.atStartOfDay()),
-            icon = Icons.Outlined.CalendarToday,
-            onClick = { pickingDate = true },
-            modifier = Modifier.fillMaxWidth(),
-        )
+        PickerFieldRow(PickerField("Date", shortDate(date.atStartOfDay())) { pickingDate = true })
         Spacer(Modifier.height(AppSpacing.md))
         OutlinedTextField(
             value = note,

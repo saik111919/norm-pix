@@ -85,6 +85,8 @@ fun SettingsRow(
     /** Something needs doing here (an update is waiting): what it says under the name is in the error colour, to be seen from the list. */
     alert: Boolean = false,
     onClick: (() -> Unit)? = null,
+    /** Something at the row's end (a chevron, for a row that opens a page). */
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     ListItem(
         modifier = modifier.then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
@@ -102,6 +104,7 @@ fun SettingsRow(
                 )
             }
         },
+        trailingContent = trailing,
     )
 }
 

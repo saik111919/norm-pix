@@ -250,9 +250,11 @@ fun ReminderAttachSheet(
     val finance = com.example.normpix.finance.ui.rememberFinanceState()
     val scheme = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
-    var tab by remember { mutableStateOf(current.tab()) }
+    // Cards are not offered while NormPix isn't storing any (Settings > Wallet & Cards > Store cards).
+    val cardsOn = LocalAppContainer.current.preferences.state.collectAsState().value.walletCardsEnabled
+    var tab by remember { mutableStateOf(current.tab().takeIf { cardsOn || it != AttachTab.Card } ?: AttachTab.Transaction) }
     var query by remember { mutableStateOf("") }
-    val tabs = remember { AttachTab.entries.map { ChoiceOption(it, it.label, it.icon) } }
+    val tabs = remember(cardsOn) { AttachTab.entries.filter { cardsOn || it != AttachTab.Card }.map { ChoiceOption(it, it.label, it.icon) } }
 
     fun pick(link: ReminderLink) = onDone(AttachChoice(link))
 

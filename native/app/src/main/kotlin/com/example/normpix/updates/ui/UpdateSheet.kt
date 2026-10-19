@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
@@ -41,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.normpix.BuildConfig
@@ -92,8 +94,9 @@ suspend fun showUpdateSheet(overlays: AppOverlays, updater: AppUpdater) {
 }
 
 /**
- * At launch, once the app is unlocked: a newer release found by the daily check is offered in the update sheet (see
- * [AppUpdater.launchOffer]); nothing is asked while the user has automatic checks off. Whenever a download the user
+ * At launch, once the app is unlocked: a newer release found by the check at launch is offered in the update sheet (see
+ * [AppUpdater.launchOffer]), at most once per the wait the user chose in Settings > Automatic updates; nothing is asked while
+ * they have automatic checks, or checking when NormPix opens, off. Whenever a download the user
  * started finishes with no update sheet or page on screen (it was left to carry on), the sheet comes back, once the app is
  * unlocked, ready to install: nothing is installed until the user taps Install. And a tapped update notification
  * ([requests]) opens the update page, once unlocked - installing what is ready when it was the notification's Install
@@ -113,8 +116,9 @@ fun OfferAppUpdates(
     val locked by rememberUpdatedState(appLocked)
     LaunchedEffect(updater, appLocked) {
         if (appLocked) return@LaunchedEffect
-        val allowed = preferences?.state?.value?.updateChecksEnabled ?: false
-        updater.launchOffer(allowed) ?: return@LaunchedEffect
+        val prefs = preferences?.state?.value
+        val allowed = prefs != null && prefs.updateChecksEnabled && prefs.updateCheckOnOpen
+        updater.launchOffer(allowed, prefs?.updateCheckEvery?.intervalMs ?: AppUpdater.CHECK_INTERVAL_MS) ?: return@LaunchedEffect
         if (!isUpdateShowing(updater)) showUpdateSheet(overlays, updater)
     }
     if (requests != null) {
@@ -145,23 +149,22 @@ fun OfferAppUpdates(
 @Composable
 fun UpdateSheet(updater: AppUpdater, onClose: () -> Unit) {
     val state by updater.state.collectAsStateWithLifecycle()
-    UpdateSheetContent(
-        state = state,
-        installed = updater.installed,
-        actions = UpdateSheetActions(
-            update = { updater.download() },
-            later = {
-                updater.later()
-                onClose()
-            },
-            cancelDownload = updater::cancelDownload,
-            install = updater::install,
-            allow = updater::allowInstalls,
-            retry = updater::retry,
-            close = onClose,
-        ),
-    )
+    UpdateSheetContent(state = state, installed = updater.installed, actions = updateActionsFor(updater, onClose))
 }
+
+/** The buttons of the update sheet and page, doing their work on [updater]; [onClose] closes the sheet or leaves the page. */
+internal fun updateActionsFor(updater: AppUpdater, onClose: () -> Unit) = UpdateSheetActions(
+    update = { updater.download() },
+    later = {
+        updater.later()
+        onClose()
+    },
+    cancelDownload = updater::cancelDownload,
+    install = updater::install,
+    allow = updater::allowInstalls,
+    retry = updater::retry,
+    close = onClose,
+)
 
 /** What the update sheet's buttons do. */
 class UpdateSheetActions(
@@ -176,19 +179,35 @@ class UpdateSheetActions(
 
 /**
  * The update sheet, laid out like the app's decisions: an icon, what is happening as a heading (announced as it changes),
- * what it means, the release (versions, date, size, what's new), progress while downloading, then the one action to
- * take at thumb height with the way out under it.
+ * what it means, the release (versions, date, size, what's new), progress while downloading, then the buttons at thumb
+ * height ([UpdateActionRow]: the way out on the left, the one action to take on the right). The update page is made of the
+ * same two parts ([UpdateBody] and [UpdateActionRow]), the buttons pinned at the foot of the screen.
  */
 @Composable
 fun UpdateSheetContent(state: UpdateState, installed: InstalledApp, actions: UpdateSheetActions, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth().padding(top = AppSpacing.xs, bottom = AppSpacing.md)) {
+        UpdateBody(state, installed, Modifier.padding(horizontal = AppSpacing.xxl), notesMaxHeight = SheetNotesMaxHeight)
+        Spacer(Modifier.height(AppSpacing.xl))
+        // Less on the left: a text button's label sits inside its touch target, and should line up with the text above.
+        UpdateActionRow(state, actions, Modifier.padding(start = AppSpacing.md, end = AppSpacing.xxl))
+    }
+}
+
+/** The most the "What's new" box takes in the sheet, which has no room to grow: longer notes scroll inside it. */
+private val SheetNotesMaxHeight = 220.dp
+
+/**
+ * What the update screen says about [state]: the icon (a loader while busy), what is happening as a heading (announced as it
+ * changes), what it means, the release's versions, the download's progress and what's new. The sheet puts it above its
+ * buttons; the page puts it in its scrolling list. [notesMaxHeight] caps the "What's new" box, which then scrolls inside
+ * itself - for the sheet; null lets it take all its notes needs, for the page, which scrolls as a whole.
+ */
+@Composable
+fun UpdateBody(state: UpdateState, installed: InstalledApp, modifier: Modifier = Modifier, notesMaxHeight: Dp? = null) {
     val scheme = MaterialTheme.colorScheme
-    val view = sheetView(state, installed, actions)
+    val view = sheetView(state, installed)
     val release = state.release
-    Column(
-        modifier
-            .fillMaxWidth()
-            .padding(start = AppSpacing.xxl, top = AppSpacing.xs, end = AppSpacing.xxl, bottom = AppSpacing.md),
-    ) {
+    Column(modifier.fillMaxWidth()) {
         if (view.busy) {
             AppLoadingIndicator(Modifier.size(48.dp))
         } else {
@@ -224,24 +243,94 @@ fun UpdateSheetContent(state: UpdateState, installed: InstalledApp, actions: Upd
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 220.dp)
+                    .then(if (notesMaxHeight != null) Modifier.heightIn(max = notesMaxHeight) else Modifier)
                     .background(scheme.surfaceContainerHigh, AppRadius.rMd)
-                    .verticalScroll(rememberScrollState())
+                    .then(if (notesMaxHeight != null) Modifier.verticalScroll(rememberScrollState()) else Modifier)
                     .padding(AppSpacing.md),
             ) {
                 Text(release.notes, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
             }
         }
-        Spacer(Modifier.height(AppSpacing.xl))
-        view.primary?.let { (label, onClick) ->
-            Button(onClick = onClick, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                Text(label, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
+    }
+}
+
+/**
+ * The update screen's buttons, as on a Pixel's system update screen: the secondary action (Later, Not now, Cancel download,
+ * Close) as a text button on the left, and the primary one (Update now, Install, Try again, Open settings) as a filled,
+ * fully rounded button on the right. When there is only one action it sits on the right, in the primary style. Shared by
+ * the sheet, which puts it under its content, and the page, which pins it at the foot of the screen.
+ */
+@Composable
+fun UpdateActionRow(state: UpdateState, actions: UpdateSheetActions, modifier: Modifier = Modifier) {
+    val buttons = updateButtons(state)
+    val primary = buttons.primary
+    Row(
+        modifier.fillMaxWidth(),
+        horizontalArrangement = if (primary != null) Arrangement.SpaceBetween else Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (primary != null) {
+            TextButton(onClick = { actions.perform(buttons.secondary) }, modifier = Modifier.heightIn(min = ActionHeight)) {
+                Text(buttons.secondary.label, style = MaterialTheme.typography.titleMedium)
             }
-            Spacer(Modifier.height(AppSpacing.xs))
         }
-        TextButton(onClick = view.secondary.second, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-            Text(view.secondary.first, style = MaterialTheme.typography.titleMedium)
-        }
+        PillButton((primary ?: buttons.secondary).label) { actions.perform(primary ?: buttons.secondary) }
+    }
+}
+
+/** The filled, fully rounded button of [UpdateActionRow]. */
+@Composable
+private fun PillButton(label: String, onClick: () -> Unit) {
+    Button(onClick = onClick, shape = CircleShape, modifier = Modifier.height(ActionHeight)) {
+        Text(label, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold), maxLines = 1)
+    }
+}
+
+private val ActionHeight = 48.dp
+
+/** One of the buttons of the update sheet and page: what it says, and which of the [UpdateSheetActions] it does. */
+internal enum class UpdateAction(val label: String) {
+    UpdateNow("Update now"),
+    Later("Later"),
+    NotNow("Not now"),
+    CancelDownload("Cancel download"),
+    Install("Install"),
+    OpenSettings("Open settings"),
+    Close("Close"),
+    Done("Done"),
+    TryAgain("Try again"),
+    DownloadAgain("Download again"),
+}
+
+/** The buttons for a state: the way out, always, and what to do next when there is something to do. */
+internal class UpdateButtons(val primary: UpdateAction?, val secondary: UpdateAction)
+
+internal fun updateButtons(state: UpdateState): UpdateButtons {
+    // A release the user can put off; one marked as needed is only closed, so it comes back at the next launch.
+    fun laterFor(release: UpdateRelease) = if (release.mandatory) UpdateAction.NotNow else UpdateAction.Later
+    return when (state) {
+        UpdateState.Idle, UpdateState.Checking -> UpdateButtons(null, UpdateAction.Close)
+        is UpdateState.UpToDate -> UpdateButtons(null, UpdateAction.Done)
+        is UpdateState.Available -> UpdateButtons(UpdateAction.UpdateNow, laterFor(state.release))
+        is UpdateState.Downloading -> UpdateButtons(null, UpdateAction.CancelDownload)
+        is UpdateState.Ready -> UpdateButtons(UpdateAction.Install, laterFor(state.release))
+        is UpdateState.NeedsPermission -> UpdateButtons(UpdateAction.OpenSettings, UpdateAction.NotNow)
+        is UpdateState.Installing -> UpdateButtons(null, UpdateAction.Close)
+        is UpdateState.Cancelled ->
+            UpdateButtons(if (state.apk != null) UpdateAction.Install else UpdateAction.DownloadAgain, UpdateAction.Close)
+        is UpdateState.Failed -> UpdateButtons(if (state.problem.canRetry) UpdateAction.TryAgain else null, UpdateAction.Close)
+    }
+}
+
+private fun UpdateSheetActions.perform(action: UpdateAction) {
+    when (action) {
+        UpdateAction.UpdateNow -> update()
+        UpdateAction.Later -> later()
+        UpdateAction.CancelDownload -> cancelDownload()
+        UpdateAction.Install -> install()
+        UpdateAction.OpenSettings -> allow()
+        UpdateAction.TryAgain, UpdateAction.DownloadAgain -> retry()
+        UpdateAction.NotNow, UpdateAction.Close, UpdateAction.Done -> close()
     }
 }
 
@@ -290,98 +379,71 @@ private fun DownloadProgress(state: UpdateState.Downloading) {
     )
 }
 
-/** What the sheet shows for a state: the icon (or a loader, when [busy]), the words, and its buttons. */
+/** What the sheet shows for a state: the icon (or a loader, when [busy]) and the words. Its buttons are [updateButtons]. */
 private class SheetView(
     val icon: ImageVector,
     val title: String,
     val message: String,
-    val primary: Pair<String, () -> Unit>?,
-    val secondary: Pair<String, () -> Unit>,
     val busy: Boolean = false,
     val showsNotes: Boolean = false,
 )
 
-private fun sheetView(state: UpdateState, installed: InstalledApp, actions: UpdateSheetActions): SheetView {
-    val close = "Close" to actions.close
-    // A release the user can put off; one marked as needed is only closed, so it comes back at the next launch.
-    fun laterFor(release: UpdateRelease) = if (release.mandatory) "Not now" to actions.close else "Later" to actions.later
-    return when (state) {
-        UpdateState.Idle, UpdateState.Checking -> SheetView(
-            Icons.Outlined.SystemUpdate, "Checking for updates", "Asking GitHub for the latest release.", null, close, busy = true,
-        )
-        is UpdateState.UpToDate -> SheetView(
-            Icons.Outlined.CheckCircle,
-            "NormPix is up to date",
-            "Version ${installed.versionName} is the latest release.",
-            null,
-            "Done" to actions.close,
-        )
-        is UpdateState.Available -> SheetView(
-            Icons.Outlined.SystemUpdate,
-            "Update available",
-            buildString {
-                append("NormPix ${state.release.versionName} is ready to download. Your data stays as it is.")
-                if (state.release.mandatory) append(" This release is marked as one to install.")
-            },
-            "Update now" to actions.update,
-            laterFor(state.release),
-            showsNotes = true,
-        )
-        is UpdateState.Downloading -> SheetView(
-            Icons.Outlined.Download,
-            "Downloading update",
-            "You can leave this, or close NormPix: the download carries on, its notification shows how far it is, and " +
-                "says when it's ready to install.",
-            null,
-            "Cancel download" to actions.cancelDownload,
-        )
-        is UpdateState.Ready -> SheetView(
-            Icons.Outlined.InstallMobile,
-            "Ready to install",
-            "Downloaded and checked. Tap Install, then confirm on the screen Android shows. NormPix closes while it " +
-                "updates; your data stays as it is.",
-            "Install" to actions.install,
-            laterFor(state.release),
-            showsNotes = true,
-        )
-        is UpdateState.NeedsPermission -> SheetView(
-            Icons.Outlined.Security,
-            "Allow NormPix to install updates",
-            "Android asks this once. Turn on \"Allow from this source\" for NormPix, then come back: the update carries on.",
-            "Open settings" to actions.allow,
-            "Not now" to actions.close,
-        )
-        is UpdateState.Installing -> SheetView(
-            Icons.Outlined.InstallMobile,
-            "Installing",
-            "Confirm on the screen Android shows. NormPix closes while it updates; your data stays as it is.",
-            null,
-            close,
-            busy = true,
-        )
-        is UpdateState.Cancelled -> if (state.apk != null) {
-            SheetView(
-                Icons.Outlined.InstallMobile,
-                "Update not installed",
-                "It's downloaded, so you can install it whenever you like.",
-                "Install" to actions.install,
-                close,
-            )
-        } else {
-            SheetView(Icons.Outlined.Download, "Download stopped", "Nothing was kept.", "Download again" to actions.retry, close)
-        }
-        is UpdateState.Failed -> SheetView(
-            if (state.problem == UpdateProblem.Disabled) Icons.Outlined.UpdateDisabled else Icons.Outlined.ErrorOutline,
-            when {
-                state.problem == UpdateProblem.Disabled -> "Updates come with releases"
-                state.release == null -> "Couldn't check for updates"
-                else -> "Couldn't update"
-            },
-            state.problem.describe(),
-            if (state.problem.canRetry) "Try again" to actions.retry else null,
-            close,
-        )
+private fun sheetView(state: UpdateState, installed: InstalledApp): SheetView = when (state) {
+    UpdateState.Idle, UpdateState.Checking -> SheetView(
+        Icons.Outlined.SystemUpdate, "Checking for updates", "Asking GitHub for the latest release.", busy = true,
+    )
+    is UpdateState.UpToDate -> SheetView(
+        Icons.Outlined.CheckCircle,
+        "NormPix is up to date",
+        "Version ${installed.versionName} is the latest release.",
+    )
+    is UpdateState.Available -> SheetView(
+        Icons.Outlined.SystemUpdate,
+        "Update available",
+        buildString {
+            append("NormPix ${state.release.versionName} is ready to download. Your data stays as it is.")
+            if (state.release.mandatory) append(" This release is marked as one to install.")
+        },
+        showsNotes = true,
+    )
+    is UpdateState.Downloading -> SheetView(
+        Icons.Outlined.Download,
+        "Downloading update",
+        "You can leave this, or close NormPix: the download carries on, its notification shows how far it is, and " +
+            "says when it's ready to install.",
+    )
+    is UpdateState.Ready -> SheetView(
+        Icons.Outlined.InstallMobile,
+        "Ready to install",
+        "Downloaded and checked. Tap Install, then confirm on the screen Android shows. NormPix closes while it " +
+            "updates; your data stays as it is.",
+        showsNotes = true,
+    )
+    is UpdateState.NeedsPermission -> SheetView(
+        Icons.Outlined.Security,
+        "Allow NormPix to install updates",
+        "Android asks this once. Turn on \"Allow from this source\" for NormPix, then come back: the update carries on.",
+    )
+    is UpdateState.Installing -> SheetView(
+        Icons.Outlined.InstallMobile,
+        "Installing",
+        "Confirm on the screen Android shows. NormPix closes while it updates; your data stays as it is.",
+        busy = true,
+    )
+    is UpdateState.Cancelled -> if (state.apk != null) {
+        SheetView(Icons.Outlined.InstallMobile, "Update not installed", "It's downloaded, so you can install it whenever you like.")
+    } else {
+        SheetView(Icons.Outlined.Download, "Download stopped", "Nothing was kept.")
     }
+    is UpdateState.Failed -> SheetView(
+        if (state.problem == UpdateProblem.Disabled) Icons.Outlined.UpdateDisabled else Icons.Outlined.ErrorOutline,
+        when {
+            state.problem == UpdateProblem.Disabled -> "Updates come with releases"
+            state.release == null -> "Couldn't check for updates"
+            else -> "Couldn't update"
+        },
+        state.problem.describe(),
+    )
 }
 
 /** What went wrong, in words the user can act on. */

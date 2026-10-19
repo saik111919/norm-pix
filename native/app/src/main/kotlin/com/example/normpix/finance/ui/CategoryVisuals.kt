@@ -340,6 +340,23 @@ fun TransferAvatar(modifier: Modifier = Modifier, size: Dp = 40.dp) {
     }
 }
 
+/**
+ * The stand-in for a category or a person not chosen (an "uncategorised" field, "No one in particular"): [icon] on the plain
+ * neutral disc, in the shape the user chose for avatars ([LocalCategoryIconShape]) - or bare, a little larger, where there is no shape.
+ */
+@Composable
+internal fun NeutralAvatar(icon: ImageVector, modifier: Modifier = Modifier, size: Dp = 40.dp) {
+    val bare = LocalCategoryIconShape.current == CategoryIconShape.None
+    AvatarDisc(null, modifier, size) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(size * if (bare) BARE_ICON_IN_BOX else ICON_IN_DISC),
+        )
+    }
+}
+
 val AccountKind.icon: ImageVector
     get() = when (this) {
         AccountKind.Cash -> Icons.Outlined.Payments

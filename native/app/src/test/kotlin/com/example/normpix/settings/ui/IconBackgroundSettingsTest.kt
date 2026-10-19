@@ -10,6 +10,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.settings.CategoryIconShape
 import com.example.normpix.testing.TestEnvironment
 import java.util.Locale
@@ -23,8 +24,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Settings > Appearance > Icon background: the four shapes behind category icons and people, one chosen, the choice taking
- * effect at once.
+ * Settings > Appearance > Category icons > Icon background: the four shapes behind category icons and people, one chosen, the
+ * choice taking effect at once.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h2400dp")
@@ -48,7 +49,7 @@ class IconBackgroundSettingsTest {
 
     @Test
     fun appearanceOffersEveryShape_withTheCircleChosen() {
-        compose.setContent { env.Content { AppearanceSettingsPage() } }
+        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.CategoryIcons) } }
         compose.waitForIdle()
 
         compose.onNodeWithText("Icon background").assertExists()
@@ -61,7 +62,7 @@ class IconBackgroundSettingsTest {
 
     @Test
     fun choosingAShapeAppliesItAtOnce_andMovesTheSelection() {
-        compose.setContent { env.Content { AppearanceSettingsPage() } }
+        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.CategoryIcons) } }
         compose.waitForIdle()
 
         shape("Square").performScrollTo().performClick()
@@ -79,7 +80,7 @@ class IconBackgroundSettingsTest {
     @Test
     fun theCurrentShapeIsSelectedWhenThePageOpens() {
         env.preferences.setCategoryIconShape(CategoryIconShape.Rounded)
-        compose.setContent { env.Content { AppearanceSettingsPage() } }
+        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.CategoryIcons) } }
         compose.waitForIdle()
 
         shape("Rounded").assertIsSelected()

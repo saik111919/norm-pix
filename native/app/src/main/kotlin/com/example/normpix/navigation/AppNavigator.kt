@@ -55,6 +55,9 @@ interface AppNavigator {
 
     fun openSettings(page: SettingsPage? = null)
 
+    /** One screen of Settings > Appearance (its colors, its font, its transitions...); a navigator without the route shows Appearance itself. */
+    fun openAppearance(section: AppearanceSection) = openSettings(SettingsPage.Appearance)
+
     /** The Profile page: the user's name and picture, and where the account button leads. */
     fun openProfile()
 

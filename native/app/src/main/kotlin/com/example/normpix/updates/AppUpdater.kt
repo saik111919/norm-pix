@@ -102,7 +102,7 @@ interface UpdateNotifier {
 
     /**
      * [release] is downloading, [done] of [total] bytes: called as it starts, then about once a percent, from any thread.
-     * [background] when the daily check started it rather than the user. Shows nothing by default.
+     * [background] when the check in the background started it rather than the user. Shows nothing by default.
      */
     fun downloading(release: UpdateRelease, done: Long, total: Long, background: Boolean) = Unit
 
@@ -125,8 +125,9 @@ interface UpdateNotifier {
 enum class BackgroundRun { Done, Again }
 
 /**
- * Keeps NormPix up to date from its GitHub releases. It checks once a day when the user lets it - in the background
- * ([runInBackground]) and at launch - or when asked in Settings. In the app, Update now downloads and checks the APK, and
+ * Keeps NormPix up to date from its GitHub releases. It checks as often as the user chose (once a day unless they say
+ * otherwise) when they let it - in the background ([runInBackground]) and at launch - or when asked in Settings. In the app,
+ * Update now downloads and checks the APK, and
  * only Install hands it to Android's installer, which asks the user to confirm. In the background it goes as far as the
  * user chose ([BackgroundUpdates]): saying an update is out, downloading it, or installing it without asking.
  *
@@ -161,6 +162,20 @@ class AppUpdater(
 
     /** When GitHub last answered a check (epoch millis), 0 for never. */
     val lastCheckAt: Long get() = records.lastCheckAt
+
+    private val _laterVersionCode = MutableStateFlow(records.dismissedVersionCode)
+
+    /**
+     * The versionCode of the release the user said Later to (0 for none), as it changes: so Home can take down its banner for
+     * the update the moment they do. Whether a release is put in front of them is [isOffered].
+     */
+    val laterVersionCode: StateFlow<Long> = _laterVersionCode.asStateFlow()
+
+    /**
+     * Whether [release] is to be put in front of the user without their asking - at launch, in the background, and on Home:
+     * unless they said Later to it, and unless it is marked mandatory, which is only ever closed, never put off.
+     */
+    fun isOffered(release: UpdateRelease): Boolean = release.mandatory || release.versionCode != records.dismissedVersionCode
 
     private var checking: Deferred<UpdateState>? = null
     private var launchCheck: Deferred<UpdateRelease?>? = null
@@ -203,20 +218,21 @@ class AppUpdater(
     }
 
     /**
-     * Once the app is unlocked at launch: the release to offer, when the user lets the app check ([allowed]), a day has
-     * passed since GitHub last answered, and the user hasn't said Later to it (unless the release is mandatory). Each
-     * launch offers at most once. The check runs in the updater's own scope, so a screen that leaves doesn't waste it.
+     * Once the app is unlocked at launch: the release to offer, when the user lets the app check at launch ([allowed]),
+     * [intervalMs] (a day, unless the user chose a different wait) has passed since GitHub last answered, and the user hasn't
+     * said Later to it (unless the release is mandatory). Each launch offers at most once. The check runs in the updater's
+     * own scope, so a screen that leaves doesn't waste it.
      */
-    suspend fun launchOffer(allowed: Boolean): UpdateRelease? {
+    suspend fun launchOffer(allowed: Boolean, intervalMs: Long = CHECK_INTERVAL_MS): UpdateRelease? {
         if (!enabled || !allowed || launchOffered) return null
         val check = launchCheck ?: scope.async {
             val since = now() - records.lastCheckAt
             when {
                 // Found in the background while this process ran: offered without asking GitHub again.
                 _state.value.offerable -> _state.value.release
-                // A clock set back (since < 0) checks, rather than waiting for a day that may never come. A download made
+                // A clock set back (since < 0) checks, rather than waiting for a time that may never come. A download made
                 // in the background is waiting: asked again (it is quick), so it is offered ready to install.
-                since !in 0 until CHECK_INTERVAL_MS || withContext(io) { downloads.holdsNewerThan(installed.versionCode) } ->
+                since !in 0 until intervalMs || withContext(io) { downloads.holdsNewerThan(installed.versionCode) } ->
                     check().takeIf { it.offerable }?.release
                 else -> null
             }
@@ -224,7 +240,7 @@ class AppUpdater(
         val release = check.await() ?: return null
         if (launchOffered || !_state.value.offerable) return null
         launchOffered = true
-        return release.takeIf { it.mandatory || it.versionCode != records.dismissedVersionCode }
+        return release.takeIf { isOffered(it) }
     }
 
     /** A state the launch offer shows: an update to download, or one downloaded and waiting for Install. */
@@ -432,6 +448,7 @@ class AppUpdater(
         val release = _state.value.release ?: return
         if (!release.mandatory) {
             records.dismissedVersionCode = release.versionCode
+            _laterVersionCode.value = release.versionCode
             notifier.withdraw()
         }
     }
@@ -524,7 +541,7 @@ class AppUpdater(
     // ------------------------------------------------------------ in the background
 
     /**
-     * The daily check in the background (see [UpdateJobService]), going as far as the user chose with what it finds:
+     * The check in the background (see [UpdateJobService]), going as far as the user chose with what it finds:
      * [BackgroundUpdates.Notify] says it is out; [BackgroundUpdates.Download] downloads it and says it is ready to install;
      * [BackgroundUpdates.Install] downloads it and installs it without asking, where Android allows that, once NormPix has
      * been off screen a while - and where Android won't, leaves it ready for the user's Install like Download does.
@@ -541,7 +558,7 @@ class AppUpdater(
         }
         val found = check()
         val release = found.release ?: return again(found)
-        if (!release.mandatory && release.versionCode == records.dismissedVersionCode) return BackgroundRun.Done
+        if (!isOffered(release)) return BackgroundRun.Done
         if (mode == BackgroundUpdates.Notify) {
             announceAvailable(release)
             return BackgroundRun.Done
@@ -572,9 +589,14 @@ class AppUpdater(
         return BackgroundRun.Done
     }
 
-    /** Android stopped the background run (its time ran out, or the network it needed went): a download it started stops too. */
-    fun stopBackgroundWork() {
-        if (backgroundDownload && !inForeground) downloading?.cancel()
+    /**
+     * Android stopped the background run (its time ran out, or the network it needed went): a download it started stops
+     * too, and is picked up by a later run. When [networkLost] - the network the run needed is gone, as when Wi-Fi drops -
+     * it stops even with NormPix on screen, or it would go on over mobile data the user didn't allow. For any other reason
+     * it stops only with NormPix off screen. A download the user started (or took over by tapping Update now) goes on.
+     */
+    fun stopBackgroundWork(networkLost: Boolean = false) {
+        if (backgroundDownload && (networkLost || !inForeground)) downloading?.cancel()
     }
 
     private fun again(state: UpdateState): BackgroundRun =
@@ -615,7 +637,9 @@ class AppUpdater(
     }
 
     companion object {
+        /** The wait between launch checks until the user chooses another (see [launchOffer]): a day. */
         const val CHECK_INTERVAL_MS = 24L * 60 * 60 * 1000
+
         const val CONFIRM_SETTLE_MS = 2_000L
 
         /** How long NormPix has to have been off screen before an update is installed without asking. */
