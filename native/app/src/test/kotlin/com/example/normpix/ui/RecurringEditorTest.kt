@@ -203,7 +203,8 @@ class RecurringEditorTest {
     )
 
     private fun saveRule() {
-        compose.onNodeWithText("Save recurring").performScrollTo().performClick()
+        // Save is pinned below the form's scrolling body, so there is nothing to scroll it into.
+        compose.onNodeWithText("Save recurring").performClick()
         compose.waitUntil(timeoutMillis = 10_000) { gone("New recurring") }
     }
 

@@ -206,7 +206,8 @@ class CardSwitchesSettingsTest {
         assertTrue(vault.cards.isEmpty())
         assertEquals(CardsState.Ready(emptyList()), env.container.cards.state.value)
         val accounts = runBlocking { env.container.finance.repository.accounts() }
-        assertEquals(listOf("HDFC RuPay"), accounts.map { it.name }, "the account stays")
+        // Cash is there from the start; the card's account is the one that must not go.
+        assertTrue("HDFC RuPay" in accounts.map { it.name }, "the account stays")
         assertTrue(accounts.all { it.cardId == null })
         assertEquals(0, env.container.expiry.states.value.size, "no expiry reminders are left")
 
@@ -247,7 +248,7 @@ class CardSwitchesSettingsTest {
 
         assertTrue(prefs.walletCardsEnabled)
         assertEquals(2, vault.cards.size)
-        assertEquals("rupay", runBlocking { env.container.finance.repository.accounts() }.single().cardId)
+        assertEquals("rupay", runBlocking { env.container.finance.repository.accounts() }.single { it.name == "HDFC RuPay" }.cardId)
     }
 
     @Test

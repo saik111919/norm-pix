@@ -220,10 +220,14 @@ class CustomFontTest {
         val file = assertNotNull(CustomFont.loadable(context) { true })
         val font = AppFont(InterfaceFont.Custom, customFile = file)
 
-        assertEquals(customFontFamily(file), fontFamilyFor(font))
+        // A font read from a file has no value equality (two families over the same file are never ==), so a family is compared by
+        // what it describes: the file, its weight and its style.
+        val described = customFontFamily(file).toString()
+        assertTrue(file.path in described, "the family is made from the installed file: $described")
+        assertEquals(described, fontFamilyFor(font).toString())
         val typography = appTypography(font)
         val styles = typography.allStyles()
-        assertTrue(styles.all { it.fontFamily == customFontFamily(file) }, "every style is in the file's family")
+        assertTrue(styles.all { it.fontFamily.toString() == described }, "every style is in the file's family")
         // The sizes and weights of the scale are Material's own, in whatever family.
         assertEquals(Typography().bodyLarge.fontSize, typography.bodyLarge.fontSize)
         assertEquals(Typography().titleLarge.fontWeight, typography.titleLarge.fontWeight)

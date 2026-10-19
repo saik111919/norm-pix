@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithText
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.screens.WalletScreen
+import com.example.normpix.settings.AccountsLayout
 import com.example.normpix.testing.InMemoryVault
 import com.example.normpix.testing.TestEnvironment
 import java.time.LocalDateTime
@@ -41,6 +42,8 @@ class WalletCardsOffTest {
         val environment = TestEnvironment("wallet_cards_off_test", InMemoryVault(cards.toList()))
         env = environment
         environment.preferences.setWalletCardsEnabled(storeCards)
+        // The default stack draws only the front account (Cash), as a card read out by its description; the compact list prints every name.
+        environment.preferences.setAccountsLayout(AccountsLayout.Rows)
         runBlocking {
             environment.container.finance.saveAccount(Account(name = "HDFC Savings", kind = AccountKind.Bank, createdAt = now, updatedAt = now))
         }

@@ -447,7 +447,8 @@ class ReminderEndsFormTest {
     }
 
     private fun save(label: String) {
-        compose.onNodeWithText(label).performScrollTo().performClick()
+        // Save is pinned below the form's scrolling body, so there is nothing to scroll it into.
+        compose.onNodeWithText(label).performClick()
         compose.waitForIdle()
     }
 

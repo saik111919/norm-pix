@@ -61,7 +61,8 @@ class RepeatNotPrefilledTest {
     @Test
     fun savingASharedBillRecordsAPlainExpense_notARepeatingPayment() {
         shared(sms)
-        compose.onNodeWithText("Save expense").performScrollTo().performClick()
+        // Save is pinned below the form's scrolling body, so there is nothing to scroll it into.
+        compose.onNodeWithText("Save expense").performClick()
         compose.waitUntil(timeoutMillis = 10_000) { compose.onAllNodesWithText("New expense").fetchSemanticsNodes().isEmpty() }
         val repository = env.container.finance.repository
         val saved = runBlocking { repository.transactions(TransactionQuery(), limit = 10).items }.single()

@@ -154,7 +154,8 @@ class AppBackupFlowsTest {
         }
     }
 
-    private fun await() = compose.waitUntil(15_000) { finished }
+    // The flag is set when work done off the main thread resumes on it; nothing here reads a node, so the looper is idled by hand.
+    private fun await() = compose.waitUntil(15_000) { compose.waitForIdle(); finished }
 
     private fun shown(text: String, substring: Boolean = false) = compose.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty()
 

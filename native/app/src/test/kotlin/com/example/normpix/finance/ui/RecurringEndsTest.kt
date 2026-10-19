@@ -86,7 +86,8 @@ class RecurringEndsTest {
     }
 
     private fun saveChanges() {
-        compose.onNodeWithText("Save changes").performScrollTo().performClick()
+        // Save is pinned below the form's scrolling body, so there is nothing to scroll it into.
+        compose.onNodeWithText("Save changes").performClick()
         compose.waitUntil(timeoutMillis = 10_000) { done != null }
     }
 

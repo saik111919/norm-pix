@@ -157,7 +157,9 @@ class CategoryIconShapeRenderingTest {
      */
     private fun PixelMap.startInk(): Float {
         val perDp = width / fieldWidth
-        val fill = this[(6 * perDp).toInt(), height / 2]
+        // The field's fill, taken from a spot clear of its picture, label and arrow. (The picture begins 4dp in and is 40dp wide, so
+        // a sample near the start at mid-height is inside it: its own colour would be taken for the field's.)
+        val fill = this[(300 * perDp).toInt(), (6 * perDp).toInt()]
         var count = 0
         for (y in 0 until height) {
             for (x in 0 until (60 * perDp).toInt()) {
@@ -200,7 +202,15 @@ class CategoryIconShapeRenderingTest {
         showField {
             TransactionCategoryField(categories = listOf(category), selected = null, onSelect = {}, onCreate = null)
         }
-        assertTheFieldsPictureFollowsTheShape("no category yet")
+        // The stand-in's disc is the neutral tone, which is the field's own fill: a shape cannot be seen on it. What the setting
+        // changes here is the icon, which is drawn larger when there is no background.
+        val circle = shot(CategoryIconShape.Circle).startInk()
+        val rounded = shot(CategoryIconShape.Rounded).startInk()
+        val square = shot(CategoryIconShape.Square).startInk()
+        val bare = shot(CategoryIconShape.None).startInk()
+        assertEquals(circle, rounded, 1f, "no category yet: the neutral disc melts into the field, in every shape")
+        assertEquals(circle, square, 1f, "no category yet: the neutral disc melts into the field, in every shape")
+        assertTrue(bare - circle > 40f, "no category yet: with no background the icon is drawn larger ($circle, $bare)")
     }
 
     @Test
