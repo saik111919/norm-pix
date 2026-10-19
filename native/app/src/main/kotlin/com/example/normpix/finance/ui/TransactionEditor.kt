@@ -58,7 +58,7 @@ import com.example.normpix.finance.domain.FinanceConflictException
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.FinanceValidationException
 import com.example.normpix.finance.domain.Person
-import com.example.normpix.finance.domain.RepeatSchedule
+import com.example.normpix.finance.domain.RepeatPlan
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.cardBillTarget
 import com.example.normpix.finance.domain.creditRoom
@@ -206,7 +206,8 @@ private fun TransactionEditor(
     // A shared message's date that couldn't be read is never quietly replaced by today: it has to be picked.
     var dateUnset by remember { mutableStateOf(prefill?.dateNeedsChoice == true) }
     // How it repeats, if it does: saving then records it as the first of a repeating payment. Not offered to one that already belongs to one.
-    var repeat by remember { mutableStateOf<RepeatSchedule?>(null) }
+    // Never set from a shared receipt or picture: a bill says what was paid, not that it repeats or when that stops.
+    var repeat by remember { mutableStateOf<RepeatPlan?>(null) }
     var showDetails by remember {
         mutableStateOf(existing?.payee != null || existing?.note != null || prefill?.payee != null || prefill?.note != null)
     }
@@ -358,7 +359,8 @@ private fun TransactionEditor(
         scope.launch {
             try {
                 if (!notADuplicate(draft)) return@launch
-                val schedule = repeat?.takeIf { existing?.recurringId == null }
+                // The end is worked out from the date as it is now, so "after 12 payments" is 12 from the date that is saved.
+                val schedule = repeat?.takeIf { existing?.recurringId == null }?.schedule(draft.occurredAt)
                 val saved = if (schedule != null) {
                     controller.saveTransactionAndRepeat(draft, schedule, pictureEdit)
                 } else {

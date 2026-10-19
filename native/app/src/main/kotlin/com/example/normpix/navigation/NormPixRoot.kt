@@ -288,14 +288,12 @@ private fun rememberDataContainer(real: AppContainer, dummy: Boolean): AppContai
 @Composable
 private fun KeepRemindersArmed(container: AppContainer) {
     val scope = rememberCoroutineScope()
-    // Off the main thread: re-registering an alarm for each reminder is a call to the system apiece, which has no business
-    // among the frames of the splash (or of the first screen).
+    // Loading waits on the database, which answers off the main thread; re-registering the alarms does not - it is a call to
+    // the system for each reminder, which has no business among the frames of the splash (or of the first screen).
     LaunchedEffect(container.reminders) {
         runCatching {
-            withContext(Dispatchers.Default) {
-                container.reminders.load()
-                container.reminders.rearmAll()
-            }
+            container.reminders.load()
+            withContext(Dispatchers.Default) { container.reminders.rearmAll() }
         }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_START) {

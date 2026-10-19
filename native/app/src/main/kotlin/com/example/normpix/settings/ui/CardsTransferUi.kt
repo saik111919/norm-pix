@@ -58,7 +58,7 @@ internal sealed interface CardsForBackup {
 }
 
 /**
- * Exporting and importing saved cards on their own (Settings > Cards). The file is always locked with a password the user
+ * Exporting and importing saved cards on their own (Settings > Wallet & Cards). The file is always locked with a password the user
  * picks (see [CardsTransfer]); exporting asks for the biometric unlock first while Wallet lock is on, since the file holds
  * every card in full. Importing only ever adds cards: one already saved is skipped, nothing is replaced. Both follow the card
  * settings: nothing is exported or imported while Store cards is off, and an import leaves CVVs out while Save CVV is off.
@@ -259,7 +259,7 @@ internal class CardsTransferFlows(
     private fun count(n: Int) = "$n ${if (n == 1) "card" else "cards"}"
 
     private companion object {
-        const val NOT_A_CARDS_FILE = "This file isn't a NormPix cards file. Cards files are made with Export cards, in Settings > Cards."
+        const val NOT_A_CARDS_FILE = "This file isn't a NormPix cards file. Cards files are made with Export cards, in Settings > Wallet & Cards."
     }
 }
 

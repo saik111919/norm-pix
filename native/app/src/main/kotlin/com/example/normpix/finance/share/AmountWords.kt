@@ -53,14 +53,13 @@ internal object AmountWords {
      */
     fun find(lines: List<String>, decimals: Int = 2): Long? {
         for (start in lines.indices) {
-            if (lines[start].isBlank() || lines[start].any { it.isDigit() }) continue
-            var joined = ""
-            for (end in start until minOf(lines.size, start + MAX_LINES)) {
-                if (lines[end].any { it.isDigit() }) break
-                joined = if (joined.isEmpty()) lines[end] else "$joined ${lines[end]}"
-                parse(joined, decimals)?.let { return it }
-                // A line that is not words at all ends the run: what follows is not part of this amount.
-                if (words(lines[end]) == null) break
+            if (lines[start].any { it.isDigit() } || words(lines[start]) == null) continue
+            // The run of lines that are all words from here, then the longest of it that reads as an amount: "Rupees One Lakh
+            // Twenty Five Thousand" is an amount on its own, but not the whole of it when "Five Hundred Only" follows.
+            var end = start + 1
+            while (end < lines.size && end - start < MAX_LINES && lines[end].none { it.isDigit() } && words(lines[end]) != null) end++
+            for (stop in end downTo start + 1) {
+                parse(lines.subList(start, stop).joinToString(" "), decimals)?.let { return it }
             }
         }
         return null
@@ -72,7 +71,7 @@ internal object AmountWords {
         if (tokens.none { it in numbers || it in scales }) return null
         if (tokens.none { it in rupeeWords || it in paiseWords || it == "only" }) return null
 
-        val paiseAt = tokens.lastIndexOfAny(paiseWords)
+        val paiseAt = tokens.indexOfLast { it in paiseWords }
         var rupeeTokens = tokens
         var paise = 0L
         if (paiseAt >= 0) {

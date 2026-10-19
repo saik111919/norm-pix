@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import com.example.normpix.BuildConfig
 import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.navigation.LocalAppContainer
@@ -28,8 +29,11 @@ import com.example.normpix.navigation.SettingsPage
 import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
+import com.example.normpix.settings.CustomFont
 import com.example.normpix.ui.theme.AppIcons
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * A searchable setting item in the settings catalog.
@@ -200,6 +204,7 @@ fun rememberSettingsSystemActions(): SettingsSystemActions {
     val overlays = LocalOverlays.current
     val snackbars = LocalSnackbars.current
     val scope = LocalAppScope.current
+    val appContext = LocalContext.current.applicationContext
 
     fun resetSettings() {
         scope.launch {
@@ -210,6 +215,8 @@ fun rememberSettingsSystemActions(): SettingsSystemActions {
             )
             if (!confirmed) return@launch
             container.preferences.resetToDefaults()
+            // The font file the user picked goes with the setting that named it.
+            withContext(Dispatchers.IO) { CustomFont.delete(appContext) }
             snackbars.show("Settings reset to defaults")
         }
     }
@@ -236,7 +243,7 @@ fun rememberSettingsSystemActions(): SettingsSystemActions {
         }
     }
 
-    return remember(container, navigator, overlays, snackbars, scope) {
+    return remember(container, navigator, overlays, snackbars, scope, appContext) {
         SettingsSystemActions(::resetSettings, ::checkForUpdates, ::showAbout)
     }
 }

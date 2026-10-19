@@ -66,11 +66,15 @@ import com.example.normpix.finance.domain.FinanceValidationException
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.RecurrenceFrequency
 import com.example.normpix.finance.domain.RecurringRule
+import com.example.normpix.finance.domain.RepeatEnd
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.dueOccurrences
 import com.example.normpix.finance.domain.firstOccurrenceAfter
 import com.example.normpix.finance.domain.minorToInputText
+import com.example.normpix.finance.domain.notBefore
 import com.example.normpix.finance.domain.parseMinorUnits
+import com.example.normpix.finance.domain.recurrenceStep
+import com.example.normpix.finance.domain.resolve
 import com.example.normpix.finance.domain.startOfDay
 import com.example.normpix.finance.domain.upcomingOccurrences
 import com.example.normpix.ui.components.AppLoadingState
@@ -150,11 +154,12 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
     var frequency by remember { mutableStateOf(existing?.frequency ?: RecurrenceFrequency.Monthly) }
     var interval by remember { mutableStateOf(existing?.interval ?: 1) }
     var start by remember { mutableStateOf(existing?.startDate ?: startOfDay(LocalDateTime.now())) }
-    var end by remember { mutableStateOf(existing?.endDate) }
+    // How it stops. A rule keeps only the day of its last payment, so a saved one reads back as "On a date" (the form then says
+    // how many payments that is); "After 12 payments" is worked out into that day when the rule is saved.
+    var ends by remember { mutableStateOf(RepeatEnd.of(existing?.endDate)) }
     var active by remember { mutableStateOf(existing?.active ?: true) }
     var saving by remember { mutableStateOf(false) }
     var pickingStart by remember { mutableStateOf(false) }
-    var pickingEnd by remember { mutableStateOf(false) }
 
     var amountError by remember { mutableStateOf<String?>(null) }
     var categoryError by remember { mutableStateOf<String?>(null) }
@@ -164,7 +169,7 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
     val isTransfer = type == TransactionType.Transfer
     val role = type.role()
 
-    fun snapshot() = listOf(type, amount, payee, note, categoryId, accountId, toAccountId, frequency, interval, start, end, active, personId)
+    fun snapshot() = listOf(type, amount, payee, note, categoryId, accountId, toAccountId, frequency, interval, start, ends, active, personId)
         .joinToString("|")
     val initialSnapshot = remember { snapshot() }
     val dirty = snapshot() != initialSnapshot
@@ -207,7 +212,7 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
             frequency = frequency,
             interval = interval,
             startDate = start,
-            endDate = end,
+            endDate = ends.resolve(start, recurrenceStep(start, frequency, interval)),
             nextDate = start,
             active = active,
             createdAt = existing?.createdAt ?: now,
@@ -302,6 +307,7 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
     LaunchedEffect(Unit) { if (!isEditing) runCatching { amountFocus.requestFocus() } }
     val reduced = rememberReducedMotion()
     val frequencies = remember { RecurrenceFrequency.entries.map { ChoiceOption(it, it.label, it.icon) } }
+    val step = remember(start, frequency, interval) { recurrenceStep(start, frequency, interval) }
 
     EditorSheet(
         title = if (isEditing) "Edit recurring" else "New recurring",
@@ -448,20 +454,10 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
             },
         )
         Spacer(Modifier.height(AppSpacing.lg))
-        // First and last payment read as one connected pair once there is an end date.
-        PickerFieldRow(
-            first = PickerField(if (isEditing) "Schedule starts" else "First payment", shortDate(start)) { pickingStart = true },
-            second = end?.let { endDate -> PickerField("Last payment by", shortDate(endDate)) { pickingEnd = true } },
-        )
+        PickerFieldRow(PickerField(if (isEditing) "Schedule starts" else "First payment", shortDate(start)) { pickingStart = true })
+        Spacer(Modifier.height(AppSpacing.lg))
+        RepeatEndField(ends = ends, onChange = { ends = it }, start = start, next = step, noun = PaymentNoun)
         Spacer(Modifier.height(AppSpacing.sm))
-        SwitchRow(
-            title = "Has an end date",
-            checked = end != null,
-            onChange = { on ->
-                haptics.selection()
-                end = if (on) startOfDay(start.plusDays(365)) else null
-            },
-        )
         if (isEditing) {
             SwitchRow(
                 title = "Active",
@@ -499,20 +495,10 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
             onPicked = { date ->
                 pickingStart = false
                 start = date.atStartOfDay()
-                end?.let { if (it.isBefore(start)) end = start }
+                // An end can't come before the first payment.
+                ends = ends.notBefore(date)
             },
             onDismiss = { pickingStart = false },
-        )
-    }
-    if (pickingEnd) {
-        DatePickerDialogFor(
-            initial = (end ?: start.plusDays(365)).toLocalDate(),
-            onPicked = { date ->
-                pickingEnd = false
-                end = date.atStartOfDay()
-            },
-            onDismiss = { pickingEnd = false },
-            yearsAhead = 50,
         )
     }
 }

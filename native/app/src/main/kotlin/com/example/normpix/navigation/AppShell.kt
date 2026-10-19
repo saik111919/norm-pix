@@ -1,11 +1,14 @@
 package com.example.normpix.navigation
 
+import androidx.activity.BackEventCompat
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -32,6 +35,7 @@ import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Text
@@ -42,13 +46,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -90,6 +98,7 @@ import com.example.normpix.ui.theme.rememberWindowSize
 import com.example.normpix.wallet.rememberCardFlows
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 val AppDestination.icon: ImageVector
@@ -108,15 +117,11 @@ val AppDestination.selectedIcon: ImageVector
         AppDestination.Wallet -> AppIcons.WalletFilled
     }
 
-/** How far the content shrinks and dims at the end of a back gesture: a hint of recession, not a zoom. */
-private const val BACK_SCALE = 0.05f
-private const val BACK_DIM = 0.25f
-
-/** How far into the back gesture (0..1) the previewed content's corners are fully round. */
-private const val BACK_CORNERS_BY = 0.25f
-
-/** The shadow under the previewed content at the end of the gesture. */
+/** The shadow under the tab the back gesture is moving, at the end of the gesture. */
 private val BACK_LIFT = 8.dp
+
+/** How long a committed back gesture takes to finish the tab's close, from wherever the finger let go. */
+private const val BACK_FINISH_MS = 160
 
 /**
  * The app frame: the top-level destinations with a floating navigation bar on
@@ -158,8 +163,17 @@ fun AppShell(
     // The gesture tracks the system predictive-back progress and scales the content back slightly;
     // releasing early animates back to rest without navigating.
     val tabHistory = remember { mutableStateListOf(shell.selected) }
-    val backProgress = remember { Animatable(0f) }
+    // The back gesture as the tabs draw it (see TabBackPreview): the tab being left moves as the user's page style closes a
+    // page, scrubbed by the finger, over the tab it goes back to.
+    val backPreview = remember { TabBackPreview() }
     val backSettle = tween<Float>(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.standard)
+    val backFinish = tween<Float>(AppMotion.duration(BACK_FINISH_MS), easing = AppMotion.standard)
+    // The ease back to rest after a gesture is let go early, so a new gesture can stop it.
+    val backSettling = remember { arrayOfNulls<Job>(1) }
+    // True from a committed gesture until the tab it went back to has taken over; a gesture started then is let go by.
+    var backFinishing by remember { mutableStateOf(false) }
+    // True for the moment of the switch a committed gesture makes: that tab is already there, whole, so it does not arrive again.
+    var tabHandoff by remember { mutableStateOf(false) }
 
     // Inside Plans back steps up first - section to Budgets, then to the transaction history - and only then
     // falls back to the previous tab. The steps live on ShellState so the rule has one definition.
@@ -173,21 +187,55 @@ fun AppShell(
     val handlesBack = canClimbWithinTab() || hasHistory
 
     PredictiveBackHandler(enabled = handlesBack) { progress ->
+        if (backFinishing) {
+            progress.collect { }
+            return@PredictiveBackHandler
+        }
+        backSettling[0]?.cancel()
+        val toPreviousTab = !canClimbWithinTab() && hasHistory
+        backPreview.target = if (toPreviousTab) tabHistory[tabHistory.lastIndex - 1] else TabBackPreview.NO_TAB
+        fun easeBackToRest() {
+            backSettling[0] = scope.launch {
+                animate(backPreview.progress, 0f, animationSpec = backSettle) { value, _ -> backPreview.progress = value }
+                backPreview.target = TabBackPreview.NO_TAB
+            }
+        }
         try {
             progress.collect { backEvent ->
-                backProgress.snapTo(backEvent.progress)
+                backPreview.direction = BackPreview.directionOf(backEvent.swipeEdge == BackEventCompat.EDGE_RIGHT)
+                backPreview.progress = backEvent.progress
             }
-            // Gesture completed: carry out the navigation, while the content eases back to full size under it.
-            scope.launch { backProgress.animateTo(0f, backSettle) }
-            if (canClimbWithinTab()) {
+            // Gesture completed.
+            if (toPreviousTab) {
+                // The close is finished from where the finger let go, and the switch is made when the tab is gone: the tab
+                // it returns to is already on screen, whole, so it is switched to without arriving - nothing flashes.
+                backFinishing = true
+                scope.launch {
+                    try {
+                        animate(backPreview.progress, 1f, animationSpec = backFinish) { value, _ -> backPreview.progress = value }
+                        tabHandoff = true
+                        Snapshot.withMutableSnapshot {
+                            tabHistory.removeAt(tabHistory.lastIndex)
+                            shell.selected = tabHistory.last()
+                            backPreview.target = TabBackPreview.NO_TAB
+                            backPreview.progress = 0f
+                        }
+                        // Two frames: the one that draws the switch, and the one after it.
+                        withFrameNanos { }
+                        withFrameNanos { }
+                    } finally {
+                        tabHandoff = false
+                        backFinishing = false
+                    }
+                }
+            } else {
+                // A step up inside the tab: its content eases back to full size while the section changes under it.
                 climbWithinTab()
-            } else if (hasHistory) {
-                tabHistory.removeAt(tabHistory.lastIndex)
-                shell.selected = tabHistory.last()
+                easeBackToRest()
             }
         } catch (_: CancellationException) {
             // Finger dragged back to the edge and released: the content eases back to rest instead of jumping.
-            scope.launch { backProgress.animateTo(0f, backSettle) }
+            easeBackToRest()
         }
     }
 
@@ -382,32 +430,18 @@ fun AppShell(
 
     val tabs: @Composable (Modifier) -> Unit = { tabModifier ->
         Box(
+            // The back gesture's preview is drawn by the tabs themselves (see TabHost): the tab being left over the one it returns to.
             modifier = tabModifier
                 .fillMaxSize()
-                .nestedScroll(barScroll.connection)
-                .graphicsLayer {
-                    // Back gesture feedback: the content is previewed as a window, in the chosen style - it shrinks
-                    // (towards where that style closes a page) and dims as you pull, its corners rounding and a shadow
-                    // lifting it off the background, as a pushed page's do.
-                    val progress = backProgress.value
-                    val scale = 1f - progress * BACK_SCALE
-                    scaleX = scale
-                    scaleY = scale
-                    alpha = 1f - progress * BACK_DIM
-                    transformOrigin = TabMotion.origin(pageAnimation)
-                    val corner = PageCornerRadius.toPx() * (progress / BACK_CORNERS_BY).coerceAtMost(1f)
-                    clip = corner > 0f
-                    shape = if (corner > 0f) RoundedCornerShape(corner) else RectangleShape
-                    shadowElevation = progress * BACK_LIFT.toPx()
-                },
+                .nestedScroll(barScroll.connection),
         ) {
             if (visited.contains(0)) {
-                TabHost(visible = current == AppDestination.Home, enterOffset = enterOffset, animateArrival = shellSettled) {
+                TabHost(visible = current == AppDestination.Home, enterOffset = enterOffset, animateArrival = shellSettled && !tabHandoff, back = backPreview, ordinal = 0) {
                     HomeScreen(listState = listStates[0])
                 }
             }
             if (visited.contains(1)) {
-                TabHost(visible = current == AppDestination.PlansAndTransactions, enterOffset = enterOffset, animateArrival = shellSettled) {
+                TabHost(visible = current == AppDestination.PlansAndTransactions, enterOffset = enterOffset, animateArrival = shellSettled && !tabHandoff, back = backPreview, ordinal = 1) {
                     PlansAndTransactionsScreen(
                         transactionsListState = listStates[1],
                         plansListState = plansListState,
@@ -415,12 +449,12 @@ fun AppShell(
                 }
             }
             if (visited.contains(2)) {
-                TabHost(visible = current == AppDestination.Insights, enterOffset = enterOffset, animateArrival = shellSettled) {
+                TabHost(visible = current == AppDestination.Insights, enterOffset = enterOffset, animateArrival = shellSettled && !tabHandoff, back = backPreview, ordinal = 2) {
                     InsightsScreen(listState = listStates[2])
                 }
             }
             if (visited.contains(3)) {
-                TabHost(visible = current == AppDestination.Wallet, enterOffset = enterOffset, animateArrival = shellSettled) {
+                TabHost(visible = current == AppDestination.Wallet, enterOffset = enterOffset, animateArrival = shellSettled && !tabHandoff, back = backPreview, ordinal = 3) {
                     WalletScreen(listState = listStates[3])
                 }
             }

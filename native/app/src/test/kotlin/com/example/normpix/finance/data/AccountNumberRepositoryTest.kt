@@ -49,7 +49,10 @@ class AccountNumberRepositoryTest {
         kind: AccountKind = AccountKind.Bank,
         numberEnding: String? = null,
         cardId: String? = null,
-    ): Account = repo.saveAccount(Account(name = name, kind = kind, numberEnding = numberEnding, cardId = cardId, createdAt = now, updatedAt = now))
+        numberStart: String? = null,
+    ): Account = repo.saveAccount(
+        Account(name = name, kind = kind, numberEnding = numberEnding, numberStart = numberStart, cardId = cardId, createdAt = now, updatedAt = now),
+    )
 
     private suspend fun stored(id: Long?): Account = repo.accounts().first { it.id == id }
 
@@ -164,6 +167,90 @@ class AccountNumberRepositoryTest {
         assertNull(read.snapshot)
         assertTrue(read.errors.any { "4 digits" in it }, read.errors.toString())
     }
+    // ----- the start of a card's number (its first six digits) -----
+
+    @Test
+    fun `a card keeps the first six digits of its number beside the last four`() = runBlocking<Unit> {
+        val card = save("HDFC Credit", AccountKind.Card, numberEnding = "1111", numberStart = "411111")
+        assertEquals("411111", stored(card.id).numberStart)
+        assertEquals("1111", stored(card.id).numberEnding)
+
+        // It is optional, and saving again without it clears it.
+        val plain = save("Plain card", AccountKind.Card, numberEnding = "4455")
+        assertNull(stored(plain.id).numberStart)
+        repo.saveAccount(stored(card.id).copy(numberStart = null))
+        assertNull(stored(card.id).numberStart)
+        assertEquals("1111", stored(card.id).numberEnding)
+    }
+
+    @Test
+    fun `the start is six digits or nothing`() = runBlocking<Unit> {
+        for (bad in listOf("41111", "4111111", "41 111", "abcdef", "41111x", "٤١١١١١")) {
+            val e = assertFailsWith<FinanceValidationException>(bad) { save("Card", AccountKind.Card, numberStart = bad) }
+            assertTrue("first 6 digits" in e.message.orEmpty(), e.message)
+        }
+        assertTrue(repo.accounts().none { it.name == "Card" })
+
+        // Blank is no start; spaces around six digits are trimmed.
+        assertNull(stored(save("Blank", AccountKind.Card, numberStart = "  ").id).numberStart)
+        assertEquals("004200", stored(save("Padded", AccountKind.Card, numberStart = " 004200 ").id).numberStart)
+    }
+
+    @Test
+    fun `cash has no number start either`() = runBlocking<Unit> {
+        val cash = save("Wallet cash", AccountKind.Cash, numberStart = "411111")
+        assertNull(stored(cash.id).numberStart)
+
+        val bank = save("Bank", numberStart = "411111")
+        repo.saveAccount(stored(bank.id).copy(kind = AccountKind.Cash))
+        assertNull(stored(bank.id).numberStart)
+    }
+
+    @Test
+    fun `a backup carries the start, and an older backup without it still restores`() = runBlocking<Unit> {
+        save("HDFC Credit", AccountKind.Card, numberEnding = "1111", numberStart = "411111")
+        save("HDFC Salary", numberEnding = "3588")
+        val text = FinanceBackupCodec.encode(repo.snapshot(), now)
+        val read = FinanceBackupCodec.decode(text)
+        val snapshot = assertNotNull(read.snapshot, read.errors.toString())
+        assertEquals("411111", snapshot.accounts.first { it.name == "HDFC Credit" }.numberStart)
+        assertNull(snapshot.accounts.first { it.name == "HDFC Salary" }.numberStart)
+
+        repo.restore(snapshot)
+        assertEquals("411111", repo.accounts().first { it.name == "HDFC Credit" }.numberStart)
+        assertEquals("1111", repo.accounts().first { it.name == "HDFC Credit" }.numberEnding)
+
+        // A backup from before the start existed has no such field at all.
+        val older = text.replace(Regex(",\\s*\"numberStart\": [^,\\n}]+"), "")
+        assertTrue("numberStart" !in older, "the field is gone from the older file")
+        val olderSnapshot = assertNotNull(FinanceBackupCodec.decode(older).snapshot)
+        val card = olderSnapshot.accounts.first { it.name == "HDFC Credit" }
+        assertNull(card.numberStart)
+        assertEquals("1111", card.numberEnding)
+        repo.restore(olderSnapshot)
+        assertNull(repo.accounts().first { it.name == "HDFC Credit" }.numberStart)
+        assertEquals("1111", repo.accounts().first { it.name == "HDFC Credit" }.numberEnding)
+    }
+
+    @Test
+    fun `a backup with a start that is not six digits, or on cash, is rejected`() = runBlocking<Unit> {
+        val card = save("HDFC Credit", AccountKind.Card, numberEnding = "1111", numberStart = "411111")
+        val cash = save("Cash", AccountKind.Cash)
+        val snapshot = repo.snapshot()
+
+        fun problems(change: (Account) -> Account) =
+            FinanceBackupCodec.validate(snapshot.copy(accounts = snapshot.accounts.map { if (it.id == card.id || it.id == cash.id) change(it) else it }))
+
+        assertTrue(problems { if (it.id == card.id) it.copy(numberStart = "4111") else it }.any { "6 digits" in it })
+        assertTrue(problems { if (it.id == cash.id) it.copy(numberStart = "411111") else it }.any { "cash" in it })
+        assertTrue(FinanceBackupCodec.validate(snapshot).isEmpty())
+
+        val text = FinanceBackupCodec.encode(snapshot, now).replace("\"numberStart\": \"411111\"", "\"numberStart\": \"41x111\"")
+        val read = FinanceBackupCodec.decode(text)
+        assertNull(read.snapshot)
+        assertTrue(read.errors.any { "6 digits" in it }, read.errors.toString())
+    }
+
 }
 
 /**
@@ -186,6 +273,36 @@ class AccountNumberMigrationTest {
                   opening_balance INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0,
                   sort_order INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
                   bank_key TEXT, credit_limit INTEGER, statement_day INTEGER, due_day INTEGER
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE categories (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
+                  type TEXT NOT NULL CHECK (type IN ('expense', 'income')), icon TEXT NOT NULL,
+                  color INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0,
+                  sort_order INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+                  parent_id INTEGER REFERENCES categories(id)
+                )
+                """.trimIndent(),
+            )
+        }
+
+        override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    }
+
+    /** The version 11 schema: account numbers (ending and card) but not yet the number's start. */
+    private class VersionEleven(context: Context, name: String) : SQLiteOpenHelper(context, name, null, 11) {
+        override fun onCreate(db: SQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE accounts (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, kind TEXT NOT NULL,
+                  opening_balance INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0,
+                  sort_order INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+                  bank_key TEXT, credit_limit INTEGER, statement_day INTEGER, due_day INTEGER,
+                  number_ending TEXT, card_id TEXT
                 )
                 """.trimIndent(),
             )
@@ -251,6 +368,67 @@ class AccountNumberMigrationTest {
             )
         } finally {
             upgraded.close()
+        }
+    }
+
+    @Test
+    fun `from version 11 the account keeps its ending and card, and gains an empty start`() = runBlocking<Unit> {
+        VersionEleven(context, dbName).use { helper ->
+            helper.writableDatabase.apply {
+                insertOrThrow(
+                    "accounts",
+                    null,
+                    ContentValues().apply {
+                        put("name", "ICICI Credit Card"); put("kind", "card"); put("opening_balance", 0)
+                        put("created_at", at); put("updated_at", at); put("number_ending", "4455"); put("card_id", "wallet-1")
+                    },
+                )
+                version = 11
+            }
+        }
+        val repo = FinanceRepository(FinanceDatabase(context, name = dbName), dispatcher = Dispatchers.Unconfined)
+        try {
+            val card = repo.accounts().single()
+            assertEquals("4455", card.numberEnding)
+            assertEquals("wallet-1", card.cardId)
+            assertNull(card.numberStart)
+            repo.saveAccount(card.copy(numberStart = "652850"))
+            assertEquals("652850", repo.accounts().single().numberStart)
+        } finally {
+            repo.close()
+        }
+    }
+
+    @Test
+    fun `upgrading adds the number start column, empty for every account`() {
+        seedVersionNine()
+        val upgraded = FinanceDatabase(context, name = dbName)
+        try {
+            assertTrue(FinanceDatabase.VERSION >= 12, "the start column arrived with version 12")
+            val db = upgraded.writableDatabase
+            val starts = db.rawQuery("SELECT number_start FROM accounts ORDER BY id", null).use { c ->
+                buildList { while (c.moveToNext()) add(c.isNull(0)) }
+            }
+            assertEquals(listOf(true, true), starts)
+        } finally {
+            upgraded.close()
+        }
+    }
+
+    @Test
+    fun `a card account on the upgraded database can be given its start`() = runBlocking<Unit> {
+        seedVersionNine()
+        val repo = FinanceRepository(FinanceDatabase(context, name = dbName), dispatcher = Dispatchers.Unconfined)
+        try {
+            val card = repo.accounts().first { it.name == "ICICI Credit Card" }
+            assertNull(card.numberStart)
+            repo.saveAccount(card.copy(numberStart = "411111", numberEnding = "1111"))
+            val saved = repo.accounts().first { it.name == "ICICI Credit Card" }
+            assertEquals("411111", saved.numberStart)
+            assertEquals("1111", saved.numberEnding)
+            assertEquals(5, saved.statementDay)
+        } finally {
+            repo.close()
         }
     }
 
