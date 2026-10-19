@@ -293,6 +293,81 @@ object PhoneReceipts {
         line("Start SIP", 720, 2216, 880, 2246),
     )
 
+    /**
+     * PhonePe's Share of a ₹100 payment to a shop (1080 x 1458), the ₹ put back: the name runs over three lines, the avatar's
+     * initials sit beside the middle one and the ₹100 is at the right of the first; the account is a RuPay credit card on UPI,
+     * shown by its first six and last two digits. The shop and what is printed of it are as they were; the handle and ids are
+     * stand-ins of the same shape.
+     */
+    val phonePeShop = listOf(
+        line("Powered by", 441, 1297, 640, 1336),
+        line("Transaction Successful", 218, 40, 742, 84),
+        line("10:33 pm on 15 Oct 2026", 216, 96, 640, 132),
+        line("Paid to", 73, 236, 219, 276),
+        line("SRI LAKSHMI NARAYANA", 241, 308, 817, 349),
+        line("₹100", 897, 308, 1007, 349),
+        line("SS", 105, 372, 160, 408),
+        line("MEDICAL AND GENERAL", 241, 366, 806, 407),
+        line("STORES", 241, 424, 427, 465),
+        line("paytmqr0test01@ptys", 241, 492, 645, 532),
+        line("Transfer Details", 193, 650, 504, 690),
+        line("PhonePe Transaction ID", 73, 757, 479, 791),
+        line("T2610152233000000000003", 73, 822, 647, 859),
+        line("Debited from", 73, 918, 293, 953),
+        line("356188XXXXXXXX56", 241, 1000, 727, 1043),
+        line("₹100", 902, 1000, 1007, 1043),
+        line("UTR: 324900000001", 241, 1100, 673, 1142),
+        line("UPI AXIS BANK", 480, 1362, 692, 1392),
+    )
+
+    /**
+     * Paytm's Share of a ₹74 payment (912 x 1716): the green tick beside the amount is not text, the payer's message "Auto" has
+     * a speech bubble before it, the amount is spelled out under the figure, and the user's own UPI id is partly hidden above
+     * their bank and its last four digits. The people, the handles and the ids are stand-ins of the same shape.
+     */
+    val paytmAuto = listOf(
+        line("UPI Ref No: 611500000001", 106, 1383, 568, 1420),
+        line("Paid Successfully", 243, 316, 671, 360),
+        line("₹74", 335, 420, 480, 485),
+        line("Rupees Seventy Four Only", 246, 538, 668, 572),
+        line("Auto", 453, 633, 532, 672),
+        line("To: Mohan Yadav", 106, 920, 453, 962),
+        line("UPI ID: paytm.s0a1bcd@pty", 106, 990, 584, 1028),
+        line("From: Account Holder", 106, 1156, 570, 1198),
+        line("UPI ID: ******0000@ptyes", 106, 1220, 521, 1258),
+        line("HDFC Bank - 1234", 106, 1272, 403, 1306),
+        line("02:25 PM, 04 Aug 2026", 106, 1445, 483, 1480),
+        line("paytm", 253, 1643, 328, 1668),
+        line("Powered by UPI", 340, 1645, 535, 1668),
+        line("YES BANK", 546, 1645, 656, 1668),
+    )
+
+    /**
+     * Kredit.Pe's Share of a ₹150 payment (1072 x 1600): white on black, the amount alone at the top, the date with no year, the
+     * payee in capitals, the user only by a partly hidden UPI id, and an advertisement at the foot. The handles and ids are
+     * stand-ins of the same shape.
+     */
+    val kreditPeBells = listOf(
+        line("Earn 3% cashback on UPI payments", 197, 1432, 875, 1470),
+        line("₹150", 120, 188, 270, 240),
+        line("Paid successfully", 120, 280, 488, 325),
+        line("Oct 07, 1:25 PM", 120, 355, 404, 392),
+        line("To: BELLS AND PEPPERS", 120, 515, 712, 560),
+        line("UPI ID: paytmqr0test02@paytm", 120, 582, 789, 625),
+        line("From", 120, 742, 214, 778),
+        line("UPI ID: xxxxxx7777-1@kphdfc", 120, 800, 697, 840),
+        line("UPI Transaction ID", 120, 958, 469, 998),
+        line("628000000001", 120, 1022, 447, 1064),
+        line("Paid with", 459, 1304, 612, 1338),
+        line("Kredit.Pe", 470, 1362, 672, 1408),
+    )
+
     /** [lines] with [text] read [asRead] instead: how a line came out before the ₹ was put back. */
     fun raw(lines: List<PictureLine>, text: String, asRead: String) = lines.map { if (it.text == text) it.copy(text = asRead) else it }
+
+    /** [lines] with only the [nth] one (from 0) whose text is [text] read [asRead]: one of two figures printed alike. */
+    fun rawNth(lines: List<PictureLine>, text: String, nth: Int, asRead: String): List<PictureLine> {
+        var seen = -1
+        return lines.map { if (it.text == text && ++seen == nth) it.copy(text = asRead) else it }
+    }
 }

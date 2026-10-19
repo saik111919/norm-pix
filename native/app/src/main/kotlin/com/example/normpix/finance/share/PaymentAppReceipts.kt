@@ -181,9 +181,10 @@ private val bareYear = Regex("""(?:19|20)\d\d""")
 
 /**
  * What a green tick or an info badge beside a figure comes out as when the recognizer runs it into the figure's line:
- * "₹74 ©", "₹74 @", "₹74 O".
+ * "₹74 ©", "774 @" - marks no figure has - or, as a letter, "₹74 O".
  */
-private val badgeTail = Regex("""(?:\s*[©®@✓✔√]+|\s+[Oo0Q])$""")
+private val badgeMark = Regex("""\s*[©®@✓✔√]+$""")
+private val badgeLetter = Regex("""\s+[Oo0Q]$""")
 
 /** Longest whole part taken as an amount: a figure of more digits is an id, not an amount. */
 private const val MAX_FIGURE_DIGITS = 7
@@ -192,13 +193,16 @@ private const val MAX_FIGURE_DIGITS = 7
  * [piece] as one sighting of an amount, or null when it isn't just a figure. Rupee amounts have two decimals at most,
  * so a last group of one or two digits is the paise, whatever separates it ("45.50", "45,50", "45 50"); a last group of
  * three is thousands ("1,250", "1.250", "1 250"). The whole part may be grouped the Indian way or the international one.
- * A badge the recognizer ran into the figure's line ("₹74 ©") is left off, but only from a figure with a ₹ in front.
+ * A badge the recognizer ran into the figure's line is left off: a tick's mark ("774 ©") from any figure, a letter it made
+ * of the tick ("₹74 O") only from one with a ₹ in front, since "45 0" could be a figure.
  */
 internal fun amountSighting(piece: String): AmountSighting? {
     val text = SharedTransactionParser.normalize(piece).trim()
     figureIn(text)?.let { return it }
-    val bare = text.replace(badgeTail, "")
-    return if (bare != text) figureIn(bare)?.takeIf { it.marked } else null
+    val withoutMark = text.replace(badgeMark, "")
+    if (withoutMark != text) figureIn(withoutMark)?.let { return it }
+    val withoutLetter = withoutMark.replace(badgeLetter, "")
+    return if (withoutLetter != withoutMark) figureIn(withoutLetter)?.takeIf { it.marked } else null
 }
 
 private fun figureIn(text: String): AmountSighting? {
@@ -373,24 +377,34 @@ internal fun ReceiptLayout.nameBelow(heading: Int, reach: Int, rupeePrinted: Boo
             if (amount != null && rest.isEmpty() && alone == null) alone = amount
             continue
         }
-        var name = partyName(rest[at])!!
+        val name = partyName(rest[at])!!
         val first = row.cells.getOrNull(at)
-        if (placed && first != null) {
-            var last: PictureLine = first
-            for (next in below.drop(i + 1)) {
-                // An avatar's initials on a row of their own, left of the name: passed over - as letters, or as whatever they were read as.
-                val pieces = next.cells.filterNot { it.right <= first.left && (initials.matches(it.text.trim()) || it.text.trim().length <= 3) }
-                if (pieces.isEmpty()) continue
-                val more = pieces.singleOrNull() ?: break
-                val aligned = kotlin.math.abs(more.left - first.left) <= first.height && more.top - last.bottom <= first.height
-                val words = nameIn(more.text)?.takeIf { aligned && (name + " " + it).length <= MAX_NAME } ?: break
-                name = "$name $words"
-                last = more
-            }
-        }
-        return NamedRow(name, amount ?: alone)
+        return NamedRow(if (first != null) runOn(name, first, below.drop(i + 1)) else name, amount ?: alone)
     }
     return NamedRow(null, alone)
+}
+
+/**
+ * [name], printed at [first], with what the receipt runs it on to: the rows [below] it, directly under it and starting where
+ * it starts, as long as they are a name's words ("UBER INDIA SYSTEMS PRIVATE" over "LIMITED"). An avatar's initials on a row of
+ * their own, left of the name, are passed over, as letters or as whatever they were read as. Needs the places of the pieces.
+ */
+internal fun ReceiptLayout.runOn(name: String, first: PictureLine, below: List<ReceiptRow>): String {
+    if (!placed) return name
+    var joined = name
+    var last = first
+    for (next in below) {
+        val pieces = next.cells.filterNot { it.right <= first.left && (initials.matches(it.text.trim()) || it.text.trim().length <= 3) }
+        if (pieces.isEmpty()) continue
+        val more = pieces.singleOrNull() ?: break
+        val aligned = kotlin.math.abs(more.left - first.left) <= first.height && more.top - last.bottom <= first.height
+        // A label ("From") under the name is the next part of the receipt, not the rest of the name.
+        if (ReceiptWords.all.any { it.after(more.text) != null }) break
+        val words = nameIn(more.text)?.takeIf { aligned && (joined + " " + it).length <= MAX_NAME } ?: break
+        joined = "$joined $words"
+        last = more
+    }
+    return joined
 }
 
 private const val MAX_NAME = 60

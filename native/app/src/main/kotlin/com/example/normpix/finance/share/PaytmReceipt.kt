@@ -66,6 +66,13 @@ internal object PaytmReceipt : PaymentAppReceipt {
         }
     }
 
+    /** [side]'s name, with the next line when the receipt ran a long one on to it (see [runOn]). */
+    private fun nameOf(receipt: ReceiptLayout, side: Side?): String? {
+        val name = side?.person ?: return null
+        val beside = side.label.besideCell
+        return if (beside != null && partyName(side.label.beside) == name) receipt.runOn(name, beside, side.rows.take(1)) else name
+    }
+
     private fun sideOf(receipt: ReceiptLayout, found: Labelled?, today: LocalDate): Side? {
         found ?: return null
         val rows = receipt.rows.drop(found.at + 1).take(SIDE_REACH)
@@ -111,7 +118,7 @@ internal object PaytmReceipt : PaymentAppReceipt {
             type = type,
             kind = kindOf(type),
             status = status,
-            counterparty = other?.person?.let(::tidyName),
+            counterparty = nameOf(receipt, other)?.let(::tidyName),
             date = date.date,
             time = date.time,
             dateUnreadable = date.unreadable,
@@ -119,26 +126,36 @@ internal object PaytmReceipt : PaymentAppReceipt {
             instrument = SharedTransactionParser.instrument(accountText, masks),
             maskedNumbers = masks,
             accountText = accountText,
-            message = if (amountAt >= 0) messageBelow(receipt, amountAt, firstSide, ledger) else null,
+            message = messageBelow(receipt, firstSide, ledger),
         )
     }
 
     /**
-     * What the payer wrote: the row(s) between the amount (and the words under it) and the first side. The speech-bubble
-     * icon before it is read as a letter or a mark, so a piece of fewer than two letters is not part of it.
+     * What the payer wrote: the row(s) between the status, the amount and the words under it - whichever of them is read, the
+     * last of them - and the first side. The speech-bubble icon before it is read as a letter or a mark, so a piece of fewer
+     * than two letters is not part of it.
      */
-    private fun messageBelow(receipt: ReceiptLayout, amountAt: Int, firstSide: Int, ledger: CurrencySpec): String? {
-        val rows = receipt.rows.subList(amountAt + 1, maxOf(amountAt + 1, firstSide))
-            .filter { row -> row.cells.none { amountSighting(it.text) != null } && AmountWords.parse(row.text, ledger.decimals) == null }
-            .filterNot { row -> inWordsShape.containsMatchIn(row.text) }
-            .filter { row -> ReceiptLayout(listOf(row)).status() == SharedStatus.Unknown && !row.isLabel() }
-        val text = rows.take(MESSAGE_ROWS).mapNotNull { row ->
-            row.cells.map { it.text.trim() }.filter { it.count(Char::isLetterOrDigit) >= 2 }.joinToString(" ").takeIf { it.isNotEmpty() }
+    private fun messageBelow(receipt: ReceiptLayout, firstSide: Int, ledger: CurrencySpec): String? {
+        val head = receipt.rows.take(firstSide)
+        fun isAmount(row: ReceiptRow) = row.cells.any { amountSighting(it.text) != null } || AmountWords.parse(row.text, ledger.decimals) != null ||
+            inWordsShape.containsMatchIn(row.text)
+        fun isStatus(row: ReceiptRow) = row.has(paidTitle) || row.has(receivedTitle) || ReceiptLayout(listOf(row)).status() != SharedStatus.Unknown
+        val anchor = head.indexOfLast { isAmount(it) || isStatus(it) }
+        if (anchor < 0) return null
+        val text = head.drop(anchor + 1).take(MESSAGE_ROWS).mapNotNull { row ->
+            row.cells.map { bubbleIcon.replaceFirst(it.text.trim(), "") }.filter { it.count(Char::isLetterOrDigit) >= 2 }
+                .joinToString(" ").takeIf { it.isNotEmpty() }
         }.joinToString(" ")
         return text.takeIf { it.length in 2..MAX_MESSAGE && '@' !in it }
     }
 
     private const val MAX_MESSAGE = 60
+
+    /**
+     * The speech-bubble icon when the recognizer ran it into the message's cell: one letter or mark, then a space ("Q Auto").
+     * "A" and "I" are left alone, as they can be the message's own first word ("A gift").
+     */
+    private val bubbleIcon = Regex("""^(?![AI]\s)[^\s\d]\s+(?=\S)""")
 
     /** The amount in words as the row says it, however the recognizer spelled the words: not the payer's message. */
     private val inWordsShape = Regex("""(?i)^\W*rupees?\b|\bonly\W*$""")

@@ -6,6 +6,7 @@ import com.example.normpix.finance.share.PhoneReceipts.line
 import com.example.normpix.finance.share.PhoneReceipts.picture
 import java.time.LocalDate
 import java.time.LocalTime
+import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -16,8 +17,16 @@ import kotlin.test.assertSame
 class PhonePeReceiptTest {
     private val today = LocalDate.of(2026, 10, 13)
 
-    private fun read(lines: List<PictureLine>, words: String = ""): ParsedTransactionDraft =
-        assertIs<SharedTextReading.Draft>(PaymentAppReceipts.read(words, picture(lines), CurrencySpec.INR, today)).draft
+    private fun read(lines: List<PictureLine>, words: String = "", on: LocalDate = today): ParsedTransactionDraft =
+        assertIs<SharedTextReading.Draft>(PaymentAppReceipts.read(words, picture(lines), CurrencySpec.INR, on)).draft
+
+    /** The day the shop payment ([PhoneReceipts.phonePeShop]) was read on, four days after it was made. */
+    private val afterShop = LocalDate.of(2026, 10, 19)
+
+    private fun shop(lines: List<PictureLine> = PhoneReceipts.phonePeShop) = read(lines, on = afterShop)
+
+    /** The shop payment's date and time row, as the recognizer read it. */
+    private val shopDate = "10:33 pm on 15 Oct 2026"
 
     @Test
     fun `a real PhonePe receipt of a payment to a business`() {
@@ -160,6 +169,196 @@ class PhonePeReceiptTest {
     fun `the payee's own account number, shown under their name, is not one of the user's`() {
         val toBank = PhoneReceipts.phonePeTen.map { if (it.text == "Q500000001@ybl") it.copy(text = "XXXXXXX9876") else it }
         assertEquals(listOf(MaskedNumber("", "1234")), read(toBank).maskedNumbers)
+    }
+
+    @Test
+    fun `a real PhonePe receipt of a payment to a shop - the date, the amount and the card`() {
+        val d = shop()
+        assertEquals("PhonePe", d.app)
+        assertEquals(TransactionType.Expense, d.type)
+        assertEquals(10_000L, d.amount)
+        assertEquals(emptyList(), d.ambiguousAmounts)
+        // The name is over three lines, with the ₹100 at the right of the first and the avatar's "SS" beside the second.
+        assertEquals("Sri Lakshmi Narayana Medical And General Stores", d.counterparty)
+        assertEquals(SharedStatus.Completed, d.status)
+        assertEquals(LocalDate.of(2026, 10, 15), d.date)
+        assertEquals(LocalTime.of(22, 33), d.time)
+        assertEquals(false, d.dateUnreadable)
+        // The UTR, not the T… id (which is the date again, run together) and not the handle.
+        assertEquals("324900000001", d.reference)
+        // A RuPay credit card on UPI: its first six and last two digits.
+        assertEquals(listOf(MaskedNumber("356188", "56")), d.maskedNumbers)
+        assertEquals("356188XXXXXXXX56", d.accountText)
+    }
+
+    @Test
+    fun `a rupee sign read as a digit is not part of the amount when something else settles it`() {
+        // One of the two places has the ₹, so the other's "7100" is ₹100.
+        assertEquals(10_000L, shop(PhoneReceipts.rawNth(PhoneReceipts.phonePeShop, "₹100", 0, "7100")).amount)
+        assertEquals(10_000L, shop(PhoneReceipts.rawNth(PhoneReceipts.phonePeShop, "₹100", 1, "7100")).amount)
+        // Whichever character the ₹ came out as, in one place or both.
+        for (misread in listOf("Z100", "R100", "*100", "F100", "2100", "7100", "100")) {
+            val one = shop(PhoneReceipts.rawNth(PhoneReceipts.phonePeShop, "₹100", 1, misread))
+            assertEquals(10_000L, one.amount, "second place read as $misread")
+            val first = shop(PhoneReceipts.rawNth(PhoneReceipts.phonePeShop, "₹100", 0, misread))
+            assertEquals(10_000L, first.amount, "first place read as $misread")
+        }
+        assertEquals(10_000L, shop(PhoneReceipts.raw(PhoneReceipts.phonePeShop, "₹100", "Z100")).amount)
+        assertEquals(10_000L, shop(PhoneReceipts.raw(PhoneReceipts.phonePeShop, "₹100", "100")).amount)
+        val twoAndSeven = PhoneReceipts.rawNth(PhoneReceipts.rawNth(PhoneReceipts.phonePeShop, "₹100", 0, "2100"), "₹100", 0, "7100")
+        assertEquals(10_000L, shop(twoAndSeven).amount)
+    }
+
+    @Test
+    fun `both places read the rupee sign as the same digit - no wrong amount is picked`() {
+        // The case behind the wrong number: "7100" twice agrees with itself, and it used to be taken as ₹7,100.
+        // Nothing here says which is right, so the receipt offers both and the person chooses.
+        val d = shop(PhoneReceipts.raw(PhoneReceipts.phonePeShop, "₹100", "7100"))
+        assertNull(d.amount)
+        assertEquals(listOf(10_000L, 710_000L), d.ambiguousAmounts.sorted())
+        // The same with a 2.
+        val twos = shop(PhoneReceipts.raw(PhoneReceipts.phonePeShop, "₹100", "2100"))
+        assertNull(twos.amount)
+        assertEquals(listOf(10_000L, 210_000L), twos.ambiguousAmounts.sorted())
+        // Where the receipt spells the amount out, that settles it (PhonePe doesn't, but another app's screen might be shared with it).
+        val spelled = PhoneReceipts.raw(PhoneReceipts.phonePeShop, "₹100", "7100") + line("Rupees One Hundred Only", 250, 560, 700, 600)
+        assertEquals(10_000L, shop(spelled).amount)
+        // Words that fit neither reading: nothing is chosen, and the figure as read is offered beside what the words say.
+        val other = PhoneReceipts.raw(PhoneReceipts.phonePeShop, "₹100", "7100") + line("Rupees Five Hundred Only", 250, 560, 700, 600)
+        assertNull(shop(other).amount)
+        assertEquals(listOf(50_000L, 710_000L), shop(other).ambiguousAmounts.sorted())
+    }
+
+    @Test
+    fun `an amount that is printed large on a row of its own is still read`() {
+        val alone = PhoneReceipts.phonePeShop.filterNot { it.text == "₹100" && it.top < 400 } + line("₹100", 440, 250, 640, 300)
+        assertEquals(10_000L, shop(alone).amount)
+        assertEquals("Sri Lakshmi Narayana Medical And General Stores", shop(alone).counterparty)
+        // Misread there as well as at the debit line.
+        val both = PhoneReceipts.raw(alone, "₹100", "7100")
+        val d = shop(both)
+        assertNull(d.amount)
+        assertEquals(listOf(10_000L, 710_000L), d.ambiguousAmounts.sorted())
+    }
+
+    @Test
+    fun `the amount run into the name's line, or alone in a block, does not change the name`() {
+        val merged = PhoneReceipts.raw(PhoneReceipts.phonePeShop, "SRI LAKSHMI NARAYANA", "SRI LAKSHMI NARAYANA ₹100")
+            .filterNot { it.text == "₹100" && it.top < 400 }
+            .map { if (it.text == "SRI LAKSHMI NARAYANA ₹100") it.copy(right = 1007) else it }
+        val d = shop(merged)
+        assertEquals("Sri Lakshmi Narayana Medical And General Stores", d.counterparty)
+        assertEquals(10_000L, d.amount)
+        // The same with the ₹ read as a 7 on the name's line.
+        val sevened = merged.map { if (it.text == "SRI LAKSHMI NARAYANA ₹100") it.copy(text = "SRI LAKSHMI NARAYANA 7100") else it }
+        assertEquals(10_000L, shop(sevened).amount)
+        assertEquals("Sri Lakshmi Narayana Medical And General Stores", shop(sevened).counterparty)
+    }
+
+    @Test
+    fun `an avatar's initials read as something else do not cut the name short`() {
+        for (avatar in listOf("55", "S5", "Ss", "5S", "SS.")) {
+            val d = shop(PhoneReceipts.raw(PhoneReceipts.phonePeShop, "SS", avatar))
+            assertEquals("Sri Lakshmi Narayana Medical And General Stores", d.counterparty, "avatar read as $avatar")
+        }
+        // A name that really is two lines stays two lines.
+        assertEquals("Sri Lakshmi Narayana Medical And General", shop(PhoneReceipts.phonePeShop.filterNot { it.text == "STORES" }).counterparty)
+    }
+
+    @Test
+    fun `the date and time survive the usual misreads`() {
+        fun on(printed: String) = shop(PhoneReceipts.raw(PhoneReceipts.phonePeShop, shopDate, printed))
+        for (printed in listOf(
+            "10:33 pm on 15 Oct 2026",
+            "10:33 PM on 15 Oct 2026",
+            "10:33 prn on 15 Oct 2026", // "pm" read with an n
+            "10.33 pm on 15 Oct 2026", // a point for the colon
+            "10:33 pm on I5 Oct 2026", // a 1 read as I
+            "10:33 pm on l5 Oct 2026", // or as l
+            "10:33 pm on 15 0ct 2026", // an O read as a zero
+            "10:33 pm on 15 Oct 2O26", // the year likewise
+            "10:33pm on 15 Oct 2026", // no space
+            "10:33 pm  on  15  Oct  2026",
+        )) {
+            val d = on(printed)
+            assertEquals(LocalDate.of(2026, 10, 15), d.date, printed)
+            assertEquals(LocalTime.of(22, 33), d.time, printed)
+            assertEquals(false, d.dateUnreadable, printed)
+        }
+    }
+
+    @Test
+    fun `a date that cannot be read falls back on the date inside PhonePe's own transaction id`() {
+        // "T" + yymmdd + hhmm + digits: T2610152233… is 2026-10-15 22:33. Used only when the printed date can't be read.
+        val gone = shop(PhoneReceipts.phonePeShop.filterNot { it.text == shopDate })
+        assertEquals(LocalDate.of(2026, 10, 15), gone.date)
+        assertEquals(LocalTime.of(22, 33), gone.time)
+        val garbled = shop(PhoneReceipts.raw(PhoneReceipts.phonePeShop, shopDate, "10:33 pm on 15 Qct 2026"))
+        assertEquals(LocalDate.of(2026, 10, 15), garbled.date)
+        // An id that says a day after today isn't a date the payment can have been made on.
+        val early = read(PhoneReceipts.phonePeShop.filterNot { it.text == shopDate }, on = LocalDate.of(2026, 10, 14))
+        assertNull(early.date)
+        // An id that isn't PhonePe's own shape is never a date: there is none here to read, so none is made up.
+        val noId = shop(PhoneReceipts.phonePeShop.filterNot { it.text == shopDate || it.text.startsWith("T26") })
+        assertNull(noId.date)
+    }
+
+    @Test
+    fun `the status survives a tick read as a letter or a mark`() {
+        for (junk in listOf("©", "@", "Q", "O", "0")) {
+            val d = shop(PhoneReceipts.raw(PhoneReceipts.phonePeShop, "Transaction Successful", "$junk Transaction Successful"))
+            assertEquals(SharedStatus.Completed, d.status, junk)
+        }
+        // And the tick on a row of its own.
+        for (junk in listOf("©", "@")) {
+            val d = shop(PhoneReceipts.phonePeShop + line(junk, 120, 40, 170, 84))
+            assertEquals(SharedStatus.Completed, d.status, junk)
+            assertEquals(10_000L, d.amount, junk)
+        }
+        fun withStatus(status: String) = shop(PhoneReceipts.raw(PhoneReceipts.phonePeShop, "Transaction Successful", status)).status
+        assertEquals(SharedStatus.Failed, withStatus("Transaction Failed"))
+        assertEquals(SharedStatus.Pending, withStatus("Transaction Pending"))
+        assertEquals(SharedStatus.Pending, withStatus("Transaction Processing"))
+        assertEquals(SharedStatus.Completed, withStatus("Payment Successful"))
+    }
+
+    @Test
+    fun `the lines in any order, or the time above the status, read the same`() {
+        val expected = shop()
+        assertEquals(expected, shop(PhoneReceipts.phonePeShop.reversed()))
+        assertEquals(expected, shop(PhoneReceipts.phonePeShop.shuffled(Random(7))))
+        // The time on the row above the status.
+        val swapped = PhoneReceipts.phonePeShop.map {
+            when (it.text) {
+                "Transaction Successful" -> it.copy(top = 96, bottom = 132)
+                shopDate -> it.copy(top = 40, bottom = 84)
+                else -> it
+            }
+        }
+        val d = shop(swapped)
+        assertEquals(SharedStatus.Completed, d.status)
+        assertEquals(LocalDate.of(2026, 10, 15), d.date)
+        assertEquals(LocalTime.of(22, 33), d.time)
+        assertEquals(10_000L, d.amount)
+    }
+
+    @Test
+    fun `a bank's logo read as text among the card's rows is not the card number or the amount`() {
+        val d = shop(PhoneReceipts.phonePeShop + line("SBI", 73, 1000, 190, 1043))
+        assertEquals(10_000L, d.amount)
+        assertEquals(listOf(MaskedNumber("356188", "56")), d.maskedNumbers)
+        assertEquals("Sri Lakshmi Narayana Medical And General Stores", d.counterparty)
+    }
+
+    @Test
+    fun `the payee's handle is not read as the reference or a number, and PhonePe's own id comes after the UTR`() {
+        val d = shop()
+        assertEquals("324900000001", d.reference)
+        // paytmqr…@ptys is a handle: nothing in it is an account number or a date.
+        assertEquals(listOf(MaskedNumber("356188", "56")), d.maskedNumbers)
+        // Without the UTR, PhonePe's own id is the reference; the handle never is.
+        val noUtr = shop(PhoneReceipts.phonePeShop.filterNot { it.text.startsWith("UTR") })
+        assertEquals("T2610152233000000000003", noUtr.reference)
     }
 
     @Test

@@ -46,8 +46,13 @@ internal object KreditPeReceipt : PaymentAppReceipt {
 
         // Only money going out is paid from Kredit.Pe: a "To:" with a name, or the title, says so.
         val payee = to?.let { found ->
-            found.beside.takeIf { it.isNotEmpty() }?.let(::partyName)
-                ?: receipt.rows.getOrNull(found.at + 1)?.text?.let(::partyName)
+            val beside = found.beside.takeIf { it.isNotEmpty() }?.let(::partyName)
+            val below = rows.drop(found.at + 1)
+            when {
+                // The name beside "To:", run on to the next line when it is a long one.
+                beside != null -> found.besideCell?.let { receipt.runOn(beside, it, below.take(1)) } ?: beside
+                else -> below.firstOrNull()?.text?.let(::partyName)
+            }
         }
         val type = if (paid || payee != null) TransactionType.Expense else null
 
