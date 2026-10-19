@@ -119,7 +119,11 @@ internal object GooglePayReceipt : PaymentAppReceipt {
         val repeated = rows.getOrNull(sentenceAt)?.text?.let { sentence.find(it)?.groupValues?.get(1) }?.let(::amountSighting)
         val fileAmount = file?.groupValues?.get(1)?.let(::amountSighting)
         // The file's name is the app's own text: what it says is the amount, whatever the picture was read as.
-        val amount = if (fileAmount != null) SettledAmount(fileAmount.minor(ledger.decimals)) else receipt.settleAmount(listOfNotNull(printed, repeated), ledger.decimals)
+        val amount = if (fileAmount != null) {
+            SettledAmount(fileAmount.minor(ledger.decimals))
+        } else {
+            receipt.settleAmount(listOfNotNull(printed, repeated), ledger.decimals)
+        }
 
         // The user's account: the card below the date, above the sentence and the details.
         val details = listOf(sentenceAt, receipt.indexOf { upiIdLabel.containsMatchIn(it.text) }, toRow, fromRow).filter { it >= 0 }

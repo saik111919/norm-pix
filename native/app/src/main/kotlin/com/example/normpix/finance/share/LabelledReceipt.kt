@@ -41,7 +41,7 @@ internal class LabelledReceipt(
             }
         }
         var party = if (type == TransactionType.Expense) payee else payer
-        // ...a bare "To" / "From" only where the other one is the user's own account (Paytm: "From: State Bank Of India - 1234").
+        // ...a bare "To" / "From" only where the other one is the user's own account (a bank and its last digits: "From: State Bank Of India - 1234").
         val toIsOwn = to?.let { ownAccountWords.containsMatchIn(receipt.valueOf(it)) } == true
         val fromIsOwn = from?.let { ownAccountWords.containsMatchIn(receipt.valueOf(it)) } == true
         if (type == null) {
