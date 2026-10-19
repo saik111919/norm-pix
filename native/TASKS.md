@@ -478,7 +478,8 @@ Asked for (2026-10-14): "When loading an image show proper loading sheet instead
 - [x] One date and time design (Insights' calendar) for every date and time picked in the app: DateSheet / TimeSheet behind the old dialog functions
 - [x] Recurring: always an "Add recurring payment" on the recurring screen; Ends = Never / On a date / After N in the recurring editor, Custom repeat, the transaction editor and reminders (reminders could not end before); nothing read from a bill sets an end
 - [x] Wallet: CVV optional; Save CVV switch (off asks to delete saved CVVs); Store cards switch (off deletes cards, CVVs, NFC tags, expiry reminders and card links, and hides the card UI); card accounts take the full number but keep only the first 6 and last 4 digits (`Account.numberStart`, finance DB 12)
-- [ ] Receipts: Paytm and Kredit.Pe readers, PhonePe's current layout (date, amount), amount in words, matching cards and accounts by first 6 + last digits
+- [x] Receipts: Paytm and Kredit.Pe readers (`PaytmReceipt`, `KreditPeReceipt`), PhonePe's current layout (date, amount), amount in words (`AmountWords`: a misread ₹ is dropped when the words agree), matching cards and accounts by first 6 + last digits (`AccountMatching`). Tests: `PaytmReceiptTest`, `KreditPeReceiptTest`, `PhonePeReceiptTest`, `AmountWordsTest`, `AccountNumberMatchTest`
+- [ ] Not verified on a phone: Paytm and Kredit.Pe are read from the one real screenshot each; other layouts of those apps (money received, a failed payment) are unseen
 - [ ] Checks: CI (tests, lint, release build) on the PR; not tried on a phone
 
 ## Backlog - to come back to
