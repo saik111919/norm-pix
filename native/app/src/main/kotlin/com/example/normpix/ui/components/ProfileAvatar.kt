@@ -26,8 +26,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
 import com.example.normpix.settings.ProfilePhotos
 
@@ -84,11 +84,13 @@ fun ProfileAvatar(name: String, emoji: String, size: Dp, modifier: Modifier = Mo
             emoji.isNotBlank() -> Text(emoji, fontSize = glyph, lineHeight = glyph, maxLines = 1, softWrap = false)
             initial != null -> Text(
                 initial,
-                style = TextStyle(
+                // Based on the theme's type scale, not a bare TextStyle, so the initial is in the font the user chose.
+                style = MaterialTheme.typography.titleMedium.copy(
                     color = scheme.onPrimaryContainer,
                     fontSize = glyph,
                     lineHeight = glyph,
                     fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.sp,
                     platformStyle = PlatformTextStyle(includeFontPadding = false),
                 ),
                 maxLines = 1,

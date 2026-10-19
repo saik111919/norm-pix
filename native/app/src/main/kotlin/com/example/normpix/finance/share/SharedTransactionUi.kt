@@ -31,10 +31,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.example.normpix.ui.components.RevealVisibility
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.normpix.finance.ui.TABULAR_FIGURES
 import com.example.normpix.finance.ui.rememberFinanceActions
 import com.example.normpix.navigation.LocalAppPreferences
 import com.example.normpix.ui.components.LocalOverlays
@@ -156,7 +156,8 @@ private fun ReadTextReveal(readText: String) {
                 Text(
                     readText.trim(),
                     modifier = Modifier.padding(AppSpacing.md),
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    // The app font, with figures of equal width - not a monospace face the user did not choose.
+                    style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = TABULAR_FIGURES),
                     color = scheme.onSurfaceVariant,
                 )
             }

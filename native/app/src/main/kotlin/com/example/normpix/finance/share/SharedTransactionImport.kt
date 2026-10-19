@@ -3,7 +3,6 @@ package com.example.normpix.finance.share
 import com.example.normpix.banks.BankCatalog
 import com.example.normpix.finance.data.FinanceRepository
 import com.example.normpix.finance.domain.Account
-import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.MoneyFormatter
 import com.example.normpix.finance.domain.NUMBER_ENDING_LENGTH
@@ -18,8 +17,11 @@ import java.io.File
 import java.time.LocalDateTime
 import kotlinx.coroutines.CancellationException
 
-/** Where a draft's category came from: the user's own last entry for the payee, or the app's table of merchants. */
-enum class CategoryOrigin { History, Merchant }
+/**
+ * Where a draft's category came from: the user's own last entry for the payee, the app's table of merchants, or - for a
+ * payee neither knows - the word the payer wrote with the payment ("Auto").
+ */
+enum class CategoryOrigin { History, Merchant, Message }
 
 /** One thing the form says about a shared draft; [attention] marks what has to be checked or entered before saving. */
 data class ShareNotice(val text: String, val attention: Boolean = false)
@@ -118,10 +120,16 @@ object SharedTransactionImport {
             null
         }
         val fromMerchant = if (billCard == null && fromHistory == null) MerchantCategories.categoryFor(payee, draft.type, state.categories) else null
-        val categoryId = fromHistory ?: fromMerchant
+        val fromMessage = if (billCard == null && fromHistory == null && fromMerchant == null) {
+            MerchantCategories.categoryForMessage(draft.message, draft.type, state.categories)
+        } else {
+            null
+        }
+        val categoryId = fromHistory ?: fromMerchant ?: fromMessage
         val categoryOrigin = when {
             fromHistory != null -> CategoryOrigin.History
             fromMerchant != null -> CategoryOrigin.Merchant
+            fromMessage != null -> CategoryOrigin.Message
             else -> null
         }
         val duplicate = quietly {
@@ -192,10 +200,11 @@ object SharedTransactionImport {
 
     /**
      * The one active account the message points to. First by its number: the digits it shows ([maskedNumbers]) against each
-     * account's own last digits and the number of its Wallet [cards] - when exactly one account has them. Otherwise by bank
-     * (and kind of card or account), when it names one the user has exactly one fitting account with; an account whose
+     * account's own first and last digits and the number of its Wallet [cards] - when exactly one account has them; then a
+     * Wallet card that has them but is linked to no account, to the one account of that card's bank and kind. Otherwise by
+     * bank (and kind of card or account), when it names one the user has exactly one fitting account with; an account whose
      * number is known and different from the one shown is not one of those. The payee's name and the "Powered by" bank a
-     * UPI app prints are left out first, so "Paid to Airtel" is not read as Airtel Payments Bank.
+     * UPI app prints are left out first, so "Paid to Airtel" is not read as Airtel Payments Bank. See [AccountMatching].
      */
     fun findAccount(
         text: String,
@@ -206,38 +215,8 @@ object SharedTransactionImport {
         maskedNumbers: List<MaskedNumber> = emptyList(),
         cards: List<StoredCard> = emptyList(),
     ): AccountMatch {
-        val active = accounts.filter { !it.archived }
-        val fits = active.associateWith { AccountNumbers.fit(it, maskedNumbers, cards) }
-        val ofBank = bankFitting(text, counterparty, instrument, active, catalog)
-        val byNumber = active.filter { fits[it] == NumberFit.Match }
-        if (byNumber.size == 1) return AccountMatch(byNumber.single(), byNumber = true, fitting = 1)
-        if (byNumber.size > 1) {
-            // Two accounts end the same way (at different banks, say): the message's bank may tell them apart.
-            val narrowed = byNumber.filter { it in ofBank }.singleOrNull()
-            return AccountMatch(narrowed, byNumber = narrowed != null, fitting = byNumber.size)
-        }
-        return AccountMatch(ofBank.filter { fits[it] != NumberFit.Contradicts }.singleOrNull())
-    }
-
-    /** What the receipt's own wording says about the user's bank: not its payee, not the bank that "powers" the UPI app. */
-    private val poweredBy = Regex("""(?i)\bpowered\s+by\b[^\n]*(?:\n[^\n]{0,40})?""")
-
-    private fun bankFitting(
-        text: String,
-        counterparty: String?,
-        instrument: SharedInstrument?,
-        accounts: List<Account>,
-        catalog: BankCatalog,
-    ): List<Account> {
-        val withoutPayee = if (counterparty.isNullOrBlank()) text else text.replace(counterparty, " ", ignoreCase = true)
-        val bank = catalog.resolve(poweredBy.replace(withoutPayee, " ")) ?: return emptyList()
-        val ofBank = accounts.filter { it.bankKey == bank.key }
-        return when (instrument) {
-            SharedInstrument.CreditCard -> ofBank.filter { it.kind == AccountKind.Card }
-            SharedInstrument.DebitCard, SharedInstrument.BankAccount, SharedInstrument.Upi -> ofBank.filter { it.kind != AccountKind.Card }
-            SharedInstrument.Wallet -> ofBank.filter { it.kind == AccountKind.Wallet }
-            SharedInstrument.Card, null -> ofBank
-        }
+        val pick = AccountMatching.find(text, counterparty, instrument, accounts, catalog, maskedNumbers, cards)
+        return AccountMatch(pick.account, pick.byNumber, pick.fitting)
     }
 
     /**
@@ -309,6 +288,7 @@ object SharedTransactionImport {
                     add("Category from your last ${if (draft.type == TransactionType.Income) "income from" else "payment to"} $it.")
                 }
                 CategoryOrigin.Merchant -> draft.counterparty?.let { add("Category picked for $it. Change it if it doesn't fit.") }
+                CategoryOrigin.Message -> draft.message?.let { add("Category picked from your message \"$it\". Change it if it doesn't fit.") }
                 null -> Unit
             }
             account?.let {

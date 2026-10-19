@@ -91,8 +91,28 @@ object MerchantCategories {
         Rule("Shopping", "Online orders", "amazon", "flipkart", "meesho", "snapdeal", "tata cliq", "shopsy"),
     )
 
+    /**
+     * What a payer's own word for a payment says about it, for a payee who is no known merchant - a person paid for an auto
+     * ride, a shop with no name the table knows. Only words that mean one thing: "Auto" is a ride, "Rent" is rent.
+     */
+    private val messageRules = listOf(
+        Rule("Transport", "Cabs & rideshare", "auto", "auto fare", "autorickshaw", "auto rickshaw", "rickshaw", "cab", "cab fare", "taxi", "taxi fare"),
+        Rule("Transport", "Bus & metro", "bus", "bus fare", "metro", "metro fare"),
+        Rule("Transport", "Trains", "train", "train ticket"),
+        Rule("Transport", "Petrol & diesel", "petrol", "diesel", "fuel"),
+        Rule("Transport", "Parking", "parking"),
+        Rule("Transport", "Tolls", "toll", "fastag"),
+        Rule("Food & dining", "Coffee & tea", "tea", "chai", "coffee"),
+        Rule("Food & dining", null, "breakfast", "lunch", "dinner", "snacks", "tiffin", "food"),
+        Rule("Groceries", null, "groceries", "grocery", "vegetables", "fruits"),
+        Rule("Groceries", "Dairy & eggs", "milk", "eggs"),
+        Rule("Health", "Pharmacy", "medicine", "medicines", "pharmacy"),
+        Rule("Rent & housing", "Rent", "rent", "house rent"),
+        Rule("Bills & utilities", "Mobile recharge", "recharge", "mobile recharge"),
+    )
+
     /** Every category a rule files into, by name: (top-level, sub-category or null). */
-    internal val targets: List<Pair<String, String?>> get() = rules.map { it.parent to it.sub }
+    internal val targets: List<Pair<String, String?>> get() = (rules + messageRules).map { it.parent to it.sub }
 
     /** The words of [name], lower case, as one spaced string: "SWIGGY.IN@AXISBANK" -> " swiggy in axisbank ". */
     private fun words(name: String): String =
@@ -114,6 +134,19 @@ object MerchantCategories {
         } ?: return null
         val usable = categories.filter { it.type == CategoryType.Expense && !it.archived }
         return idOf(rule.parent, rule.sub, usable) ?: rule.olderHome?.let { (parent, sub) -> idOf(parent, sub, usable) }
+    }
+
+    /**
+     * The id of the user's category for a [type] with the payer's own [message] ("Auto", "Rent"), or null when the message
+     * is not one word or phrase the table knows, the user has no such category, or it isn't an expense. The whole message
+     * must be the word: "Auto" is a ride, "auto loan emi" is not.
+     */
+    fun categoryForMessage(message: String?, type: TransactionType?, categories: List<Category>): Long? {
+        if (message.isNullOrBlank() || type != TransactionType.Expense) return null
+        val said = words(message).trim()
+        val rule = messageRules.firstOrNull { rule -> said in rule.names } ?: return null
+        val usable = categories.filter { it.type == CategoryType.Expense && !it.archived }
+        return idOf(rule.parent, rule.sub, usable)
     }
 
     /** The id of [sub] under the top-level [parent] among [usable], else of [parent]; null when there is no [parent]. */

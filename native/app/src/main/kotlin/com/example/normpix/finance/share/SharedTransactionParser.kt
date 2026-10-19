@@ -793,10 +793,11 @@ object SharedTransactionParser {
     }
 
     /**
-     * What a month is written as: a word, or the two the recognizer misspells with a digit ("0ct", "5ep"). Any word that
-     * is not a month ("Market") is turned away by [monthOf].
+     * What a month is written as: its name, whole or cut short, as a word of its own; also the ones the recognizer
+     * misspells with a digit ("0ct", "5ep", "n0v").
      */
-    private const val MONTH = """([a-z]{3,9}|0ct|5ep|n0v)"""
+    private const val MONTH = """(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|""" +
+        """oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|0ct|5ep|n0v)(?![\p{L}])"""
 
     /**
      * A day of the month, or a year, as the recognizer reads it: an O for a 0, an I or l or | for a 1. A day has a real digit
