@@ -27,6 +27,7 @@ import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.finance.ui.shortDate
 import com.example.normpix.navigation.NormPixRoot
 import com.example.normpix.testing.TestEnvironment
 import java.time.LocalDate
@@ -215,8 +216,10 @@ class ShareTransactionFlowTest {
         assertTrue(stored().isEmpty())
 
         compose.onNodeWithContentDescription("Date, Choose").performScrollTo().performClick()
-        waitFor("OK")
-        compose.onNodeWithText("OK").performClick()
+        // The date sheet opens on today; its button uses the day shown.
+        val useToday = "Use ${shortDate(LocalDate.now().atStartOfDay())}"
+        waitFor(useToday)
+        compose.onNodeWithText(useToday).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Save expense").performClick()
         waitGone("New expense")

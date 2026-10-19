@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CalendarToday
-import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Snooze
@@ -67,8 +65,8 @@ import com.example.normpix.ui.components.BankGlyph
 import com.example.normpix.finance.ui.ChoiceOption
 import com.example.normpix.finance.ui.ConnectedChoiceRow
 import com.example.normpix.finance.ui.TonalFieldShape
-import com.example.normpix.finance.ui.TonalPickerField
-import com.example.normpix.finance.ui.connectedFieldShapes
+import com.example.normpix.finance.ui.PickerField
+import com.example.normpix.finance.ui.PickerFieldRow
 import com.example.normpix.finance.ui.tonalFieldColors
 import com.example.normpix.finance.ui.typedFieldColors
 import com.example.normpix.ui.components.AppLinearProgress
@@ -352,7 +350,6 @@ fun AddReminderSheet(
         )
     }
 
-    val (dateShape, timeShape) = remember { connectedFieldShapes() }
     val categories = remember { ReminderCategory.entries.map { ChoiceOption(it, it.label, it.icon) } }
     val repeats = buildList {
         add(ChoiceOption(RepeatKind.Once, "Once", Icons.Outlined.LooksOne))
@@ -396,10 +393,10 @@ fun AddReminderSheet(
             shape = TonalFieldShape,
         )
         Spacer(Modifier.height(AppSpacing.lg))
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            TonalPickerField("Date", dateLabel(dueAt), Icons.Outlined.CalendarToday, { pickingDate = true }, Modifier.weight(1f), dateShape)
-            TonalPickerField("Time", timeText(dueAt, is24Hour), Icons.Outlined.Schedule, { pickingTime = true }, Modifier.weight(1f), timeShape)
-        }
+        PickerFieldRow(
+            first = PickerField("Date", dateLabel(dueAt)) { pickingDate = true },
+            second = PickerField("Time", timeText(dueAt, is24Hour)) { pickingTime = true },
+        )
         Spacer(Modifier.height(AppSpacing.lg))
         ChoiceDropdownField(
             label = "Category",

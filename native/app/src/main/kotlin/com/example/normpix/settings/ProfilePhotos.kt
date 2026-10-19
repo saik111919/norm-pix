@@ -150,6 +150,18 @@ class ProfilePhotos(private val context: Context, private val clock: () -> Long 
     /** Deletes every photo. */
     suspend fun deleteAll() = keepOnly(null)
 
+    /**
+     * Files [file] - a photo read from an app backup - as the kept photo called [name], unless a photo by that name is kept
+     * already (a name is a time stamp, so it is the same photo). False when it couldn't be filed.
+     */
+    suspend fun adopt(file: File, name: String): Boolean = withContext(Dispatchers.IO) {
+        if (!isProfilePhotoName(name) || !file.isFile) return@withContext false
+        dir.mkdirs()
+        val target = File(dir, name)
+        if (target.isFile) return@withContext true
+        file.renameTo(target) || runCatching { file.copyTo(target) }.isSuccess
+    }
+
     private fun onWhite(bitmap: Bitmap): Bitmap {
         val out = createBitmap(bitmap.width, bitmap.height)
         Canvas(out).apply {

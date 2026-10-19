@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarToday
-import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.rounded.Tune
@@ -250,13 +249,7 @@ fun RepeatSheet(initial: RepeatSchedule?, from: LocalDateTime, onDone: (RepeatSc
         )
         end?.let { endDate ->
             Spacer(Modifier.height(AppSpacing.sm))
-            TonalPickerField(
-                label = "Last repeat by",
-                value = shortDate(endDate),
-                icon = Icons.Outlined.Event,
-                onClick = { pickingEnd = true },
-                modifier = Modifier.fillMaxWidth(),
-            )
+            PickerFieldRow(PickerField("Last repeat by", shortDate(endDate)) { pickingEnd = true })
         }
         Spacer(Modifier.height(AppSpacing.lg))
         RepeatPreview(schedule, from)

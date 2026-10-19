@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.EventRepeat
@@ -301,7 +300,6 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
     val backfill = if (!isEditing && active) dueOccurrences(preview, now).dates.size else 0
     val amountFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { if (!isEditing) runCatching { amountFocus.requestFocus() } }
-    val (startShape, endShape) = remember { connectedFieldShapes() }
     val reduced = rememberReducedMotion()
     val frequencies = remember { RecurrenceFrequency.entries.map { ChoiceOption(it, it.label, it.icon) } }
 
@@ -451,26 +449,10 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
         )
         Spacer(Modifier.height(AppSpacing.lg))
         // First and last payment read as one connected pair once there is an end date.
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            TonalPickerField(
-                label = if (isEditing) "Schedule starts" else "First payment",
-                value = shortDate(start),
-                icon = Icons.Outlined.CalendarToday,
-                onClick = { pickingStart = true },
-                modifier = Modifier.weight(1f),
-                shape = if (end == null) TonalFieldShape else startShape,
-            )
-            end?.let { endDate ->
-                TonalPickerField(
-                    label = "Last payment by",
-                    value = shortDate(endDate),
-                    icon = Icons.Outlined.Event,
-                    onClick = { pickingEnd = true },
-                    modifier = Modifier.weight(1f),
-                    shape = endShape,
-                )
-            }
-        }
+        PickerFieldRow(
+            first = PickerField(if (isEditing) "Schedule starts" else "First payment", shortDate(start)) { pickingStart = true },
+            second = end?.let { endDate -> PickerField("Last payment by", shortDate(endDate)) { pickingEnd = true } },
+        )
         Spacer(Modifier.height(AppSpacing.sm))
         SwitchRow(
             title = "Has an end date",

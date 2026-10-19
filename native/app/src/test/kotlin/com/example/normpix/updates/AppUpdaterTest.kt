@@ -2,6 +2,7 @@ package com.example.normpix.updates
 
 import android.content.Intent
 import com.example.normpix.settings.BackgroundUpdates
+import com.example.normpix.settings.UpdateCheckEvery
 import com.example.normpix.updates.Releases.LATEST
 import java.io.File
 import java.io.InputStream
@@ -114,6 +115,25 @@ class AppUpdaterTest {
         assertEquals("1.0.3", next.launchOffer(allowed = true)?.versionName)
         assertEquals(clock, records.lastCheckAt)
         assertNull(next.launchOffer(allowed = true), "a launch offers once")
+    }
+
+    @Test
+    fun `a launch asks GitHub once per the wait the user chose`() = runTest {
+        Releases.publish(network)
+        val hour = 60L * 60 * 1000
+        // 13 hours on: too soon for once a day, time for twice a day.
+        records.lastCheckAt = clock - 13 * hour
+        assertNull(updater().launchOffer(allowed = true))
+        assertEquals(emptyList(), network.asked, "once a day isn't due yet")
+        assertEquals("1.0.3", updater().launchOffer(allowed = true, intervalMs = UpdateCheckEvery.TwiceADay.intervalMs)?.versionName)
+        assertEquals(clock, records.lastCheckAt)
+
+        // Four days on: too soon for once a week, time for every 3 days.
+        records.lastCheckAt = clock - 4 * 24 * hour
+        val asked = network.asked.size
+        assertNull(updater().launchOffer(allowed = true, intervalMs = UpdateCheckEvery.OnceAWeek.intervalMs))
+        assertEquals(asked, network.asked.size, "once a week isn't due yet")
+        assertNotNull(updater().launchOffer(allowed = true, intervalMs = UpdateCheckEvery.EveryThreeDays.intervalMs))
     }
 
     @Test
@@ -635,6 +655,34 @@ class AppUpdaterTest {
 
         network.answer(apkUrl, body = apk)
         assertEquals(BackgroundRun.Done, updater.runInBackground(BackgroundUpdates.Download))
+        assertIs<UpdateState.Ready>(updater.state.value)
+    }
+
+    @Test
+    fun `a background download stops when the network it needed goes, even with NormPix open`() = runTest {
+        val apk = Releases.publish(network)
+        // On screen, as when the user has NormPix open as the Wi-Fi drops: the download must not carry on over mobile data.
+        val updater = updater(onScreen = true)
+        network.stream(apkUrl, apk.size.toLong()) { CancellingStream(apk) { updater.stopBackgroundWork(networkLost = true) } }
+        assertEquals(BackgroundRun.Again, updater.runInBackground(BackgroundUpdates.Download))
+        assertIs<UpdateState.Available>(updater.state.value, "left to download again, not \"stopped by the user\"")
+        assertEquals(emptyList(), downloads())
+        assertEquals(emptyList(), notifier.posted)
+
+        // Stopped for any other reason, a download goes on while NormPix is open (it is not off screen to be cut short).
+        network.stream(apkUrl, apk.size.toLong()) { CancellingStream(apk) { updater.stopBackgroundWork() } }
+        assertEquals(BackgroundRun.Done, updater.runInBackground(BackgroundUpdates.Download))
+        assertIs<UpdateState.Ready>(updater.state.value)
+    }
+
+    @Test
+    fun `a download the user started goes on when a background run loses its network`() = runTest {
+        val apk = Releases.publish(network)
+        val updater = updater()
+        assertIs<UpdateState.Available>(updater.check())
+        network.stream(apkUrl, apk.size.toLong()) { CancellingStream(apk) { updater.stopBackgroundWork(networkLost = true) } }
+        updater.download()
+        advanceUntilIdle()
         assertIs<UpdateState.Ready>(updater.state.value)
     }
 

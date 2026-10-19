@@ -155,6 +155,25 @@ class ReminderDao(
             .use { if (it.moveToFirst()) it.reminder() else null }
     }
 
+    /**
+     * Replaces every reminder with [reminders] in one step (a restored backup, or taking one back): all of it or none of it, so a
+     * failure leaves the reminders as they were. A reminder that has an id keeps it, so the ids must differ. Returns what is
+     * stored afterwards, in the order [getAll] gives.
+     */
+    suspend fun replaceAll(reminders: List<Reminder>): List<Reminder> {
+        io {
+            beginTransaction()
+            try {
+                delete(RemindersDatabase.TABLE, null, null)
+                for (reminder in reminders) insertOrThrow(RemindersDatabase.TABLE, null, reminder.toValues())
+                setTransactionSuccessful()
+            } finally {
+                endTransaction()
+            }
+        }
+        return getAll()
+    }
+
     suspend fun getAll(): List<Reminder> = io {
         query(RemindersDatabase.TABLE, null, null, null, null, null, "due_at ASC").use { cursor ->
             buildList { while (cursor.moveToNext()) add(cursor.reminder()) }
