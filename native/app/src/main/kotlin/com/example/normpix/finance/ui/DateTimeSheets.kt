@@ -247,6 +247,18 @@ internal fun timePicks(now: LocalTime): List<TimePick> = listOf(
     TimePick("Night", LocalTime.of(21, 0)),
 )
 
+/** [hour] (0-23) as a 12-hour clock face shows it: 1 to 12, with midnight and noon both 12. */
+internal fun clockHour(hour: Int): Int = ((hour + 11) % 12) + 1
+
+/** [hour] (0-23) moved into the morning or the afternoon, keeping its place on the clock face. */
+internal fun inHalfOfDay(hour: Int, afternoon: Boolean): Int = hour % 12 + if (afternoon) 12 else 0
+
+/**
+ * The hour (0-23) a tile of the hour grid sets: [tile] is 0 to 23 on a 24-hour clock, and 1 to 12 on a 12-hour one, where
+ * [afternoon] says which half of the day it is in.
+ */
+internal fun hourFromTile(tile: Int, afternoon: Boolean, is24Hour: Boolean): Int = if (is24Hour) tile else inHalfOfDay(tile, afternoon)
+
 /** Which half of the time the tiles under the pair are setting. */
 private enum class TimePart { Hour, Minute }
 
@@ -268,7 +280,7 @@ fun TimeSheet(initial: LocalTime, is24Hour: Boolean, onPick: (LocalTime?) -> Uni
     var minute by remember { mutableIntStateOf(initial.minute) }
     var editing by remember { mutableStateOf(TimePart.Hour) }
     val afternoon = hour >= 12
-    val shownHour = if (is24Hour) hour else ((hour + 11) % 12) + 1
+    val shownHour = if (is24Hour) hour else clockHour(hour)
     val outer = CornerSize(50)
     val inner = CornerSize(InnerCorner)
     val big = MaterialTheme.typography.displaySmall.copy(fontFeatureSettings = TABULAR_FIGURES)
@@ -320,7 +332,7 @@ fun TimeSheet(initial: LocalTime, is24Hour: Boolean, onPick: (LocalTime?) -> Uni
                         afternoon = afternoon,
                         onChange = { pm ->
                             haptics.selection()
-                            hour = if (pm) hour % 12 + 12 else hour % 12
+                            hour = inHalfOfDay(hour, pm)
                         },
                         modifier = Modifier.width(PeriodWidth).fillMaxHeight(),
                     )
@@ -363,7 +375,7 @@ fun TimeSheet(initial: LocalTime, is24Hour: Boolean, onPick: (LocalTime?) -> Uni
                         is24Hour = is24Hour,
                         onPick = { value ->
                             haptics.selection()
-                            hour = if (is24Hour) value else value % 12 + if (afternoon) 12 else 0
+                            hour = hourFromTile(value, afternoon, is24Hour)
                             // The hour is the quick half: on to the minute, as the clock does.
                             editing = TimePart.Minute
                         },

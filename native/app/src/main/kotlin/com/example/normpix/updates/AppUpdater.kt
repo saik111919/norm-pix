@@ -163,6 +163,20 @@ class AppUpdater(
     /** When GitHub last answered a check (epoch millis), 0 for never. */
     val lastCheckAt: Long get() = records.lastCheckAt
 
+    private val _laterVersionCode = MutableStateFlow(records.dismissedVersionCode)
+
+    /**
+     * The versionCode of the release the user said Later to (0 for none), as it changes: so Home can take down its banner for
+     * the update the moment they do. Whether a release is put in front of them is [isOffered].
+     */
+    val laterVersionCode: StateFlow<Long> = _laterVersionCode.asStateFlow()
+
+    /**
+     * Whether [release] is to be put in front of the user without their asking - at launch, in the background, and on Home:
+     * unless they said Later to it, and unless it is marked mandatory, which is only ever closed, never put off.
+     */
+    fun isOffered(release: UpdateRelease): Boolean = release.mandatory || release.versionCode != records.dismissedVersionCode
+
     private var checking: Deferred<UpdateState>? = null
     private var launchCheck: Deferred<UpdateRelease?>? = null
     private var launchOffered = false
@@ -226,7 +240,7 @@ class AppUpdater(
         val release = check.await() ?: return null
         if (launchOffered || !_state.value.offerable) return null
         launchOffered = true
-        return release.takeIf { it.mandatory || it.versionCode != records.dismissedVersionCode }
+        return release.takeIf { isOffered(it) }
     }
 
     /** A state the launch offer shows: an update to download, or one downloaded and waiting for Install. */
@@ -434,6 +448,7 @@ class AppUpdater(
         val release = _state.value.release ?: return
         if (!release.mandatory) {
             records.dismissedVersionCode = release.versionCode
+            _laterVersionCode.value = release.versionCode
             notifier.withdraw()
         }
     }
@@ -543,7 +558,7 @@ class AppUpdater(
         }
         val found = check()
         val release = found.release ?: return again(found)
-        if (!release.mandatory && release.versionCode == records.dismissedVersionCode) return BackgroundRun.Done
+        if (!isOffered(release)) return BackgroundRun.Done
         if (mode == BackgroundUpdates.Notify) {
             announceAvailable(release)
             return BackgroundRun.Done

@@ -115,13 +115,16 @@ fun CardDetailsSheet(cardId: String, flows: CardFlows, onDismiss: () -> Unit) {
                     onCopy = { copy(CardField.Expiry) },
                 )
             }
-            item {
-                DetailRow(
-                    label = CardField.Cvv.label,
-                    value = if (revealed) card.cvv else "•".repeat(card.cvv.length),
-                    spoken = if (revealed) card.cvv else "hidden",
-                    onCopy = { copy(CardField.Cvv) },
-                )
+            // A card kept without a CVV has no row for one: nothing to show, nothing to copy.
+            if (card.hasCvv) {
+                item {
+                    DetailRow(
+                        label = CardField.Cvv.label,
+                        value = if (revealed) card.cvv else "•".repeat(card.cvv.length),
+                        spoken = if (revealed) card.cvv else "hidden",
+                        onCopy = { copy(CardField.Cvv) },
+                    )
+                }
             }
             item {
                 DetailRow(

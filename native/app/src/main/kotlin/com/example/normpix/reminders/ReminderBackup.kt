@@ -20,6 +20,10 @@ import kotlinx.serialization.json.put
  * Reading is forgiving about what a reminder may lack and strict about what it can't do without: an entry with no title or no
  * due time is left out (and counted), an unknown category or status falls back the way the database does, and a repeat rule
  * is brought back inside what the app can use.
+ *
+ * A repeat rule is written and read by the rule itself ([RepeatRule.toJson] and [RepeatRule.fromJson]), so whatever the rule
+ * carries - an end date, once it has one - goes into a backup and comes back, and a backup made before the rule had it reads
+ * as a rule without it.
  */
 object ReminderBackupCodec {
     private val pretty = Json { prettyPrint = true }

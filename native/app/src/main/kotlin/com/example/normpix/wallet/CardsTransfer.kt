@@ -20,7 +20,7 @@ import kotlinx.serialization.json.put
 
 /**
  * Saved cards as a file of their own, to move them to another phone or keep a copy: separate from the finance backup, which
- * never carries card numbers. A card file carries everything a card has - number, expiry, CVV - so it is always encrypted,
+ * never carries card numbers. A card file carries everything a card has - number, expiry, CVV where one is kept - so it is always encrypted,
  * with a password the user chooses: AES-256-GCM under a key drawn from the password by PBKDF2-HMAC-SHA256.
  *
  * The file is JSON: `{"format": "normpix-cards", "version": 1, "kdf": ..., "iterations": n, "salt": b64, "iv": b64,
@@ -154,16 +154,24 @@ object CardsTransfer {
         }
     }
 
-    /** What adding [incoming] to [existing] does: the cards that are new, and how many were already there. */
-    data class Merge(val added: List<StoredCard>, val alreadyThere: Int) {
+    /**
+     * What adding [incoming] to [existing] does: the cards that are new, and how many were already there. [refused]: nothing
+     * was added because "Store cards" is off (Settings > Wallet & Cards); the file is not looked at.
+     */
+    data class Merge(val added: List<StoredCard>, val alreadyThere: Int, val refused: Boolean = false) {
         fun applyTo(existing: List<StoredCard>): List<StoredCard> = existing + added
     }
 
     /**
      * Adds [incoming] to [existing] without ever replacing or duplicating a card: one already saved - the same card (by id),
      * or the same number with the same expiry - is left as it is, and counted in [Merge.alreadyThere].
+     *
+     * Under [policy] (the card settings): with cards not stored nothing is added and the result is [Merge.refused]; with CVVs
+     * not kept every card added comes without its CVV. Both apply whatever the file holds, so a file made on a phone that
+     * keeps CVVs can't put them on one that doesn't.
      */
-    fun merge(existing: List<StoredCard>, incoming: List<StoredCard>): Merge {
+    fun merge(existing: List<StoredCard>, incoming: List<StoredCard>, policy: CardsPolicy = CardsPolicy.Unrestricted): Merge {
+        if (!policy.storeCards) return Merge(emptyList(), 0, refused = true)
         val ids = existing.mapTo(HashSet()) { it.id }
         val numbers = existing.mapTo(HashSet()) { sameCardKey(it) }
         val added = mutableListOf<StoredCard>()
@@ -173,7 +181,7 @@ object CardsTransfer {
             if (card.id in ids || key in numbers) {
                 already++
             } else {
-                added += card
+                added += policy.shape(card)
                 ids += card.id
                 numbers += key
             }

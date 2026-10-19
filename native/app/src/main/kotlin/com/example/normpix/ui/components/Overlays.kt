@@ -55,7 +55,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.example.normpix.settings.PageAnimationType
+import com.example.normpix.settings.SheetAnimationType
 import com.example.normpix.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -300,9 +300,10 @@ fun OverlayHost(overlays: AppOverlays) {
     val preferences = LocalAppPreferences.current
     val prefsState = preferences?.state?.collectAsState()
     val sheetBlurEnabled = prefsState?.value?.sheetBlurEnabled ?: true
-    // In the Linux window style sheets and decisions open and close like its windows (see windowRise).
-    val windowStyle = (prefsState?.value?.pageAnimation ?: PageAnimationType.LinuxWindow) == PageAnimationType.LinuxWindow &&
-        !rememberReducedMotion()
+    // Sheets and decisions open and close in the style chosen for them (Settings > Appearance > Sheet & dialog transitions; see
+    // sheetMotion) - apart from the pages' style - and with no motion of their own when the system asks for reduced motion.
+    val sheetStyle = prefsState?.value?.sheetAnimation ?: SheetAnimationType.Window
+    val sheetMotionOn = !rememberReducedMotion()
 
     for (request in overlays.sheets) {
         key(request) {
@@ -340,6 +341,7 @@ fun OverlayHost(overlays: AppOverlays) {
             )
             stateRef[0] = sheetState
             val surface = rememberSheetSurface(enabled = sheetBlurEnabled)
+            val hold = remember { SheetHold() }
             // Under a sheet or picker opened over it, this sheet is blurred like the page under them all.
             val above = rememberEasedBlur { overlays.blurAbove(request) }
             ModalBottomSheet(
@@ -348,7 +350,7 @@ fun OverlayHost(overlays: AppOverlays) {
                 // At full height a sheet stops under the status bar, which stays over the page (blurred, as around the sheet).
                 // The padding looks up the insets of the window it ends up in - the sheet's own - unlike a WindowInsets
                 // read here, in the page's window.
-                modifier = Modifier.statusBarsPadding().windowRise(sheetState, windowStyle),
+                modifier = Modifier.statusBarsPadding().sheetMotion(sheetState, sheetStyle, sheetMotionOn, hold),
                 shape = SheetShape,
                 containerColor = surface.container,
                 contentColor = surface.content,
@@ -362,7 +364,7 @@ fun OverlayHost(overlays: AppOverlays) {
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .blursBackdrop(overlays, request, surface.blurBehind)
+                        .blursBackdrop(overlays, request, surface.blurBehind, hold)
                         .then(
                             if (request.expandable && fits == null) {
                                 Modifier.measuresFit({ handleHeight[0] }) { fits = it }
@@ -406,6 +408,7 @@ fun OverlayHost(overlays: AppOverlays) {
                 }
             }
             val surface = rememberSheetSurface(enabled = sheetBlurEnabled)
+            val hold = remember { SheetHold() }
             val above = rememberEasedBlur { overlays.blurAbove(request) }
             ModalBottomSheet(
                 onDismissRequest = { request.result.complete(false) },
@@ -413,7 +416,7 @@ fun OverlayHost(overlays: AppOverlays) {
                 // At full height a sheet stops under the status bar, which stays over the page (blurred, as around the sheet).
                 // The padding looks up the insets of the window it ends up in - the sheet's own - unlike a WindowInsets
                 // read here, in the page's window.
-                modifier = Modifier.statusBarsPadding().windowRise(sheetState, windowStyle),
+                modifier = Modifier.statusBarsPadding().sheetMotion(sheetState, sheetStyle, sheetMotionOn, hold),
                 shape = SheetShape,
                 containerColor = surface.container,
                 contentColor = surface.content,
@@ -425,7 +428,7 @@ fun OverlayHost(overlays: AppOverlays) {
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .blursBackdrop(overlays, request, surface.blurBehind)
+                        .blursBackdrop(overlays, request, surface.blurBehind, hold)
                         .blurredBy(above, TileMode.Decal)
                         .windowInsetsPadding(
                             WindowInsets.navigationBars

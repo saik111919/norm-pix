@@ -21,6 +21,7 @@ import com.example.normpix.finance.domain.upcomingOccurrences
 import com.example.normpix.ui.components.AppEmptyState
 import com.example.normpix.ui.components.AppErrorState
 import com.example.normpix.ui.components.AppLoadingState
+import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.theme.AppSpacing
@@ -59,6 +60,16 @@ fun RecurringView() {
                     }
                     if (paused.isNotEmpty()) ListSection(title = "Paused") { for (r in paused) item { RuleTile(r) } }
                     if (ended.isNotEmpty()) ListSection(title = "Ended") { for (r in ended) item { RuleTile(r) } }
+                    // Always at hand, not only while the list is empty.
+                    ListSection(modifier = Modifier.padding(top = AppSpacing.lg)) {
+                        item {
+                            ListRow(
+                                headline = "Add recurring payment",
+                                leading = { LeadingIcon(Icons.Rounded.Add) },
+                                onClick = actions::addRecurring,
+                            )
+                        }
+                    }
                 }
             }
         }

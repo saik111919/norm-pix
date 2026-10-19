@@ -57,8 +57,10 @@ import com.example.normpix.finance.domain.Category
 import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.FinanceConflictException
 import com.example.normpix.finance.domain.FinanceValidationException
+import com.example.normpix.finance.domain.emojiOf
 import com.example.normpix.finance.domain.minorToInputText
 import com.example.normpix.finance.domain.numberEndingOrNull
+import com.example.normpix.finance.domain.numberStartOrNull
 import com.example.normpix.finance.domain.parseMinorUnits
 import com.example.normpix.ui.components.AppHaptics
 import com.example.normpix.ui.components.DiscardChangesGuard
@@ -92,6 +94,9 @@ fun CategoryFormSheet(
     var parentId by remember { mutableStateOf<Long?>(existing?.parentId ?: parent?.id) }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
+    // Which of the folded parts are open. Looking is not changing: neither is part of what the sheet asks before closing.
+    var iconOpen by remember { mutableStateOf(false) }
+    var colorOpen by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
@@ -228,26 +233,20 @@ fun CategoryFormSheet(
 
         if (!hasSubCategories && parents.isNotEmpty()) {
             Spacer(Modifier.height(AppSpacing.lg))
+            // Each parent is shown as its avatar in the lists, in the shape chosen in Settings > Appearance.
             val options = listOf(
                 ChoiceOption(
                     key = NO_PARENT,
                     label = "None (top-level)",
                     icon = Icons.Outlined.Category,
+                    avatar = { size -> NeutralAvatar(Icons.Outlined.Category, size = size) },
                 )
             ) + parents.map { p ->
                 ChoiceOption(
                     key = p.id!!,
                     label = p.name,
                     icon = categoryIcon(p.icon),
-                    tint = paletteColor(p.color),
-                    glyph = {
-                        CategoryGlyph(
-                            icon = p.icon,
-                            tint = paletteColor(p.color).onContainer,
-                            size = 22.dp,
-                            name = p.name,
-                        )
-                    },
+                    avatar = { size -> CategoryAvatar(p, size = size) },
                 )
             }
             ChoiceDropdownField(
@@ -256,42 +255,69 @@ fun CategoryFormSheet(
                 selected = parentId ?: NO_PARENT,
                 onSelect = { parentId = if (it == NO_PARENT) null else it },
                 emptyIcon = Icons.Outlined.Category,
+                emptyAsAvatar = true,
             )
         }
 
-        Spacer(Modifier.height(AppSpacing.xl))
-        FormGroupLabel("Icon")
-        CategoryIconPicker(icon = icon, onSelect = { icon = it })
+        // The icon and the color are folded away until wanted, so the form opens short: the name is what most need.
+        Spacer(Modifier.height(AppSpacing.lg))
+        CollapsibleField(
+            label = "Icon",
+            value = iconName(icon),
+            expanded = iconOpen,
+            onToggle = { iconOpen = !iconOpen },
+            leading = { CategoryAvatar(preview) },
+        ) {
+            CategoryIconPicker(icon = icon, onSelect = { icon = it })
+        }
 
-        Spacer(Modifier.height(AppSpacing.xl))
-        FormGroupLabel("Color")
-        if (chosenParent != null) {
-            Text(
-                text = "Takes the color of ${chosenParent.name}, so they read as one.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
-                verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
-            ) {
-                for (i in 0 until paletteSize) {
-                    val colors = paletteColor(i)
-                    val label = paletteNames[i]
-                    val selected = color == i
-                    ColorDot(
-                        colors = colors,
-                        label = label,
-                        selected = selected,
-                        onClick = {
-                            haptics.selection()
-                            color = i
-                        },
-                    )
+        Spacer(Modifier.height(AppSpacing.md))
+        CollapsibleField(
+            label = "Color",
+            value = if (chosenParent != null) "Same as ${chosenParent.name}" else paletteNames[Math.floorMod(color, paletteSize)],
+            expanded = colorOpen,
+            onToggle = { colorOpen = !colorOpen },
+            leading = { ColorSwatch(paletteColor(chosenParent?.color ?: color)) },
+        ) {
+            if (chosenParent != null) {
+                Text(
+                    text = "Takes the color of ${chosenParent.name}, so they read as one.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+                ) {
+                    for (i in 0 until paletteSize) {
+                        val colors = paletteColor(i)
+                        val label = paletteNames[i]
+                        val selected = color == i
+                        ColorDot(
+                            colors = colors,
+                            label = label,
+                            selected = selected,
+                            onClick = {
+                                haptics.selection()
+                                color = i
+                            },
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+/** What an icon is called in the form: its name in the picker, or the emoji itself for one chosen from the keyboard or the catalog. */
+private fun iconName(icon: String): String = emojiOf(icon) ?: categoryIcons[icon]?.label ?: "Other"
+
+/** A color as a plain dot, as [ColorDot] draws an unchosen one but not pressable: for showing the color chosen. */
+@Composable
+private fun ColorSwatch(colors: PaletteColors) {
+    Box(Modifier.size(40.dp).clip(CircleShape).background(colors.container), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(16.dp).background(colors.accent, CircleShape))
     }
 }
 
@@ -371,8 +397,11 @@ fun AccountFormSheet(
     var limitError by remember { mutableStateOf<String?>(null) }
     var statementDay by remember { mutableStateOf(existing?.statementDay) }
     var dueDay by remember { mutableStateOf(existing?.dueDay) }
-    // What tells a shared receipt which account this is: the number's last digits, and the Wallet card (if any) it is.
+    // What tells a shared receipt which account this is: the number's last digits (and, for a card, its first six), and the
+    // Wallet card (if any) it is. A card's whole number is typed into [cardNumber] and only ever kept as its start and end.
     var numberEnding by remember { mutableStateOf(existing?.numberEnding.orEmpty()) }
+    var numberStart by remember { mutableStateOf(existing?.numberStart) }
+    var cardNumber by remember { mutableStateOf("") }
     var numberError by remember { mutableStateOf<String?>(null) }
     var cardId by remember { mutableStateOf(existing?.cardId) }
     val cardsState = LocalWalletCards.current?.state?.collectAsState()?.value
@@ -394,9 +423,9 @@ fun AccountFormSheet(
     }
 
     val initialSnapshot = remember {
-        listOf(name, amount, kind, bank.key, owed, makeDefault, limit, statementDay, dueDay, numberEnding, cardId).joinToString("|")
+        listOf(name, amount, kind, bank.key, owed, makeDefault, limit, statementDay, dueDay, numberEnding, numberStart, cardNumber, cardId).joinToString("|")
     }
-    val hasChanges = listOf(name, amount, kind, bank.key, owed, makeDefault, limit, statementDay, dueDay, numberEnding, cardId)
+    val hasChanges = listOf(name, amount, kind, bank.key, owed, makeDefault, limit, statementDay, dueDay, numberEnding, numberStart, cardNumber, cardId)
         .joinToString("|") != initialSnapshot
 
     DiscardChangesGuard(
@@ -440,18 +469,42 @@ fun AccountFormSheet(
             null
         }
 
+        // A card account's number is typed whole (or just its last four digits) and cut down to its start and end here; any
+        // other account is given the last four digits. Nothing but those two pieces is ever put in the account.
+        val isCardAccount = kind == AccountKind.Card
+        val typedCard = readCardNumber(cardNumber)
         val endingText = numberEnding.trim()
-        numberError = if (hasBank && endingText.isNotEmpty() && numberEndingOrNull(endingText) == null) {
-            "Enter all $NUMBER_ENDING_LENGTH digits, or leave it empty"
-        } else {
-            null
+        var savedStart: String? = null
+        var savedEnding: String? = endingText.takeIf { hasBank && it.isNotEmpty() }
+        numberError = null
+        if (hasBank && isCardAccount) {
+            when (typedCard) {
+                is CardNumberEntry.Full -> {
+                    savedStart = typedCard.start
+                    savedEnding = typedCard.ending
+                }
+                is CardNumberEntry.Ending -> {
+                    savedStart = null
+                    savedEnding = typedCard.ending
+                }
+                CardNumberEntry.Unusable ->
+                    numberError = "Enter the whole card number, or just its last $NUMBER_ENDING_LENGTH digits, or leave it empty"
+                // Nothing typed: what is kept already stays kept (or was thrown away with the clear button).
+                CardNumberEntry.None -> {
+                    savedStart = numberStart?.let(::numberStartOrNull)
+                    if (endingText.isNotEmpty() && numberEndingOrNull(endingText) == null) {
+                        numberError = "Enter all $NUMBER_ENDING_LENGTH digits, or leave it empty"
+                    }
+                }
+            }
+        } else if (hasBank && endingText.isNotEmpty() && numberEndingOrNull(endingText) == null) {
+            numberError = "Enter all $NUMBER_ENDING_LENGTH digits, or leave it empty"
         }
 
         if (nameError == null && amountError == null && bankError == null && limitError == null && numberError == null && parsed != null) {
             val now = LocalDateTime.now()
             val openingBalance = if (owed) -parsed else parsed
             val bankKey = if (hasBank) bank.key else null
-            val savedEnding = endingText.takeIf { hasBank && it.isNotEmpty() }
             val savedCard = (if (cardsState is CardsState.Ready) shownCardId else cardId).takeIf { hasBank }
             val draft = if (existing != null) {
                 existing.copy(
@@ -463,6 +516,7 @@ fun AccountFormSheet(
                     statementDay = statementDay.takeIf { kind == AccountKind.Card },
                     dueDay = dueDay.takeIf { kind == AccountKind.Card },
                     numberEnding = savedEnding,
+                    numberStart = savedStart,
                     cardId = savedCard,
                     updatedAt = now,
                 )
@@ -481,6 +535,7 @@ fun AccountFormSheet(
                     statementDay = statementDay.takeIf { kind == AccountKind.Card },
                     dueDay = dueDay.takeIf { kind == AccountKind.Card },
                     numberEnding = savedEnding,
+                    numberStart = savedStart,
                     cardId = savedCard,
                 )
             }
@@ -560,6 +615,18 @@ fun AccountFormSheet(
                     numberError = null
                 },
                 numberError = numberError,
+                cardNumber = cardNumber,
+                onCardNumber = {
+                    cardNumber = it
+                    numberError = null
+                },
+                keptStart = numberStart,
+                onForgetNumber = {
+                    numberEnding = ""
+                    numberStart = null
+                    cardNumber = ""
+                    numberError = null
+                },
                 cards = linkableCards(walletCards, finance.accounts, existing),
                 cardId = shownCardId,
                 onCardId = { cardId = it },

@@ -1,6 +1,7 @@
 package com.example.normpix.backup
 
 import com.example.normpix.finance.data.FinanceBackupArchive
+import com.example.normpix.settings.CustomFont
 import com.example.normpix.settings.isProfilePhotoName
 import java.io.File
 import java.io.IOException
@@ -20,7 +21,7 @@ import java.util.zip.ZipOutputStream
  * app/settings.json          the app's preferences, each with its type
  * app/reminders.json         every reminder
  * app/profile/<file>         the profile photo
- * app/fonts/<file>           the font file the user picked
+ * app/fonts/<file>           the font file the user picked (always custom-interface-font.ttf, see CustomFont)
  * app/cards.json             the saved cards, locked with a password (a cards file, see CardsTransfer)
  * ```
  *
@@ -29,8 +30,8 @@ import java.util.zip.ZipOutputStream
  * Reading is as careful as for a full backup. An entry with a name that is absolute, has a `..` in it or otherwise isn't a plain
  * relative path makes the whole file unusable - nothing is read past it. Each entry has a size limit, and one over it makes the
  * file unusable too. Photos and fonts are taken only when they are named and shaped as the app makes them (a photo name
- * from `isProfilePhotoName` and a JPEG; a font name of plain characters and a font's header), at most [MAX_FILES] of each;
- * a file that isn't is left out, and no file is ever written anywhere but a folder of its own inside the one it is read into.
+ * from `isProfilePhotoName` and a JPEG; the one font name [CustomFont.FILE_NAME] and a font's header), at most [MAX_FILES] of
+ * each; a file that isn't is left out, and no file is ever written anywhere but a folder of its own inside the one it is read into.
  */
 object AppBackupArchive {
     const val MANIFEST_ENTRY = "app/manifest.json"
@@ -48,8 +49,8 @@ object AppBackupArchive {
     /** Far above a kept profile photo (a 512 pixel square JPEG, a few tens of KB). */
     const val MAX_PHOTO_BYTES = 8L * 1024 * 1024
 
-    /** A font file with room to spare: a variable font runs to a few MB, a CJK one to tens. */
-    const val MAX_FONT_BYTES = 32L * 1024 * 1024
+    /** As big a font as the app takes from the user in the first place ([CustomFont.MAX_BYTES]): a backup holds nothing it wouldn't. */
+    const val MAX_FONT_BYTES = CustomFont.MAX_BYTES
 
     /** The most photos, and the most fonts, taken from one backup. */
     const val MAX_FILES = 8
@@ -84,10 +85,8 @@ object AppBackupArchive {
     /** What a zip held: the finance backup in it, and the app's part - null when it has none (a full backup from before app backups). */
     class Contents(val finance: FinanceBackupArchive.Contents, val app: App?)
 
-    /** Whether a font file is named in a way that is safe to build a path from: plain characters, a font's extension. */
-    fun isFontName(name: String): Boolean = FONT_NAME.matches(name)
-
-    private val FONT_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,63}\\.(ttf|otf|ttc)", RegexOption.IGNORE_CASE)
+    /** Whether [name] is the name the app keeps its font file under - the only font name a backup carries or a restore takes. */
+    fun isFontName(name: String): Boolean = name == CustomFont.FILE_NAME
 
     /** Whether [name] is anything but a plain relative path: absolute, with a drive, a backslash, a NUL or a `..` in it. */
     fun isUnsafeName(name: String): Boolean =
@@ -154,7 +153,7 @@ object AppBackupArchive {
                 name.startsWith(FONTS_PREFIX) -> take(
                     data, name.removePrefix(FONTS_PREFIX), File(into, "fonts"), fonts, MAX_FONT_BYTES,
                     named = { isFontName(it) },
-                    looksRight = { head, n -> looksLikeFont(head, n) },
+                    looksRight = { head, n -> n >= HEADER_BYTES && CustomFont.hasFontHeader(head.copyOfRange(0, HEADER_BYTES)) },
                 )
                 else -> Unit
             }
@@ -221,12 +220,4 @@ object AppBackupArchive {
 
     private fun looksLikeJpeg(head: ByteArray, n: Int): Boolean =
         n >= 3 && head[0] == 0xFF.toByte() && head[1] == 0xD8.toByte() && head[2] == 0xFF.toByte()
-
-    /** A font starts with its table directory's version: 0x00010000 (TrueType), "true", "OTTO" (OpenType with CFF) or "ttcf" (a collection). */
-    private fun looksLikeFont(head: ByteArray, n: Int): Boolean {
-        if (n < HEADER_BYTES) return false
-        val tag = String(head, 0, HEADER_BYTES, Charsets.ISO_8859_1)
-        return tag == "OTTO" || tag == "true" || tag == "ttcf" ||
-            (head[0] == 0.toByte() && head[1] == 1.toByte() && head[2] == 0.toByte() && head[3] == 0.toByte())
-    }
 }

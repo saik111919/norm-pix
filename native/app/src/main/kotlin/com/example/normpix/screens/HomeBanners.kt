@@ -1,5 +1,6 @@
 package com.example.normpix.screens
 
+import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
@@ -14,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.example.normpix.finance.domain.BudgetHealth
 import com.example.normpix.finance.domain.BudgetOverview
@@ -41,6 +43,9 @@ import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.components.rememberDeckStackState
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.StatusTone
+import com.example.normpix.updates.release
+import com.example.normpix.updates.ui.updateActionsFor
+import com.example.normpix.updates.ui.updateBannerFor
 import com.example.normpix.wallet.CardsState
 import com.example.normpix.wallet.expiry.printed
 import com.example.normpix.wallet.expiry.title
@@ -49,12 +54,13 @@ import kotlinx.coroutines.launch
 
 /**
  * What needs attention, right under the month: one stack of banners for each kind of thing - overdue reminders, budgets that
- * are over or nearly used, cards about to expire - the most pressing in front of each stack. Pressing and holding a stack lays
- * its banners out, each with its own buttons, the way the cards and the top spending do. Nothing at all when nothing needs it.
+ * are over or nearly used, cards about to expire, an update to install - the most pressing in front of each stack. Pressing and
+ * holding a stack lays its banners out, each with its own buttons, the way the cards and the top spending do. Nothing at all
+ * when nothing needs it.
  */
 @Composable
 internal fun NeedsAttention(budgets: BudgetOverview) {
-    val stacks = listOf(reminderBanners(), budgetBanners(budgets), cardExpiryBanners())
+    val stacks = listOf(reminderBanners(), budgetBanners(budgets), cardExpiryBanners(), updateBanners())
     // One for each kind of banner, since each is its own stack: the header's button gathers whichever are spread out.
     val decks = List(stacks.size) { rememberDeckStackState() }
     if (stacks.all { it.isEmpty() }) return
@@ -137,8 +143,8 @@ private fun cardExpiryBanners(): List<Banner> {
 
     // The app keeps the expiry reminders in step with the card list on its own; this covers the sample-data cards, which have
     // their own, silent tracker (the Wallet tab does the same).
-    LaunchedEffect(cardsState, container.expiry) {
-        (cardsState as? CardsState.Ready)?.let { container.expiry.sync(it.cards) }
+    LaunchedEffect(cardsState, container.expiry, prefs.walletCardsEnabled) {
+        if (prefs.walletCardsEnabled) (cardsState as? CardsState.Ready)?.let { container.expiry.sync(it.cards) }
     }
     var notificationsOn by remember { mutableStateOf(container.expiry.notificationsEnabled()) }
     LifecycleResumeEffect(container.expiry) {
@@ -148,7 +154,8 @@ private fun cardExpiryBanners(): List<Banner> {
     @Suppress("UNUSED_EXPRESSION")
     lockVersion // re-evaluate the lock whenever it may have changed
 
-    val due = (cardsState as? CardsState.Ready)?.cards.orEmpty()
+    // With Store cards off (Settings > Wallet & Cards) no card is expiring: there are none, even in a sample set.
+    val due = (if (prefs.walletCardsEnabled) (cardsState as? CardsState.Ready)?.cards.orEmpty() else emptyList())
         .mapNotNull { card -> expiryStates[card.id]?.takeIf { it.needsAttention }?.let { card to it } }
         .sortedBy { (_, state) -> state.expiry }
     if (due.isEmpty()) return emptyList()
@@ -193,4 +200,30 @@ private fun cardExpiryBanners(): List<Banner> {
             onOpen = { flows.showCard(card) },
         )
     }
+}
+
+/**
+ * A new version of NormPix, while there is one to act on, as one banner that follows the update through its steps (see
+ * [updateBannerFor]). Its buttons do what the update sheet's do, and pressing the banner opens the App update page. Nothing in a
+ * build that doesn't update itself, and nothing for a release the user said Later to (as at launch).
+ */
+@Composable
+private fun updateBanners(): List<Banner> {
+    val updater = LocalAppContainer.current.updates?.takeIf { it.enabled } ?: return emptyList()
+    val navigator = LocalNavigator.current
+    val context = LocalContext.current
+    val state by updater.state.collectAsState()
+    val laterCode by updater.laterVersionCode.collectAsState()
+    val release = state.release ?: return emptyList()
+    // Keyed on what Later last said, so putting the update off takes the banner down at once.
+    val offered = remember(release, laterCode) { updater.isOffered(release) }
+    val banner = updateBannerFor(
+        state = state,
+        offered = offered,
+        installedVersion = updater.installed.versionName,
+        bytes = { Formatter.formatShortFileSize(context, it) },
+        actions = updateActionsFor(updater, onClose = {}),
+        open = { navigator.openUpdates() },
+    )
+    return listOfNotNull(banner)
 }

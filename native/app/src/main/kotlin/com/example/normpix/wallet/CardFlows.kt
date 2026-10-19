@@ -74,11 +74,22 @@ class CardFlows(
 ) {
     private val cards get() = container.cards
 
+    /** Whether cards are being stored at all (Settings > Wallet & Cards > Store cards); no way to add one is offered otherwise. */
+    private val storing get() = container.preferences.state.value.walletCardsEnabled
+
+    private fun saySettingsKeepNoCards() {
+        snackbars.show("NormPix isn't storing cards. Turn on Store cards in Settings > Wallet & Cards to add one.", SnackbarKind.Warning)
+    }
+
     /**
      * Shows the add-card form and stores the result; null if cancelled or the vault refused.
      * [tapped]: a bank card identified by NFC, so the form starts from what the tap could tell.
      */
     suspend fun addAndSave(tapped: PaymentCardInfo? = null): StoredCard? {
+        if (!storing) {
+            saySettingsKeepNoCards()
+            return null
+        }
         val card = overlays.sheet<StoredCard> { dismiss -> AddCardSheet(initial = null, onDone = dismiss, tapped = tapped) } ?: return null
         if (!cards.add(card)) {
             snackbars.show("Couldn't save to the card vault. Try again.", SnackbarKind.Error)
@@ -109,6 +120,8 @@ class CardFlows(
      * and CVV are copied without ever being shown on screen.
      */
     fun copyField(card: StoredCard, field: CardField): Boolean {
+        // A card kept without a CVV has none to copy.
+        if (field == CardField.Cvv && !card.hasCvv) return false
         val timeout = container.preferences.state.value.clipboardTimeout
         if (!container.clipboard.copy(field.label, field.valueOf(card), timeout)) return false
         haptics.success()
@@ -194,6 +207,10 @@ class CardFlows(
      * Inlet continues in the add-card form, since its details can only be typed or scanned.
      */
     fun openNfcExchange(tab: ExchangeTab = ExchangeTab.Inlet, card: StoredCard? = null) {
+        if (!storing) {
+            saySettingsKeepNoCards()
+            return
+        }
         scope.launch {
             val next = overlays.sheet<ManualEntry> { dismiss ->
                 NfcExchangeSheet(
@@ -227,13 +244,15 @@ class CardFlows(
                 Column(Modifier.padding(AppSpacing.page).padding(bottom = AppSpacing.lg)) {
                     SheetHeader(title = "Add to wallet")
                     Spacer(Modifier.height(AppSpacing.sm))
-                    ListItem(
-                        modifier = Modifier.clickable { dismiss("card") },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        leadingContent = { Icon(Icons.Outlined.CreditCard, contentDescription = null) },
-                        headlineContent = { Text("Payment card") },
-                        supportingContent = { Text("Add debit or credit card to device vault") },
-                    )
+                    if (storing) {
+                        ListItem(
+                            modifier = Modifier.clickable { dismiss("card") },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            leadingContent = { Icon(Icons.Outlined.CreditCard, contentDescription = null) },
+                            headlineContent = { Text("Payment card") },
+                            supportingContent = { Text("Add debit or credit card to device vault") },
+                        )
+                    }
                     ListItem(
                         modifier = Modifier.clickable { dismiss("account") },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -241,13 +260,15 @@ class CardFlows(
                         headlineContent = { Text("Bank account or cash") },
                         supportingContent = { Text("Track a bank balance or cash on hand") },
                     )
-                    ListItem(
-                        modifier = Modifier.clickable { dismiss("nfc_inlet") },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        leadingContent = { Icon(Icons.Outlined.Nfc, contentDescription = null) },
-                        headlineContent = { Text("Tap to add (NFC)") },
-                        supportingContent = { Text("Tap a phone sharing a card from NormPix, or your contactless card") },
-                    )
+                    if (storing) {
+                        ListItem(
+                            modifier = Modifier.clickable { dismiss("nfc_inlet") },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            leadingContent = { Icon(Icons.Outlined.Nfc, contentDescription = null) },
+                            headlineContent = { Text("Tap to add (NFC)") },
+                            supportingContent = { Text("Tap a phone sharing a card from NormPix, or your contactless card") },
+                        )
+                    }
                     Spacer(Modifier.height(AppSpacing.sm))
                 }
             }

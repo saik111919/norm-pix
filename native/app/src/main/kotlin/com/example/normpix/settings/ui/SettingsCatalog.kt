@@ -3,7 +3,6 @@ package com.example.normpix.settings.ui
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.ColorLens
-import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Info
@@ -22,12 +21,14 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.normpix.BuildConfig
+import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.navigation.SettingsPage
 import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
+import com.example.normpix.ui.theme.AppIcons
 import kotlinx.coroutines.launch
 
 /**
@@ -39,9 +40,14 @@ data class SettingsEntry(
     val page: SettingsPage?,
     val keywords: List<String>,
     val special: SettingsSpecial? = null,
+    /** For an Appearance entry: the screen of Appearance it is on (null: Appearance itself, where the theme is). */
+    val appearance: AppearanceSection? = null,
+    /** About saved cards alone: not offered while NormPix isn't storing cards (Settings > Wallet & Cards > Store cards). */
+    val cardsOnly: Boolean = false,
 ) {
     val group: SettingsPage? get() = page
-    val location: String get() = page?.name ?: "Settings"
+    val location: String
+        get() = if (appearance != null) "${page?.name} > ${appearance.title}" else page?.name ?: "Settings"
     val icon: ImageVector get() = if (special != null) SettingsCatalog.iconFor(special) else SettingsCatalog.iconFor(page)
 }
 
@@ -55,16 +61,18 @@ object SettingsCatalog {
 
         // Appearance
         SettingsEntry("Theme", SettingsPage.Appearance, listOf("dark", "light", "system", "theme", "mode")),
-        SettingsEntry("Color source & palette", SettingsPage.Appearance, listOf("color", "dynamic", "material", "wallpaper", "monochrome")),
-        SettingsEntry("Accent color", SettingsPage.Appearance, listOf("accent", "emerald", "ocean", "amber", "rose", "violet", "tint")),
-        SettingsEntry("App icon", SettingsPage.Appearance, listOf("app icon", "launcher", "home screen", "logo", "glossy", "comic", "minimal", "flat", "glass", "clay", "pixel", "paper", "neon")),
-        SettingsEntry("Progress indicators", SettingsPage.Appearance, listOf("progress", "loading", "wavy", "flat", "bar", "spinner", "loader", "indicator", "expressive")),
-        SettingsEntry("Background blur", SettingsPage.Appearance, listOf("sheet", "dialog", "blur", "frosted", "glass", "background", "overlay", "dock", "footer")),
-        SettingsEntry("Category icons", SettingsPage.Appearance, listOf("category", "icons", "emoji", "outline", "outlined", "glyph", "avatar", "style")),
-        SettingsEntry("Icon background", SettingsPage.Appearance, listOf("icon background", "shape", "radius", "circle", "rounded", "square", "avatar", "corners", "disc", "tile", "category", "logo", "round")),
-        SettingsEntry("Interface font", SettingsPage.Appearance, listOf("font", "typeface", "text", "gs flex", "google sans", "weight", "width", "roundness", "zenith", "neo", "impact", "airy")),
-        SettingsEntry("Back button style", SettingsPage.Appearance, listOf("back", "button", "floating", "circle", "header", "dock", "top bar")),
-        SettingsEntry("Page transitions", SettingsPage.Appearance, listOf("animation", "motion", "shared axis", "slide", "fade")),
+        SettingsEntry("Color source & palette", SettingsPage.Appearance, listOf("color", "dynamic", "material", "wallpaper", "monochrome"), appearance = AppearanceSection.Colors),
+        SettingsEntry("Accent color", SettingsPage.Appearance, listOf("accent", "emerald", "ocean", "amber", "rose", "violet", "tint"), appearance = AppearanceSection.Colors),
+        SettingsEntry("App icon", SettingsPage.Appearance, listOf("app icon", "launcher", "home screen", "logo", "glossy", "comic", "minimal", "flat", "glass", "clay", "pixel", "paper", "neon"), appearance = AppearanceSection.AppIcon),
+        SettingsEntry("Progress indicators", SettingsPage.Appearance, listOf("progress", "loading", "wavy", "flat", "bar", "spinner", "loader", "indicator", "expressive"), appearance = AppearanceSection.ProgressIndicators),
+        SettingsEntry("Background blur", SettingsPage.Appearance, listOf("sheet", "dialog", "blur", "frosted", "glass", "background", "overlay", "dock", "footer"), appearance = AppearanceSection.Effects),
+        SettingsEntry("Category icons", SettingsPage.Appearance, listOf("category", "icons", "emoji", "outline", "outlined", "glyph", "avatar", "style"), appearance = AppearanceSection.CategoryIcons),
+        SettingsEntry("Icon background", SettingsPage.Appearance, listOf("icon background", "shape", "radius", "circle", "rounded", "square", "avatar", "corners", "disc", "tile", "category", "logo", "round"), appearance = AppearanceSection.CategoryIcons),
+        SettingsEntry("Interface font", SettingsPage.Appearance, listOf("font", "typeface", "text", "gs flex", "google sans", "weight", "width", "roundness", "zenith", "neo", "impact", "airy"), appearance = AppearanceSection.InterfaceFont),
+        SettingsEntry("Your font", SettingsPage.Appearance, listOf("custom font", "upload font", "ttf", "otf", "font file", "import font", "own font", "my font", "typeface", "text"), appearance = AppearanceSection.InterfaceFont),
+        SettingsEntry("Back button style", SettingsPage.Appearance, listOf("back", "button", "floating", "circle", "header", "dock", "top bar"), appearance = AppearanceSection.BackButton),
+        SettingsEntry("Page transitions", SettingsPage.Appearance, listOf("animation", "motion", "shared axis", "slide", "fade"), appearance = AppearanceSection.PageTransitions),
+        SettingsEntry("Sheet & dialog transitions", SettingsPage.Appearance, listOf("sheet", "dialog", "bottom sheet", "decision", "popup", "overlay", "animation", "motion", "transition", "window", "slide", "fade", "scale"), appearance = AppearanceSection.SheetTransitions),
 
         // Finance
         SettingsEntry("Categories", null, listOf("categories", "labels", "tags"), special = SettingsSpecial.Categories),
@@ -77,15 +85,21 @@ object SettingsCatalog {
         SettingsEntry("Sample data", SettingsPage.Data, listOf("sample data", "dummy data", "test", "mock", "demo")),
         SettingsEntry("Export backup", SettingsPage.Data, listOf("backup", "export", "json", "save")),
         SettingsEntry("Import backup", SettingsPage.Data, listOf("restore", "import", "load", "recover")),
+        SettingsEntry("Backup of everything", SettingsPage.Data, listOf("app backup", "everything", "full app backup", "zip", "new phone", "move to a new phone", "backup settings", "export settings", "backup profile", "backup font")),
+        SettingsEntry("Restore settings", SettingsPage.Data, listOf("restore settings", "import settings", "restore app backup", "restore everything", "restore profile", "restore font")),
+        SettingsEntry("Reminders backup", SettingsPage.Data, listOf("reminders backup", "backup reminders", "export reminders", "restore reminders", "import reminders")),
 
         // Wallet
-        SettingsEntry("Export and import cards", SettingsPage.Wallet, listOf("export cards", "import cards", "card backup", "backup cards", "move cards", "transfer cards", "password")),
-        SettingsEntry("Card actions style", SettingsPage.Wallet, listOf("buttons", "menu", "context menu", "actions")),
+        SettingsEntry("Store cards", SettingsPage.Wallet, listOf("store cards", "don't store cards", "dont store cards", "do not store cards", "delete cards", "delete all cards", "remove cards", "erase cards", "no cards", "save cards", "card vault", "wallet cards", "accounts only")),
+        SettingsEntry("Save CVV", SettingsPage.Wallet, listOf("cvv", "save cvv", "cvc", "security code", "don't save cvv", "dont save cvv", "do not store cvv", "delete cvv", "remove cvv", "card security code", "optional cvv"), cardsOnly = true),
+        SettingsEntry("Card number on account", SettingsPage.Wallet, listOf("card number on account", "account card number", "card number", "first 6 digits", "last 4 digits", "bin", "paid from", "receipts", "match receipts", "recognise card", "recognize card")),
+        SettingsEntry("Export and import cards", SettingsPage.Wallet, listOf("export cards", "import cards", "card backup", "backup cards", "move cards", "transfer cards", "password"), cardsOnly = true),
+        SettingsEntry("Card actions style", SettingsPage.Wallet, listOf("buttons", "menu", "context menu", "actions"), cardsOnly = true),
         SettingsEntry("Accounts layout", SettingsPage.Wallet, listOf("accounts", "stack", "stacked", "cards", "list", "rows", "compact", "layout", "wallet")),
         SettingsEntry("Bank logo style", SettingsPage.Wallet, listOf("logo", "brand", "icon", "compact", "full")),
-        SettingsEntry("NFC tag reveal gate", SettingsPage.Wallet, listOf("nfc", "tap to reveal", "card number", "security", "registered tag", "only my tag", "my tag", "register tag")),
-        SettingsEntry("Card tilt", SettingsPage.Wallet, listOf("tilt", "motion", "gyroscope", "sensor", "parallax", "animation")),
-        SettingsEntry("Clear copied card details after", SettingsPage.Wallet, listOf("clipboard", "copy", "clear", "timeout", "seconds", "security", "cvv")),
+        SettingsEntry("NFC tag reveal gate", SettingsPage.Wallet, listOf("nfc", "tap to reveal", "card number", "security", "registered tag", "only my tag", "my tag", "register tag"), cardsOnly = true),
+        SettingsEntry("Card tilt", SettingsPage.Wallet, listOf("tilt", "motion", "gyroscope", "sensor", "parallax", "animation"), cardsOnly = true),
+        SettingsEntry("Clear copied card details after", SettingsPage.Wallet, listOf("clipboard", "copy", "clear", "timeout", "seconds", "security", "cvv"), cardsOnly = true),
 
         // Notifications
         SettingsEntry("Notifications", SettingsPage.Notifications, listOf("notifications", "notify", "alerts", "alert", "mute", "silence", "reminder alerts", "card expiry")),
@@ -108,13 +122,17 @@ object SettingsCatalog {
         SettingsEntry("About NormPix", null, listOf("licenses", "version", "privacy"), special = SettingsSpecial.About),
     )
 
-    fun search(query: String): List<SettingsEntry> {
+    /** The settings matching [query]; with [cardsEnabled] false (Store cards off) the ones about saved cards are left out. */
+    fun search(query: String, cardsEnabled: Boolean = true): List<SettingsEntry> {
         val q = query.trim().lowercase()
         if (q.isEmpty()) return emptyList()
         return entries.filter { entry ->
-            entry.title.lowercase().contains(q) ||
-                entry.keywords.any { it.contains(q) } ||
-                (entry.page?.name?.lowercase()?.contains(q) == true)
+            (cardsEnabled || !entry.cardsOnly) && (
+                entry.title.lowercase().contains(q) ||
+                    entry.keywords.any { it.contains(q) } ||
+                    (entry.page?.name?.lowercase()?.contains(q) == true) ||
+                    (entry.appearance?.title?.lowercase()?.contains(q) == true)
+                )
         }
     }
 
@@ -122,7 +140,7 @@ object SettingsCatalog {
         SettingsPage.Appearance -> Icons.Outlined.Palette
         SettingsPage.Finance -> Icons.Outlined.Payments
         SettingsPage.Data -> Icons.Outlined.Storage
-        SettingsPage.Wallet -> Icons.Outlined.CreditCard
+        SettingsPage.Wallet -> AppIcons.Wallet
         SettingsPage.Availability -> Icons.Outlined.Schedule
         SettingsPage.Notifications -> Icons.Outlined.Notifications
         SettingsPage.Updates -> Icons.Outlined.Update
@@ -154,6 +172,7 @@ fun rememberSettingsActivator(): SettingsActivator {
     return remember(navigator, system) {
         SettingsActivator { entry ->
             when {
+                entry.appearance != null -> navigator.openAppearance(entry.appearance)
                 entry.page != null -> navigator.openSettings(entry.page)
                 entry.special == SettingsSpecial.Profile -> navigator.openProfile()
                 entry.special == SettingsSpecial.Categories -> navigator.openCategories()

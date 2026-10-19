@@ -74,8 +74,8 @@ enum class PageAnimationType(val label: String, val description: String) {
 enum class SheetAnimationType(val label: String, val description: String) {
     Window("Window", "Grows out of the bottom edge as it rises, and shrinks back into it as it goes"),
     Slide("Slide", "The standard bottom sheet: it slides up from the bottom edge"),
-    Fade("Fade", "Fades in as it rises, and fades out as it goes"),
-    Scale("Scale", "Grows from its middle as it rises, and shrinks back as it goes"),
+    Fade("Fade", "Stays where it rests and fades in, then fades out as it goes"),
+    Scale("Scale", "Stays where it rests and grows from its bottom edge as it fades in, then shrinks back as it goes"),
     ;
 
     companion object {
@@ -284,6 +284,16 @@ data class AppPrefsState(
     val clipboardTimeout: ClipboardTimeout = ClipboardTimeout.Sec10,
     /** Cards tilt a few degrees with the phone's motion. Off, or with animations removed system-wide, they stay flat. */
     val cardTiltEnabled: Boolean = true,
+    /**
+     * Settings > Wallet & Cards > Save CVV. Off, no card keeps a CVV: the field is gone from the card form, and a card from a
+     * scan, an NFC tap or a cards file is kept without one. Turning it off deletes the CVVs already saved, after asking.
+     */
+    val cardCvvEnabled: Boolean = true,
+    /**
+     * Settings > Wallet & Cards > Store cards. Off, NormPix keeps no cards at all: the vault is emptied (after asking), the Wallet
+     * shows accounts only, and everything about cards leaves the settings and the search. Turning it back on starts empty.
+     */
+    val walletCardsEnabled: Boolean = true,
     /** Blurs the background behind bottom sheets on supported devices. */
     val sheetBlurEnabled: Boolean = true,
     /** Back button style and placement on sub-pages. */
@@ -396,6 +406,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
             transactionSwipeActions = prefs.enum(K_TRANSACTION_SWIPE, defaults.transactionSwipeActions),
             clipboardTimeout = prefs.enum(K_CLIPBOARD_TIMEOUT, defaults.clipboardTimeout),
             cardTiltEnabled = prefs.getBoolean(K_CARD_TILT, defaults.cardTiltEnabled),
+            cardCvvEnabled = prefs.getBoolean(K_CARD_CVV, defaults.cardCvvEnabled),
+            walletCardsEnabled = prefs.getBoolean(K_WALLET_CARDS, defaults.walletCardsEnabled),
             sheetBlurEnabled = prefs.getBoolean(K_SHEET_BLUR, defaults.sheetBlurEnabled),
             backButtonStyle = prefs.enum(K_BACK_STYLE, defaults.backButtonStyle),
             progressStyle = prefs.enum(K_PROGRESS_STYLE, defaults.progressStyle),
@@ -504,6 +516,14 @@ class AppPreferences(private val prefs: SharedPreferences) {
 
     fun setCardTiltEnabled(enabled: Boolean) =
         change({ copy(cardTiltEnabled = enabled) }) { putBoolean(K_CARD_TILT, enabled) }
+
+    /** Only the settings flow that has dealt with the CVVs already saved should call this (see `CardsSettingsFlows`). */
+    fun setCardCvvEnabled(enabled: Boolean) =
+        change({ copy(cardCvvEnabled = enabled) }) { putBoolean(K_CARD_CVV, enabled) }
+
+    /** Only the settings flow that has erased the cards already saved should call this with false (see `CardsSettingsFlows`). */
+    fun setWalletCardsEnabled(enabled: Boolean) =
+        change({ copy(walletCardsEnabled = enabled) }) { putBoolean(K_WALLET_CARDS, enabled) }
 
     fun setSheetBlurEnabled(enabled: Boolean) =
         change({ copy(sheetBlurEnabled = enabled) }) { putBoolean(K_SHEET_BLUR, enabled) }
@@ -746,6 +766,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_TRANSACTION_SWIPE = "transaction_swipe_actions"
         const val K_CLIPBOARD_TIMEOUT = "clipboard_timeout"
         const val K_CARD_TILT = "card_tilt_enabled"
+        const val K_CARD_CVV = "card_cvv_enabled"
+        const val K_WALLET_CARDS = "wallet_cards_enabled"
         const val K_SHEET_BLUR = "sheet_blur_enabled"
         const val K_BACK_STYLE = "back_button_style"
         const val K_PROGRESS_STYLE = "progress_style"
@@ -784,6 +806,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
          *   file would get around.
          * - [K_NFC_REVEAL], [K_NFC_REVEAL_REGISTERED]: the NFC gate for revealing a card. It needs this phone's NFC and the tags
          *   registered here (kept apart, under a key that never leaves this phone), and it is a lock like the one above.
+         * - [K_CARD_CVV], [K_WALLET_CARDS]: whether this phone keeps CVVs and cards at all. Each is tied to what is stored here
+         *   (turning one off deletes it, after asking), so a file must neither switch it off over saved cards nor back on.
          * Update records and the card vault are in files of their own, not in these preferences.
          */
         val BACKUP_EXCLUDED: Set<String> = setOf(
@@ -794,6 +818,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
             K_LOCK_TIMEOUT,
             K_NFC_REVEAL,
             K_NFC_REVEAL_REGISTERED,
+            K_CARD_CVV,
+            K_WALLET_CARDS,
         )
 
         fun ScheduledFeature.key(field: String) = "availability_${name.lowercase()}_$field"

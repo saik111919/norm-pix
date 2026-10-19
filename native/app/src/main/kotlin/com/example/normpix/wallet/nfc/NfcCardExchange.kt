@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -56,7 +57,7 @@ sealed class NfcOutletState {
 }
 
 /**
- * Serializes a [StoredCard] into an NFC exchange payload.
+ * Serializes a [StoredCard] into an NFC exchange payload. A card kept without a CVV is sent without one.
  */
 fun StoredCard.toNfcExchangePayload(): String = buildJsonObject {
     put("type", "normpix_card")
@@ -66,7 +67,7 @@ fun StoredCard.toNfcExchangePayload(): String = buildJsonObject {
     put("cardNumber", cardNumber)
     put("expiryMonth", expiryMonth)
     put("expiryYear", expiryYear)
-    put("cvv", cvv)
+    if (hasCvv) put("cvv", cvv)
     put("kind", kind.key)
 }.toString()
 
@@ -93,7 +94,8 @@ fun parseCardFromNfcPayload(raw: String): StoredCard? = runCatching {
     if (cardNumber.any { !it.isDigit() && it != ' ' && it != '-' } || digits.length !in MIN_DIGITS..MAX_DIGITS) return null
     val expiryMonth = json["expiryMonth"]?.jsonPrimitive?.content ?: "12"
     val expiryYear = json["expiryYear"]?.jsonPrimitive?.content ?: "30"
-    val cvv = json["cvv"]?.jsonPrimitive?.content ?: ""
+    // Optional, and only ever a 3-4 digit code: anything else (absent, null, empty, junk) means the card has none.
+    val cvv = (json["cvv"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.length in 3..4 && it.all(Char::isDigit) }.orEmpty()
     val kindKey = json["kind"]?.jsonPrimitive?.content ?: "credit"
     val kind = CardKind.entries.firstOrNull { it.key == kindKey } ?: CardKind.Credit
 

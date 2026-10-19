@@ -90,6 +90,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import com.example.normpix.banks.ui.AccountMark
@@ -116,16 +117,17 @@ import com.example.normpix.ui.theme.isDark
  */
 
 /**
- * One choice of a [ConnectedChoiceRow] or [ChoiceDropdownField]. [tint] gives a category-style tonal icon badge;
- * [glyph] replaces the icon with other artwork (a bank's logo) in the dropdown.
+ * One choice of a [ConnectedChoiceRow] or [ChoiceDropdownField]. [glyph] replaces the icon with other artwork (a bank's logo)
+ * on its badge in the dropdown. [avatar] replaces the badge altogether, drawn at the size it is given: for a category or a
+ * person, whose mark is the same avatar here as in the lists ([CategoryAvatar], [PersonAvatar]) - in the shape the user chose.
  */
 @Immutable
 class ChoiceOption<K>(
     val key: K,
     val label: String,
     val icon: ImageVector,
-    val tint: PaletteColors? = null,
     val glyph: (@Composable () -> Unit)? = null,
+    val avatar: (@Composable (size: Dp) -> Unit)? = null,
 )
 
 /** Round-cornered tonal fields: filled, no outline, an indicator only for errors. */
@@ -317,6 +319,8 @@ fun <K> ChoiceDropdownField(
     onCreate: (() -> Unit)? = null,
     /** The badge shown while nothing is chosen, so the card has its icon from the start. */
     emptyIcon: ImageVector? = null,
+    /** Whether [emptyIcon] stands for a category or a person, and so is drawn as an avatar in the shape the user chose. */
+    emptyAsAvatar: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
     val haptics = rememberAppHaptics()
@@ -332,7 +336,7 @@ fun <K> ChoiceDropdownField(
             placeholder = { Text(placeholder) },
             leadingIcon = when {
                 current != null -> { { ChoiceIcon(current) } }
-                emptyIcon != null -> { { IconBadge(emptyIcon) } }
+                emptyIcon != null -> { { if (emptyAsAvatar) NeutralAvatar(emptyIcon) else IconBadge(emptyIcon) } }
                 else -> null
             },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
@@ -393,7 +397,13 @@ fun <K> ChoiceDropdownField(
     }
 }
 
-/** An icon on a 40dp circular badge with a soft tonal background: the one icon container every selection field uses. */
+/** The size of the badge (or avatar) at the start of a selection field. */
+private val IconBadgeSize = 40.dp
+
+/**
+ * An icon on a 40dp circular badge with a soft tonal background: the one icon container every selection field uses, for
+ * anything but a category or a person - those are shown as the avatars the user chose the shape of (see [ChoiceOption.avatar]).
+ */
 @Composable
 fun IconBadge(
     icon: ImageVector?,
@@ -402,7 +412,7 @@ fun IconBadge(
     content: Color = MaterialTheme.colorScheme.onSecondaryContainer,
     glyph: (@Composable () -> Unit)? = null,
 ) {
-    Box(modifier.size(40.dp).background(container, CircleShape), contentAlignment = Alignment.Center) {
+    Box(modifier.size(IconBadgeSize).background(container, CircleShape), contentAlignment = Alignment.Center) {
         if (glyph != null) {
             glyph()
         } else if (icon != null) {
@@ -411,17 +421,11 @@ fun IconBadge(
     }
 }
 
-/** A choice's icon as a [IconBadge]: in its own palette (a category), or the neutral tonal one. */
+/** A choice's mark: its own [ChoiceOption.avatar] (a category, a person), or its icon on the neutral tonal [IconBadge]. */
 @Composable
 private fun <K> ChoiceIcon(option: ChoiceOption<K>) {
-    val scheme = MaterialTheme.colorScheme
-    val tint = option.tint
-    IconBadge(
-        option.icon,
-        container = tint?.container ?: scheme.secondaryContainer,
-        content = tint?.onContainer ?: scheme.onSecondaryContainer,
-        glyph = option.glyph,
-    )
+    val avatar = option.avatar
+    if (avatar != null) avatar(IconBadgeSize) else IconBadge(option.icon, glyph = option.glyph)
 }
 
 /**
@@ -632,14 +636,14 @@ fun PersonSelector(
     onCreate: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    val options = listOf(ChoiceOption(NO_PERSON, "No one in particular", Icons.Outlined.Person)) + people.map { person ->
-        val tone = paletteColor(person.color)
+    val options = listOf(
+        ChoiceOption(NO_PERSON, "No one in particular", Icons.Outlined.Person, avatar = { size -> PersonAvatar(null, size = size) }),
+    ) + people.map { person ->
         ChoiceOption(
             person.id!!,
             if (person.archived) "${person.name} (archived)" else person.name,
             Icons.Outlined.Person,
-            tone,
-            glyph = { PersonGlyph(person, tone.onContainer, 22.dp) },
+            avatar = { size -> PersonAvatar(person, size = size) },
         )
     }
     ChoiceDropdownField(
@@ -652,5 +656,6 @@ fun PersonSelector(
         createLabel = "New person",
         onCreate = onCreate,
         emptyIcon = Icons.Outlined.Person,
+        emptyAsAvatar = true,
     )
 }

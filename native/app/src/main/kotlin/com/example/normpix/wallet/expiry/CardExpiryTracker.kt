@@ -98,6 +98,12 @@ class CardExpiryTracker(
         rearm()
     }
 
+    /**
+     * Forgets every card: each one's alarm and notification are cancelled and its record removed, so nothing about a card's
+     * expiry is left once the cards are deleted (Store cards turned off).
+     */
+    fun clear() = sync(emptyList())
+
     /** The user marked this card done: no more reminders for this expiry. */
     @Synchronized
     fun markDone(cardId: String) {

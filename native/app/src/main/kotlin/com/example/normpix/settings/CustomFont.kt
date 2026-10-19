@@ -170,7 +170,7 @@ object CustomFont {
         val size = source.length()
         if (!source.isFile || size <= 0L || size > MAX_BYTES) return null
         val folder = File(context.cacheDir, FOLDER)
-        val copy = File(folder, "interface-$size-${source.lastModified()}.ttf")
+        val copy = stampedCopy(folder, source, size)
         if (copy.isFile && copy.length() == size) return copy
         if (!hasFontHeader(source) || !canLoad(source)) return null
         val staged = File(folder, copy.name + ".part")
@@ -184,6 +184,23 @@ object CustomFont {
             null
         }
     }
+
+    /**
+     * The copy [loadable] made of the saved font, if it is already there: two file lookups and nothing else, so the screen can
+     * ask for it on the first frame and draw in the user's font at once. Null when there is no copy yet (then [loadable]
+     * makes it, off the main thread).
+     */
+    fun ready(context: Context): File? {
+        val source = file(context)
+        val size = source.length()
+        if (!source.isFile || size <= 0L || size > MAX_BYTES) return null
+        val copy = stampedCopy(File(context.cacheDir, FOLDER), source, size)
+        return copy.takeIf { it.isFile && it.length() == size }
+    }
+
+    /** The cache copy of [source] as it is now: named by its size and its last change, so a different file is a different path. */
+    private fun stampedCopy(folder: File, source: File, size: Long): File =
+        File(folder, "interface-$size-${source.lastModified()}.ttf")
 
     /** Removes the saved font and the copies drawn with. */
     fun delete(context: Context) {

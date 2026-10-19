@@ -85,7 +85,7 @@ fun SettingsScreen() {
     val is24Hour = android.text.format.DateFormat.is24HourFormat(androidx.compose.ui.platform.LocalContext.current)
     var query by rememberSaveable { mutableStateOf("") }
     val searching = query.isNotBlank()
-    val results = SettingsCatalog.search(query)
+    val results = SettingsCatalog.search(query, cardsEnabled = prefs.walletCardsEnabled)
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val searchFocus = remember { FocusRequester() }
@@ -245,7 +245,7 @@ private fun summary(group: SettingsPage, prefs: AppPrefsState, finance: FinanceS
         } else {
             "Biometric lock off"
         }
-    SettingsPage.Wallet -> prefs.walletCardActionStyle.label
+    SettingsPage.Wallet -> if (prefs.walletCardsEnabled) prefs.walletCardActionStyle.label else "Cards aren't stored · Accounts only"
     SettingsPage.Notifications -> if (prefs.notificationsEnabled) "On · Reminders, card expiry and updates" else "Off"
     SettingsPage.Updates -> automaticUpdatesSummary(prefs)
     SettingsPage.Availability -> ScheduledFeature.entries.joinToString(" · ") { feature ->

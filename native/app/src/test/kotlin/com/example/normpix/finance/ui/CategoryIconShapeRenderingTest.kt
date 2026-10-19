@@ -17,14 +17,17 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
+import com.example.normpix.finance.domain.Category
 import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.FinanceTransaction
+import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.settings.CategoryIconShape
 import com.example.normpix.settings.CategoryIconStyle
 import com.example.normpix.testing.TestEnvironment
 import com.example.normpix.ui.components.AssetBitmaps
 import java.time.LocalDateTime
+import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
@@ -133,6 +136,89 @@ class CategoryIconShapeRenderingTest {
         val bare = shot(CategoryIconShape.None)
         assertEquals(page, bare.corner(0.12f), "with no background, no tile behind the arrows")
         assertTrue(bare.hasInk())
+    }
+
+    // ------------------------------------------------------------ the editors draw the same avatars
+
+    private val fieldWidth = 360f
+
+    /** A field of an editor, 360dp wide on a white page. */
+    private fun showField(field: @androidx.compose.runtime.Composable () -> Unit) {
+        env.preferences.setCategoryIconStyle(CategoryIconStyle.Outline)
+        compose.setContent {
+            env.Content { Box(Modifier.testTag("page").width(fieldWidth.dp).background(page)) { field() } }
+        }
+        compose.waitForIdle()
+    }
+
+    /**
+     * How much of a field's start (its first 60dp, where its picture is) is drawn in something other than the field's own
+     * fill, in square dp: a disc of the picture's size, the less the rounder it is; with no background, only the icon.
+     */
+    private fun PixelMap.startInk(): Float {
+        val perDp = width / fieldWidth
+        val fill = this[(6 * perDp).toInt(), height / 2]
+        var count = 0
+        for (y in 0 until height) {
+            for (x in 0 until (60 * perDp).toInt()) {
+                val c = this[x, y]
+                if (abs(c.red - fill.red) + abs(c.green - fill.green) + abs(c.blue - fill.blue) > 0.06f) count++
+            }
+        }
+        return count / (perDp * perDp)
+    }
+
+    /** Circle, then rounded, then square cover more and more of their 40dp box; none covers only the icon. */
+    private fun assertTheFieldsPictureFollowsTheShape(what: String) {
+        val circle = shot(CategoryIconShape.Circle).startInk()
+        val rounded = shot(CategoryIconShape.Rounded).startInk()
+        val square = shot(CategoryIconShape.Square).startInk()
+        val bare = shot(CategoryIconShape.None).startInk()
+        assertTrue(rounded - circle > 40f, "$what: a rounded square has more corner than a circle ($circle, $rounded)")
+        assertTrue(square - rounded > 40f, "$what: a square has more corner than a rounded one ($rounded, $square)")
+        assertTrue(circle - bare > 600f, "$what: with no background only the icon is drawn, not a 40dp disc ($circle, $bare)")
+    }
+
+    private fun anExpenseCategory(): Category = runBlocking {
+        val finance = env.container.finance
+        finance.load()
+        finance.state.value.categories.first { it.name == "Shopping" && it.type == CategoryType.Expense }
+    }
+
+    @Test
+    fun theCategoryFieldOfTheEditorsFollowsTheShape() {
+        val category = anExpenseCategory()
+        showField {
+            TransactionCategoryField(categories = listOf(category), selected = category.id, onSelect = {}, onCreate = null)
+        }
+        assertTheFieldsPictureFollowsTheShape("the chosen category")
+    }
+
+    @Test
+    fun theCategoryFieldWithNothingChosenFollowsTheShapeToo() {
+        val category = anExpenseCategory()
+        showField {
+            TransactionCategoryField(categories = listOf(category), selected = null, onSelect = {}, onCreate = null)
+        }
+        assertTheFieldsPictureFollowsTheShape("no category yet")
+    }
+
+    @Test
+    fun thePersonFieldOfTheExpenseEditorFollowsTheShape() {
+        val person = Person(id = 7L, name = "Asha", color = 2, createdAt = now, updatedAt = now)
+        showField { PersonSelector(people = listOf(person), selected = person.id, onSelect = {}, onCreate = null) }
+        assertTheFieldsPictureFollowsTheShape("the person")
+    }
+
+    @Test
+    fun anAccountStaysOnItsOwnRoundBadge_whateverTheShape() {
+        val bank = Account(id = 3L, name = "Everyday", kind = AccountKind.Bank, createdAt = now, updatedAt = now)
+        showField { AccountSelector(label = "Paid from", accounts = listOf(bank), selected = bank.id, onSelect = {}) }
+        val circle = shot(CategoryIconShape.Circle).startInk()
+        val square = shot(CategoryIconShape.Square).startInk()
+        val bare = shot(CategoryIconShape.None).startInk()
+        assertEquals(circle, square, 1f, "an account is not a category: its badge is the same in every shape")
+        assertEquals(circle, bare, 1f)
     }
 
     // ------------------------------------------------------------ payee logos on a transaction row

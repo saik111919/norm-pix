@@ -2,32 +2,50 @@ package com.example.normpix.updates
 
 import android.content.Context
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import com.example.normpix.navigation.SettingsPage
 import com.example.normpix.settings.AppPreferences
+import com.example.normpix.settings.AppPrefsState
 import com.example.normpix.settings.BackgroundUpdates
+import com.example.normpix.settings.UpdateCheckEvery
+import com.example.normpix.settings.UpdateCheckWhen
 import com.example.normpix.settings.ui.SettingsCatalog
 import com.example.normpix.settings.ui.SettingsScreen
 import com.example.normpix.settings.ui.SettingsSpecial
 import com.example.normpix.settings.ui.UpdatesSettingsPage
+import com.example.normpix.settings.ui.automaticUpdatesSummary
 import com.example.normpix.testing.TestEnvironment
 import com.example.normpix.ui.theme.NormPixTheme
 import com.example.normpix.updates.ui.OfferAppUpdates
+import com.example.normpix.updates.ui.UpdateBody
 import com.example.normpix.updates.ui.UpdatePage
 import com.example.normpix.updates.ui.UpdateSheetActions
 import com.example.normpix.updates.ui.UpdateSheetContent
 import java.io.File
 import java.time.Instant
+import java.time.LocalTime
 import kotlin.io.path.createTempDirectory
+import kotlin.math.abs
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -40,6 +58,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -105,6 +124,9 @@ class UpdateUiTest {
         compose.waitForIdle()
     }
 
+    /** The text's box on screen, from the root of the composition. */
+    private fun boundsOf(text: String) = compose.onNodeWithText(text).getBoundsInRoot()
+
     private fun absent(text: String) = assertTrue(compose.onAllNodesWithText(text).fetchSemanticsNodes().isEmpty(), "\"$text\" is not shown")
 
     private fun waitFor(text: String, substring: Boolean = false) =
@@ -139,6 +161,42 @@ class UpdateUiTest {
         tap("Update now")
         tap("Later")
         assertEquals(listOf("update", "later"), taps)
+    }
+
+    @Test
+    fun `Later is a text button on the left, Update now a filled button on the right`() {
+        show(UpdateState.Available(release))
+        val later = boundsOf("Later")
+        val update = boundsOf("Update now")
+        val screen = compose.onRoot().getBoundsInRoot()
+        assertTrue(later.right <= update.left, "Later $later is left of Update now $update")
+        assertTrue(later.left < screen.left + screen.width / 2, "Later is in the left half")
+        assertTrue(update.right > screen.left + screen.width / 2, "Update now is in the right half")
+        assertTrue(screen.right - update.right <= 32.dp, "Update now sits at the right edge: $update in $screen")
+        assertEquals(0f, abs((later.top + later.bottom).value - (update.top + update.bottom).value), 2f, "on one line")
+        // The same pair for an update that is ready: Later, then Install.
+        show(UpdateState.Ready(release, apk))
+        assertTrue(boundsOf("Later").right <= boundsOf("Install").left)
+        // And Not now, then Open settings, when Android's leave is needed.
+        show(UpdateState.NeedsPermission(release, apk))
+        assertTrue(boundsOf("Not now").right <= boundsOf("Open settings").left)
+    }
+
+    @Test
+    fun `a single action sits on the right`() {
+        val screen = { compose.onRoot().getBoundsInRoot() }
+        show(UpdateState.Downloading(release, release.size / 2, release.size))
+        assertTrue(screen().right - boundsOf("Cancel download").right <= 32.dp, "Cancel download is on the right")
+        show(UpdateState.UpToDate("1.0.2"))
+        assertTrue(screen().right - boundsOf("Done").right <= 32.dp, "Done is on the right")
+        show(UpdateState.Installing(release, apk))
+        assertTrue(screen().right - boundsOf("Close").right <= 32.dp, "Close is on the right")
+        // A failure that can't be tried again has Close alone; one that can has Close on the left and Try again on the right.
+        show(UpdateState.Failed(UpdateProblem.SignatureMismatch, release))
+        assertTrue(screen().right - boundsOf("Close").right <= 32.dp)
+        show(UpdateState.Failed(UpdateProblem.Offline))
+        assertTrue(boundsOf("Close").right <= boundsOf("Try again").left)
+        assertTrue(screen().right - boundsOf("Try again").right <= 32.dp)
     }
 
     @Test
@@ -205,6 +263,25 @@ class UpdateUiTest {
     // ------------------------------------------------------------ Settings
 
     @Test
+    fun `the page's body shows all the notes, the sheet's box caps them`() {
+        val long = release.copy(notes = (1..40).joinToString("\n") { "- Change number $it" })
+        var cap by mutableStateOf<Dp?>(null)
+        compose.setContent {
+            NormPixTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Box(Modifier.testTag("body")) { UpdateBody(UpdateState.Available(long), Releases.installed, notesMaxHeight = cap) }
+                }
+            }
+        }
+        compose.waitForIdle()
+        val whole = compose.onNodeWithTag("body").getBoundsInRoot().height
+        cap = 220.dp
+        compose.waitForIdle()
+        val capped = compose.onNodeWithTag("body").getBoundsInRoot().height
+        assertTrue(whole > capped + 300.dp, "40 lines of notes take $whole on the page, and at most $capped in the sheet")
+    }
+
+    @Test
     fun `Check for updates in Settings opens the update page`() {
         val environment = environment(updater())
         compose.setContent { environment.Content { SettingsScreen() } }
@@ -230,7 +307,45 @@ class UpdateUiTest {
         compose.setContent { environment.Content { UpdatePage() } }
         waitFor("Update available")
         compose.onNodeWithText("1.0.3").assertIsDisplayed()
-        compose.onNodeWithText("Update now").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Update now").assertIsDisplayed()
+        compose.onNodeWithText("Later").assertIsDisplayed()
+    }
+
+    @Test
+    fun `the update page scrolls its content above buttons pinned at the foot of the screen`() {
+        val notes = (1..40).joinToString("\n") { "- Change number $it" }
+        Releases.publish(network, changes = mapOf("notes" to JsonPrimitive(notes)))
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("Update available")
+        val screen = compose.onRoot().getBoundsInRoot()
+        val pinned = boundsOf("Update now")
+        val later = boundsOf("Later")
+        assertTrue(pinned.top > screen.top + screen.height / 2, "the buttons are in the lower half, without scrolling: $pinned")
+        assertTrue(later.right <= pinned.left, "Later on the left, Update now on the right")
+        assertTrue(screen.right - pinned.right <= 32.dp, "Update now at the right edge")
+
+        // The page scrolls all the way to its last line while the buttons stay where they are.
+        compose.onNodeWithText("Only GitHub is contacted", substring = true).performScrollTo().assertIsDisplayed()
+        assertEquals(pinned, boundsOf("Update now"), "the bar doesn't move with the page")
+        assertEquals(later, boundsOf("Later"))
+        tap("Update now")
+        compose.waitUntil(10_000) {
+            compose.waitForIdle()
+            compose.onAllNodesWithText("Ready to install").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Install").assertIsDisplayed()
+    }
+
+    @Test
+    fun `Later on the update page puts the update off and leaves`() {
+        Releases.publish(network)
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("Update available")
+        tap("Later")
+        assertEquals(10003L, records.dismissedVersionCode)
+        assertEquals(1, environment.navigator.backs)
     }
 
     @Test
@@ -257,7 +372,7 @@ class UpdateUiTest {
         }
         waitFor("Update available")
         val asked = network.asked.size
-        scrollTap("Update now")
+        tap("Update now")
         compose.waitUntil(10_000) {
             compose.waitForIdle()
             updater.state.value is UpdateState.Ready
@@ -278,15 +393,125 @@ class UpdateUiTest {
     }
 
     @Test
+    fun `the summary says how often, at what time, what is done and on which network`() {
+        assertEquals("Daily · Download, then ask · Wi-Fi only", automaticUpdatesSummary(AppPrefsState()))
+        val weekly = AppPrefsState(updateCheckEvery = UpdateCheckEvery.OnceAWeek, updateCheckWhen = UpdateCheckWhen.AtSetTime)
+        assertEquals("Weekly at 9:00 PM · Download, then ask · Wi-Fi only", automaticUpdatesSummary(weekly))
+        assertEquals("Weekly at 21:00 · Download, then ask · Wi-Fi only", automaticUpdatesSummary(weekly, is24Hour = true))
+        assertEquals(
+            "Every 3 days at 7:30 AM · Install automatically · any network",
+            automaticUpdatesSummary(
+                weekly.copy(
+                    updateCheckEvery = UpdateCheckEvery.EveryThreeDays,
+                    updateCheckMinuteOfDay = 7 * 60 + 30,
+                    backgroundUpdates = BackgroundUpdates.Install,
+                    updateOnMobileData = true,
+                ),
+            ),
+        )
+        assertEquals(
+            "Twice daily at 9:00 AM and 9:00 PM · Tell me",
+            automaticUpdatesSummary(
+                weekly.copy(updateCheckEvery = UpdateCheckEvery.TwiceADay, backgroundUpdates = BackgroundUpdates.Notify, updateCheckMinuteOfDay = 9 * 60),
+            ),
+        )
+        assertEquals("Twice daily · Tell me", automaticUpdatesSummary(AppPrefsState(updateCheckEvery = UpdateCheckEvery.TwiceADay, backgroundUpdates = BackgroundUpdates.Notify)))
+        assertEquals("Off · only when you check", automaticUpdatesSummary(AppPrefsState(updateChecksEnabled = false)))
+    }
+
+    @Test
+    fun `Settings shows the summary of the choices made`() {
+        val environment = environment(updater())
+        environment.preferences.setUpdateCheckEvery(UpdateCheckEvery.OnceAWeek)
+        environment.preferences.setUpdateCheckWhen(UpdateCheckWhen.AtSetTime)
+        compose.setContent { environment.Content { SettingsScreen() } }
+        compose.onNodeWithText("Automatic updates").performScrollTo()
+        compose.onNodeWithText("Weekly at 9:00 PM · Download, then ask · Wi-Fi only").assertIsDisplayed()
+    }
+
+    @Test
     fun `automatic checks can be turned off, and with them everything done in the background`() {
         val environment = environment(updater())
         compose.setContent { environment.Content { UpdatesSettingsPage() } }
         assertTrue(environment.preferences.state.value.updateChecksEnabled)
         compose.onNodeWithText("Download it, then ask").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("How often").performScrollTo().assertIsDisplayed()
         scrollTap("Check for updates automatically")
         assertFalse(environment.preferences.state.value.updateChecksEnabled)
         absent("When an update is found")
         absent("Download it, then ask")
+        absent("How often")
+        absent("Check when you open NormPix")
+    }
+
+    @Test
+    fun `how often to check is the user's to choose, a day being where it starts`() {
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatesSettingsPage() } }
+        assertEquals(UpdateCheckEvery.OnceADay, environment.preferences.state.value.updateCheckEvery)
+        compose.onNodeWithText("Once a day, in the background and when you open NormPix").performScrollTo().assertIsDisplayed()
+        for (choice in listOf(UpdateCheckEvery.OnceAWeek, UpdateCheckEvery.EveryThreeDays, UpdateCheckEvery.TwiceADay, UpdateCheckEvery.OnceADay)) {
+            scrollTap(choice.label)
+            assertEquals(choice, environment.preferences.state.value.updateCheckEvery)
+        }
+        scrollTap("Once a week")
+        compose.onNodeWithText("Once a week, in the background and when you open NormPix").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `a time to check is asked for only when checking at a set time`() {
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatesSettingsPage() } }
+        assertEquals(UpdateCheckWhen.AnyTime, environment.preferences.state.value.updateCheckWhen)
+        compose.onNodeWithText("Any time").performScrollTo().assertIsDisplayed()
+        absent("Check time")
+
+        scrollTap("At a set time")
+        assertEquals(UpdateCheckWhen.AtSetTime, environment.preferences.state.value.updateCheckWhen)
+        compose.onNodeWithText("Check time").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("9:00 PM").performScrollTo().assertIsDisplayed()
+
+        environment.preferences.setUpdateCheckTime(7, 30)
+        compose.waitForIdle()
+        compose.onNodeWithText("7:30 AM").performScrollTo().assertIsDisplayed()
+
+        // Twice a day is the time and 12 hours on: both are shown.
+        scrollTap("Twice a day")
+        compose.onNodeWithText("7:30 AM and 7:30 PM").performScrollTo().assertIsDisplayed()
+
+        scrollTap("Any time")
+        compose.waitUntil(5_000) {
+            compose.waitForIdle()
+            compose.onAllNodesWithText("Check time").fetchSemanticsNodes().isEmpty()
+        }
+    }
+
+    @Test
+    fun `checking when NormPix opens is a switch of its own, on until turned off`() {
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatesSettingsPage() } }
+        assertTrue(environment.preferences.state.value.updateCheckOnOpen)
+        compose.onNodeWithText("Check when you open NormPix").performScrollTo().assertIsDisplayed()
+        scrollTap("Check when you open NormPix")
+        assertFalse(environment.preferences.state.value.updateCheckOnOpen)
+        assertTrue(environment.preferences.state.value.updateChecksEnabled, "the check in the background is not affected")
+        compose.onNodeWithText("Once a day, in the background", substring = true).performScrollTo().assertIsDisplayed()
+        absent("Once a day, in the background and when you open NormPix")
+    }
+
+    @Test
+    fun `the mobile data switch has a title of its own, and says what it covers`() {
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatesSettingsPage() } }
+        compose.onNodeWithText("Network").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Background downloads wait for Wi-Fi").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("A metered Wi-Fi, such as a hotspot, counts as mobile data.", substring = true).performScrollTo().assertIsDisplayed()
+        scrollTap("Download on mobile data")
+        compose.onNodeWithText("Background downloads may use mobile data").performScrollTo().assertIsDisplayed()
+        // The switch's group begins clear of the one above it (its title's own space), not tight against it.
+        val above = boundsOf("Install it automatically")
+        val title = boundsOf("Network")
+        assertTrue(title.top - above.bottom >= 12.dp, "Network starts clear of the group above: $above, $title")
     }
 
     @Test
@@ -380,6 +605,22 @@ class UpdateUiTest {
         assertTrue(SettingsCatalog.search("update").none { it.page == SettingsPage.Security })
     }
 
+    @Test
+    fun `settings search finds how often, the time and checking when opened, on the Automatic updates page`() {
+        val searches = mapOf(
+            "How often to check for updates" to listOf("how often", "frequency", "twice a day", "once a week", "every 3 days"),
+            "Update check time" to listOf("check time", "at a set time", "time of day", "any time"),
+            "Check when NormPix opens" to listOf("check when opened", "check on open", "when i open", "launch"),
+            "Automatic updates" to listOf("mobile data", "metered", "hotspot", "wi-fi"),
+        )
+        for ((title, queries) in searches) {
+            for (query in queries) {
+                val found = SettingsCatalog.search(query).filter { it.title == title }
+                assertEquals(listOf<SettingsPage?>(SettingsPage.Updates), found.map { it.page }, "\"$query\" finds \"$title\"")
+            }
+        }
+    }
+
     // ------------------------------------------------------------ at launch
 
     @Test
@@ -430,6 +671,45 @@ class UpdateUiTest {
     }
 
     @Test
+    fun `nothing is asked at launch with checking when NormPix opens off, though automatic checks are on`() {
+        Releases.publish(network)
+        val updater = updater()
+        val environment = environment(updater)
+        environment.preferences.setUpdateCheckOnOpen(false)
+        assertTrue(environment.preferences.state.value.updateChecksEnabled)
+        compose.setContent { environment.Content { OfferAppUpdates(updater, appLocked = false) } }
+        compose.waitForIdle()
+        assertEquals(emptyList(), network.asked)
+        assertNull(updater.state.value.release)
+    }
+
+    @Test
+    fun `the check at launch waits as long as the user chose`() {
+        Releases.publish(network)
+        val updater = updater()
+        val environment = environment(updater)
+        // GitHub answered 13 hours ago: a day hasn't passed, so a launch doesn't ask - until the user says twice a day.
+        records.lastCheckAt = System.currentTimeMillis() - 13L * 60 * 60 * 1000
+        environment.preferences.setUpdateCheckEvery(UpdateCheckEvery.OnceAWeek)
+        compose.setContent { environment.Content { OfferAppUpdates(updater, appLocked = false) } }
+        compose.waitForIdle()
+        assertEquals(emptyList(), network.asked, "13 hours into a week")
+        assertNull(updater.state.value.release)
+    }
+
+    @Test
+    fun `a launch asks once the wait the user chose has passed`() {
+        Releases.publish(network)
+        val updater = updater()
+        val environment = environment(updater)
+        records.lastCheckAt = System.currentTimeMillis() - 13L * 60 * 60 * 1000
+        environment.preferences.setUpdateCheckEvery(UpdateCheckEvery.TwiceADay)
+        compose.setContent { environment.Content { OfferAppUpdates(updater, appLocked = false) } }
+        waitFor("Update available")
+        assertTrue(network.asked.any { "releases/latest" in it })
+    }
+
+    @Test
     fun `nothing is asked at launch with automatic checks off`() {
         Releases.publish(network)
         val updater = updater()
@@ -464,10 +744,67 @@ class UpdatePreferenceTest {
         preferences.setUpdateChecksEnabled(false)
         preferences.setBackgroundUpdates(BackgroundUpdates.Install)
         preferences.setUpdateOnMobileData(true)
+        preferences.setUpdateCheckEvery(UpdateCheckEvery.OnceAWeek)
+        preferences.setUpdateCheckWhen(UpdateCheckWhen.AtSetTime)
+        preferences.setUpdateCheckTime(6, 45)
+        preferences.setUpdateCheckOnOpen(false)
         preferences.resetToDefaults()
         assertTrue(preferences.state.value.updateChecksEnabled)
         assertEquals(BackgroundUpdates.Download, preferences.state.value.backgroundUpdates)
         assertFalse(preferences.state.value.updateOnMobileData)
+        assertEquals(UpdateCheckEvery.OnceADay, preferences.state.value.updateCheckEvery)
+        assertEquals(UpdateCheckWhen.AnyTime, preferences.state.value.updateCheckWhen)
+        assertEquals(21 * 60, preferences.state.value.updateCheckMinuteOfDay)
+        assertTrue(preferences.state.value.updateCheckOnOpen)
+    }
+
+    @Test
+    fun `existing users keep checking once a day, any time, and when NormPix opens`() {
+        val defaults = AppPreferences(store()).state.value
+        assertEquals(UpdateCheckEvery.OnceADay, defaults.updateCheckEvery)
+        assertEquals(24L * 60 * 60 * 1000, defaults.updateCheckEvery.intervalMs)
+        assertEquals(UpdateCheckWhen.AnyTime, defaults.updateCheckWhen)
+        assertEquals(LocalTime.of(21, 0), defaults.updateCheckTime)
+        assertTrue(defaults.updateCheckOnOpen)
+    }
+
+    @Test
+    fun `how often, when, the time and checking at launch are remembered`() {
+        val store = store()
+        val preferences = AppPreferences(store)
+        preferences.setUpdateCheckEvery(UpdateCheckEvery.EveryThreeDays)
+        preferences.setUpdateCheckWhen(UpdateCheckWhen.AtSetTime)
+        preferences.setUpdateCheckTime(7, 5)
+        preferences.setUpdateCheckOnOpen(false)
+        val read = AppPreferences(store).state.value
+        assertEquals(UpdateCheckEvery.EveryThreeDays, read.updateCheckEvery)
+        assertEquals(UpdateCheckWhen.AtSetTime, read.updateCheckWhen)
+        assertEquals(7 * 60 + 5, read.updateCheckMinuteOfDay)
+        assertEquals(LocalTime.of(7, 5), read.updateCheckTime)
+        assertFalse(read.updateCheckOnOpen)
+    }
+
+    @Test
+    fun `an unknown or out of range value reads as the default`() {
+        val store = store()
+        store.edit()
+            .putString("update_check_every", "EveryFullMoon")
+            .putString("update_check_when", "Sometimes")
+            .putInt("update_check_minute_of_day", 99_999)
+            .commit()
+        val read = AppPreferences(store).state.value
+        assertEquals(UpdateCheckEvery.OnceADay, read.updateCheckEvery)
+        assertEquals(UpdateCheckWhen.AnyTime, read.updateCheckWhen)
+        assertEquals(24 * 60 - 1, read.updateCheckMinuteOfDay, "kept inside the day")
+        store.edit().putInt("update_check_minute_of_day", -5).commit()
+        assertEquals(0, AppPreferences(store).state.value.updateCheckMinuteOfDay)
+    }
+
+    @Test
+    fun `a time that isn't on the clock is kept inside the day`() {
+        val preferences = AppPreferences(store())
+        preferences.setUpdateCheckTime(25, 70)
+        assertTrue(preferences.state.value.updateCheckMinuteOfDay in 0 until 24 * 60)
     }
 
     @Test

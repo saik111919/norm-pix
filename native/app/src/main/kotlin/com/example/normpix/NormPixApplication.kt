@@ -106,6 +106,11 @@ class AppContainer(
 
     /** Set with [updateRequests] by Install on the "ready to install" notification: the update page installs it, too. */
     val updateInstallRequests = MutableStateFlow(false)
+
+    init {
+        // What the vault may keep is the user's say (Store cards, Save CVV): every way a card gets in is held to it.
+        cards.followSettings(preferences)
+    }
 }
 
 class NormPixApplication : Application() {

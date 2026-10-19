@@ -1,5 +1,8 @@
 package com.example.normpix.finance.ui
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getBoundsInRoot
@@ -68,11 +71,80 @@ class CategoryFormTest {
         compose.waitForIdle()
     }
 
+    /** The form's icon and color are folded until their row is tapped. */
+    private fun open(part: String) {
+        compose.onNodeWithText(part).performClick()
+        compose.waitForIdle()
+    }
+
+    private fun state(part: String) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, part)
+
+    @Test
+    fun theIconAndColorAreFoldedAtFirst_eachShowingWhatIsChosen() {
+        showForm()
+        // Folded: the row says what is chosen, and none of the picker is there.
+        compose.onNodeWithText("Icon").assert(state("Collapsed"))
+        compose.onNodeWithText("Color").assert(state("Collapsed"))
+        compose.onNodeWithText("Other").assertExists()
+        compose.onNodeWithText("Coral").assertExists()
+        compose.onAllNodesWithText("Emoji").assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("Blue").assertCountEquals(0)
+        // The name stays as it was.
+        compose.onNodeWithText("Name").assertExists()
+    }
+
+    @Test
+    fun aRowOpensInPlace_andFoldsAgain() {
+        showForm()
+        open("Icon")
+        compose.onNodeWithText("Icon").assert(state("Expanded"))
+        compose.onNodeWithText("Emoji").assertExists()
+        compose.onNodeWithText("Color").assert(state("Collapsed"))
+        compose.onAllNodesWithContentDescription("Blue").assertCountEquals(0)
+
+        open("Color")
+        compose.onNodeWithContentDescription("Blue").assertExists()
+        compose.onNodeWithText("Emoji").assertExists()
+
+        open("Icon")
+        compose.onAllNodesWithText("Emoji").assertCountEquals(0)
+        compose.onNodeWithContentDescription("Blue").assertExists()
+    }
+
+    @Test
+    fun aColorPickedFromTheOpenedRow_isTheOneSaved_andNamedOnTheRow() {
+        var saved: Category? = null
+        showForm { saved = it }
+        compose.onNodeWithText("Name").performTextInput("Gym")
+        open("Color")
+        compose.onNodeWithContentDescription("Blue").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Blue").assertExists()
+        compose.onNodeWithText("Save category").performClick()
+        compose.waitUntil(10_000) { saved != null }
+
+        assertEquals(2, assertNotNull(saved).color)
+    }
+
+    @Test
+    fun theRowsShowTheIconAndColorACategoryHas() {
+        val tea = runBlocking {
+            loaded
+            finance.saveCategory(
+                Category(name = "Tea", type = CategoryType.Expense, icon = "coffee", color = 5, createdAt = now, updatedAt = now),
+            )
+        }
+        showForm(existing = tea)
+        compose.onNodeWithText("Coffee").assertExists()
+        compose.onNodeWithText("Teal").assertExists()
+    }
+
     @Test
     fun theEmojiTab_offersTheCatalog_andPickingOneSavesItAsTheIcon() {
         var saved: Category? = null
         showForm { saved = it }
         compose.onNodeWithText("Name").performTextInput("Pizza night")
+        open("Icon")
         compose.onNodeWithText("Emoji").performClick()
         compose.onNodeWithContentDescription("pizza").performClick()
         compose.onNodeWithText("Save category").performClick()
@@ -87,6 +159,7 @@ class CategoryFormTest {
         var saved: Category? = null
         showForm { saved = it }
         compose.onNodeWithText("Name").performTextInput("Magic")
+        open("Icon")
         compose.onNodeWithText("Emoji").performClick()
         compose.onNodeWithText("Search or paste an emoji").performTextInput("my $unicorn thing")
         compose.onNodeWithText("Save category").performClick()
@@ -98,6 +171,7 @@ class CategoryFormTest {
     @Test
     fun searchingNarrowsTheCatalog_andSaysWhenNothingMatches() {
         showForm()
+        open("Icon")
         compose.onNodeWithText("Emoji").performClick()
         compose.onNodeWithContentDescription("sushi").assertExists()
 
@@ -118,6 +192,9 @@ class CategoryFormTest {
 
         compose.onNodeWithText("New sub-category").assertExists()
         compose.onNodeWithText("Expense category in Eating out").assertExists()
+        // Its color is its parent's, so there is none to choose: the row says so, and opened it explains.
+        compose.onNodeWithText("Same as Eating out").assertExists()
+        open("Color")
         compose.onNodeWithText("Takes the color of Eating out", substring = true).assertExists()
         compose.onAllNodesWithContentDescription("Coral").assertCountEquals(0)
 

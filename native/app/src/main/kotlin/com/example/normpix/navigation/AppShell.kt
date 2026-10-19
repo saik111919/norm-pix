@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.AddAlert
 import androidx.compose.material.icons.outlined.CreditCard
+import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Settings
@@ -207,7 +208,7 @@ fun AppShell(
     BackHandler(enabled = isMoreOpen) { isMoreOpen = false }
 
     // Contextual actions surfaced inside the More / Actions bottom action area:
-    val contextualActions = remember(current, shell.tab, walletLocked) {
+    val contextualActions = remember(current, shell.tab, shell.section, walletLocked, prefs.walletCardsEnabled) {
         buildList {
             when (current) {
                 AppDestination.Home -> {
@@ -249,11 +250,23 @@ fun AppShell(
                             )
                         }
                         PlansAndTransactionsTab.Plans -> {
+                            // On Recurring the thing to add is a recurring payment, whenever the list has some: a reminder stays one tap behind it.
+                            val onRecurring = shell.section == PlanSection.Recurring
+                            if (onRecurring) {
+                                add(
+                                    FooterAction(
+                                        label = "Add recurring payment",
+                                        icon = Icons.Outlined.EventRepeat,
+                                        isPrimary = true,
+                                        onClick = { expenseFlows.addRecurring() },
+                                    ),
+                                )
+                            }
                             add(
                                 FooterAction(
                                     label = "Add reminder",
                                     icon = Icons.Outlined.AddAlert,
-                                    isPrimary = true,
+                                    isPrimary = !onRecurring,
                                     onClick = { reminderFlows.add() },
                                 ),
                             )
@@ -280,19 +293,22 @@ fun AppShell(
                 }
                 AppDestination.Wallet -> {
                     if (!walletLocked) {
-                        add(
-                            FooterAction(
-                                label = "Add card",
-                                icon = Icons.Outlined.CreditCard,
-                                isPrimary = true,
-                                onClick = { cardFlows.addCard() },
-                            ),
-                        )
+                        // With Store cards off there are no cards to add, and adding an account is the Wallet's main action.
+                        if (prefs.walletCardsEnabled) {
+                            add(
+                                FooterAction(
+                                    label = "Add card",
+                                    icon = Icons.Outlined.CreditCard,
+                                    isPrimary = true,
+                                    onClick = { cardFlows.addCard() },
+                                ),
+                            )
+                        }
                         add(
                             FooterAction(
                                 label = "Add account",
                                 icon = Icons.Outlined.AccountBalanceWallet,
-                                isPrimary = false,
+                                isPrimary = !prefs.walletCardsEnabled,
                                 onClick = { expenseFlows.addAccount() },
                             ),
                         )

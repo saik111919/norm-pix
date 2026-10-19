@@ -51,6 +51,7 @@ class FinanceDatabase(
         if (oldVersion < 9) addBillingDays(db)
         if (oldVersion < 10) addAccountNumbers(db)
         if (oldVersion < 11) addNewDefaultCategories(db, clock())
+        if (oldVersion < 12) addAccountNumberStarts(db)
     }
 
     override fun onOpen(db: SQLiteDatabase) {
@@ -60,7 +61,7 @@ class FinanceDatabase(
 
     companion object {
         const val DB_NAME = "normpix_finance.db"
-        const val VERSION = 11
+        const val VERSION = 12
 
         const val ACCOUNTS = "accounts"
         const val PEOPLE = "people"
@@ -88,7 +89,8 @@ class FinanceDatabase(
                   statement_day INTEGER,
                   due_day INTEGER,
                   number_ending TEXT,
-                  card_id TEXT
+                  card_id TEXT,
+                  number_start TEXT
                 )
                 """.trimIndent(),
             )
@@ -356,6 +358,15 @@ class FinanceDatabase(
                 while (cursor.moveToNext()) if (cursor.getString(0).trim().lowercase() in markers) return true
             }
             return false
+        }
+
+        /**
+         * Version 12: a card account can keep the first six digits of its number beside the last four, so a receipt that shows
+         * both ends of the number is told from another card's. Adds the (empty) column: every account stays as it was, with
+         * none - nothing is worked out for an account that was never told.
+         */
+        fun addAccountNumberStarts(db: SQLiteDatabase) {
+            db.execSQL("ALTER TABLE $ACCOUNTS ADD COLUMN number_start TEXT")
         }
 
         /**

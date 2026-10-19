@@ -22,6 +22,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.TextFields
@@ -41,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -49,6 +51,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.ui.ChoiceOption
@@ -56,6 +59,7 @@ import com.example.normpix.finance.ui.ConnectedChoiceRow
 import com.example.normpix.settings.AppIcon
 import com.example.normpix.settings.AppPreferences
 import com.example.normpix.settings.AppPrefsState
+import com.example.normpix.settings.CustomFont
 import com.example.normpix.settings.FontAxes
 import com.example.normpix.settings.FontPreset
 import com.example.normpix.settings.FontShape
@@ -65,7 +69,9 @@ import com.example.normpix.ui.components.RevealVisibility
 import com.example.normpix.ui.components.SwitchRow
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
+import com.example.normpix.ui.theme.customFontFamily
 import com.example.normpix.ui.theme.gsFlexFamily
+import com.example.normpix.ui.theme.rememberCustomFontFile
 import kotlin.math.roundToInt
 
 /** How many app icons sit in a row: four, so each is big enough to judge, and the rows line up as a grid. */
@@ -165,15 +171,22 @@ internal fun AppIconArt(icon: AppIcon, modifier: Modifier = Modifier) {
 private val fontOptions = listOf(
     ChoiceOption(InterfaceFont.GsFlex, InterfaceFont.GsFlex.label, Icons.Outlined.TextFields),
     ChoiceOption(InterfaceFont.System, InterfaceFont.System.label, Icons.Outlined.Smartphone),
+    ChoiceOption(InterfaceFont.Custom, InterfaceFont.Custom.label, Icons.Outlined.FileOpen),
 )
 
 /**
- * The Interface font card: GS Flex or the phone's own font; with GS Flex, one of its styles - or, with Custom variable font
- * on, its weight, width and roundness set by hand. A sample under the controls shows the result before the whole app is.
+ * The Interface font card: GS Flex, the phone's own font, or a font file of the user's own ([custom] picks and forgets it);
+ * with GS Flex, one of its styles - or, with Custom variable font on, its weight, width and roundness set by hand. A sample
+ * under the controls shows the result before the whole app is.
  */
 @Composable
-internal fun InterfaceFontCard(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
+internal fun InterfaceFontCard(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics, custom: CustomFontActions) {
+    val context = LocalContext.current
     val flex = prefs.interfaceFont == InterfaceFont.GsFlex
+    val own = prefs.interfaceFont == InterfaceFont.Custom
+    // The user's font as the app draws with it (null when there is none that can be used), for the sample and the panel.
+    val ownFile = rememberCustomFontFile(prefs.interfaceFont, prefs.customFontRevision)
+    val ownFamily = remember(ownFile) { ownFile?.let(::customFontFamily) }
     // While a slider is dragged only the sample follows it; the app takes the value once the slider is let go.
     var weight by remember(prefs.fontWeightShift) { mutableFloatStateOf(prefs.fontWeightShift.toFloat()) }
     var width by remember(prefs.fontWidth) { mutableFloatStateOf(prefs.fontWidth.toFloat()) }
@@ -189,9 +202,23 @@ internal fun InterfaceFontCard(prefs: AppPrefsState, preferences: AppPreferences
             selected = prefs.interfaceFont,
             onSelect = { font ->
                 haptics.selection()
-                preferences.setInterfaceFont(font)
+                // "Your font" with none chosen yet goes straight to choosing one; the font only changes once a good file is in.
+                if (font == InterfaceFont.Custom && !(prefs.customFontName.isNotBlank() && CustomFont.exists(context))) {
+                    custom.choose()
+                } else {
+                    preferences.setInterfaceFont(font)
+                }
             },
         )
+        RevealVisibility(visible = own) {
+            Column {
+                CustomFontPanel(prefs, ownFile, custom)
+                if (ownFamily != null) {
+                    Spacer(Modifier.height(AppSpacing.md))
+                    FontSample(ownFamily)
+                }
+            }
+        }
         RevealVisibility(visible = flex) {
             Column {
                 Spacer(Modifier.height(AppSpacing.sm))
@@ -245,7 +272,7 @@ internal fun InterfaceFontCard(prefs: AppPrefsState, preferences: AppPreferences
                     }
                 }
                 Spacer(Modifier.height(AppSpacing.md))
-                FontSample(live)
+                FontSample(remember(live) { gsFlexFamily(live) })
             }
         }
     }
@@ -313,11 +340,10 @@ private fun FontAxisSlider(
     }
 }
 
-/** A line of text and a figure in [shape], to judge it by before the rest of the app changes. */
+/** A line of text and a figure in [family], to judge it by before the rest of the app changes. */
 @Composable
-private fun FontSample(shape: FontShape) {
+private fun FontSample(family: FontFamily) {
     val scheme = MaterialTheme.colorScheme
-    val family = remember(shape) { gsFlexFamily(shape) }
     Column(
         Modifier
             .fillMaxWidth()

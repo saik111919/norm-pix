@@ -90,6 +90,7 @@ internal object FinanceRows {
         putNullable("statement_day", a.statementDay)
         putNullable("due_day", a.dueDay)
         putNullable("number_ending", a.numberEnding)
+        putNullable("number_start", a.numberStart)
         putNullable("card_id", a.cardId)
     }
 
@@ -119,6 +120,7 @@ internal object FinanceRows {
         statementDay = c.intOrNull("statement_day"),
         dueDay = c.intOrNull("due_day"),
         numberEnding = c.stringOrNull("number_ending"),
+        numberStart = c.stringOrNull("number_start"),
         cardId = c.stringOrNull("card_id"),
     )
 

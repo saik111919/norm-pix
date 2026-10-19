@@ -4,6 +4,7 @@ import android.content.Context
 import com.example.normpix.AppContainer
 import com.example.normpix.finance.ui.FinanceController
 import com.example.normpix.finance.ui.FinanceUndo
+import com.example.normpix.settings.CustomFont
 import com.example.normpix.settings.PrefValue
 import com.example.normpix.settings.ProfilePhotos
 import com.example.normpix.wallet.CardsTransfer
@@ -108,29 +109,40 @@ class AppRestorer(private val context: Context, private val container: AppContai
                     val named = (values[PROFILE_PHOTO_KEY] as? PrefValue.StringPref)?.value
                     if (named != null && photos.file(named) == null) toWrite = toWrite - PROFILE_PHOTO_KEY
                 }
-                val fonts = if (fontOn) swapFonts(plan.fonts) else null
-                if (fonts != null) steps += Step(revert = { fonts.revert() }, settle = { fonts.settle() })
-
+                // "Your font" as the choice, with no font file on this phone to draw with, could only fall back to the default: the
+                // phone's own choice stays then.
+                val keepFontChoice = !fontOn &&
+                    (values[INTERFACE_FONT_KEY] as? PrefValue.StringPref)?.value == CUSTOM_FONT_CHOICE &&
+                    !withContext(Dispatchers.IO) { CustomFont.exists(context) }
                 val inScope: (String) -> Boolean = { key ->
-                    when (key) {
-                        in PROFILE_KEYS -> profileOn
-                        in FONT_KEYS -> fontOn
+                    when {
+                        key == INTERFACE_FONT_KEY && keepFontChoice -> false
+                        key in PROFILE_KEYS -> profileOn
+                        key in FONT_KEYS -> fontOn
                         else -> settingsOn
                     }
                 }
                 val before = preferences.exportAll()
-                skipped = preferences.importAll(toWrite, inScope)
                 // Photos the preferences no longer name are let go: the old one stays while the user can still undo.
                 suspend fun tidyPhotos() {
                     if (profileOn) photos.keepOnly(preferences.state.value.profilePhoto.ifEmpty { null })
                 }
+                var swap: FontSwap? = null
+                // Taking it back puts the font file back first, so that what draws with the font loads the right one when the
+                // preferences are read again.
                 steps += Step(
                     revert = {
+                        swap?.revert()
                         preferences.importAll(before, inScope)
                         tidyPhotos()
                     },
-                    settle = { tidyPhotos() },
+                    settle = {
+                        swap?.settle()
+                        tidyPhotos()
+                    },
                 )
+                if (fontOn) swap = swapFonts(plan.fonts)
+                skipped = preferences.importAll(toWrite, inScope)
             }
 
             val incoming = cards
@@ -153,7 +165,7 @@ class AppRestorer(private val context: Context, private val container: AppContai
      * is settled or taken back.
      */
     private suspend fun swapFonts(fonts: Map<String, File>): FontSwap = withContext(Dispatchers.IO) {
-        val dir = File(context.filesDir, FONTS_DIR)
+        val dir = File(context.filesDir, CustomFont.FOLDER)
         val aside = File(context.cacheDir, "fonts-before-${UUID.randomUUID()}")
         if (dir.exists() && !dir.renameTo(aside)) {
             dir.copyRecursively(aside)
@@ -171,7 +183,7 @@ class AppRestorer(private val context: Context, private val container: AppContai
     }
 
     private class FontSwap(private val dir: File, private val aside: File) {
-        suspend fun revert() = withContext(Dispatchers.IO) {
+        suspend fun revert(): Unit = withContext(Dispatchers.IO) {
             dir.deleteRecursively()
             if (aside.exists() && !aside.renameTo(dir)) {
                 aside.copyRecursively(dir)
@@ -179,7 +191,7 @@ class AppRestorer(private val context: Context, private val container: AppContai
             }
         }
 
-        suspend fun settle() = withContext(Dispatchers.IO) {
+        suspend fun settle(): Unit = withContext(Dispatchers.IO) {
             aside.deleteRecursively()
         }
     }

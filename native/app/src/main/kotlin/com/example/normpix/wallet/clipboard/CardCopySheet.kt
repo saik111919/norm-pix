@@ -55,8 +55,9 @@ fun copiedMessage(field: CardField, timeout: ClipboardTimeout): String =
     if (timeout.clears) "${field.label} copied. It clears from the clipboard in ${timeout.spoken}." else "${field.label} copied."
 
 /**
- * "Copy card details": the four things a card can give, each one tap. Copying one never reveals the card on screen,
- * and the number and CVV are masked here too. [onCopy] does the copy and says whether it worked.
+ * "Copy card details": the four things a card can give (three, for a card kept without a CVV), each one tap. Copying one
+ * never reveals the card on screen, and the number and CVV are masked here too. [onCopy] does the copy and says whether
+ * it worked.
  */
 @Composable
 fun CardCopySheet(
@@ -71,7 +72,7 @@ fun CardCopySheet(
         SheetHeader(title = "Copy card details", subtitle = "${card.bankName} •••• ${card.last4}")
         Spacer(Modifier.height(AppSpacing.md))
         ListSection {
-            for (field in CardField.entries) {
+            for (field in CardField.entries.filter { it != CardField.Cvv || card.hasCvv }) {
                 item {
                     ListRow(
                         headline = field.label,

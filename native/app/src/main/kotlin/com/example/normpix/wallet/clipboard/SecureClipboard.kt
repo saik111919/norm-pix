@@ -44,6 +44,13 @@ interface SecureClipboard {
      * timer died with the process) and by the backup alarm.
      */
     fun reconcile()
+
+    /**
+     * Takes NormPix's last copy off the clipboard now, if it is still there and still NormPix's own (a copy since, from
+     * anywhere, is left alone), and forgets its timer. Used when the cards it came from are deleted. Nothing happens
+     * where there is no clipboard.
+     */
+    fun clear() = Unit
 }
 
 /** Who put what is on the clipboard, as far as the system lets NormPix tell. */
@@ -133,6 +140,13 @@ class ClipboardGuard(
         } else if (timer == null) {
             arm(current)
         }
+    }
+
+    @Synchronized
+    override fun clear() {
+        val current = pending() ?: return
+        timer?.cancel()
+        expire(current.token)
     }
 
     private fun pending(): PendingClear? {

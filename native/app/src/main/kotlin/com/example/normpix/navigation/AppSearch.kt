@@ -111,10 +111,11 @@ fun AppSearchPage() {
     val transactions by rememberFinanceQuery(debounced) {
         if (debounced.isEmpty()) emptyList() else transactions(TransactionQuery(text = debounced), limit = MAX_TRANSACTIONS).items
     }
-    // Card list read once per visit, never while the wallet is locked.
+    // Card list read once per visit, never while the wallet is locked, and not at all while NormPix isn't storing cards.
     val walletLocked = container.lock.isWalletLocked(prefs)
-    val cards by produceState(emptyList<StoredCard>(), walletLocked) {
-        value = if (walletLocked) emptyList() else runCatching { container.vault.loadCards() }.getOrDefault(emptyList())
+    val storingCards = prefs.walletCardsEnabled
+    val cards by produceState(emptyList<StoredCard>(), walletLocked, storingCards) {
+        value = if (walletLocked || !storingCards) emptyList() else runCatching { container.vault.loadCards() }.getOrDefault(emptyList())
     }
 
     val lower = debounced.lowercase()
@@ -132,7 +133,7 @@ fun AppSearchPage() {
         cards.filter { it.bankName.lowercase().contains(lower) || (debounced.length >= 3 && it.last4.contains(debounced)) }
     }
     val reminders = if (lower.isEmpty()) emptyList() else remindersState.reminders.filter { it.title.lowercase().contains(lower) }.take(MAX_REMINDERS)
-    val settings = SettingsCatalog.search(debounced)
+    val settings = SettingsCatalog.search(debounced, cardsEnabled = storingCards)
     val nothing = matchedTransactions.isEmpty() && accounts.isEmpty() && people.isEmpty() && matchedCards.isEmpty() && reminders.isEmpty() && settings.isEmpty()
 
     androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {

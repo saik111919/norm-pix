@@ -6,6 +6,7 @@ import com.example.normpix.BuildConfig
 import com.example.normpix.finance.data.FinanceBackupCodec
 import com.example.normpix.finance.data.FinanceSnapshot
 import com.example.normpix.reminders.ReminderBackupCodec
+import com.example.normpix.settings.CustomFont
 import com.example.normpix.settings.ProfilePhotos
 import java.io.File
 import java.io.OutputStream
@@ -21,12 +22,15 @@ internal const val PROFILE_PHOTO_KEY = "profile_photo"
 
 /**
  * The preferences that name the font the user picked: restored with [BackupPart.Font] and its file. The file itself is
- * `fonts/custom-interface-font.ttf` in the app's files, and the preference its display name (the custom font's contract).
+ * [CustomFont.file], and the preference its display name.
  */
 internal val FONT_KEYS: Set<String> = setOf("custom_font_name")
 
-/** The folder of the app's files the interface font the user picked is kept in. */
-internal const val FONTS_DIR = "fonts"
+/** The preference that says which interface font is in use; it is a setting, and may name the font the user picked ("Custom"). */
+internal const val INTERFACE_FONT_KEY = "interface_font"
+
+/** What [INTERFACE_FONT_KEY] holds when the font in use is the one the user picked (the name of `InterfaceFont.Custom`). */
+internal const val CUSTOM_FONT_CHOICE = "Custom"
 
 /**
  * Reads everything an app backup carries from the app's stores, and writes it as a zip ([AppBackupArchive]). The saved cards
@@ -92,10 +96,10 @@ class AppBackupExporter(private val context: Context, private val container: App
     fun write(out: OutputStream, source: Source): Int =
         AppBackupArchive.write(out, source.financeJson, source.pictureNames, source.parts) { name -> container.finance.pictures?.file(name) }
 
-    /** The font files in the app's fonts folder - the ones a restore would take back. */
-    private fun fontFiles(): List<File> =
-        File(context.filesDir, FONTS_DIR).listFiles { file -> file.isFile }.orEmpty()
-            .filter { AppBackupArchive.isFontName(it.name) && it.length() <= AppBackupArchive.MAX_FONT_BYTES }
-            .sortedBy { it.name }
-            .take(AppBackupArchive.MAX_FILES)
+    /** The font the user picked, if there is one that a restore would take back: a whole font file, no bigger than the app takes. */
+    private fun fontFiles(): List<File> {
+        val font = CustomFont.file(context)
+        val size = font.length()
+        return if (font.isFile && size in 1L..AppBackupArchive.MAX_FONT_BYTES && CustomFont.hasFontHeader(font)) listOf(font) else emptyList()
+    }
 }

@@ -271,21 +271,50 @@ fun comparedWith(change: Double, basis: String): String {
     return "$percent% ${if (change < 0) "less" else "more"} than $basis"
 }
 
-/** A labelled figure on a tile: the label small, the value under it the stronger of the two. */
+/**
+ * A labelled figure on a tile: the label small, across the tile's whole width, and the value under it the stronger of the two.
+ * Keep the label to a word or two, since a tile is half the card: it takes a second line only where the text is large.
+ * [valueColor] colours the value where it says something (unspecified: the tile's own ink). [leading] sits before the value,
+ * not the label, so the label keeps all the room (the budget tile's ring).
+ */
 @Composable
-fun HeroFigure(label: String, value: String, modifier: Modifier = Modifier) {
+fun HeroFigure(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    valueColor: Color = Color.Unspecified,
+    leading: (@Composable () -> Unit)? = null,
+) {
     val ink = LocalContentColor.current
     val type = MaterialTheme.typography
+    val valueStyle = type.titleLarge.copy(fontWeight = FontWeight.SemiBold, fontFeatureSettings = TABULAR_FIGURES)
     Column(modifier.semantics(mergeDescendants = true) {}) {
         Text(label, style = type.labelLarge, color = ink.copy(alpha = 0.82f), maxLines = 2)
         Spacer(Modifier.height(AppSpacing.xxs))
-        Text(
-            value,
-            style = type.titleLarge.copy(fontWeight = FontWeight.SemiBold, fontFeatureSettings = TABULAR_FIGURES),
-            maxLines = 1,
-            softWrap = false,
-            autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = type.titleLarge.fontSize),
-        )
+        if (leading == null) {
+            Text(
+                value,
+                style = valueStyle,
+                color = valueColor,
+                maxLines = 1,
+                softWrap = false,
+                autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = type.titleLarge.fontSize),
+            )
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                leading()
+                Spacer(Modifier.width(AppSpacing.sm))
+                Text(
+                    value,
+                    style = valueStyle,
+                    color = valueColor,
+                    maxLines = 1,
+                    softWrap = false,
+                    autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = type.titleLarge.fontSize),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
     }
 }
 
