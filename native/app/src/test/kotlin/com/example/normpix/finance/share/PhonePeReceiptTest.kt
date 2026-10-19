@@ -26,7 +26,8 @@ class PhonePeReceiptTest {
         assertEquals(3_000L, d.amount)
         assertEquals(TransactionType.Expense, d.type)
         // The name runs on to a second line; the avatar's "UL" between the lines and the note "Uber" below are not part of it.
-        assertEquals("UBER INDIA SYSTEMS PRIVATE LIMITED", d.counterparty)
+        // PhonePe prints it in capitals; it is written back as a name.
+        assertEquals("Uber India Systems Private Limited", d.counterparty)
         assertEquals(SharedStatus.Completed, d.status)
         assertEquals(LocalDate.of(2026, 10, 12), d.date)
         assertEquals(LocalTime.of(11, 29), d.time)

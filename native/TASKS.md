@@ -465,6 +465,22 @@ Asked for (2026-10-14): "When loading an image show proper loading sheet instead
 - [x] A download made in the background is found at the next launch, ready to install, without downloading again; Later is respected in the background
 - [ ] Checks: CI on the PR; not tried on a phone
 
+## Phase 20 - Appearance pages, your own font, update schedule, full backup, date sheets, repeat ends, card settings, receipts (2026-10-19)
+- [x] Inspected first: Appearance was one long page; sheets took their motion from the page style; the category badge in the editors hard-coded a circle; dates and times used Material dialogs everywhere but Insights; updates checked once a day only; backups held finance data only; reminders' repeats never ended; a card shown with two trailing digits (RuPay on UPI) never matched an account
+- [x] Appearance: Theme stays on top; every other section opens its own page (Look / Motion / Layout), one enum entry + one composable per section; search opens the section. Sheet & dialog transitions separate from page transitions (Window / Slide / Fade / Scale; existing installs keep what they had)
+- [x] Interface font: "Your font" - a .ttf/.otf picked from the phone, checked (size, header, loads) and copied into the app; Replace / Remove; a missing file falls back to GS Flex. The font reaches avatar initials and the text read off a receipt (no more monospace); Material's emphasized styles are internal in this Material version
+- [x] Predictive back plays the chosen page style: tabs slide to the swipe edge / fade / shrink with the tab underneath shown; pushed pages' going-back transitions scrub evenly; sheets close in their own style once the gesture commits
+- [x] Settings > Wallet & Cards uses the dock's Wallet icon
+- [x] App update page like a Pixel's: content scrolls, actions pinned at the bottom (secondary text button left, filled pill right), shared with the update sheet. Automatic updates: How often (twice a day … weekly), When (any time / at a set time), check when NormPix opens; the mobile-data switch in its own Network section; a background download stops when its network goes, even with the app open
+- [x] Home > Needs attention shows an update (available, downloading, ready, needs permission); Later hides that release. Budget tile reads "Over budget" / "Left to spend" on one line. Splash letters and tagline words come in one after another from one clock, after the first frames are drawn
+- [x] Full app backup (.zip): finance + pictures as before, plus settings, reminders, profile photo, your font and (with a password, only if asked) cards; restore lets you pick parts, undo for all but cards; app lock, NFC gate, sample data and the card switches are never restored over
+- [x] Category and person icons in add/edit follow Icon background; the category form opens with Icon and Color collapsed
+- [x] One date and time design (Insights' calendar) for every date and time picked in the app: DateSheet / TimeSheet behind the old dialog functions
+- [x] Recurring: always an "Add recurring payment" on the recurring screen; Ends = Never / On a date / After N in the recurring editor, Custom repeat, the transaction editor and reminders (reminders could not end before); nothing read from a bill sets an end
+- [x] Wallet: CVV optional; Save CVV switch (off asks to delete saved CVVs); Store cards switch (off deletes cards, CVVs, NFC tags, expiry reminders and card links, and hides the card UI); card accounts take the full number but keep only the first 6 and last 4 digits (`Account.numberStart`, finance DB 12)
+- [ ] Receipts: Paytm and Kredit.Pe readers, PhonePe's current layout (date, amount), amount in words, matching cards and accounts by first 6 + last digits
+- [ ] Checks: CI (tests, lint, release build) on the PR; not tried on a phone
+
 ## Backlog - to come back to
 
 - [ ] **Reminders that behave like Samsung Reminder** (asked 2026-10-14, parked until we return to it). Today a reminder

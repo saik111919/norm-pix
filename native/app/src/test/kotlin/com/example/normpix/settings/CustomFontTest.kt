@@ -1,7 +1,6 @@
 package com.example.normpix.settings
 
 import android.content.Context
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Typography
 import androidx.test.core.app.ApplicationProvider
 import com.example.normpix.navigation.AppearanceSection
@@ -201,33 +200,20 @@ class CustomFontTest {
         titleLarge, titleMedium, titleSmall, bodyLarge, bodyMedium, bodySmall, labelLarge, labelMedium, labelSmall,
     )
 
-    @OptIn(ExperimentalMaterial3ExpressiveApi::class)
-    private fun Typography.allEmphasizedStyles() = listOf(
-        displayLargeEmphasized, displayMediumEmphasized, displaySmallEmphasized,
-        headlineLargeEmphasized, headlineMediumEmphasized, headlineSmallEmphasized,
-        titleLargeEmphasized, titleMediumEmphasized, titleSmallEmphasized,
-        bodyLargeEmphasized, bodyMediumEmphasized, bodySmallEmphasized,
-        labelLargeEmphasized, labelMediumEmphasized, labelSmallEmphasized,
-    )
-
     @Test
     fun thePhonesOwnFontLeavesMaterialsTypeScaleAsItIs() {
         assertNull(fontFamilyFor(AppFont(InterfaceFont.System)))
         assertEquals(Typography(), appTypography(AppFont(InterfaceFont.System)))
     }
 
-    @OptIn(ExperimentalMaterial3ExpressiveApi::class)
     @Test
-    fun gsFlexSetsAllThirtyStylesIncludingTheEmphasizedOnes() {
+    fun gsFlexSetsEveryStyleOfTheScale() {
         val font = AppFont(InterfaceFont.GsFlex)
-        val typography = appTypography(font)
-        val styles = typography.allStyles() + typography.allEmphasizedStyles()
-        assertEquals(30, styles.size)
-        assertTrue(styles.all { it.fontFamily != null }, "every style is in the app font")
-        assertEquals(typography.bodyLarge.fontFamily, typography.bodyLargeEmphasized.fontFamily, "an emphasized style is in the same family")
+        val styles = appTypography(font).allStyles()
+        assertEquals(15, styles.size)
+        assertTrue(styles.all { it.fontFamily == gsFlexFamily(font.shape) }, "every style is in the app font")
     }
 
-    @OptIn(ExperimentalMaterial3ExpressiveApi::class)
     @Test
     fun yourFontIsUsedForEveryStyleOnceItsFileIsThere() {
         CustomFont.install(ByteArrayInputStream(truetype), CustomFont.file(context)) { true }
@@ -236,11 +222,11 @@ class CustomFontTest {
 
         assertEquals(customFontFamily(file), fontFamilyFor(font))
         val typography = appTypography(font)
-        val styles = typography.allStyles() + typography.allEmphasizedStyles()
-        assertTrue(styles.all { it.fontFamily == customFontFamily(file) }, "all thirty styles are in the file's family")
+        val styles = typography.allStyles()
+        assertTrue(styles.all { it.fontFamily == customFontFamily(file) }, "every style is in the file's family")
         // The sizes and weights of the scale are Material's own, in whatever family.
         assertEquals(Typography().bodyLarge.fontSize, typography.bodyLarge.fontSize)
-        assertEquals(Typography().titleLargeEmphasized.fontWeight, typography.titleLargeEmphasized.fontWeight)
+        assertEquals(Typography().titleLarge.fontWeight, typography.titleLarge.fontWeight)
     }
 
     @Test

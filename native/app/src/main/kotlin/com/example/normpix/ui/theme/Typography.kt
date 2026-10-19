@@ -1,6 +1,5 @@
 package com.example.normpix.ui.theme
 
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -77,10 +76,9 @@ fun fontFamilyFor(font: AppFont): FontFamily? = when (font.font) {
 
 /**
  * The Material type scale in [font]. The phone's own font is Material's default scale untouched; GS Flex and a custom font are
- * the same scale (sizes, line heights, weights) set in their family. Material's fifteen "emphasized" styles (the heavier twin
- * of each style, which its expressive components draw with) are set in it too, otherwise they would stay in the phone's font.
+ * the same scale (sizes, line heights, weights) set in their family. (Material's "emphasized" twins of these styles are internal
+ * to Material in this version, so an app can neither read nor set them; nothing in NormPix draws with them.)
  */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 fun appTypography(font: AppFont): Typography {
     val base = Typography()
     val family = fontFamilyFor(font) ?: return base
@@ -101,21 +99,6 @@ fun appTypography(font: AppFont): Typography {
         labelLarge = base.labelLarge.inFamily(),
         labelMedium = base.labelMedium.inFamily(),
         labelSmall = base.labelSmall.inFamily(),
-        displayLargeEmphasized = base.displayLargeEmphasized.inFamily(),
-        displayMediumEmphasized = base.displayMediumEmphasized.inFamily(),
-        displaySmallEmphasized = base.displaySmallEmphasized.inFamily(),
-        headlineLargeEmphasized = base.headlineLargeEmphasized.inFamily(),
-        headlineMediumEmphasized = base.headlineMediumEmphasized.inFamily(),
-        headlineSmallEmphasized = base.headlineSmallEmphasized.inFamily(),
-        titleLargeEmphasized = base.titleLargeEmphasized.inFamily(),
-        titleMediumEmphasized = base.titleMediumEmphasized.inFamily(),
-        titleSmallEmphasized = base.titleSmallEmphasized.inFamily(),
-        bodyLargeEmphasized = base.bodyLargeEmphasized.inFamily(),
-        bodyMediumEmphasized = base.bodyMediumEmphasized.inFamily(),
-        bodySmallEmphasized = base.bodySmallEmphasized.inFamily(),
-        labelLargeEmphasized = base.labelLargeEmphasized.inFamily(),
-        labelMediumEmphasized = base.labelMediumEmphasized.inFamily(),
-        labelSmallEmphasized = base.labelSmallEmphasized.inFamily(),
     )
 }
 
