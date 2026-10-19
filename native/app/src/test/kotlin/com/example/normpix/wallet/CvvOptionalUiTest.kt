@@ -167,7 +167,7 @@ class CvvOptionalUiTest {
     fun `with Save CVV off the field is gone and an edited card is saved without one`() {
         val e = environment { it.preferences.setCardCvvEnabled(false) }
         var saved: StoredCard? = null
-        compose.setContent { e.Content { AddCardSheet(card("123")) { saved = it } } }
+        compose.setContent { e.Content { AddCardSheet(card("123"), onDone = { saved = it }) } }
         compose.waitForIdle()
 
         compose.onAllNodesWithText("CVV").assertCountEquals(0)
