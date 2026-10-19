@@ -187,6 +187,24 @@ class PageTransitionsTest {
     }
 
     @Test
+    fun goingBackIsTheClosingOfThePageInItsOwnStyle() {
+        // Under the back gesture the transition is seeked, not played: what a style does on the way out must be a motion of
+        // the page itself, with no delay or keyframe that would hold it still (or jump) while a finger drags it.
+        start()
+        val fade = movesOf(PageAnimationType.FadeThrough)
+        assertTrue(fade.closing.sameSizeAs(fade.rest) && abs(fade.closing.left - fade.rest.left) < 1f, "Fade through: only the opacity changes on the way out")
+
+        val axis = movesOf(PageAnimationType.SharedAxis)
+        assertTrue(axis.closing.left > axis.rest.left && axis.closing.sameSizeAs(axis.rest), "Shared axis: glides away sideways, 50 ms in")
+
+        val window = movesOf(PageAnimationType.LinuxWindow)
+        assertTrue(window.closing.width < window.rest.width && window.closing.top > window.rest.top, "Linux window: shrinking, a little low, 50 ms in")
+
+        val scale = movesOf(PageAnimationType.ScaleAndFade)
+        assertTrue(scale.closing.width < scale.rest.width && abs(scale.closing.center.x - scale.rest.center.x) < 1f, "Scale and fade: shrinks about its centre")
+    }
+
+    @Test
     fun theWindowBehindThePagesIsTheAppsOwnBackgroundNotTheSystems() {
         // The app can be dark while the phone is light (or the reverse); wherever no page is drawn - a page arriving,
         // the keyboard resizing - the window shows through, so it has to be the app's background or it flashes.

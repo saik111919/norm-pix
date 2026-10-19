@@ -811,7 +811,7 @@ object SharedTransactionParser {
     // "14 Oct '26", "23rd sep'26": a two-digit year can have an apostrophe in front. Not after a letter or a digit, so that
     // "I5 Oct" is not read as the 5th, nor the "3dec" in an id as a December.
     private val dayMonthDate = Regex(
-        """(?<![\p{L}\d])$DAY(?:st|nd|rd|th)?[\s-]?$MONTH\.?(?:[\s,'’-]*$YEAR(?![\d:]))?""",
+        """(?<![\p{L}\d])$DAY(?:st|nd|rd|th)?[\s-]?$MONTH\.?(?:[\s,'’-]*$YEAR(?![\p{L}\d:]))?""",
         RegexOption.IGNORE_CASE,
     )
 

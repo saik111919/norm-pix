@@ -130,7 +130,7 @@ class SheetMotionTest {
             // Going down (a close, or a drag): never more visible, never bigger, than a moment before.
             var lastAlpha = 1f
             var lastScale = 1f
-            for (top in tops) {
+            for (top in tops.reversed()) {
                 val p = pose(style, top)
                 assertTrue(p.alpha <= lastAlpha + 1e-4f, "$style: ${p.alpha} at $top is fainter than before")
                 assertTrue(p.scale <= lastScale + 1e-4f, "$style: ${p.scale} at $top is smaller than before")
