@@ -5,6 +5,8 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.YearMonth
+import com.example.normpix.finance.domain.RepeatEnd
+import com.example.normpix.finance.domain.resolve
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -34,24 +36,45 @@ enum class RepeatKind(val key: String) {
  * - [RepeatKind.Monthly] uses [dayOfMonth] (1-31, clamped to the target month's
  *   actual length - the 31st of a 30-day month lands on its 30th).
  * - [RepeatKind.Custom] uses [intervalDays] (a fixed day interval).
+ *
+ * A repeat goes on for ever unless it has an [endDate]: the last day a reminder may fall on. After it, completing the last
+ * reminder finishes it instead of moving it on. "After 12 times" is kept as the day of the 12th ([ending]), the way a repeating
+ * payment keeps it, so there is no count to fall out of step when a reminder is moved.
  */
 data class RepeatRule(
     val kind: RepeatKind,
     val weekdays: Set<Int>? = null,
     val dayOfMonth: Int? = null,
     val intervalDays: Int? = null,
+    /** The last day a reminder may fall on (that day included), or null for no end. Ignored for a reminder that does not repeat. */
+    val endDate: LocalDate? = null,
 ) {
     val repeats: Boolean get() = kind != RepeatKind.Once
 
+    /** What the rhythm is, then where it stops: "Every day", "Weekly on Mon, Thu until 3 Mar 2027". */
     val label: String
-        get() = when (kind) {
-            RepeatKind.Once -> "Does not repeat"
-            RepeatKind.Daily -> "Every day"
-            RepeatKind.Weekdays -> "Every weekday"
-            RepeatKind.Weekly -> weeklyLabel()
-            RepeatKind.Monthly -> "Monthly on day ${dayOfMonth ?: 1}"
-            RepeatKind.Custom -> "Every ${intervalDays ?: 1} day${if (intervalDays == 1) "" else "s"}"
+        get() {
+            val every = when (kind) {
+                RepeatKind.Once -> "Does not repeat"
+                RepeatKind.Daily -> "Every day"
+                RepeatKind.Weekdays -> "Every weekday"
+                RepeatKind.Weekly -> weeklyLabel()
+                RepeatKind.Monthly -> "Monthly on day ${dayOfMonth ?: 1}"
+                RepeatKind.Custom -> "Every ${intervalDays ?: 1} day${if (intervalDays == 1) "" else "s"}"
+            }
+            val end = endDate
+            return if (repeats && end != null) "$every until ${dayText(end)}" else every
         }
+
+    /** The same rhythm with no end: the steps an "after N times" is counted in. */
+    val unending: RepeatRule get() = if (endDate == null) this else copy(endDate = null)
+
+    /** How this rule ends, as the form holds it: a day, or never. */
+    val ends: RepeatEnd get() = endDate?.let { RepeatEnd.OnDate(it) } ?: RepeatEnd.Never
+
+    /** This rhythm ending as [ends] says, when [first] is the first reminder; a count becomes the day of the last one. */
+    fun ending(ends: RepeatEnd, first: LocalDateTime): RepeatRule =
+        if (!repeats) this else copy(endDate = ends.resolve(first, unending::nextOccurrence)?.toLocalDate())
 
     private fun weeklyLabel(): String {
         val days = weekdays
@@ -61,9 +84,16 @@ data class RepeatRule(
 
     /**
      * The next occurrence strictly after [from], preserving [from]'s time of
-     * day. Null for [RepeatKind.Once] - there is no next one.
+     * day. Null for [RepeatKind.Once] - there is no next one - and once the next
+     * would fall after the [endDate]: the repeat is over.
      */
-    fun nextOccurrence(from: LocalDateTime): LocalDateTime? = when (kind) {
+    fun nextOccurrence(from: LocalDateTime): LocalDateTime? {
+        val next = following(from) ?: return null
+        val end = endDate
+        return if (end != null && next.toLocalDate().isAfter(end)) null else next
+    }
+
+    private fun following(from: LocalDateTime): LocalDateTime? = when (kind) {
         RepeatKind.Once -> null
         RepeatKind.Daily -> from.plusDays(1)
         RepeatKind.Weekdays -> {
@@ -98,18 +128,26 @@ data class RepeatRule(
         weekdays?.let { put("weekdays", JsonArray(it.sorted().map(::JsonPrimitive))) }
         dayOfMonth?.let { put("dayOfMonth", it) }
         intervalDays?.let { put("intervalDays", it) }
+        endDate?.let { put("endDate", it.toString()) }
     }
 
     companion object {
         val Once = RepeatRule(RepeatKind.Once)
 
         private val WEEKDAY_NAMES = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+        private val MONTH_NAMES = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+        /** "3 Mar 2027". */
+        private fun dayText(day: LocalDate): String = "${day.dayOfMonth} ${MONTH_NAMES[day.monthValue - 1]} ${day.year}"
 
         fun fromJson(json: JsonObject): RepeatRule = RepeatRule(
             kind = RepeatKind.fromKey((json["kind"] as JsonPrimitive).content) ?: RepeatKind.Once,
             weekdays = (json["weekdays"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.intOrNull }?.toSet(),
             dayOfMonth = (json["dayOfMonth"] as? JsonPrimitive)?.intOrNull,
             intervalDays = (json["intervalDays"] as? JsonPrimitive)?.intOrNull,
+            // Absent in a rule saved before repeats could end, and in one with no end: no end. A date that can't be read is no end too.
+            endDate = (json["endDate"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+                ?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
         )
     }
 }

@@ -22,7 +22,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-private class RecordingScheduler : ExpiryScheduler {
+private class WipeTestAlarms : ExpiryScheduler {
     val alarms = mutableMapOf<String, Long>()
     var failToCancel = false
 
@@ -36,7 +36,7 @@ private class RecordingScheduler : ExpiryScheduler {
     }
 }
 
-private class QuietNotifier : ExpiryNotifier {
+private class WipeTestNotices : ExpiryNotifier {
     val cancelled = mutableListOf<String>()
 
     override fun areEnabled() = true
@@ -67,8 +67,8 @@ class CardsWipeTest {
         ),
     )
     private val store = InMemoryCardExpiryStore()
-    private val scheduler = RecordingScheduler()
-    private val notifier = QuietNotifier()
+    private val scheduler = WipeTestAlarms()
+    private val notifier = WipeTestNotices()
     private val env = TestEnvironment(
         prefsName = "cards_wipe_test",
         vault = vault,
