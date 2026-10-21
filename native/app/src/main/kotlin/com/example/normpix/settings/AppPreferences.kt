@@ -179,6 +179,7 @@ enum class CardsLayout(val label: String, val description: String) {
     Stack("Stacked cards", "One card in front, the others tucked behind it. Swipe to bring the next one forward, hold to spread them out"),
     Cards("Card list", "Every card in full, one under another, with its own actions"),
     Rows("Compact list", "One line for each card: bank, kind and expiry. Tap one to open it"),
+    Carousel("Carousel", "One card in the middle, the next ones peeking in from the sides. Swipe across to change card; its details and buttons are underneath, whichever Card actions style is chosen"),
 }
 
 /**

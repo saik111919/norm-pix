@@ -125,7 +125,7 @@ private fun ColorsSection(prefs: AppPrefsState, preferences: AppPreferences, hap
     ) {
         item {
             SwitchRow(
-                headline = "Use wallpaper colors",
+                headline = USE_WALLPAPER_COLORS,
                 supporting = "Match the colors of your wallpaper and system",
                 checked = usingWallpaper,
                 enabled = wallpaperColors,

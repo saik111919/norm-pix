@@ -130,6 +130,8 @@ fun AppPage(
     floatingTopBar: Boolean = false,
     onBack: (() -> Unit)? = null,
     displayTitle: Boolean = false,
+    /** False for a page whose content opens with a heading of its own, so the page's name isn't set above it as well. */
+    largeTitle: Boolean = true,
     content: LazyListScope.() -> Unit,
 ) {
     val floatsItself = !floatingTopBar && rememberBackButtonStyle() == BackButtonStyle.TopFloatingCircle
@@ -147,6 +149,7 @@ fun AppPage(
             imeAware = imeAware,
             floatingTopBar = floatingTopBar,
             displayTitle = displayTitle,
+            largeTitle = largeTitle,
             content = content,
         )
         return
@@ -167,7 +170,7 @@ fun AppPage(
             insetBottom = insetBottom,
             imeAware = imeAware,
             floatingTopBar = true,
-            largeTitle = pushed,
+            largeTitle = pushed && largeTitle,
             displayTitle = displayTitle,
             content = content,
         )
@@ -435,6 +438,7 @@ fun AppSubPage(
     showTopBack: Boolean = false,
     showFloatingBack: Boolean = true,
     displayTitle: Boolean = false,
+    largeTitle: Boolean = true,
     bottomBar: (@Composable () -> Unit)? = null,
     content: LazyListScope.() -> Unit,
 ) {
@@ -493,6 +497,7 @@ fun AppSubPage(
                 insetBottom = bottomBar == null,
                 floatingTopBar = isTopFloatingCircle,
                 displayTitle = displayTitle,
+                largeTitle = largeTitle,
                 content = content,
             )
             if (bottomBar != null) {

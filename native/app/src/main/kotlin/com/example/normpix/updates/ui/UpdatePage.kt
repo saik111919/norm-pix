@@ -35,9 +35,10 @@ import com.example.normpix.updates.release
  * does: the versions, what's new, the download's progress, and the one thing to do next. A tapped update notification opens
  * it too. While it is on screen no update sheet comes up over it.
  *
- * As on a Pixel's system update screen, all that scrolls at the top of the page while the buttons stay pinned in a bar at the
- * foot of the screen ([UpdateActionRow]): Later, or whatever the way out is, on the left, and Update now - or Install, or
- * whatever is next - on the right.
+ * It is laid out as a Pixel's system update screen is ([UpdateScreenBody]): a bare icon and a large headline open the page, with
+ * no title of the page's own above them, and all that scrolls while the buttons stay pinned at the foot of the screen
+ * ([UpdateActionStack]): Update now - or Install, or whatever is next - filled and across the page, and Later, or whatever
+ * the way out is, outlined under it.
  *
  * Leaving it never stops a download: that carries on with NormPix closed, its progress in a notification.
  */
@@ -80,11 +81,13 @@ private fun UpdatePageFor(updater: AppUpdater, onClose: () -> Unit) {
         title = PAGE_TITLE,
         onBack = onClose,
         listState = listState,
+        // The headline is the page's title: the page's name isn't set above it.
+        largeTitle = false,
         bottomBar = { UpdateBottomBar(state, actions, listState) },
     ) {
         item(key = "update") {
             Column {
-                UpdateBody(state, updater.installed, Modifier.padding(horizontal = AppSpacing.xl))
+                UpdateScreenBody(state, updater.installed, Modifier.padding(horizontal = AppSpacing.xl))
                 if (updater.enabled) {
                     Spacer(Modifier.height(AppSpacing.lg))
                     Text(
@@ -106,11 +109,10 @@ private fun UpdateBottomBar(state: UpdateState, actions: UpdateSheetActions, lis
     val moreBelow by remember(listState) { derivedStateOf { listState.canScrollForward } }
     Column(Modifier.fillMaxWidth()) {
         if (moreBelow) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        // Less on the left: a text button's label sits inside its touch target, and should line up with the text above.
-        UpdateActionRow(
+        UpdateActionStack(
             state,
             actions,
-            Modifier.padding(start = AppSpacing.sm, top = AppSpacing.md, end = AppSpacing.xl, bottom = AppSpacing.md),
+            Modifier.padding(start = AppSpacing.xl, top = AppSpacing.md, end = AppSpacing.xl, bottom = AppSpacing.md),
         )
     }
 }

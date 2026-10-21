@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import com.example.normpix.screens.WalletScreen
+import com.example.normpix.settings.CardsLayout
 import com.example.normpix.testing.InMemoryVault
 import com.example.normpix.testing.TestEnvironment
 import com.example.normpix.wallet.CardKind
@@ -65,14 +66,23 @@ class WalletExpiryNoticeTest {
     @After
     fun tearDown() = env.close()
 
-    private fun show(vararg cards: StoredCard) {
+    private fun show(vararg cards: StoredCard, layout: CardsLayout? = null) {
         env = TestEnvironment(
             "wallet_expiry_notice",
             InMemoryVault(cards.toList()),
             expiry = CardExpiryTracker(InMemoryCardExpiryStore(), NoExpiryScheduler, notifier),
         )
+        if (layout != null) env.preferences.setCardsLayout(layout)
         compose.setContent { env.Content { WalletScreen() } }
         compose.waitForIdle()
+    }
+
+    @Test
+    fun inTheCarouselACardNotInFrontStillHasItsNoticeListed() {
+        // The first card is in front and isn't expiring; the second, beside it, is. Its notice isn't waiting for a swipe.
+        show(card("a", "HDFC Bank", "4242", later), card("b", "ICICI Bank", "0001", soon), layout = CardsLayout.Carousel)
+        compose.onNodeWithText("ICICI Bank •••• 0001 · Expires soon").performScrollTo().assertIsDisplayed()
+        assertEquals(1, compose.onAllNodesWithText("Mark as done").fetchSemanticsNodes().size)
     }
 
     @Test

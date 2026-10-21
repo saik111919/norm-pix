@@ -308,9 +308,56 @@ class UpdateUiTest {
         val environment = environment(updater())
         compose.setContent { environment.Content { UpdatePage() } }
         waitFor("Update available")
-        compose.onNodeWithText("1.0.3").assertIsDisplayed()
+        compose.onNodeWithText("Installed version: 1.0.2").assertIsDisplayed()
+        compose.onNodeWithText("New version: 1.0.3").assertIsDisplayed()
+        compose.onNodeWithText("Update size", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Update now").assertIsDisplayed()
         compose.onNodeWithText("Later").assertIsDisplayed()
+    }
+
+    @Test
+    fun `the update page opens with its headline, not with a title of the page's own above it`() {
+        Releases.publish(network)
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("Update available")
+        // One "Update available", the headline: the page's name ("App update") isn't set over it as a second title.
+        assertEquals(1, compose.onAllNodesWithText("Update available").fetchSemanticsNodes().size)
+        absent("App update")
+        // The page is laid out like the Pixel's: the headline is large, and starts at the page's left margin.
+        val headline = boundsOf("Update available")
+        assertTrue(headline.height > 30.dp, "a large headline: ${headline.height}")
+        assertTrue(headline.left <= 32.dp, "at the left margin: $headline")
+    }
+
+    @Test
+    fun `the update page's buttons are two pills stacked across the foot of the screen, Update now over Later`() {
+        Releases.publish(network)
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("Update available")
+        val screen = compose.onRoot().getBoundsInRoot()
+        val update = boundsOf("Update now")
+        val later = boundsOf("Later")
+        assertTrue(update.bottom <= later.top, "Update now $update is over Later $later")
+        assertEquals(update.left.value, later.left.value, 1f, "the same width, one under the other")
+        assertEquals(update.right.value, later.right.value, 1f)
+        assertTrue(update.left - screen.left <= 32.dp && screen.right - update.right <= 32.dp, "across the page: $update in $screen")
+        assertTrue(update.width > screen.width * 0.8f, "full width: ${update.width} of ${screen.width}")
+        assertTrue(later.top > screen.top + screen.height / 2, "at the foot of the screen: $later")
+    }
+
+    @Test
+    fun `a single action on the update page is one full-width button`() {
+        Releases.publish(network, "1.0.2", 10002)
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("NormPix is up to date")
+        val screen = compose.onRoot().getBoundsInRoot()
+        val done = boundsOf("Done")
+        assertTrue(done.width > screen.width * 0.8f, "full width: ${done.width} of ${screen.width}")
+        assertTrue(done.top > screen.top + screen.height / 2, "at the foot of the screen")
+        absent("Later")
     }
 
     @Test
@@ -324,8 +371,8 @@ class UpdateUiTest {
         val pinned = boundsOf("Update now")
         val later = boundsOf("Later")
         assertTrue(pinned.top > screen.top + screen.height / 2, "the buttons are in the lower half, without scrolling: $pinned")
-        assertTrue(later.right <= pinned.left, "Later on the left, Update now on the right")
-        assertTrue(screen.right - pinned.right <= 32.dp, "Update now at the right edge")
+        assertTrue(pinned.bottom <= later.top, "Update now over Later")
+        assertTrue(screen.right - pinned.right <= 32.dp, "the buttons run across the page")
 
         // The page scrolls all the way to its last line while the buttons stay where they are.
         compose.onNodeWithText("Only GitHub is contacted", substring = true).performScrollTo().assertIsDisplayed()

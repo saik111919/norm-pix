@@ -3,7 +3,13 @@ package com.example.normpix.settings.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -19,6 +25,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -139,6 +147,56 @@ fun ProfileSettingsRow(
         },
     )
 }
+
+/**
+ * A [SettingsRow] split in two, as Pixel's Settings does "Adaptive brightness": the row itself opens its page ([onClick]), and
+ * a switch at its end, after a thin divider, turns the thing on or off without opening anything. Two touch targets, announced
+ * as a button and as a switch ([switchLabel] is what the switch is called, as the row's own words say what the page holds).
+ */
+@Composable
+fun SettingsSplitSwitchRow(
+    headline: String,
+    icon: ImageVector,
+    hue: Int?,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    onClick: () -> Unit,
+    switchLabel: String,
+    modifier: Modifier = Modifier,
+    supporting: String? = null,
+    enabled: Boolean = true,
+) {
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        SettingsRow(
+            headline = headline,
+            icon = icon,
+            hue = hue,
+            modifier = Modifier.weight(1f),
+            supporting = supporting,
+            onClick = onClick,
+        )
+        Box(
+            Modifier
+                .width(1.dp)
+                .height(SPLIT_DIVIDER_HEIGHT)
+                .background(MaterialTheme.colorScheme.outlineVariant),
+        )
+        Box(
+            Modifier
+                .heightIn(min = SPLIT_SWITCH_HEIGHT)
+                .widthIn(min = SPLIT_SWITCH_WIDTH)
+                .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
+                .semantics { contentDescription = switchLabel },
+            contentAlignment = Alignment.Center,
+        ) {
+            Switch(checked = checked, onCheckedChange = null, enabled = enabled)
+        }
+    }
+}
+
+private val SPLIT_DIVIDER_HEIGHT = 36.dp
+private val SPLIT_SWITCH_HEIGHT = 72.dp
+private val SPLIT_SWITCH_WIDTH = 88.dp
 
 /** [SettingsRow] with an on/off switch: the whole row toggles (one touch target, announced as a switch). */
 @Composable

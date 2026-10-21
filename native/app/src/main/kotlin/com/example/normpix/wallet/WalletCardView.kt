@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
@@ -113,7 +114,8 @@ fun groupDigits(digits: String): String = digits.chunked(4).joinToString(" ")
 fun WalletCardView(
     card: StoredCard,
     revealed: Boolean,
-    actionStyle: WalletCardActionStyle,
+    /** How the card's controls are reached; null shows the card alone, for a caller that lays the controls out itself ([CardActionBar]). */
+    actionStyle: WalletCardActionStyle?,
     onToggleReveal: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -135,16 +137,8 @@ fun WalletCardView(
     val theme = remember(card.bankName) { BankCardDesign.themeFor(card.bankName) }
     val showingBack = flip.value >= 0.5f
 
-    val revealLabel = when {
-        revealed -> "Hide"
-        nfcGated -> "Tap NFC to reveal"
-        else -> "Reveal"
-    }
-    val revealIcon = when {
-        revealed -> Icons.Outlined.VisibilityOff
-        nfcGated -> Icons.Outlined.Nfc
-        else -> Icons.Outlined.Visibility
-    }
+    val revealLabel = revealLabelOf(revealed, nfcGated)
+    val revealIcon = revealIconOf(revealed, nfcGated)
 
     fun doFlip() {
         haptics.selection()
@@ -228,26 +222,67 @@ fun WalletCardView(
 
     Column(modifier) {
         flipCard()
-        Spacer(Modifier.height(AppSpacing.md))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            FilledTonalButton(onClick = onToggleReveal, modifier = Modifier.weight(1f)) {
-                Icon(revealIcon, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(AppSpacing.sm))
-                Text(revealLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            Spacer(Modifier.width(AppSpacing.sm))
-            if (onCopy != null) {
-                FilledTonalIconButton(onClick = { onCopy(null) }) { Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy card details") }
-                Spacer(Modifier.width(AppSpacing.xs))
-            }
-            if (onShareNfc != null) {
-                FilledTonalIconButton(onClick = onShareNfc) { Icon(Icons.Rounded.Contactless, contentDescription = "Share via NFC") }
-                Spacer(Modifier.width(AppSpacing.xs))
-            }
-            FilledTonalIconButton(onClick = onEdit) { Icon(Icons.Outlined.Edit, contentDescription = "Edit card") }
-            Spacer(Modifier.width(AppSpacing.xs))
-            FilledTonalIconButton(onClick = onDelete) { Icon(Icons.Outlined.DeleteOutline, contentDescription = "Delete card") }
+        if (actionStyle != null) {
+            Spacer(Modifier.height(AppSpacing.md))
+            CardActionBar(
+                revealed = revealed,
+                nfcGated = nfcGated,
+                onToggleReveal = onToggleReveal,
+                onEdit = onEdit,
+                onDelete = onDelete,
+                onShareNfc = onShareNfc,
+                onCopy = onCopy?.let { copy -> { copy(null) } },
+            )
         }
+    }
+}
+
+private fun revealLabelOf(revealed: Boolean, nfcGated: Boolean): String = when {
+    revealed -> "Hide"
+    nfcGated -> "Tap NFC to reveal"
+    else -> "Reveal"
+}
+
+private fun revealIconOf(revealed: Boolean, nfcGated: Boolean): ImageVector = when {
+    revealed -> Icons.Outlined.VisibilityOff
+    nfcGated -> Icons.Outlined.Nfc
+    else -> Icons.Outlined.Visibility
+}
+
+/**
+ * A card's controls as a row of buttons: Reveal (or Hide, or "Tap NFC to reveal") across the row, then Copy, Share and Edit and
+ * Delete as icons. Under each card of the card list, and under the carousel's card in front. Copy and Share are left out when
+ * [onCopy] or [onShareNfc] is null.
+ */
+@Composable
+internal fun CardActionBar(
+    revealed: Boolean,
+    nfcGated: Boolean,
+    onToggleReveal: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+    onShareNfc: (() -> Unit)? = null,
+    onCopy: (() -> Unit)? = null,
+) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        FilledTonalButton(onClick = onToggleReveal, modifier = Modifier.weight(1f)) {
+            Icon(revealIconOf(revealed, nfcGated), contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(AppSpacing.sm))
+            Text(revealLabelOf(revealed, nfcGated), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.width(AppSpacing.sm))
+        if (onCopy != null) {
+            FilledTonalIconButton(onClick = onCopy) { Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy card details") }
+            Spacer(Modifier.width(AppSpacing.xs))
+        }
+        if (onShareNfc != null) {
+            FilledTonalIconButton(onClick = onShareNfc) { Icon(Icons.Rounded.Contactless, contentDescription = "Share via NFC") }
+            Spacer(Modifier.width(AppSpacing.xs))
+        }
+        FilledTonalIconButton(onClick = onEdit) { Icon(Icons.Outlined.Edit, contentDescription = "Edit card") }
+        Spacer(Modifier.width(AppSpacing.xs))
+        FilledTonalIconButton(onClick = onDelete) { Icon(Icons.Outlined.DeleteOutline, contentDescription = "Delete card") }
     }
 }
 

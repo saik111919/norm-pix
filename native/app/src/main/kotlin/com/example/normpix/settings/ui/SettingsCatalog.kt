@@ -100,6 +100,7 @@ object SettingsCatalog {
         SettingsEntry("Export and import cards", SettingsPage.Wallet, listOf("export cards", "import cards", "card backup", "backup cards", "move cards", "transfer cards", "password"), cardsOnly = true),
         SettingsEntry("Card actions style", SettingsPage.Wallet, listOf("buttons", "menu", "context menu", "actions"), cardsOnly = true),
         SettingsEntry("Accounts layout", SettingsPage.Wallet, listOf("accounts", "stack", "stacked", "cards", "list", "rows", "compact", "layout", "wallet")),
+        SettingsEntry("Cards layout", SettingsPage.Wallet, listOf("cards", "stack", "stacked", "list", "rows", "compact", "carousel", "swipe", "layout", "wallet"), cardsOnly = true),
         SettingsEntry("Bank logo style", SettingsPage.Wallet, listOf("logo", "brand", "icon", "compact", "full")),
         SettingsEntry("NFC tag reveal gate", SettingsPage.Wallet, listOf("nfc", "tap to reveal", "card number", "security", "registered tag", "only my tag", "my tag", "register tag"), cardsOnly = true),
         SettingsEntry("Card tilt", SettingsPage.Wallet, listOf("tilt", "motion", "gyroscope", "sensor", "parallax", "animation"), cardsOnly = true),
