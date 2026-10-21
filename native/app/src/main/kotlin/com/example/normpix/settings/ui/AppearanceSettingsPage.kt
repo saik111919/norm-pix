@@ -39,6 +39,7 @@ import com.example.normpix.settings.ThemeMode
 import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.SectionSubheader
+import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.AppTheme
 
@@ -47,6 +48,9 @@ import com.example.normpix.ui.theme.AppTheme
  * of how NormPix looks and moves, grouped as Look, Motion and Layout. A row shows what is chosen now and opens a screen of its
  * own for that part ([AppearanceSectionPage]).
  */
+
+/** What the switch on the Colors row is called, for a screen reader (the Colors page's own switch row says the same). */
+internal const val USE_WALLPAPER_COLORS = "Use wallpaper colors"
 
 /** The groups of the Appearance overview. [hue] is the colour of its rows' icons (see [SettingsGlyph]). */
 internal enum class AppearanceGroup(val title: String, val hue: Int) {
@@ -119,6 +123,7 @@ fun AppearanceSettingsPage() {
     // Android holds the launcher icon; read it each time the page opens.
     val appIcon = remember { AppIcons.current(context) }
     val groupStyle = settingsGroupStyle()
+    val haptics = rememberAppHaptics()
 
     AppSubPage(title = "Appearance", onBack = navigator::back) {
         item(key = "body") {
@@ -134,20 +139,39 @@ fun AppearanceSettingsPage() {
                     ListSection(title = group.title, style = groupStyle) {
                         for (section in AppearanceSection.entries.filter { it.group == group }) {
                             item {
-                                SettingsRow(
-                                    headline = section.title,
-                                    supporting = section.summary(prefs, appIcon),
-                                    icon = section.icon,
-                                    hue = group.hue,
-                                    onClick = { navigator.openAppearance(section) },
-                                    trailing = {
-                                        Icon(
-                                            Icons.Rounded.ChevronRight,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    },
-                                )
+                                if (section == AppearanceSection.Colors) {
+                                    // The one row that is also a switch: wallpaper colors or the user's own, without opening the page.
+                                    val wallpaperColors = AppTheme.dynamicColorSupported
+                                    SettingsSplitSwitchRow(
+                                        headline = section.title,
+                                        supporting = section.summary(prefs, appIcon),
+                                        icon = section.icon,
+                                        hue = group.hue,
+                                        checked = prefs.colorSource == ColorSource.System && wallpaperColors,
+                                        enabled = wallpaperColors,
+                                        switchLabel = USE_WALLPAPER_COLORS,
+                                        onClick = { navigator.openAppearance(section) },
+                                        onCheckedChange = { on ->
+                                            haptics.selection()
+                                            preferences.setColorSource(if (on) ColorSource.System else ColorSource.Custom)
+                                        },
+                                    )
+                                } else {
+                                    SettingsRow(
+                                        headline = section.title,
+                                        supporting = section.summary(prefs, appIcon),
+                                        icon = section.icon,
+                                        hue = group.hue,
+                                        onClick = { navigator.openAppearance(section) },
+                                        trailing = {
+                                            Icon(
+                                                Icons.Rounded.ChevronRight,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        },
+                                    )
+                                }
                             }
                         }
                     }

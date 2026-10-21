@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Nfc
 import androidx.compose.material.icons.outlined.ViewAgenda
+import androidx.compose.material.icons.outlined.ViewCarousel
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -111,6 +112,7 @@ import com.example.normpix.wallet.AccountCardView
 import com.example.normpix.wallet.AccountStack
 import com.example.normpix.wallet.CardKind
 import com.example.normpix.wallet.AddTile
+import com.example.normpix.wallet.CardCarousel
 import com.example.normpix.wallet.CardStack
 import com.example.normpix.wallet.CardsState
 import com.example.normpix.wallet.WalletCardView
@@ -313,7 +315,11 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                     selected = if (cardsDeck.unfolded) null else prefs.cardsLayout,
                                     onSelect = {
                                         haptics.selection()
-                                        if (it == CardsLayout.Stack && cardsDeck.unfolded) cardsDeck.fold() else container.preferences.setCardsLayout(it)
+                                        // "Stack" while spread out only gathers them. Any other pick takes the cards out of the stack for
+                                        // good: they aren't "spread out" any more, or no segment would show as chosen.
+                                        val gatheringOnly = it == CardsLayout.Stack && cardsDeck.unfolded
+                                        cardsDeck.fold()
+                                        if (!gatheringOnly) container.preferences.setCardsLayout(it)
                                     },
                                 )
                             }
@@ -359,6 +365,31 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                         // The next card goes where this stack ends: a slim tile, as the cards behind the front one are slim.
                                         Spacer(Modifier.height(AppSpacing.lg))
                                         AddTile(title = "Add card", supporting = "Encrypted, and kept on this device", onClick = flows::addCard, compact = true)
+                                    }
+                                }
+                            } else if (prefs.cardsLayout == CardsLayout.Carousel) {
+                                item(key = "cards-carousel") {
+                                    Column(Modifier.padding(bottom = AppSpacing.lg)) {
+                                        CardCarousel(
+                                            cards = visible,
+                                            revealed = revealed,
+                                            nfcGated = prefs.nfcTagRevealEnabled,
+                                            bankIconStyle = prefs.bankIconStyle,
+                                            tilt = tilt,
+                                            onToggleReveal = { reveal.toggle(it.id) },
+                                            onShareNfc = { flows.openNfcExchange(ExchangeTab.Outlet, it) },
+                                            onEdit = { flows.editCard(it) },
+                                            onDelete = {
+                                                revealed.remove(it.id)
+                                                flows.deleteCard(it)
+                                            },
+                                            onCopy = { card, field -> reveal.copy(card, field) },
+                                        )
+                                        // The next card goes after the last, as under the stack: a slim tile.
+                                        Spacer(Modifier.height(AppSpacing.lg))
+                                        Box(Modifier.padding(horizontal = AppSpacing.lg)) {
+                                            AddTile(title = "Add card", supporting = "Encrypted, and kept on this device", onClick = flows::addCard, compact = true)
+                                        }
                                     }
                                 }
                             } else {
@@ -455,6 +486,7 @@ private val cardsLayoutOptions = listOf(
     ChoiceOption(CardsLayout.Stack, "Stack", Icons.Outlined.Layers),
     ChoiceOption(CardsLayout.Cards, "Cards", Icons.Outlined.ViewAgenda),
     ChoiceOption(CardsLayout.Rows, "Rows", Icons.AutoMirrored.Outlined.ViewList),
+    ChoiceOption(CardsLayout.Carousel, "Carousel", Icons.Outlined.ViewCarousel),
 )
 
 private val accountsLayoutOptions = listOf(

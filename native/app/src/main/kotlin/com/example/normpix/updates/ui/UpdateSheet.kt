@@ -2,6 +2,7 @@ package com.example.normpix.updates.ui
 
 import android.text.format.DateUtils
 import android.text.format.Formatter
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.outlined.UpdateDisabled
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -238,21 +240,87 @@ fun UpdateBody(state: UpdateState, installed: InstalledApp, modifier: Modifier =
         }
         if (release != null && release.notes.isNotBlank() && view.showsNotes) {
             Spacer(Modifier.height(AppSpacing.lg))
-            Text("What's new", style = MaterialTheme.typography.titleSmall, color = scheme.onSurface)
-            Spacer(Modifier.height(AppSpacing.xs))
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .then(if (notesMaxHeight != null) Modifier.heightIn(max = notesMaxHeight) else Modifier)
-                    .background(scheme.surfaceContainerHigh, AppRadius.rMd)
-                    .then(if (notesMaxHeight != null) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                    .padding(AppSpacing.md),
-            ) {
-                Text(release.notes, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
-            }
+            WhatsNew(release, notesMaxHeight)
         }
     }
 }
+
+/** "What's new": the release's notes in a tonal box, which scrolls inside itself when [notesMaxHeight] caps it. */
+@Composable
+private fun WhatsNew(release: UpdateRelease, notesMaxHeight: Dp?) {
+    val scheme = MaterialTheme.colorScheme
+    Text("What's new", style = MaterialTheme.typography.titleSmall, color = scheme.onSurface)
+    Spacer(Modifier.height(AppSpacing.xs))
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .then(if (notesMaxHeight != null) Modifier.heightIn(max = notesMaxHeight) else Modifier)
+            .background(scheme.surfaceContainerHigh, AppRadius.rMd)
+            .then(if (notesMaxHeight != null) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+            .padding(AppSpacing.md),
+    ) {
+        Text(release.notes, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+    }
+}
+
+/**
+ * The update page's body, laid out as a Pixel's system update screen is: the icon on its own, centred and bare, a large
+ * headline under it (announced as it changes), what it means, then the release as plain "label: value" lines - the installed
+ * version, the new one, the date and "Update size" - the download's progress and what's new. The buttons are not part of it:
+ * they are pinned at the foot of the page ([UpdateActionStack]).
+ */
+@Composable
+fun UpdateScreenBody(state: UpdateState, installed: InstalledApp, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    val context = LocalContext.current
+    val view = sheetView(state, installed)
+    val release = state.release
+    Column(modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            if (view.busy) {
+                AppLoadingIndicator(Modifier.size(ScreenIconSize))
+            } else {
+                Icon(
+                    view.icon,
+                    contentDescription = null,
+                    tint = if (state is UpdateState.Failed) scheme.error else scheme.primary,
+                    modifier = Modifier.size(ScreenIconSize),
+                )
+            }
+        }
+        Spacer(Modifier.height(AppSpacing.xl))
+        Text(
+            view.title,
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Medium,
+            color = scheme.onSurface,
+            modifier = Modifier.semantics { heading() }.politeLiveRegion(),
+        )
+        Spacer(Modifier.height(AppSpacing.md))
+        Text(view.message, style = MaterialTheme.typography.bodyLarge, color = scheme.onSurfaceVariant)
+        if (release != null && state !is UpdateState.Failed) {
+            Spacer(Modifier.height(AppSpacing.xl))
+            val facts = listOfNotNull(
+                "Installed version: ${installed.versionName}",
+                "New version: ${release.versionName}",
+                release.publishedAt?.let { "Released: ${releaseDate(it)}" },
+                "Update size: ${Formatter.formatShortFileSize(context, release.size)}",
+            )
+            for (fact in facts) Text(fact, style = MaterialTheme.typography.bodyLarge, color = scheme.onSurfaceVariant)
+        }
+        if (state is UpdateState.Downloading) {
+            Spacer(Modifier.height(AppSpacing.xl))
+            DownloadProgress(state)
+        }
+        if (release != null && release.notes.isNotBlank() && view.showsNotes) {
+            Spacer(Modifier.height(AppSpacing.xl))
+            WhatsNew(release, notesMaxHeight = null)
+        }
+    }
+}
+
+/** The page's icon, as large as the Pixel's - a phone with its download arrow - is against its headline. */
+private val ScreenIconSize = 56.dp
 
 /**
  * The update screen's buttons, as on a Pixel's system update screen: the secondary action (Later, Not now, Cancel download,
@@ -278,15 +346,44 @@ fun UpdateActionRow(state: UpdateState, actions: UpdateSheetActions, modifier: M
     }
 }
 
-/** The filled, fully rounded button of [UpdateActionRow]. */
+/**
+ * The update page's buttons, as on a Pixel's system update screen ("Restart now" over "Restart after 2:00 AM"): the primary
+ * action (Update now, Install, Try again, Open settings) as a filled, fully rounded button across the page, and the way out
+ * (Later, Not now, Close) as an outlined one under it. With only one action, it is the filled one, alone.
+ */
 @Composable
-private fun PillButton(label: String, onClick: () -> Unit) {
-    Button(onClick = onClick, shape = CircleShape, modifier = Modifier.height(ActionHeight)) {
+fun UpdateActionStack(state: UpdateState, actions: UpdateSheetActions, modifier: Modifier = Modifier) {
+    val buttons = updateButtons(state)
+    val primary = buttons.primary
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+        PillButton((primary ?: buttons.secondary).label, Modifier.fillMaxWidth().height(StackedActionHeight)) {
+            actions.perform(primary ?: buttons.secondary)
+        }
+        if (primary != null) {
+            OutlinedButton(
+                onClick = { actions.perform(buttons.secondary) },
+                shape = CircleShape,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.fillMaxWidth().height(StackedActionHeight),
+            ) {
+                Text(buttons.secondary.label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** The filled, fully rounded button of [UpdateActionRow] and [UpdateActionStack]. */
+@Composable
+private fun PillButton(label: String, modifier: Modifier = Modifier.height(ActionHeight), onClick: () -> Unit) {
+    Button(onClick = onClick, shape = CircleShape, modifier = modifier) {
         Text(label, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold), maxLines = 1)
     }
 }
 
 private val ActionHeight = 48.dp
+
+/** Taller than the row's, as the Pixel's are: they run across the page, and are the whole of the foot of it. */
+private val StackedActionHeight = 52.dp
 
 /** One of the buttons of the update sheet and page: what it says, and which of the [UpdateSheetActions] it does. */
 internal enum class UpdateAction(val label: String) {
