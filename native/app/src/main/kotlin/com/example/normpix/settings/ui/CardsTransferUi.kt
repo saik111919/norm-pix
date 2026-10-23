@@ -104,6 +104,14 @@ internal class CardsTransferFlows(
     }
 
     suspend fun import() {
+        if (container.preferences.state.value.dummyDataEnabled) {
+            overlays.alert(
+                "Sample data is on",
+                "Cards cannot be imported while sample data is showing. Turn it off in Settings > Data & backup first.",
+                icon = Icons.Outlined.ErrorOutline,
+            )
+            return
+        }
         // Refused before the file is even asked for: with cards not stored there is nowhere to put them.
         if (!container.preferences.state.value.walletCardsEnabled) {
             overlays.alert(
