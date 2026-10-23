@@ -16,12 +16,13 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import com.example.normpix.screens.WalletScreen
 import com.example.normpix.settings.CardsLayout
 import com.example.normpix.testing.InMemoryVault
@@ -79,9 +80,9 @@ class CardsLayoutTest {
         env?.close()
     }
 
-    private fun showWallet(layout: CardsLayout? = null): TestEnvironment {
+    private fun showWallet(layout: CardsLayout? = null, cards: List<StoredCard> = listOf(HDFC_CARD, ICICI_CARD)): TestEnvironment {
         Locale.setDefault(Locale.US)
-        val environment = TestEnvironment("cards_layout_test", InMemoryVault(listOf(HDFC_CARD, ICICI_CARD)))
+        val environment = TestEnvironment("cards_layout_test", InMemoryVault(cards))
         env = environment
         if (layout != null) environment.preferences.setCardsLayout(layout)
         compose.setContent { environment.Content { WalletScreen() } }
@@ -156,11 +157,12 @@ class CardsLayoutTest {
         compose.onNodeWithContentDescription("HDFC Bank debit card, ending in", substring = true).performTouchInput { longClick() }
         compose.waitForIdle()
 
-        compose.onNodeWithText("Carousel").performClick()
+        // The second "Carousel" is the cards': the accounts' comes first on the page.
+        compose.onAllNodesWithText("Carousel")[1].performClick()
         compose.waitForIdle()
 
         assertEquals(CardsLayout.Carousel, environment.preferences.state.value.cardsLayout)
-        compose.onNodeWithText("Carousel").assertIsSelected()
+        compose.onAllNodesWithText("Carousel")[1].assertIsSelected()
         // And "Stack" then stacks them, rather than only gathering cards that are no longer spread out.
         compose.onAllNodesWithText("Stack")[1].performClick()
         compose.waitForIdle()
@@ -227,32 +229,73 @@ class CardsLayoutTest {
     fun theCarouselIsAFourthChoice_andTheChoiceIsKept() {
         val environment = showWallet()
 
-        compose.onNodeWithText("Carousel").performClick()
+        compose.onAllNodesWithText("Carousel")[1].performClick()
         compose.waitForIdle()
 
         assertEquals(CardsLayout.Carousel, environment.preferences.state.value.cardsLayout)
-        compose.onNodeWithText("Carousel").assertIsSelected()
+        compose.onAllNodesWithText("Carousel")[1].assertIsSelected()
         // The card in front, with the next one peeking in beside it.
         compose.onNodeWithContentDescription("HDFC Bank debit card, ending in", substring = true).assertExists()
         compose.onNodeWithContentDescription("ICICI Bank credit card, ending in", substring = true).assertExists()
     }
 
     @Test
-    fun theCarouselListsTheDetailsOfTheCardInFront_hiddenUntilRevealed() {
+    fun theCarouselWritesTheDetailsOfTheCardInFrontUnderIt_hiddenUntilRevealed() {
         showWallet(CardsLayout.Carousel)
 
         compose.onNodeWithText("HDFC Bank").assertExists()
         compose.onNodeWithText("Debit card · Visa · Ending in 4242").assertExists()
-        compose.onNodeWithText("Card number").assertExists()
+        compose.onNodeWithText("CARD NUMBER").assertExists()
         compose.onNodeWithText("•••• •••• •••• 4242").assertExists()
+        compose.onNodeWithText("CARDHOLDER").assertExists()
         compose.onNodeWithText("Asha Rao").assertExists()
         compose.onNodeWithText("07/29").assertExists()
         compose.onNodeWithText("•••").assertExists()
         compose.onAllNodesWithText("4111 1111 1111 4242").assertCountEquals(0)
         compose.onAllNodesWithText("737").assertCountEquals(0)
-        // The other card's details are not on the page: only the one in front is listed.
+        // The container beside it is only a way to it: its details are not read out.
         compose.onAllNodesWithText("ICICI Bank").assertCountEquals(0)
         compose.onNodeWithContentDescription("Card 1 of 2").assertExists()
+    }
+
+    @Test
+    fun theDetailsSitInAPanelUnderTheCardsThatTheCardsStandIn() {
+        showWallet(CardsLayout.Carousel)
+
+        val card = compose.onNodeWithContentDescription("HDFC Bank debit card, ending in", substring = true).getUnclippedBoundsInRoot()
+        val number = compose.onNodeWithText("•••• •••• •••• 4242").getUnclippedBoundsInRoot()
+        val reveal = compose.onNodeWithText("Reveal").getUnclippedBoundsInRoot()
+        // Directly under the card, in line with it: not a separate block further down the page.
+        assertTrue(number.top >= card.bottom, "the details are under the card: $number under $card")
+        assertTrue(number.top - card.bottom < 150.dp, "close under it, in the panel it stands in: ${number.top - card.bottom}")
+        // (Text widths are not measured: this test class runs on Robolectric's legacy text, where a string is a dp a letter.)
+        assertTrue(number.left < card.right, "under the card, not off to its right: $number, $card")
+        assertTrue(reveal.top >= number.bottom, "and the buttons are under the details")
+    }
+
+    @Test
+    fun aCardKeptWithoutACvvHasNoCvvOnItsDetails_asOnItsSheet() {
+        showWallet(CardsLayout.Carousel, cards = listOf(HDFC_CARD.copy(cvv = ""), ICICI_CARD))
+
+        // The one in front keeps none: no CVV detail, and its cardholder has the room.
+        compose.onAllNodesWithText("CVV").assertCountEquals(0)
+
+        // The next keeps one: it has its CVV, hidden.
+        compose.onNodeWithContentDescription("HDFC Bank debit card, ending in", substring = true).performTouchInput { swipeLeft() }
+        compose.waitForIdle()
+        compose.onNodeWithText("CVV").assertExists()
+        compose.onNodeWithText("•••").assertExists()
+    }
+
+    @Test
+    fun whenNoCardKeepsACvv_whichIsWhatSaveCvvOffLeavesTheVaultWith_noDetailsHaveOne() {
+        showWallet(CardsLayout.Carousel, cards = listOf(HDFC_CARD.copy(cvv = ""), ICICI_CARD.copy(cvv = "")))
+
+        compose.onAllNodesWithText("CVV").assertCountEquals(0)
+        compose.onNodeWithContentDescription("HDFC Bank debit card, ending in", substring = true).performTouchInput { swipeLeft() }
+        compose.waitForIdle()
+        compose.onAllNodesWithText("CVV").assertCountEquals(0)
+        compose.onNodeWithText("ICICI Bank").assertExists()
     }
 
     @Test
@@ -287,9 +330,9 @@ class CardsLayoutTest {
     fun aCardAtTheSideComesForwardWhenTapped() {
         showWallet(CardsLayout.Carousel)
 
-        // The sliver of it that shows: its middle is off the screen.
+        // The part of it that shows from behind the card in front: the outer end, as it is turned away and tucked behind.
         compose.onNodeWithContentDescription("ICICI Bank credit card, ending in", substring = true)
-            .performTouchInput { click(Offset(8f, centerY)) }
+            .performTouchInput { click(Offset(width - 12f, centerY)) }
         compose.waitForIdle()
 
         compose.onNodeWithText("ICICI Bank").assertExists()

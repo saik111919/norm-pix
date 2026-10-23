@@ -313,7 +313,7 @@ private fun PageFrame(
                             .background(scheme.surface),
                     ) {
                         Spacer(Modifier.height(statusBar + FloatingTopControls.clearance))
-                        pinnedHeader?.invoke()
+                        pinnedHeader()
                     }
                 }
             }

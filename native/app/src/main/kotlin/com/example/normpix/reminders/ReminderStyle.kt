@@ -7,10 +7,10 @@ import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Event
-import androidx.compose.material.icons.outlined.Label
+import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Snooze
@@ -48,12 +48,12 @@ fun Reminder.urgency(now: LocalDateTime = LocalDateTime.now()): ReminderUrgency 
 val ReminderCategory.icon: ImageVector
     get() = when (this) {
         ReminderCategory.Payments -> Icons.Outlined.Payments
-        ReminderCategory.Expenses -> Icons.Outlined.ReceiptLong
+        ReminderCategory.Expenses -> Icons.AutoMirrored.Outlined.ReceiptLong
         ReminderCategory.Income -> Icons.Outlined.AccountBalanceWallet
         ReminderCategory.Accounts -> Icons.Outlined.AccountBalance
         ReminderCategory.Cards -> Icons.Outlined.CreditCard
         ReminderCategory.Personal -> Icons.Outlined.Person
-        ReminderCategory.Custom -> Icons.Outlined.Label
+        ReminderCategory.Custom -> Icons.AutoMirrored.Outlined.Label
     }
 
 private val WEEKDAYS = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")

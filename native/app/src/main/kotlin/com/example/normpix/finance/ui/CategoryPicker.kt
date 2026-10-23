@@ -1,5 +1,17 @@
 package com.example.normpix.finance.ui
 
+import com.example.normpix.ui.theme.AppMotion
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.foundation.layout.Row
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -191,7 +203,7 @@ fun TransactionCategoryField(
 
 /**
  * The sheet: a search box, the categories used most ("Frequently used"), then every family - the category as a row that
- * picks it, its sub-categories as chips under it - and "New category". Typing in the search box swaps the families for the
+ * picks it, its sub-categories as chips under it, closed until the row's chevron (or "Expand all") opens them - and "New category". Typing in the search box swaps the families for the
  * matches, each named by where it sits. With [multiple] the rows toggle and a button applies the set; otherwise a tap picks
  * and closes. [onDone] gets the picked ids, or null when the sheet is dismissed.
  */
@@ -218,6 +230,13 @@ fun CategoryPickerSheet(
     val searching = query.isNotBlank()
     val matches = if (searching) categories.matching(query) { finance.categories.pathName(it) } else emptyList()
     val families = remember(categories) { categories.families() }
+    // Which families show their sub-categories. They start closed, so the sheet is a short list of families to look down - except
+    // the one a picked sub-category sits in, which starts open, so the choice is seen where it is.
+    var open by remember(families) {
+        mutableStateOf(families.filter { family -> family.subs.any { it.id in selected } }.map { it.key }.toSet())
+    }
+    val expandable = families.filter { it.subs.isNotEmpty() }
+    val allOpen = expandable.isNotEmpty() && expandable.all { it.key in open }
 
     fun choose(category: Category) {
         val id = category.id ?: return
@@ -296,12 +315,34 @@ fun CategoryPickerSheet(
                                     )
                                 }
                             }
-                            SectionSubheader("All categories")
+                        }
+                    }
+                }
+                item(key = "all-header") {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        SectionSubheader("All categories", Modifier.weight(1f))
+                        if (expandable.isNotEmpty()) {
+                            TextButton(
+                                onClick = {
+                                    haptics.selection()
+                                    open = if (allOpen) emptySet() else expandable.map { it.key }.toSet()
+                                },
+                            ) { Text(if (allOpen) "Collapse all" else "Expand all") }
                         }
                     }
                 }
                 items(families, key = { it.category.id ?: it.category.name }) { family ->
-                    FamilyCard(family, picked, multiple, onChoose = ::choose)
+                    FamilyCard(
+                        family = family,
+                        picked = picked,
+                        multiple = multiple,
+                        expanded = family.key in open,
+                        onToggle = {
+                            haptics.selection()
+                            open = if (family.key in open) open - family.key else open + family.key
+                        },
+                        onChoose = ::choose,
+                    )
                 }
             }
             if (onCreate != null) {
@@ -330,22 +371,53 @@ fun CategoryPickerSheet(
     }
 }
 
-/** One family: its category as a row that picks it, then its sub-categories as chips, all in one rounded card. */
+/** A family's own key: what [CategoryPickerSheet] remembers it open by. */
+private val CategoryFamily.key: String get() = (category.id ?: category.name).toString()
+
+/**
+ * One family in one rounded card: its category as a row that picks it, and - closed or open, by the chevron at the row's
+ * end - its sub-categories as chips under it. Closed, the row says what is inside (the first few names and how many more)
+ * or, if one is picked, which: so nothing chosen is out of sight. Open, it says how many there are.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun FamilyCard(family: CategoryFamily, picked: Set<Long>, multiple: Boolean, onChoose: (Category) -> Unit) {
+private fun FamilyCard(
+    family: CategoryFamily,
+    picked: Set<Long>,
+    multiple: Boolean,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onChoose: (Category) -> Unit,
+) {
     val scheme = MaterialTheme.colorScheme
+    val pickedSubs = family.subs.filter { it.id in picked }
+    val count = family.subs.size
+    val supporting = when {
+        count == 0 -> null
+        expanded -> "$count sub-categor${if (count == 1) "y" else "ies"}"
+        pickedSubs.size == 1 -> "${pickedSubs.single().name} selected"
+        pickedSubs.isNotEmpty() -> "${pickedSubs.size} selected"
+        else -> family.subs.take(PREVIEW_NAMES).joinToString(", ") { it.name } + if (count > PREVIEW_NAMES) " +${count - PREVIEW_NAMES}" else ""
+    }
     Surface(shape = AppRadius.rLg, color = scheme.surfaceContainerHigh) {
         Column {
             PickerRow(
                 category = family.category,
                 name = family.category.name,
-                supporting = family.subs.size.takeIf { it > 0 }?.let { "$it sub-categor${if (it == 1) "y" else "ies"}" },
+                supporting = supporting,
+                supportingEmphasis = !expanded && pickedSubs.isNotEmpty(),
                 selected = family.category.id in picked,
                 multiple = multiple,
                 onClick = { onChoose(family.category) },
+                trailingExtra = if (count > 0) ({ ExpandToggle(expanded, family.category.name, onToggle) }) else null,
             )
-            if (family.subs.isNotEmpty()) {
+            AnimatedVisibility(
+                visible = expanded && count > 0,
+                enter = expandVertically(tween(AppMotion.duration(AppMotion.MEDIUM_MS), easing = AppMotion.standard)) +
+                    fadeIn(tween(AppMotion.duration(AppMotion.MEDIUM_MS), easing = AppMotion.standard)),
+                exit = shrinkVertically(tween(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.standard)) +
+                    fadeOut(tween(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.standard)),
+            ) {
                 FlowRow(
                     modifier = Modifier.padding(start = AppSpacing.lg, end = AppSpacing.lg, bottom = AppSpacing.md),
                     horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
@@ -360,7 +432,30 @@ private fun FamilyCard(family: CategoryFamily, picked: Set<Long>, multiple: Bool
     }
 }
 
-/** A category as a full-width row: its avatar and name, and whether it is picked (a tick, or a checkbox when several can be). */
+/** How many of a closed family's sub-categories are named on its row. */
+private const val PREVIEW_NAMES = 2
+
+/** The chevron that opens and closes a family: a touch target of its own at the row's end, turning over as it opens. */
+@Composable
+private fun ExpandToggle(expanded: Boolean, name: String, onClick: () -> Unit) {
+    val angle by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.standard),
+        label = "family_chevron",
+    )
+    IconButton(onClick = onClick) {
+        Icon(
+            Icons.Rounded.ExpandMore,
+            contentDescription = if (expanded) "Hide sub-categories of $name" else "Show sub-categories of $name",
+            modifier = Modifier.rotate(angle),
+        )
+    }
+}
+
+/**
+ * A category as a full-width row: its avatar and name, and whether it is picked (a tick, or a checkbox when several can be).
+ * [trailingExtra] goes after that, at the row's end; [supportingEmphasis] puts the supporting line in the accent colour.
+ */
 @Composable
 private fun PickerRow(
     category: Category,
@@ -369,8 +464,15 @@ private fun PickerRow(
     multiple: Boolean,
     onClick: () -> Unit,
     supporting: String? = null,
+    supportingEmphasis: Boolean = false,
+    trailingExtra: (@Composable () -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val mark: (@Composable () -> Unit)? = when {
+        multiple -> ({ Checkbox(checked = selected, onCheckedChange = null) })
+        selected -> ({ Icon(Icons.Rounded.Check, contentDescription = null, tint = scheme.primary) })
+        else -> null
+    }
     ListItem(
         modifier = Modifier
             .background(if (selected && !multiple) scheme.secondaryContainer.copy(alpha = 0.5f) else Color.Transparent)
@@ -382,11 +484,25 @@ private fun PickerRow(
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         leadingContent = { CategoryAvatar(category, size = 40.dp) },
         headlineContent = { Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        supportingContent = supporting?.let { { Text(it) } },
-        trailingContent = when {
-            multiple -> ({ Checkbox(checked = selected, onCheckedChange = null) })
-            selected -> ({ Icon(Icons.Rounded.Check, contentDescription = null, tint = scheme.primary) })
-            else -> null
+        supportingContent = supporting?.let {
+            {
+                Text(
+                    it,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = if (supportingEmphasis) scheme.primary else Color.Unspecified,
+                )
+            }
+        },
+        trailingContent = if (mark == null && trailingExtra == null) {
+            null
+        } else {
+            {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    mark?.invoke()
+                    trailingExtra?.invoke()
+                }
+            }
         },
     )
 }

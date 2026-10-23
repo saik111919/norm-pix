@@ -1,5 +1,6 @@
 package com.example.normpix.updates
 
+import androidx.core.net.toUri
 import android.app.PendingIntent
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
@@ -175,7 +176,7 @@ class SessionUpdateInstaller(
     override val installsQuietly: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     override fun openInstallSetting(): Boolean =
-        show(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")))
+        show(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, "package:${context.packageName}".toUri()))
 
     override fun install(apk: File, release: UpdateRelease, quiet: Boolean, started: (id: Int) -> Unit) {
         // An install left from an earlier try (turned down, or the app closed under it) goes: only the newest is committed.

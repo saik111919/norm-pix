@@ -93,7 +93,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
-import com.example.normpix.banks.ui.AccountMark
+import com.example.normpix.banks.ui.AccountBadge
+import com.example.normpix.banks.ui.BankBadge
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.Category
 import com.example.normpix.finance.domain.CurrencySpec
@@ -321,6 +322,8 @@ fun <K> ChoiceDropdownField(
     emptyIcon: ImageVector? = null,
     /** Whether [emptyIcon] stands for a category or a person, and so is drawn as an avatar in the shape the user chose. */
     emptyAsAvatar: Boolean = false,
+    /** The mark shown while nothing is chosen, when it is not an icon on a badge (an account's, in the shape the user chose). Wins over [emptyIcon]. */
+    emptyAvatar: (@Composable (size: Dp) -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val haptics = rememberAppHaptics()
@@ -336,6 +339,7 @@ fun <K> ChoiceDropdownField(
             placeholder = { Text(placeholder) },
             leadingIcon = when {
                 current != null -> { { ChoiceIcon(current) } }
+                emptyAvatar != null -> { { emptyAvatar(IconBadgeSize) } }
                 emptyIcon != null -> { { if (emptyAsAvatar) NeutralAvatar(emptyIcon) else IconBadge(emptyIcon) } }
                 else -> null
             },
@@ -442,9 +446,9 @@ fun AccountSelector(
     exclude: Long? = null,
     errorText: String? = null,
 ) {
-    val markTint = MaterialTheme.colorScheme.onSurfaceVariant
+    // An account's mark is on a badge in the shape the user chose for icon backgrounds, as a category's and a person's are.
     val options = accounts.filter { it.id != exclude }.map { account ->
-        ChoiceOption(account.id!!, account.name, account.kind.icon, glyph = { AccountMark(account, markTint, 24.dp) })
+        ChoiceOption(account.id!!, account.name, account.kind.icon, avatar = { size -> AccountBadge(account, size = size) })
     }
     ChoiceDropdownField(
         label = label,
@@ -454,7 +458,7 @@ fun AccountSelector(
         modifier = modifier,
         placeholder = "Choose an account",
         errorText = errorText,
-        emptyIcon = Icons.Outlined.AccountBalanceWallet,
+        emptyAvatar = { size -> BankBadge(bank = null, fallback = Icons.Outlined.AccountBalanceWallet, size = size) },
     )
 }
 

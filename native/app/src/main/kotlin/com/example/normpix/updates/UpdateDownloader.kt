@@ -25,7 +25,12 @@ class UpdateDownloader(private val github: GitHubAccess, private val dir: File) 
         if (!dir.isDirectory && !dir.mkdirs()) throw UpdateException(UpdateProblem.Storage)
         // Only one update is ever kept: older downloads and the leftovers of an interrupted one go first.
         clear()
-        if (dir.usableSpace in 0 until release.size + SPACE_MARGIN) throw UpdateException(UpdateProblem.Storage)
+        // A quick look before downloading, on the app's own folder. It leaves out the space the system could free by clearing
+        // other apps' caches (what StorageManager.getAllocatableBytes adds, and needs a Context for), so on a nearly full phone
+        // it can refuse where clearing would have made room. A disk that fills while writing is the same problem, below.
+        @Suppress("UsableSpace")
+        val room = dir.usableSpace
+        if (room in 0 until release.size + SPACE_MARGIN) throw UpdateException(UpdateProblem.Storage)
         val part = File(dir, target.name + PART)
         try {
             github.open(release.apkUrl, "application/octet-stream").use { response ->

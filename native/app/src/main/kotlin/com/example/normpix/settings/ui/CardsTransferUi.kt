@@ -169,9 +169,10 @@ internal class CardsTransferFlows(
      * key takes a moment, so a sheet says so meanwhile.
      */
     private suspend fun lock(cards: List<StoredCard>, now: LocalDateTime): String? {
-        val withCvv = cards.any { it.hasCvv }
         val password = overlays.sheet<String> { dismiss ->
-            CardsPasswordSheet(forExport = true, cardCount = cards.size, onDone = dismiss, withCvv = withCvv)
+            // Worked out in the sheet, not before it: a Boolean held by the sheet's lambda trips the build's Compose stack
+            // trace mapping ("Failed to tokenize ... lock").
+            CardsPasswordSheet(forExport = true, cardCount = cards.size, onDone = dismiss, withCvv = cards.any { it.hasCvv })
         } ?: return null
         return overlays.loading("Locking the file") {
             withContext(Dispatchers.Default) { CardsTransfer.encode(cards, password.toCharArray(), exportedAt = now) }

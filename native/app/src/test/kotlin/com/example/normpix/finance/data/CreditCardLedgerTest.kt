@@ -89,7 +89,7 @@ class CreditCardLedgerTest {
         assertEquals(2_000_00L, repo.summary(september.range).expense)
 
         // Part of the bill paid from the bank: both move, the total does not, and it is not spending.
-        pay(bank.id!!, card.id!!, 5_000_00)
+        pay(bank.id!!, card.id, 5_000_00)
         assertEquals(-7_000_00L, repo.accountBalances()[card.id])
         assertEquals(45_000_00L, repo.accountBalances()[bank.id])
         assertEquals(38_000_00L, total(), "paying a bill moves money, it does not make or lose any")
@@ -98,7 +98,7 @@ class CreditCardLedgerTest {
         assertEquals(2_000_00L, repo.budgetOverview(september).overall!!.spent, "nor against the budget")
 
         // The rest: the card is square.
-        pay(bank.id!!, card.id!!, 7_000_00)
+        pay(bank.id, card.id, 7_000_00)
         assertEquals(0L, repo.accountBalances()[card.id])
         assertEquals(38_000_00L, repo.accountBalances()[bank.id])
         assertEquals(38_000_00L, total())
@@ -115,9 +115,9 @@ class CreditCardLedgerTest {
         assertEquals(17_000_00L, total(), "20,000 - 3,000: the credit balance is held, not owed")
 
         // New spending eats the credit before it becomes a bill again.
-        spendOn(card.id!!, 1_000_00)
+        spendOn(card.id, 1_000_00)
         assertEquals(500_00L, repo.accountBalances()[card.id])
-        spendOn(card.id!!, 1_000_00)
+        spendOn(card.id, 1_000_00)
         assertEquals(-500_00L, repo.accountBalances()[card.id], "and past it, the card is owed on again")
         assertEquals(15_000_00L, total())
     }
@@ -129,7 +129,7 @@ class CreditCardLedgerTest {
         val card = account("Axis Credit Card", AccountKind.Card, opening = -6_000_00)
 
         pay(bank.id!!, card.id!!, 4_000_00)
-        pay(wallet.id!!, card.id!!, 1_000_00)
+        pay(wallet.id!!, card.id, 1_000_00)
         assertEquals(-1_000_00L, repo.accountBalances()[card.id])
         assertEquals(6_000_00L, repo.accountBalances()[bank.id])
         assertEquals(0L, repo.accountBalances()[wallet.id])

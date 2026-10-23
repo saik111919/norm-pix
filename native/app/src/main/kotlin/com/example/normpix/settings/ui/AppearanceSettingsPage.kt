@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Autorenew
 import androidx.compose.material.icons.outlined.BrightnessAuto
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.ColorLens
 import androidx.compose.material.icons.outlined.DarkMode
@@ -52,12 +53,32 @@ import com.example.normpix.ui.theme.AppTheme
 /** What the switch on the Colors row is called, for a screen reader (the Colors page's own switch row says the same). */
 internal const val USE_WALLPAPER_COLORS = "Use wallpaper colors"
 
-/** The groups of the Appearance overview. [hue] is the colour of its rows' icons (see [SettingsGlyph]). */
-internal enum class AppearanceGroup(val title: String, val hue: Int) {
-    Look("Look", hue = 3),
-    Motion("Motion", hue = 6),
-    Layout("Layout", hue = 5),
+/** The groups of the Appearance overview. */
+internal enum class AppearanceGroup(val title: String) {
+    Look("Look"),
+    Motion("Motion"),
+    Layout("Layout"),
 }
+
+/**
+ * The colour of a section's icon on the Appearance overview (see [SettingsGlyph]): one of its own, so a row is known by its
+ * colour at a glance rather than by reading, and no two rows of a group - or neighbouring ones - share one. An index into the
+ * category palette, which has eight hues for ten rows: Back button style repeats Colors', six rows and a group away.
+ * (0 coral, 1 green, 2 blue, 3 purple, 4 amber, 5 teal, 6 pink, 7 indigo.)
+ */
+internal val AppearanceSection.hue: Int
+    get() = when (this) {
+        AppearanceSection.Colors -> 6
+        AppearanceSection.AppIcon -> 2
+        AppearanceSection.InterfaceFont -> 4
+        AppearanceSection.CategoryIcons -> 3
+        AppearanceSection.ProgressIndicators -> 5
+        AppearanceSection.Effects -> 0
+        AppearanceSection.PageTransitions -> 7
+        AppearanceSection.SheetTransitions -> 1
+        AppearanceSection.BackButton -> 6
+        AppearanceSection.MonthControl -> 2
+    }
 
 /** The group a section sits in on the Appearance overview. Every section must be placed: the build stops at one that is not. */
 internal val AppearanceSection.group: AppearanceGroup
@@ -72,7 +93,9 @@ internal val AppearanceSection.group: AppearanceGroup
         AppearanceSection.PageTransitions,
         AppearanceSection.SheetTransitions,
         -> AppearanceGroup.Motion
-        AppearanceSection.BackButton -> AppearanceGroup.Layout
+        AppearanceSection.BackButton,
+        AppearanceSection.MonthControl,
+        -> AppearanceGroup.Layout
     }
 
 /** The icon of a section's row. */
@@ -87,6 +110,7 @@ internal val AppearanceSection.icon: ImageVector
         AppearanceSection.PageTransitions -> Icons.Outlined.SwapHoriz
         AppearanceSection.SheetTransitions -> Icons.Outlined.Layers
         AppearanceSection.BackButton -> Icons.Rounded.ChevronLeft
+        AppearanceSection.MonthControl -> Icons.Outlined.CalendarMonth
     }
 
 /** What a section's row says under its name: the choice made now. [appIcon] is the launcher icon in use (Android holds that one). */
@@ -105,6 +129,7 @@ internal fun AppearanceSection.summary(prefs: AppPrefsState, appIcon: AppIcon): 
     AppearanceSection.PageTransitions -> prefs.pageAnimation.label
     AppearanceSection.SheetTransitions -> prefs.sheetAnimation.label
     AppearanceSection.BackButton -> prefs.backButtonStyle.label
+    AppearanceSection.MonthControl -> prefs.monthControlStyle.label
 }
 
 private val themeOptions = listOf(
@@ -146,7 +171,7 @@ fun AppearanceSettingsPage() {
                                         headline = section.title,
                                         supporting = section.summary(prefs, appIcon),
                                         icon = section.icon,
-                                        hue = group.hue,
+                                        hue = section.hue,
                                         checked = prefs.colorSource == ColorSource.System && wallpaperColors,
                                         enabled = wallpaperColors,
                                         switchLabel = USE_WALLPAPER_COLORS,
@@ -161,7 +186,7 @@ fun AppearanceSettingsPage() {
                                         headline = section.title,
                                         supporting = section.summary(prefs, appIcon),
                                         icon = section.icon,
-                                        hue = group.hue,
+                                        hue = section.hue,
                                         onClick = { navigator.openAppearance(section) },
                                         trailing = {
                                             Icon(

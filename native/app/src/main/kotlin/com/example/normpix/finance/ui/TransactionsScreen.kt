@@ -20,9 +20,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Wallet
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AllInclusive
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.FilterList
@@ -43,6 +44,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -203,7 +205,7 @@ fun TransactionHistory(
     var summary by remember { mutableStateOf(PeriodSummary.Empty) }
     var hasAnyData by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
-    var retry by remember { mutableStateOf(0) }
+    var retry by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(searchInput) {
         if (searchInput != searchText) {
@@ -337,7 +339,7 @@ fun TransactionHistory(
                             latest = MonthKey.of(today),
                             onChanged = { month = it },
                             modifier = Modifier.padding(top = AppSpacing.sm),
-                            trailing = { MonthScopeButton("All time", onClick = { setAllTime(true) }) },
+                            trailing = { MonthScopeButton("All time", onClick = { setAllTime(true) }, icon = Icons.Rounded.AllInclusive) },
                         )
                     }
                 } else {
@@ -374,7 +376,7 @@ fun TransactionHistory(
                     val personName = finance.person(lockedPersonId)?.name
                     when {
                         !hasAnyData && personName != null -> AppEmptyState(
-                            icon = Icons.Outlined.ReceiptLong,
+                            icon = Icons.AutoMirrored.Outlined.ReceiptLong,
                             title = "Nothing spent on $personName yet",
                             message = "Expenses you record for $personName will appear here, with what they add up to.",
                             actionLabel = "Add an expense",
@@ -382,7 +384,7 @@ fun TransactionHistory(
                             onAction = addExpense,
                         )
                         !hasAnyData -> AppEmptyState(
-                            icon = Icons.Outlined.ReceiptLong,
+                            icon = Icons.AutoMirrored.Outlined.ReceiptLong,
                             title = "Your spending history will appear here",
                             message = "Record what you spend and earn. Everything stays on this device.",
                             actionLabel = "Add your first expense",

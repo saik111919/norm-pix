@@ -19,10 +19,11 @@ import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
-import androidx.compose.material.icons.rounded.TrendingDown
-import androidx.compose.material.icons.rounded.TrendingUp
+import androidx.compose.material.icons.automirrored.rounded.TrendingDown
+import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -228,7 +229,7 @@ fun InsightsScreen(listState: LazyListState = rememberLazyListState()) {
                         latest = MonthKey.of(LocalDateTime.now()),
                         onChanged = { month = it },
                         modifier = Modifier.widthIn(max = 480.dp),
-                        trailing = { MonthScopeButton("Dates", onClick = { picking = true }) },
+                        trailing = { MonthScopeButton("Dates", onClick = { picking = true }, icon = Icons.Rounded.DateRange) },
                     )
                 } else {
                     DateRangeSwitcher(
@@ -557,8 +558,8 @@ private fun WhatChanged(data: InsightsData) {
             "Spending categories compared with $basis."
         },
     ) {
-        up?.let { item { Change("Largest increase", it, Icons.Rounded.TrendingUp, "more") } }
-        down?.let { item { Change("Largest decrease", it, Icons.Rounded.TrendingDown, "less") } }
+        up?.let { item { Change("Largest increase", it, Icons.AutoMirrored.Rounded.TrendingUp, "more") } }
+        down?.let { item { Change("Largest decrease", it, Icons.AutoMirrored.Rounded.TrendingDown, "less") } }
         if (up == null && down == null) {
             item { ListRow(headline = "No category changes", supporting = "Spending in each category matches $basis.") }
         }

@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -48,6 +48,42 @@ class TabArrivalTest {
     @Test
     fun aTabThatArrivesWithTheShellIsFullyThereFromItsFirstFrame() {
         assertEquals(Color.Red, centre(animateArrival = false))
+    }
+
+    /** A red tab switched to, in the default (window) style, with the clock frozen at the moment it was composed. */
+    private fun showArrivingTab() {
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            Box(Modifier.fillMaxSize().background(Color.White)) {
+                TabHost(visible = true, animateArrival = true) {
+                    Box(Modifier.fillMaxSize().background(Color.Red).testTag("tab"))
+                }
+            }
+        }
+    }
+
+    /** The colour [fraction] (0..1) of the way across the tab and [down] (0..1) of the way down it. */
+    private fun sample(fraction: Float, down: Float): Color {
+        val pixels = compose.onNodeWithTag("tab").captureToImage().toPixelMap()
+        return pixels[(pixels.width * fraction).toInt(), (pixels.height * down).toInt()]
+    }
+
+    @Test
+    fun aTabSwitchedToRisesFromTheBottomEdgeInTheLinuxWindowStyle() {
+        showArrivingTab()
+        compose.mainClock.advanceTimeBy(40)
+        // The default style: a window. Early on only the part along the bottom edge is uncovered - the top is still the page behind.
+        assertEquals(Color.White, sample(0.5f, 0.1f), "the top of the tab is not uncovered yet")
+        val bottom = sample(0.5f, 0.9f)
+        assertTrue(bottom.green < 0.95f, "but the bottom of it is already there (faintly: it is also fading in): $bottom")
+    }
+
+    @Test
+    fun aTabSwitchedToIsWholeOnceItHasArrived() {
+        showArrivingTab()
+        compose.mainClock.advanceTimeBy(1000)
+        assertEquals(Color.Red, sample(0.5f, 0.1f), "arrived: the top is uncovered too")
+        assertEquals(Color.Red, sample(0.5f, 0.9f))
     }
 
     @Test

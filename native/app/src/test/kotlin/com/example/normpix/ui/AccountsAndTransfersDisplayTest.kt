@@ -10,7 +10,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -188,8 +188,15 @@ class AccountsAndTransfersDisplayTest {
         openWallet()
         val money = finance.state.value.money
 
+        // The overview: the total, and the two figures it is made of, each named - one thing, with a sentence for a screen reader.
         compose.onNode(hasText("Total balance") and hasText(money.format(26_000_00))).assertIsDisplayed()
-        compose.onNodeWithText("${money.format(38_000_00)} in accounts, minus ${money.format(12_000_00)} owed").assertIsDisplayed()
+        compose.onNode(hasText("In accounts") and hasText(money.format(38_000_00))).assertIsDisplayed()
+        compose.onNode(hasText("You owe") and hasText(money.format(12_000_00))).assertIsDisplayed()
+        compose.onNode(
+            hasContentDescription(
+                "Total balance ${money.format(26_000_00)}: ${money.format(38_000_00)} in accounts, minus ${money.format(12_000_00)} owed.",
+            ),
+        ).assertIsDisplayed()
         compose.onNodeWithText("Owed").assertIsDisplayed()
         // The card's supporting line is just its kind; the owed status sits under the amount, not in that line.
         compose.onNodeWithText("Card").assertIsDisplayed()
@@ -203,11 +210,11 @@ class AccountsAndTransfersDisplayTest {
         val card = account("Credit Card", AccountKind.Card, openingBalance = -12_000_00)
         openWallet()
         val money = finance.state.value.money
-        compose.onNodeWithText("${money.format(38_000_00)} in accounts, minus ${money.format(12_000_00)} owed").assertIsDisplayed()
+        compose.onNode(hasText("You owe") and hasText(money.format(12_000_00))).assertIsDisplayed()
 
         // 15,000 moved from Bank onto the card: the card goes from owing 12,000 to being 3,000 in credit.
         transfer(bank, card, 15_000_00)
-        waitGone("in accounts, minus", substring = true)
+        waitGone("You owe")
 
         compose.onNodeWithText("In credit").assertIsDisplayed()
         compose.onNodeWithText(money.format(3_000_00)).assertIsDisplayed()
@@ -221,7 +228,8 @@ class AccountsAndTransfersDisplayTest {
         openWallet()
         compose.onNodeWithText("Cash · Default").assertIsDisplayed()
 
-        compose.onAllNodesWithText("in accounts, minus", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("You owe").assertCountEquals(0)
+        compose.onNode(hasText("In accounts") and hasText(finance.state.value.money.format(10_000_00))).assertIsDisplayed()
     }
 
     // ------------------------------------------------------------ the new account form

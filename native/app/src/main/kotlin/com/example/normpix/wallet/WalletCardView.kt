@@ -1,5 +1,12 @@
 package com.example.normpix.wallet
 
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -75,6 +82,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.normpix.settings.BankIconStyle
@@ -92,6 +100,13 @@ import kotlinx.coroutines.launch
 
 /** Subtle foil emboss shadow behind card text, like stamped physical bank cards. */
 internal val embossShadow = Shadow(Color.Black.copy(alpha = 0.33f), Offset(0f, 1.5f), 4f)
+
+/**
+ * The colour of a card face's small captions ("BALANCE", "EXPIRES", "% used"): white at 90%, not the 62% they had, which fell to
+ * 2.4-4.3:1 on several banks' colours (measured against every bank theme; text this small needs 4.5:1). Hierarchy on a card
+ * is made by size and weight, not by dimming - see CardTextContrastTest.
+ */
+internal val CardCaptionColor = Color.White.copy(alpha = 0.9f)
 
 internal const val CARD_ASPECT = 1.586f
 
@@ -264,12 +279,23 @@ internal fun CardActionBar(
     modifier: Modifier = Modifier,
     onShareNfc: (() -> Unit)? = null,
     onCopy: (() -> Unit)? = null,
+    /** Reveal as an [ElevatedPillButton] - a face with an edge under it, pressed down - rather than a tonal button. */
+    elevatedReveal: Boolean = false,
 ) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        FilledTonalButton(onClick = onToggleReveal, modifier = Modifier.weight(1f)) {
-            Icon(revealIconOf(revealed, nfcGated), contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(AppSpacing.sm))
-            Text(revealLabelOf(revealed, nfcGated), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (elevatedReveal) {
+            ElevatedPillButton(
+                label = revealLabelOf(revealed, nfcGated),
+                icon = revealIconOf(revealed, nfcGated),
+                onClick = onToggleReveal,
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            FilledTonalButton(onClick = onToggleReveal, modifier = Modifier.weight(1f)) {
+                Icon(revealIconOf(revealed, nfcGated), contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(AppSpacing.sm))
+                Text(revealLabelOf(revealed, nfcGated), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         Spacer(Modifier.width(AppSpacing.sm))
         if (onCopy != null) {
@@ -283,6 +309,58 @@ internal fun CardActionBar(
         FilledTonalIconButton(onClick = onEdit) { Icon(Icons.Outlined.Edit, contentDescription = "Edit card") }
         Spacer(Modifier.width(AppSpacing.xs))
         FilledTonalIconButton(onClick = onDelete) { Icon(Icons.Outlined.DeleteOutline, contentDescription = "Delete card") }
+    }
+}
+
+private val ElevatedPillHeight = 48.dp
+private val ElevatedPillEdge = 3.dp
+
+/**
+ * A pill in the primary colour with an edge under it - a darker lip a few dp deep - that the face sinks onto while it is
+ * pressed: a button with depth, the way CRED's NeoPOP "elevated" buttons have it. The edge is part of the button's height, so
+ * nothing moves when it is pressed but the face. With animations off the face still sinks, at once.
+ */
+@Composable
+internal fun ElevatedPillButton(label: String, icon: ImageVector, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val reduced = rememberReducedMotion()
+    val sink by animateDpAsState(
+        targetValue = if (pressed) ElevatedPillEdge else 0.dp,
+        animationSpec = if (reduced) snap() else tween(AppMotion.SHORT_MS / 2, easing = AppMotion.standard),
+        label = "elevated_pill_sink",
+    )
+    Box(modifier.height(ElevatedPillHeight + ElevatedPillEdge)) {
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(ElevatedPillHeight)
+                .background(lerp(scheme.primary, Color.Black, 0.32f), CircleShape),
+        )
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(ElevatedPillHeight)
+                .offset { IntOffset(0, sink.roundToPx()) }
+                .clip(CircleShape)
+                .background(scheme.primary)
+                .clickable(interactionSource = source, indication = LocalIndication.current, role = Role.Button, onClick = onClick),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = scheme.onPrimary, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(AppSpacing.sm))
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = scheme.onPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -411,7 +489,7 @@ internal fun CardDetail(label: String, value: String, modifier: Modifier = Modif
     Column(modifier) {
         Text(
             label,
-            style = TextStyle(color = Color.White.copy(alpha = 0.62f), fontWeight = FontWeight.SemiBold, fontSize = 8.5.sp, letterSpacing = 0.9.sp, shadow = embossShadow),
+            style = TextStyle(color = CardCaptionColor, fontWeight = FontWeight.SemiBold, fontSize = 9.sp, letterSpacing = 0.9.sp, shadow = embossShadow),
             maxLines = 1,
         )
         Spacer(Modifier.height(2.dp))
@@ -529,7 +607,7 @@ private fun CardBack(card: StoredCard, theme: BankBrandTheme, revealed: Boolean)
                 )
                 Text(
                     "CVV / CVC",
-                    style = TextStyle(color = Color.White.copy(alpha = 0.8f), fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 0.6.sp, shadow = embossShadow),
+                    style = TextStyle(color = CardCaptionColor, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 0.6.sp, shadow = embossShadow),
                 )
             }
         }
@@ -574,11 +652,18 @@ internal fun CardFace(theme: BankBrandTheme, padding: androidx.compose.ui.unit.D
     ) { content() }
 }
 
+/**
+ * What every pill on a card is laid on before its own colour: a faint dark, so a translucent-white pill (the usual kind) does not
+ * lighten what is behind its words - on the lightest bank colours it took white text under 4.5:1 (see CardTextContrastTest).
+ */
+internal val CardBadgeUnderlay = Color.Black.copy(alpha = 0.18f)
+
 @Composable
 internal fun CardBadge(text: String, background: Color, border: Color, textColor: Color) {
     Box(
         Modifier
             .clip(AppRadius.rFull)
+            .background(CardBadgeUnderlay)
             .background(background)
             .border(1.dp, border, AppRadius.rFull)
             .padding(horizontal = 9.dp, vertical = 3.dp),

@@ -243,8 +243,8 @@ object BankCardDesign {
     private val kotakTheme = BankBrandTheme(
         id = "kotak",
         displayName = "kotak",
-        gradientColors = listOf(Color(0xFFED1C24), Color(0xFF990E14), Color(0xFF4A0508)),
-        gradient = GradientSpec.Linear(begin = Anchor(1f, -1f), end = Anchor(-1f, 1f), colors = listOf(Color(0xFFE51A22), Color(0xFF9E1016), Color(0xFF470609)), stops = listOf(0.0f, 0.55f, 1.0f)),
+        gradientColors = listOf(Color(0xFFBE151C), Color(0xFF990E14), Color(0xFF4A0508)),
+        gradient = GradientSpec.Linear(begin = Anchor(1f, -1f), end = Anchor(-1f, 1f), colors = listOf(Color(0xFFBE151C), Color(0xFF9E1016), Color(0xFF470609)), stops = listOf(0.0f, 0.55f, 1.0f)),
         patternType = BankPatternType.KotakInfinity,
         chipFinish = EmvChipFinish.Gold,
         tierName = "PRIVY LEAGUE",
@@ -341,8 +341,8 @@ object BankCardDesign {
     private val wellsFargoTheme = BankBrandTheme(
         id = "wells_fargo",
         displayName = "WELLS FARGO",
-        gradientColors = listOf(Color(0xFFD71E28), Color(0xFF8F1017), Color(0xFF47070B)),
-        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFFC71B24), Color(0xFF7A0E14), Color(0xFF3D0609)), stops = null),
+        gradientColors = listOf(Color(0xFFC3181F), Color(0xFF8F1017), Color(0xFF47070B)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFFB5171F), Color(0xFF7A0E14), Color(0xFF3D0609)), stops = null),
         patternType = BankPatternType.MinimalGeometric,
         chipFinish = EmvChipFinish.Gold,
         tierName = "ACTIVE CASH",
@@ -397,8 +397,8 @@ object BankCardDesign {
     private val bobTheme = BankBrandTheme(
         id = "bob",
         displayName = "Bank of Baroda",
-        gradientColors = listOf(Color(0xFFD95A11), Color(0xFF9E3A06), Color(0xFF592003)),
-        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFFE86214), Color(0xFFA63E07), Color(0xFF632403)), stops = null),
+        gradientColors = listOf(Color(0xFFA63F08), Color(0xFF8C3305), Color(0xFF592003)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFFA63F08), Color(0xFF8F3505), Color(0xFF632403)), stops = null),
         patternType = BankPatternType.MinimalGeometric,
         chipFinish = EmvChipFinish.Gold,
         tierName = "PREMIER",
@@ -453,8 +453,8 @@ object BankCardDesign {
     private val tdBankTheme = BankBrandTheme(
         id = "td",
         displayName = "TD",
-        gradientColors = listOf(Color(0xFF008A44), Color(0xFF005228), Color(0xFF002914)),
-        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF009C4D), Color(0xFF005C2D), Color(0xFF003017)), stops = null),
+        gradientColors = listOf(Color(0xFF006E37), Color(0xFF005228), Color(0xFF002914)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF006E37), Color(0xFF005C2D), Color(0xFF003017)), stops = null),
         patternType = BankPatternType.MinimalGeometric,
         chipFinish = EmvChipFinish.Silver,
         tierName = "CASH",

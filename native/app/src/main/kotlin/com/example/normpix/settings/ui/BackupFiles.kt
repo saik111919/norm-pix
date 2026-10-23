@@ -1,6 +1,7 @@
 package com.example.normpix.settings.ui
 
 import android.app.Activity
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -126,10 +127,9 @@ fun rememberBackupFiles(): BackupFiles {
                 val uri = pick { createLauncher.launch(fileName to mimeType) } ?: return false
                 val resolver = context.contentResolver
                 try {
-                    val stream = withContext(Dispatchers.IO) {
-                        runCatching { resolver.openOutputStream(uri, "wt") }.getOrNull() ?: resolver.openOutputStream(uri, "w")
-                    } ?: throw IOException("Couldn't open the file for writing")
-                    stream.buffered().use { write(it) }
+                    val stream = withContext(Dispatchers.IO) { openToWrite(resolver, uri) } ?: throw IOException("Couldn't open the file for writing")
+                    // The file's own stream is closed here as well as by the buffer over it, which flushes first.
+                    stream.use { raw -> raw.buffered().use { write(it) } }
                 } catch (e: Exception) {
                     // Don't leave an empty or half-written file behind.
                     withContext(Dispatchers.IO) { runCatching { DocumentsContract.deleteDocument(resolver, uri) } }
@@ -140,8 +140,8 @@ fun rememberBackupFiles(): BackupFiles {
 
             override suspend fun <T> openStreaming(read: suspend (InputStream) -> T): T? {
                 val uri = pick { openLauncher.launch(Unit) } ?: return null
-                val stream = withContext(Dispatchers.IO) { context.contentResolver.openInputStream(uri) } ?: throw IOException("Couldn't open the file")
-                return stream.buffered().use { read(it) }
+                val stream = withContext(Dispatchers.IO) { openToRead(context.contentResolver, uri) } ?: throw IOException("Couldn't open the file")
+                return stream.use { raw -> raw.buffered().use { read(it) } }
             }
 
             override suspend fun open(): ByteArray? {
@@ -166,3 +166,13 @@ fun rememberBackupFiles(): BackupFiles {
         }
     }
 }
+
+/**
+ * The file at [uri], to write to: replacing what it holds ("wt"), or - for a provider with no truncate mode - as it is ("w").
+ * The caller closes it.
+ */
+private fun openToWrite(resolver: ContentResolver, uri: Uri): OutputStream? =
+    runCatching { resolver.openOutputStream(uri, "wt") }.getOrNull() ?: resolver.openOutputStream(uri, "w")
+
+/** The file at [uri], to read from. The caller closes it. */
+private fun openToRead(resolver: ContentResolver, uri: Uri): InputStream? = resolver.openInputStream(uri)

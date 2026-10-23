@@ -166,7 +166,7 @@ class SubCategoryRepositoryTest {
         assertFailsWith<FinanceConflictException> { repo.setCategoryArchived(pizza.id!!, false) }
         assertFailsWith<FinanceValidationException> { saved("Burger", parent = category(food.id)) }
 
-        repo.setCategoryArchived(food.id!!, false)
+        repo.setCategoryArchived(food.id, false)
         assertFalse(category(food.id).archived)
         assertTrue(category(pizza.id).archived, "restoring the parent does not guess which sub-categories to bring back")
         repo.setCategoryArchived(pizza.id!!, false)

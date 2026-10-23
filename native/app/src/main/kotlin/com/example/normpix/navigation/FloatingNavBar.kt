@@ -50,6 +50,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
@@ -63,7 +64,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.contentDescription
@@ -85,6 +85,7 @@ import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.components.rememberFrostedChrome
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.isDark
+import com.example.normpix.ui.theme.rememberWindowWidthDp
 
 /*
  * Modern Floating Navigation Dock & Back Pill inspired by Google Pixel / Essentials design language.
@@ -173,8 +174,8 @@ fun FloatingNavigationRow(
     current: AppDestination,
     overdueCount: Int,
     onDestinationSelected: (AppDestination) -> Unit,
-    onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
+    onOpenSettings: () -> Unit = {},
     actions: List<FooterAction> = emptyList(),
     isMoreOpen: Boolean = false,
     onMoreToggle: () -> Unit = {},
@@ -182,8 +183,7 @@ fun FloatingNavigationRow(
     currentLabel: String = current.label,
 ) {
     val backdrop = LocalFrostedBackdrop.current
-    val configuration = LocalConfiguration.current
-    val screenWidth = configuration.screenWidthDp
+    val screenWidth = rememberWindowWidthDp()
     val isNarrow = screenWidth < 360
     // Room for the selected label: the screen, less margins, the Settings tile, the dock's padding, one
     // 48dp item (plus gap) for every other destination, and the pill's own padding and icon.
@@ -366,11 +366,11 @@ private fun FooterActionPill(
 fun FloatingBackRow(
     title: String,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
     onCompanionClick: (() -> Unit)? = null,
     companionIcon: ImageVector = Icons.Outlined.Search,
     companionContentDescription: String = "Search",
     colors: DockColors? = null,
-    modifier: Modifier = Modifier,
 ) {
     val backdrop = LocalFrostedBackdrop.current
     val effectiveColors = colors ?: rememberDockColors(blurred = rememberFrostedChrome(backdrop))
@@ -527,7 +527,7 @@ private fun FloatingNavCompanionItem(
     val tooltipState = rememberTooltipState()
 
     TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
         tooltip = {
             PlainTooltip {
                 Text(contentDescription)
@@ -611,7 +611,7 @@ private fun FloatingNavItem(
     // Icon-only items name themselves on long press. The wrapper stays in place when the item is selected (its
     // label is already showing) so the container/content color animations are never restarted.
     TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
         tooltip = { PlainTooltip { Text(destination.label) } },
         state = rememberTooltipState(),
         enableUserInput = !selected,

@@ -3,9 +3,8 @@ package com.example.normpix.settings
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import com.example.normpix.settings.ui.SettingsCatalog
@@ -46,22 +45,38 @@ class CardsLayoutSettingTest {
         compose.setContent { env.Content { WalletSettingsPage() } }
         compose.waitForIdle()
 
-        // The accounts' layouts share three names with the cards' (twice on the page each); the carousel is the cards' alone.
-        for (layout in CardsLayout.entries) {
-            compose.onAllNodesWithText(layout.label).assertCountEquals(if (layout == CardsLayout.Carousel) 1 else 2)
-        }
-        compose.onNodeWithText("Carousel").performScrollTo().assertIsDisplayed().performClick()
+        // The accounts' layouts and the cards' have the same names: each is on the page twice, the accounts' first.
+        for (layout in CardsLayout.entries) compose.onAllNodesWithText(layout.label).assertCountEquals(2)
+        compose.onAllNodesWithText("Carousel")[1].performScrollTo().assertIsDisplayed().performClick()
         compose.waitForIdle()
 
         assertEquals(CardsLayout.Carousel, env.preferences.state.value.cardsLayout)
+        assertEquals(AccountsLayout.Stack, env.preferences.state.value.accountsLayout, "the accounts' choice is its own")
         assertEquals(CardsLayout.Carousel, AppPreferences(env.prefsStore).state.value.cardsLayout, "kept across a restart")
-        compose.onNodeWithText("Carousel").assertIsSelected()
+        compose.onAllNodesWithText("Carousel")[1].assertIsSelected()
     }
 
     @Test
-    fun searchFindsTheCardsLayoutByCarousel_onlyWhileCardsAreStored() {
+    fun theCarouselIsOneOfTheAccountsLayoutsToo_andIsKept() {
+        compose.setContent { env.Content { WalletSettingsPage() } }
+        compose.waitForIdle()
+
+        compose.onAllNodesWithText("Carousel")[0].performScrollTo().assertIsDisplayed().performClick()
+        compose.waitForIdle()
+
+        assertEquals(AccountsLayout.Carousel, env.preferences.state.value.accountsLayout)
+        assertEquals(CardsLayout.Cards, env.preferences.state.value.cardsLayout, "the cards' choice is its own")
+        assertEquals(AccountsLayout.Carousel, AppPreferences(env.prefsStore).state.value.accountsLayout, "kept across a restart")
+        compose.onAllNodesWithText("Carousel")[0].assertIsSelected()
+    }
+
+    @Test
+    fun searchFindsTheLayoutsByCarousel() {
         assertTrue(SettingsCatalog.search("carousel", cardsEnabled = true).any { it.title == "Cards layout" })
+        assertTrue(SettingsCatalog.search("carousel", cardsEnabled = true).any { it.title == "Accounts layout" })
         assertTrue(SettingsCatalog.search("swipe", cardsEnabled = true).any { it.title == "Cards layout" })
+        // With Store cards off there are no cards to lay out: only the accounts' layout is found.
         assertFalse(SettingsCatalog.search("carousel", cardsEnabled = false).any { it.title == "Cards layout" })
+        assertTrue(SettingsCatalog.search("carousel", cardsEnabled = false).any { it.title == "Accounts layout" })
     }
 }

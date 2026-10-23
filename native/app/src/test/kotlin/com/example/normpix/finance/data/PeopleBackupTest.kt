@@ -73,7 +73,7 @@ class PeopleBackupTest {
 
         repo.resetAll()
         assertTrue(repo.people().isEmpty())
-        repo.restore(read.snapshot!!)
+        repo.restore(read.snapshot)
 
         val people = repo.people()
         assertEquals(listOf("Mom", "Riya"), people.map { it.name })
@@ -102,7 +102,7 @@ class PeopleBackupTest {
         val read = FinanceBackupCodec.decode(json)
         assertTrue(read.isValid, read.errors.toString())
         assertTrue(read.snapshot!!.people.isEmpty())
-        repo.restore(read.snapshot!!)
+        repo.restore(read.snapshot)
         assertTrue(repo.people().isEmpty())
     }
 

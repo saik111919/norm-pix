@@ -17,6 +17,7 @@ enum class AppearanceSection(val title: String) {
     PageTransitions("Page transitions"),
     SheetTransitions("Sheet & dialog transitions"),
     BackButton("Back button style"),
+    MonthControl("Month control"),
     ;
 
     companion object {

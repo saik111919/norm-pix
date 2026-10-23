@@ -25,12 +25,18 @@ class SheetAnimationPreferenceTest {
         .also { it.edit().clear().commit() }
 
     @Test
-    fun hasFourStylesAndTheDescriptionsDoNotClaimToMovePages() {
+    fun hasFiveStylesAndTheDescriptionsDoNotClaimToMovePages() {
         assertEquals(
-            listOf(SheetAnimationType.Window, SheetAnimationType.Slide, SheetAnimationType.Fade, SheetAnimationType.Scale),
+            listOf(
+                SheetAnimationType.Window,
+                SheetAnimationType.LinuxWindow,
+                SheetAnimationType.Slide,
+                SheetAnimationType.Fade,
+                SheetAnimationType.Scale,
+            ),
             SheetAnimationType.entries.toList(),
         )
-        assertEquals(listOf("Window", "Slide", "Fade", "Scale"), SheetAnimationType.entries.map { it.label })
+        assertEquals(listOf("Window", "Linux window", "Slide", "Fade", "Scale"), SheetAnimationType.entries.map { it.label })
         assertTrue(SheetAnimationType.entries.none { it.description.contains("page", ignoreCase = true) }, "sheets only")
     }
 
@@ -93,7 +99,7 @@ class SheetAnimationPreferenceTest {
 
     @Test
     fun settingsSearchFindsItAndOpensItsOwnPageOfAppearance() {
-        for (query in listOf("sheet", "dialog", "bottom sheet", "popup")) {
+        for (query in listOf("sheet", "dialog", "bottom sheet", "popup", "linux", "desktop")) {
             val hit = SettingsCatalog.search(query).single { it.title == "Sheet & dialog transitions" }
             assertEquals(SettingsPage.Appearance, hit.group, query)
             assertEquals(AppearanceSection.SheetTransitions, hit.appearance, query)

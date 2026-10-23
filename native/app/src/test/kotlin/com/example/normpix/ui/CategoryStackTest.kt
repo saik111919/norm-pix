@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -95,7 +95,7 @@ class CategoryStackTest {
 
         val total = 2_002_00L + 1_078_00L
         listOf(
-            CategorySpend(shopping.id!!, finance.state.value.category(shopping.id), month, 2_002_00, 2, 2_002_00.toDouble() / total, 1_000_00, null),
+            CategorySpend(shopping.id, finance.state.value.category(shopping.id), month, 2_002_00, 2, 2_002_00.toDouble() / total, 1_000_00, null),
             CategorySpend(groceries.id!!, finance.state.value.category(groceries.id), month, 1_078_00, 1, 1_078_00.toDouble() / total, 0, null),
         )
     }

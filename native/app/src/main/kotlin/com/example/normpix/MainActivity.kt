@@ -27,6 +27,9 @@ class MainActivity : FragmentActivity() {
         }
         enableEdgeToEdge()
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            // Deprecated in Android 15 (API 35); still what stops the
+            // system putting a scrim behind the status bar on Android 10 to 14.
+            @Suppress("DEPRECATION")
             window.isStatusBarContrastEnforced = false
             window.isNavigationBarContrastEnforced = false
         }

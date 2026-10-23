@@ -84,6 +84,7 @@ import com.example.normpix.reminders.LocalReminders
 import com.example.normpix.reminders.rememberReminderFlows
 import com.example.normpix.screens.HomeScreen
 import com.example.normpix.screens.PlansAndTransactionsScreen
+import com.example.normpix.settings.PageAnimationType
 import com.example.normpix.screens.WalletScreen
 import com.example.normpix.ui.components.LocalFrostedBackdrop
 import com.example.normpix.ui.components.LocalSnackbars
@@ -600,11 +601,17 @@ internal fun TabHost(
                         val t = arrival.value
                         val p = TabMotion.ease(animation, t)
                         alpha = TabMotion.arrivalAlpha(animation, t)
-                        val scale = TabMotion.scale(animation, p)
+                        // A window is not scaled: it is uncovered from the bottom edge up (see TabMotion.reveal).
+                        val scale = if (animation == PageAnimationType.LinuxWindow) 1f else TabMotion.scale(animation, p)
                         scaleX = scale
                         scaleY = scale
                         transformOrigin = TabMotion.origin(animation)
                         translationX = if (TabMotion.slides(animation)) (1f - p) * travel else 0f
+                        val reveal = TabMotion.reveal(animation, p)
+                        if (reveal < 1f) {
+                            clip = true
+                            shape = BottomRevealShape(reveal, PageCornerRadius.toPx())
+                        }
                     }
                     preview != null && preview.target == ordinal -> Modifier
                         .graphicsLayer { applyBackPose(BackPreview.revealed(animation, preview.progress, preview.direction)) }
@@ -652,7 +659,11 @@ private fun GraphicsLayerScope.applyBackPose(pose: BackPose) {
     alpha = pose.alpha
     translationX = pose.shiftX * size.width
     transformOrigin = pose.origin
-    if (pose.corners > 0f) {
+    if (pose.reveal < 1f) {
+        // A window sinking into its strip: what shows of it is the part along the bottom edge, its top corners as round as it is far gone.
+        clip = true
+        shape = BottomRevealShape(pose.reveal, PageCornerRadius.toPx() * pose.corners)
+    } else if (pose.corners > 0f) {
         clip = true
         shape = RoundedCornerShape(PageCornerRadius.toPx() * pose.corners)
     }

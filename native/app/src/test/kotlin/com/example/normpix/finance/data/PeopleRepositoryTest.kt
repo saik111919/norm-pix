@@ -194,7 +194,7 @@ class PeopleRepositoryTest {
         // Moving an old expense onto her is a new link, so it is refused.
         val other = spend(7_000)
         assertFailsWith<FinanceValidationException> { repo.saveTransaction(other.copy(personId = mom.id)) }
-        repo.setPersonArchived(mom.id!!, false)
+        repo.setPersonArchived(mom.id, false)
         repo.saveTransaction(other.copy(personId = mom.id))
         assertEquals(mom.id, repo.transactionById(other.id!!)!!.personId)
     }
@@ -229,20 +229,20 @@ class PeopleRepositoryTest {
         assertEquals(5_000L, sept.unassigned)
         assertEquals(sept.totalExpense, sept.assigned + sept.unassigned)
         assertEquals(50_000L, sept.of(mom.id!!)!!.amount)
-        assertEquals(2, sept.of(mom.id!!)!!.count)
+        assertEquals(2, sept.of(mom.id)!!.count)
         assertEquals(25_000L, sept.of(riya.id!!)!!.amount)
         assertEquals(listOf(mom.id, riya.id), sept.byPerson.map { it.personId }, "largest first")
-        assertEquals(50_000.0 / 80_000.0, sept.shareOfPerson(mom.id!!), 1e-9)
+        assertEquals(50_000.0 / 80_000.0, sept.shareOfPerson(mom.id), 1e-9)
 
         val aug = repo.peopleSpending(august.range)
         assertEquals(90_000L, aug.totalExpense)
-        assertEquals(90_000L, aug.of(mom.id!!)!!.amount)
-        assertNull(aug.of(riya.id!!), "nothing for Riya in August")
+        assertEquals(90_000L, aug.of(mom.id)!!.amount)
+        assertNull(aug.of(riya.id), "nothing for Riya in August")
 
         val all = repo.peopleSpending(null)
         assertEquals(170_000L, all.totalExpense)
-        assertEquals(140_000L, all.of(mom.id!!)!!.amount)
-        assertEquals(3, all.of(mom.id!!)!!.count)
+        assertEquals(140_000L, all.of(mom.id)!!.amount)
+        assertEquals(3, all.of(mom.id)!!.count)
     }
 
     @Test
@@ -268,24 +268,24 @@ class PeopleRepositoryTest {
 
         // Edit the amount.
         repo.saveTransaction(lunch.copy(amount = 16_000))
-        assertEquals(16_000L, repo.peopleSpending(september.range).of(mom.id!!)!!.amount)
+        assertEquals(16_000L, repo.peopleSpending(september.range).of(mom.id)!!.amount)
 
         // Reassign to Riya: Mom loses it entirely (no entry at all), Riya gains it.
         repo.saveTransaction(repo.transactionById(lunch.id!!)!!.copy(personId = riya.id))
         var spending = repo.peopleSpending(september.range)
-        assertNull(spending.of(mom.id!!))
+        assertNull(spending.of(mom.id))
         assertEquals(16_000L, spending.of(riya.id!!)!!.amount)
         assertEquals(16_000L, spending.totalExpense, "the whole did not change when it changed hands")
 
         // Take the person off.
-        repo.saveTransaction(repo.transactionById(lunch.id!!)!!.copy(personId = null))
+        repo.saveTransaction(repo.transactionById(lunch.id)!!.copy(personId = null))
         spending = repo.peopleSpending(september.range)
         assertTrue(spending.byPerson.isEmpty())
         assertEquals(16_000L, spending.unassigned)
 
         // Give it back, then delete it.
-        repo.saveTransaction(repo.transactionById(lunch.id!!)!!.copy(personId = riya.id))
-        repo.deleteTransaction(lunch.id!!)
+        repo.saveTransaction(repo.transactionById(lunch.id)!!.copy(personId = riya.id))
+        repo.deleteTransaction(lunch.id)
         spending = repo.peopleSpending(september.range)
         assertEquals(PeopleSpending.Empty, spending)
     }
@@ -296,7 +296,7 @@ class PeopleRepositoryTest {
         val lunch = spend(10_000, mom.id, at = LocalDateTime.of(2026, 9, 3, 12, 0))
         repo.saveTransaction(lunch.copy(occurredAt = LocalDateTime.of(2026, 8, 31, 23, 0)))
         assertNull(repo.peopleSpending(september.range).of(mom.id!!))
-        assertEquals(10_000L, repo.peopleSpending(august.range).of(mom.id!!)!!.amount)
+        assertEquals(10_000L, repo.peopleSpending(august.range).of(mom.id)!!.amount)
     }
 
     @Test
@@ -353,8 +353,8 @@ class PeopleRepositoryTest {
 
         assertEquals(listOf("Riya", "Mom"), repo.people().map { it.name }, "archived last")
         assertTrue(repo.people().first { it.name == "Mom" }.archived)
-        assertEquals(40_000L, repo.peopleSpending(september.range).of(mom.id!!)!!.amount, "still counted")
-        repo.setPersonArchived(mom.id!!, false)
+        assertEquals(40_000L, repo.peopleSpending(september.range).of(mom.id)!!.amount, "still counted")
+        repo.setPersonArchived(mom.id, false)
         assertEquals(listOf("Mom", "Riya"), repo.people().map { it.name })
         assertNotNull(riya.id)
     }
@@ -409,12 +409,12 @@ class PeopleRepositoryTest {
         spend(5_000)
 
         assertEquals(listOf(a.id), repo.transactions(TransactionQuery(personIds = setOf(mom.id!!))).items.map { it.id })
-        assertEquals(setOf(a.id, b.id), repo.transactions(TransactionQuery(personIds = setOf(mom.id!!, riya.id!!))).items.map { it.id }.toSet())
+        assertEquals(setOf(a.id, b.id), repo.transactions(TransactionQuery(personIds = setOf(mom.id, riya.id!!))).items.map { it.id }.toSet())
         assertEquals(3, repo.transactions(TransactionQuery()).items.size)
         assertTrue(TransactionQuery(personIds = setOf(1)).hasFilters)
         // The totals for the same filter are the person's, and only their expenses.
-        assertEquals(40_000L, repo.summaryFor(TransactionQuery(personIds = setOf(mom.id!!))).expense)
-        assertEquals(0L, repo.summaryFor(TransactionQuery(personIds = setOf(mom.id!!))).income)
+        assertEquals(40_000L, repo.summaryFor(TransactionQuery(personIds = setOf(mom.id))).expense)
+        assertEquals(0L, repo.summaryFor(TransactionQuery(personIds = setOf(mom.id))).income)
     }
 
     @Test

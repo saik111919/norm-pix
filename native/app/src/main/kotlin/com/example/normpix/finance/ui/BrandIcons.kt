@@ -1,7 +1,7 @@
 package com.example.normpix.finance.ui
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Article
+import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.Brush
@@ -85,7 +85,7 @@ val brandCategoryIcons: Map<String, CategoryIconSpec> = mapOf(
     "xbox" to CategoryIconSpec(Icons.Outlined.SportsEsports, "Xbox", "🎮", "brands/xbox.svg"),
     "nintendo" to CategoryIconSpec(Icons.Outlined.SportsEsports, "Nintendo Switch", "🎮", "brands/nintendo.svg"),
     "discord" to CategoryIconSpec(Icons.Outlined.Forum, "Discord", "💬", "brands/discord.svg"),
-    "medium" to CategoryIconSpec(Icons.Outlined.Article, "Medium", "📰", "brands/medium.svg"),
+    "medium" to CategoryIconSpec(Icons.AutoMirrored.Outlined.Article, "Medium", "📰", "brands/medium.svg"),
 )
 
 /**

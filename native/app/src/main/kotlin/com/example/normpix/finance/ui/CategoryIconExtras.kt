@@ -2,7 +2,7 @@ package com.example.normpix.finance.ui
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ShowChart
-import androidx.compose.material.icons.outlined.AirplaneTicket
+import androidx.compose.material.icons.automirrored.outlined.AirplaneTicket
 import androidx.compose.material.icons.outlined.Apartment
 import androidx.compose.material.icons.outlined.BabyChangingStation
 import androidx.compose.material.icons.outlined.Backpack
@@ -28,7 +28,7 @@ import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.CurrencyBitcoin
 import androidx.compose.material.icons.outlined.DeliveryDining
 import androidx.compose.material.icons.outlined.Diamond
-import androidx.compose.material.icons.outlined.DirectionsBike
+import androidx.compose.material.icons.automirrored.outlined.DirectionsBike
 import androidx.compose.material.icons.outlined.DirectionsBus
 import androidx.compose.material.icons.outlined.DirectionsRailway
 import androidx.compose.material.icons.outlined.DirectionsSubway
@@ -74,7 +74,7 @@ import androidx.compose.material.icons.outlined.LocalShipping
 import androidx.compose.material.icons.outlined.LocalTaxi
 import androidx.compose.material.icons.outlined.Luggage
 import androidx.compose.material.icons.outlined.MedicalInformation
-import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.MilitaryTech
 import androidx.compose.material.icons.outlined.Money
@@ -134,11 +134,11 @@ internal val extraCategoryIcons: List<Pair<String, CategoryIconSpec>> = listOf(
 
     // Transport
     "taxi" to CategoryIconSpec(Icons.Outlined.LocalTaxi, "Taxi", "🚕"),
-    "bike" to CategoryIconSpec(Icons.Outlined.DirectionsBike, "Bike", "🚲"),
+    "bike" to CategoryIconSpec(Icons.AutoMirrored.Outlined.DirectionsBike, "Bike", "🚲"),
     "scooter" to CategoryIconSpec(Icons.Outlined.TwoWheeler, "Scooter", "🛴"),
     "parking" to CategoryIconSpec(Icons.Outlined.LocalParking, "Parking", "🅿️"),
     "toll" to CategoryIconSpec(Icons.Outlined.Toll, "Toll", "🚧"),
-    "flight" to CategoryIconSpec(Icons.Outlined.AirplaneTicket, "Flight", "🛫"),
+    "flight" to CategoryIconSpec(Icons.AutoMirrored.Outlined.AirplaneTicket, "Flight", "🛫"),
     "train" to CategoryIconSpec(Icons.Outlined.DirectionsRailway, "Train", "🚆"),
     "bus" to CategoryIconSpec(Icons.Outlined.DirectionsBus, "Bus", "🚌"),
     "metro" to CategoryIconSpec(Icons.Outlined.DirectionsSubway, "Metro", "🚇"),
@@ -179,7 +179,7 @@ internal val extraCategoryIcons: List<Pair<String, CategoryIconSpec>> = listOf(
     "movies" to CategoryIconSpec(Icons.Outlined.Theaters, "Movies", "🎬"),
     "music" to CategoryIconSpec(Icons.Outlined.MusicNote, "Music", "🎵"),
     "games" to CategoryIconSpec(Icons.Outlined.SportsEsports, "Games", "🎮"),
-    "books" to CategoryIconSpec(Icons.Outlined.MenuBook, "Books", "📚"),
+    "books" to CategoryIconSpec(Icons.AutoMirrored.Outlined.MenuBook, "Books", "📚"),
     "sports" to CategoryIconSpec(Icons.Outlined.SportsSoccer, "Sports", "⚽"),
     "concerts" to CategoryIconSpec(Icons.Outlined.Mic, "Concerts", "🎤"),
     "tickets" to CategoryIconSpec(Icons.Outlined.ConfirmationNumber, "Event Tickets", "🎟️"),

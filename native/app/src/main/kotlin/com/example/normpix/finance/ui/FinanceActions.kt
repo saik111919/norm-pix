@@ -13,7 +13,7 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.NotificationAdd
 import androidx.compose.material.icons.outlined.Payments
-import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.Unarchive
@@ -203,10 +203,11 @@ class FinanceActions(
 
     fun showDetails(transaction: FinanceTransaction) {
         scope.launch {
-            val canRemind = reminders != null
             when (
                 overlays.sheet<DetailAction>(expandable = true) { dismiss ->
-                    TransactionDetailsSheet(transaction, canRemind = canRemind, onAction = dismiss)
+                    // Asked in the sheet, not before it: a Boolean held by the sheet's lambda trips the build's Compose stack
+                    // trace mapping ("Failed to tokenize ... invokeSuspend").
+                    TransactionDetailsSheet(transaction, canRemind = reminders != null, onAction = dismiss)
                 }
             ) {
                 DetailAction.Edit -> editTransaction(transaction)
@@ -288,7 +289,7 @@ class FinanceActions(
                 ActionListSheet(
                     title = account.name,
                     subtitle = listOfNotNull(
-                        state.money.format(state.balanceOf(account.id!!)),
+                        state.money.format(state.balanceOf(account.id)),
                         billingCycleSummary(account.statementDay, account.dueDay),
                     ).joinToString(" · "),
                     actions = actions,
@@ -307,7 +308,7 @@ class FinanceActions(
                 "archive", "restore" -> {
                     val archive = action == "archive"
                     val undo = finance.undoable {
-                        setAccountArchived(account.id!!, archive)
+                        setAccountArchived(account.id, archive)
                         emptyList()
                     }
                     snackbars.offerUndo(
@@ -328,7 +329,7 @@ class FinanceActions(
                     if (!confirmed) return@launch
                     try {
                         val undo = finance.undoable {
-                            deleteAccount(account.id!!)
+                            deleteAccount(account.id)
                             emptyList()
                         }
                         snackbars.offerUndo("${account.name} deleted", finance, undo, scope)
@@ -369,7 +370,7 @@ class FinanceActions(
             }
             val actions = buildList {
                 if (!person.archived) add(SheetAction("add", Icons.Outlined.Add, "Add expense for ${person.name}"))
-                if (showOpen) add(SheetAction("open", Icons.Outlined.ReceiptLong, "See their expenses"))
+                if (showOpen) add(SheetAction("open", Icons.AutoMirrored.Outlined.ReceiptLong, "See their expenses"))
                 add(SheetAction("edit", Icons.Outlined.Edit, "Edit"))
                 add(
                     if (person.archived) {

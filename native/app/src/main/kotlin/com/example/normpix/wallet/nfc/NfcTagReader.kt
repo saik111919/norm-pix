@@ -335,10 +335,13 @@ sealed interface PhoneNfcArea {
 fun phoneNfcArea(adapter: NfcAdapter): PhoneNfcArea {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return PhoneNfcArea.Unknown
     val info = runCatching { adapter.nfcAntennaInfo }.getOrNull() ?: return PhoneNfcArea.Unknown
+    // Deprecated in API 37 with no other way to tell named; it is still what a foldable reports.
+    @Suppress("DEPRECATION")
+    val foldable = info.isDeviceFoldable
     return nfcAreaFrom(
         widthMm = info.deviceWidth,
         heightMm = info.deviceHeight,
-        foldable = info.isDeviceFoldable,
+        foldable = foldable,
         antennas = info.availableNfcAntennas.map { it.locationX to it.locationY },
     )
 }

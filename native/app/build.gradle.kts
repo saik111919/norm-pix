@@ -1,6 +1,43 @@
+import com.android.build.api.artifact.SingleArtifact
+import javax.xml.parsers.DocumentBuilderFactory
+import javax.xml.transform.TransformerFactory
+import javax.xml.transform.dom.DOMSource
+import javax.xml.transform.stream.StreamResult
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+}
+
+/**
+ * Leaves ML Kit's telemetry transport without its backend. It would upload usage logs to Google once the app may use the
+ * network (it may: it asks GitHub for updates); the transport finds its one backend through a meta-data entry in the
+ * library's own manifest, and without that entry it has nowhere to send them and drops them.
+ *
+ * Done to each build's merged manifest rather than with `tools:node="remove"` in src/main: the unit tests' manifest has no
+ * library manifests in it, and the manifest merger warns about a removal with nothing to remove.
+ */
+abstract class DropTelemetryBackend : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val mergedManifest: RegularFileProperty
+
+    @get:OutputFile
+    abstract val cleanedManifest: RegularFileProperty
+
+    @TaskAction
+    fun drop() {
+        val android = "http://schemas.android.com/apk/res/android"
+        val backend = "backend:com.google.android.datatransport.cct.CctBackendFactory"
+        val document = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+            .newDocumentBuilder().parse(mergedManifest.get().asFile)
+        val entries = document.getElementsByTagName("meta-data")
+        (0 until entries.length).map(entries::item)
+            .filter { it.attributes.getNamedItemNS(android, "name")?.nodeValue == backend }
+            .forEach { it.parentNode.removeChild(it) }
+        TransformerFactory.newInstance().newTransformer()
+            .transform(DOMSource(document), StreamResult(cleanedManifest.get().asFile))
+    }
 }
 
 /** A build setting: CI passes it as an environment variable, a machine of its own as a Gradle property. */
@@ -108,6 +145,11 @@ android {
         // The app's own text is English; this drops the other languages' copies of library strings.
         localeFilters += listOf("en")
     }
+    lint {
+        // A phone app: the release is arm only on purpose (see the release build type's abiFilters), so it isn't offered to
+        // x86_64 Chromebooks. Lint's note about them is not news.
+        disable += "ChromeOsAbiSupport"
+    }
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
@@ -116,6 +158,8 @@ android {
             // timed out) and, late in a full run, dies.
             all { test ->
                 test.maxHeapSize = "2g"
+                // Robolectric loads its native graphics library; JDK 24 and later warn about that unless told it is allowed.
+                test.jvmArgs("--enable-native-access=ALL-UNNAMED")
                 // `-Pscreenshots=<folder>`: ReadmeScreenshots renders the README's pictures there (it is skipped otherwise).
                 providers.gradleProperty("screenshots").orNull?.let { test.systemProperty("normpix.screenshots", it) }
             }
@@ -124,6 +168,12 @@ android {
 }
 
 androidComponents {
+    onVariants { variant ->
+        val drop = tasks.register<DropTelemetryBackend>("${variant.name}DropTelemetryBackend")
+        variant.artifacts.use(drop)
+            .wiredWithFiles(DropTelemetryBackend::mergedManifest, DropTelemetryBackend::cleanedManifest)
+            .toTransform(SingleArtifact.MERGED_MANIFEST)
+    }
     onVariants(selector().withBuildType("release")) { variant ->
         // Store native libraries compressed in the release APK (the OCR library deflates from 11 MB to 4.4 MB). They
         // are unpacked once at install, so the download is what shrinks.
@@ -133,6 +183,8 @@ androidComponents {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    // Reads the way up a shared picture is turned: the platform's own ExifInterface has had flaws in what it parses.
+    implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.lifecycle.runtime.compose)

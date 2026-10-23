@@ -1,5 +1,6 @@
 package com.example.normpix.wallet.clipboard
 
+import androidx.core.content.edit
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -61,13 +62,13 @@ class PrefsPendingClearStore(private val prefs: SharedPreferences) : PendingClea
     }
 
     override fun save(pending: PendingClear?) {
-        prefs.edit().apply {
+        prefs.edit {
             if (pending == null) {
                 remove(K_TOKEN).remove(K_DEADLINE)
             } else {
                 putString(K_TOKEN, pending.token).putLong(K_DEADLINE, pending.deadlineMillis)
             }
-        }.apply()
+        }
     }
 
     private companion object {

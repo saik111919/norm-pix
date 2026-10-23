@@ -11,26 +11,44 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.normpix.banks.Bank
 import com.example.normpix.finance.domain.Account
+import com.example.normpix.finance.ui.ShapedBadge
 import com.example.normpix.finance.ui.icon
 import com.example.normpix.finance.ui.rememberFinanceState
 import com.example.normpix.ui.components.BankGlyph
-import com.example.normpix.ui.components.LeadingBadge
-import com.example.normpix.ui.components.LeadingIcon
 
 /**
- * The leading badge of a list row for something that belongs to [bank]: the bank's logo (or the generic bank glyph, for a
- * bank with no artwork) in the same round tonal badge every list row uses. Without a bank - cash, an account none was
- * chosen for - it is the usual [fallback] icon badge, so rows line up either way.
+ * The badge of a row, a field or a chip for something that belongs to [bank]: the bank's logo (or the generic bank glyph, for a
+ * bank with no artwork) on the tonal badge every list row uses - in the shape the user chose for icon backgrounds (Settings >
+ * Appearance > Icon background: a circle, a rounded square, a square, or none, where the logo is drawn larger on its own).
+ * Without a bank - cash, an account none was chosen for - it is the [fallback] icon, on the same badge, so rows line up either way.
  */
 @Composable
 fun BankBadge(bank: Bank?, fallback: ImageVector, modifier: Modifier = Modifier, size: Dp = 40.dp) {
-    if (bank == null) {
-        LeadingIcon(fallback, modifier, size = size)
-    } else {
-        LeadingBadge(modifier, size = size) {
-            BankGlyph(bank, tint = MaterialTheme.colorScheme.onSecondaryContainer, size = size / 2 + 2.dp)
+    val scheme = MaterialTheme.colorScheme
+    ShapedBadge(modifier, size) { drawSize, bare ->
+        // On the badge the mark sits in the tone made for it; on nothing it takes one that reads on the page.
+        val tint = if (bare) scheme.onSurfaceVariant else scheme.onSecondaryContainer
+        if (bank == null) {
+            Icon(fallback, contentDescription = null, tint = tint, modifier = Modifier.size(drawSize))
+        } else {
+            BankGlyph(bank, tint = tint, size = drawSize)
         }
     }
+}
+
+/** [BankBadge] for the bank called [bankName], for the places that only hold a name (a reminder's linked card). Unknown names get the generic glyph. */
+@Composable
+fun BankBadge(bankName: String, modifier: Modifier = Modifier, size: Dp = 40.dp) {
+    val scheme = MaterialTheme.colorScheme
+    ShapedBadge(modifier, size) { drawSize, bare ->
+        BankGlyph(bankName, tint = if (bare) scheme.onSurfaceVariant else scheme.onSecondaryContainer, size = drawSize)
+    }
+}
+
+/** An account's badge: its bank's logo when it has a bank, otherwise the icon of its kind - [BankBadge], so an account looks the same wherever it appears. */
+@Composable
+fun AccountBadge(account: Account, modifier: Modifier = Modifier, size: Dp = 40.dp) {
+    BankBadge(rememberFinanceState().catalog.byKey(account.bankKey), account.kind.icon, modifier, size)
 }
 
 /**

@@ -342,7 +342,7 @@ fun UpdateActionRow(state: UpdateState, actions: UpdateSheetActions, modifier: M
                 Text(buttons.secondary.label, style = MaterialTheme.typography.titleMedium)
             }
         }
-        PillButton((primary ?: buttons.secondary).label) { actions.perform(primary ?: buttons.secondary) }
+        PillButton((primary ?: buttons.secondary).label, Modifier.height(ActionHeight)) { actions.perform(primary ?: buttons.secondary) }
     }
 }
 
@@ -374,7 +374,7 @@ fun UpdateActionStack(state: UpdateState, actions: UpdateSheetActions, modifier:
 
 /** The filled, fully rounded button of [UpdateActionRow] and [UpdateActionStack]. */
 @Composable
-private fun PillButton(label: String, modifier: Modifier = Modifier.height(ActionHeight), onClick: () -> Unit) {
+private fun PillButton(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Button(onClick = onClick, shape = CircleShape, modifier = modifier) {
         Text(label, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold), maxLines = 1)
     }

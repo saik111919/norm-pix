@@ -19,7 +19,7 @@ import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.EventRepeat
-import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.LinkOff
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
@@ -219,7 +219,7 @@ class AttachChoice(val link: ReminderLink?)
 
 private enum class AttachTab(val label: String, val icon: ImageVector) {
     // Short on purpose: four labels share one row, and the chosen one grows. "Activity" is where any expense, income or transfer is.
-    Transaction("Activity", Icons.Outlined.ReceiptLong),
+    Transaction("Activity", Icons.AutoMirrored.Outlined.ReceiptLong),
     Recurring("Repeating", Icons.Outlined.EventRepeat),
     Account("Account", Icons.Outlined.AccountBalanceWallet),
     Card("Card", Icons.Outlined.CreditCard),

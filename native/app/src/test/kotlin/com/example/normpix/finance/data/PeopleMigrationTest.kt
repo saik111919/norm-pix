@@ -186,12 +186,12 @@ class PeopleMigrationTest {
                     null,
                     ContentValues().apply {
                         put("type", "income"); put("amount", 1); put("account_id", 1); put("category_id", 1)
-                        put("occurred_at", at); put("created_at", at); put("updated_at", at); put("person_id", mom.id!!)
+                        put("occurred_at", at); put("created_at", at); put("updated_at", at); put("person_id", mom.id)
                     },
                 )
             }
 
-            assertEquals(1, repo.deletePerson(mom.id!!))
+            assertEquals(1, repo.deletePerson(mom.id))
             assertEquals(2, repo.transactions(TransactionQuery()).items.size)
             assertTrue(repo.people().isEmpty())
         } finally {

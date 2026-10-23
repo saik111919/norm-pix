@@ -3,6 +3,7 @@ package com.example.normpix.settings.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,16 +40,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
+import com.example.normpix.banks.ui.BankBadge
+import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.ui.CategoryAvatarSample
 import com.example.normpix.finance.ui.CategoryGlyph
 import com.example.normpix.finance.ui.LocalCategoryIconShape
 import com.example.normpix.finance.ui.LocalCategoryIconStyle
+import com.example.normpix.finance.ui.MonthScopeButton
+import com.example.normpix.finance.ui.MonthSwitcher
 import com.example.normpix.finance.ui.outline
 import com.example.normpix.finance.ui.paletteColor
 import com.example.normpix.navigation.AppearanceSection
@@ -63,6 +70,7 @@ import com.example.normpix.settings.CategoryIconShape
 import com.example.normpix.settings.CategoryIconStyle
 import com.example.normpix.settings.ColorSource
 import com.example.normpix.settings.InterfaceFont
+import com.example.normpix.settings.MonthControlStyle
 import com.example.normpix.settings.PageAnimationType
 import com.example.normpix.settings.ProgressStyle
 import com.example.normpix.settings.SheetAnimationType
@@ -83,6 +91,7 @@ import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.AppTheme
 import com.example.normpix.ui.theme.isDark
+import java.time.LocalDateTime
 import kotlinx.coroutines.launch
 
 /** One screen of Settings > Appearance: [section]'s own choices, under its name. */
@@ -106,6 +115,7 @@ fun AppearanceSectionPage(section: AppearanceSection) {
                     AppearanceSection.PageTransitions -> PageTransitionsSection(prefs, preferences, haptics)
                     AppearanceSection.SheetTransitions -> SheetTransitionsSection(prefs, preferences, haptics)
                     AppearanceSection.BackButton -> BackButtonSection(prefs, preferences, haptics)
+                    AppearanceSection.MonthControl -> MonthControlSection(prefs, preferences, haptics)
                 }
             }
         }
@@ -225,7 +235,7 @@ private fun CategoryIconsSection(prefs: AppPrefsState, preferences: AppPreferenc
     }
     ListSection(
         title = "Icon background",
-        footer = "The shape behind category icons and people in lists, charts and the transaction editor. Brand logos, " +
+        footer = "The shape behind category icons, people and banks in lists, charts and the editors. Brand logos, " +
             "like a payee's, are cut to the same shape.",
         modifier = Modifier.selectableGroup(),
     ) {
@@ -406,6 +416,56 @@ private fun BackButtonSection(prefs: AppPrefsState, preferences: AppPreferences,
     }
 }
 
+@Composable
+private fun MonthControlSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
+    ListSection(
+        footer = "How the month is switched on Activity, Budgets, Insights and People. Both work the same - the steps, the " +
+            "month picker, \"Dates\" and \"All time\" - and only the look differs.",
+        modifier = Modifier.selectableGroup(),
+    ) {
+        for (style in MonthControlStyle.entries) {
+            item {
+                val choose = {
+                    haptics.selection()
+                    preferences.setMonthControlStyle(style)
+                }
+                Column {
+                    RadioRow(
+                        headline = style.label,
+                        supporting = style.description,
+                        selected = prefs.monthControlStyle == style,
+                        onClick = choose,
+                    )
+                    MonthControlPreview(style, onClick = choose, modifier = Modifier.padding(start = AppSpacing.lg, end = AppSpacing.lg, bottom = AppSpacing.lg))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * What a month control looks like in [style]: the real one, as it would show last month - both steps live, the way out beside
+ * it - whichever style is chosen. A touch on it chooses the style rather than operating the sample, and a screen reader skips
+ * it (the row above says what it is).
+ */
+@Composable
+private fun MonthControlPreview(style: MonthControlStyle, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val latest = remember { MonthKey.of(LocalDateTime.now()) }
+    // On the page's own colour, as the control is on a page: on the list's tone the track would melt into it.
+    Box(modifier.clearAndSetSemantics {}.background(MaterialTheme.colorScheme.background, AppRadius.rLg).padding(AppSpacing.sm)) {
+        MonthSwitcher(
+            month = latest.previous,
+            latest = latest,
+            onChanged = {},
+            style = style,
+            trailing = { MonthScopeButton("Dates", onClick = {}, icon = Icons.Rounded.DateRange, style = style) },
+        )
+        // A tap, and nothing a keyboard could land on: the row above is the control (a focusable sample here would be a stop with
+        // no label and no ring), this is only so a touch on the picture chooses it too.
+        Box(Modifier.matchParentSize().pointerInput(onClick) { detectTapGestures { onClick() } })
+    }
+}
+
 /**
  * What an icon style looks like: three categories as they would be drawn in that style, whichever one is chosen - on the
  * background the user has chosen, or with none.
@@ -435,7 +495,7 @@ private fun CategoryIconStylePreview(style: CategoryIconStyle) {
     }
 }
 
-/** What an icon background looks like: three avatars in that shape (one a brand's logo), whichever one is chosen. */
+/** What an icon background looks like: three avatars in that shape (a category, a brand's logo, a bank), whichever one is chosen. */
 @Composable
 private fun CategoryIconShapePreview(shape: CategoryIconShape) {
     CompositionLocalProvider(LocalCategoryIconShape provides shape) {
@@ -444,9 +504,10 @@ private fun CategoryIconShapePreview(shape: CategoryIconShape) {
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.clearAndSetSemantics {},
         ) {
-            for ((index, icon) in listOf("restaurant", "swiggy", "shopping").withIndex()) {
+            for ((index, icon) in listOf("restaurant", "swiggy").withIndex()) {
                 CategoryAvatarSample(icon, colorIndex = index * 2, size = 32.dp)
             }
+            BankBadge("HDFC Bank", size = 32.dp)
         }
     }
 }

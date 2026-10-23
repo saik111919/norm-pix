@@ -53,6 +53,7 @@ import com.example.normpix.finance.ui.label
 import com.example.normpix.settings.BankIconStyle
 import com.example.normpix.ui.components.DeckStack
 import com.example.normpix.ui.components.DeckStackState
+import com.example.normpix.ui.components.focusRing
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppRadius
 
@@ -89,13 +90,29 @@ data class AccountCardData(
     val dueSoon: Boolean = false,
     /** [due] in full for a screen reader: the date and how far away it is. */
     val dueSpoken: String? = null,
+    /** How much of the money held across all accounts is in this one ("62%"); null when none is, or while amounts are hidden. */
+    val share: String? = null,
+    /** Amounts are hidden (the eye at the top of Home and Wallet): [balance] is dots, which a screen reader is told as such. */
+    val hidden: Boolean = false,
 ) {
+    /**
+     * Who the card is, for a screen reader, without its figures: the carousel's card is read as this, and its panel - which is
+     * read right after it - says the balance and the rest, so nothing is heard twice.
+     */
+    val identity: String
+        get() = buildString {
+            append(name).append(", ").append(kind.label)
+            if (bankName != null) append(", ").append(bankName)
+            if (isDefault) append(", default account")
+            if (archived) append(", archived")
+        }
+
     /** The card as a screen reader reads it. */
     val spoken: String
         get() = buildString {
             append(name).append(", ").append(kind.label)
             if (bankName != null) append(", ").append(bankName)
-            append(", balance ").append(balance)
+            append(", balance ").append(if (hidden) "hidden" else balance)
             if (standing != null) append(", ").append(standing)
             if (creditSpoken != null) append(", ").append(creditSpoken)
             if (dueSpoken != null) append(", ").append(dueSpoken)
@@ -183,7 +200,7 @@ private fun KindMark(kind: AccountKind) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AccountFront(data: AccountCardData, theme: BankBrandTheme, bankIconStyle: BankIconStyle) {
+private fun AccountFront(data: AccountCardData, theme: BankBrandTheme, bankIconStyle: BankIconStyle, compact: Boolean = false) {
     CardFace(theme) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -207,14 +224,36 @@ private fun AccountFront(data: AccountCardData, theme: BankBrandTheme, bankIconS
             Spacer(Modifier.weight(1f))
             Text(
                 data.name,
-                style = TextStyle(color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, letterSpacing = 0.3.sp, shadow = embossShadow),
+                style = TextStyle(
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = if (compact) 20.sp else 15.sp,
+                    letterSpacing = 0.3.sp,
+                    shadow = embossShadow,
+                ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (compact) {
+                // The carousel's card says who it is and nothing else: the figures are in the panel under it, said once.
+                val flags = buildList {
+                    if (data.isDefault) add("DEFAULT" to Triple(theme.badgeColor, theme.badgeBorderColor, theme.badgeTextColor))
+                    if (data.archived) add("ARCHIVED" to QuietPill)
+                }
+                if (flags.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        for ((text, colors) in flags) CardBadge(text, background = colors.first, border = colors.second, textColor = colors.third)
+                    }
+                }
+                // The panel is drawn over the card's lower edge: keep the print clear of it.
+                Spacer(Modifier.height(4.dp))
+                return@Column
+            }
             Spacer(Modifier.height(10.dp))
             Text(
                 "BALANCE",
-                style = TextStyle(color = Color.White.copy(alpha = 0.62f), fontWeight = FontWeight.SemiBold, fontSize = 8.5.sp, letterSpacing = 0.9.sp, shadow = embossShadow),
+                style = TextStyle(color = CardCaptionColor, fontWeight = FontWeight.SemiBold, fontSize = 9.sp, letterSpacing = 0.9.sp, shadow = embossShadow),
                 maxLines = 1,
             )
             Spacer(Modifier.height(2.dp))
@@ -276,14 +315,14 @@ private fun CreditMeter(used: Float, over: Boolean, caption: String?) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
                 caption.orEmpty(),
-                style = TextStyle(color = Color.White.copy(alpha = 0.86f), fontWeight = FontWeight.SemiBold, fontSize = 10.sp, shadow = embossShadow),
+                style = TextStyle(color = Color.White.copy(alpha = 0.95f), fontWeight = FontWeight.SemiBold, fontSize = 10.sp, shadow = embossShadow),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false),
             )
             Text(
                 "${(used.coerceIn(0f, 1f) * 100).toInt()}% used",
-                style = TextStyle(color = Color.White.copy(alpha = 0.62f), fontWeight = FontWeight.Medium, fontSize = 10.sp, shadow = embossShadow),
+                style = TextStyle(color = CardCaptionColor, fontWeight = FontWeight.Medium, fontSize = 10.sp, shadow = embossShadow),
                 maxLines = 1,
             )
         }
@@ -296,6 +335,8 @@ fun AccountCardFacePreview(
     data: AccountCardData,
     modifier: Modifier = Modifier,
     bankIconStyle: BankIconStyle = BankIconStyle.Full,
+    /** Who it is and nothing more - bank, kind, name, flags - for the carousel's card, whose panel says its figures. */
+    compact: Boolean = false,
 ) {
     // Card art keeps a card's proportions, so it ignores the system font scale (as the bank cards do).
     val density = LocalDensity.current
@@ -303,7 +344,7 @@ fun AccountCardFacePreview(
     val theme = remember(data.bankName, data.kind) { AccountCardDesign.themeFor(data.bankName, data.kind) }
     CompositionLocalProvider(LocalDensity provides fixedDensity) {
         Box(modifier.fillMaxWidth().aspectRatio(CARD_ASPECT).alpha(if (data.archived) 0.72f else 1f)) {
-            AccountFront(data, theme, bankIconStyle)
+            AccountFront(data, theme, bankIconStyle, compact)
         }
     }
 }
@@ -327,6 +368,7 @@ fun AccountCardView(
     onManage: () -> Unit,
     modifier: Modifier = Modifier,
     bankIconStyle: BankIconStyle = BankIconStyle.Full,
+    compact: Boolean = false,
 ) {
     val press = remember { MutableInteractionSource() }
     val pressed by press.collectIsPressedAsState()
@@ -338,6 +380,8 @@ fun AccountCardView(
                 scaleX = scale
                 scaleY = scale
             }
+            // No ripple, so keyboard focus is shown by a ring along the card's own edge.
+            .focusRing(press, AppRadius.rLg)
             .combinedClickable(
                 interactionSource = press,
                 indication = null,
@@ -347,13 +391,13 @@ fun AccountCardView(
                 onClick = onOpen,
             )
             .clearAndSetSemantics {
-                contentDescription = data.spoken
+                contentDescription = if (compact) data.identity else data.spoken
                 role = Role.Button
                 onClick(label = "Opens the history") { onOpen(); true }
                 onLongClick(label = "Manage account") { onManage(); true }
             },
     ) {
-        AccountCardFacePreview(data, bankIconStyle = bankIconStyle)
+        AccountCardFacePreview(data, bankIconStyle = bankIconStyle, compact = compact)
     }
 }
 

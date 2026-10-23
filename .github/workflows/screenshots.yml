@@ -29,10 +29,20 @@ concurrency:
 permissions:
   contents: write
 
+env:
+  # JDK 24 and later warn on every native library a Java program loads (Gradle's own, Robolectric's) unless it is allowed
+  # to: GRADLE_OPTS reaches the JVM that starts Gradle, native-access in native/gradle.properties and native/app/build.gradle.kts
+  # the daemon and the test JVMs.
+  GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
+  # The first git of a checkout hints at the name of a new repository's first branch; saying so keeps the log to real news.
+  GIT_CONFIG_COUNT: 1
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
 jobs:
   render:
     name: Render
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     # A fork's pull request can't push here; its pictures are still in the run's artifact.
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
@@ -48,7 +58,7 @@ jobs:
           distribution: temurin
           java-version: 25
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
 
       - name: Render the screenshots
         working-directory: native
@@ -58,7 +68,7 @@ jobs:
             -Pscreenshots="$GITHUB_WORKSPACE/docs/screenshots"
           ls -l "$GITHUB_WORKSPACE/docs/screenshots"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: screenshots
           path: docs/screenshots/

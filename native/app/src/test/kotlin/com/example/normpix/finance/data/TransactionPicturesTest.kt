@@ -166,7 +166,7 @@ class TransactionPicturesTest {
 
         val removed = finance.saveTransaction(replaced, PictureEdit.Remove)
         assertNull(removed.picture)
-        assertNull(finance.repository.transactionById(saved.id!!)!!.picture)
+        assertNull(finance.repository.transactionById(saved.id)!!.picture)
         assertTrue(keptNames().isEmpty())
     }
 

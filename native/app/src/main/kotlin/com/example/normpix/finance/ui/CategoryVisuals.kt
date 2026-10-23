@@ -28,7 +28,7 @@ import androidx.compose.material.icons.outlined.MedicalServices
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Pets
-import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.RequestQuote
 import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.Savings
@@ -96,7 +96,7 @@ private val coreCategoryIcons: List<Pair<String, CategoryIconSpec>> = listOf(
     "shopping" to CategoryIconSpec(Icons.Outlined.ShoppingBag, "Shopping", "🛍️"),
     "clothing" to CategoryIconSpec(Icons.Outlined.Checkroom, "Clothing", "👕"),
     "electronics" to CategoryIconSpec(Icons.Outlined.Devices, "Electronics", "💻"),
-    "bills" to CategoryIconSpec(Icons.Outlined.ReceiptLong, "Bills", "🧾"),
+    "bills" to CategoryIconSpec(Icons.AutoMirrored.Outlined.ReceiptLong, "Bills", "🧾"),
     "phone" to CategoryIconSpec(Icons.Outlined.Smartphone, "Phone", "📱"),
     "internet" to CategoryIconSpec(Icons.Outlined.Wifi, "Internet", "📶"),
     "subscriptions" to CategoryIconSpec(Icons.Outlined.Subscriptions, "Subscriptions", "📺"),
@@ -356,6 +356,36 @@ internal fun NeutralAvatar(icon: ImageVector, modifier: Modifier = Modifier, siz
         )
     }
 }
+
+/**
+ * A tonal badge of [container] behind [content], in the shape the user chose for icon backgrounds ([LocalCategoryIconShape]) -
+ * for the marks that are neither a category nor a person: a bank's logo, the icon of an account's kind - so Settings >
+ * Appearance > Icon background reaches them too, and a row of accounts, a bank and a category all share one look. With no shape
+ * ([CategoryIconShape.None]) there is no badge: the mark has the whole box ([size]) and is drawn larger, as an avatar's art is.
+ *
+ * [content] is told the size it may draw at, and whether it sits on nothing ([bare]: it then takes a tone that reads on the page,
+ * not one made for the badge).
+ */
+@Composable
+fun ShapedBadge(
+    modifier: Modifier = Modifier,
+    size: Dp = 40.dp,
+    container: Color = MaterialTheme.colorScheme.secondaryContainer,
+    content: @Composable (drawSize: Dp, bare: Boolean) -> Unit,
+) {
+    val choice = LocalCategoryIconShape.current
+    if (choice == CategoryIconShape.None) {
+        Box(modifier.size(size), contentAlignment = Alignment.Center) { content(size * BARE_MARK_IN_BOX, true) }
+    } else {
+        Box(modifier.size(size).background(container, choice.outline), contentAlignment = Alignment.Center) {
+            content(size * MARK_IN_BADGE, false)
+        }
+    }
+}
+
+/** How much of a badge a bank's mark (or an account's icon) spans, and how much of the box with no badge behind it. */
+private const val MARK_IN_BADGE = 0.55f
+private const val BARE_MARK_IN_BOX = 0.8f
 
 val AccountKind.icon: ImageVector
     get() = when (this) {

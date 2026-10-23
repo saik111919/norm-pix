@@ -506,7 +506,7 @@ fun runningTotals(daily: List<DailyTotal>, days: Int): List<Long> {
 
 /** The key for a line in a legend: a short stroke of its color (dashed for a reference), never a filled box. */
 @Composable
-fun LineKey(color: Color, dashed: Boolean = false, modifier: Modifier = Modifier) {
+fun LineKey(color: Color, modifier: Modifier = Modifier, dashed: Boolean = false) {
     Canvas(modifier.size(width = 16.dp, height = 8.dp)) {
         val y = size.height / 2
         drawLine(
@@ -524,7 +524,7 @@ fun LineKey(color: Color, dashed: Boolean = false, modifier: Modifier = Modifier
 @Composable
 fun ChartKey(color: Color, label: String, modifier: Modifier = Modifier, dashed: Boolean = false, textColor: Color = Color.Unspecified) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        LineKey(color, dashed)
+        LineKey(color, dashed = dashed)
         Spacer(Modifier.width(AppSpacing.xs + AppSpacing.xxs))
         Text(label, style = MaterialTheme.typography.labelMedium, color = textColor.takeOrElse { MaterialTheme.colorScheme.onSurfaceVariant })
     }

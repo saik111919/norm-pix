@@ -12,7 +12,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -164,8 +164,11 @@ class TransactionEditorTest {
         compose.onNodeWithText("Category").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Select a category").assertIsDisplayed()
-        // A family is its category as a row, with its ready-made sub-categories as chips under it.
+        // A family is its category as a row; its ready-made sub-categories are chips under it, closed until the row's chevron opens them.
         compose.onNodeWithText("Food & dining").assertIsDisplayed()
+        assertTrue(compose.onAllNodesWithText("Restaurants").fetchSemanticsNodes().isEmpty(), "closed: the chips are not shown")
+        compose.onNodeWithContentDescription("Show sub-categories of Food & dining").performClick()
+        compose.waitForIdle()
         compose.onNodeWithText("Restaurants").assertIsDisplayed()
         compose.onNodeWithText("Search categories").assertIsDisplayed()
         // The rest are a scroll down the list, ending with "New category".
@@ -180,6 +183,8 @@ class TransactionEditorTest {
         openEditor()
         typeAmount("120")
         compose.onNodeWithText("Category").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Show sub-categories of Food & dining").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Pizza").performClick()
         compose.waitForIdle()

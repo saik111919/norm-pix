@@ -24,6 +24,7 @@ class BackPreviewTest {
         assertNear(0f, shiftX, "$message shift")
         assertNear(0f, corners, "$message corners")
         assertNear(0f, lift, "$message lift")
+        assertNear(1f, reveal, "$message reveal")
     }
 
     @Test
@@ -80,6 +81,7 @@ class BackPreviewTest {
             assertEquals(end.scale, past.scale, "$type scale past 1")
             assertEquals(end.alpha, past.alpha, "$type alpha past 1")
             assertEquals(end.shiftX, past.shiftX, "$type shift past 1")
+            assertEquals(end.reveal, past.reveal, "$type reveal past 1")
         }
     }
 
@@ -134,10 +136,17 @@ class BackPreviewTest {
     }
 
     @Test
-    fun aWindowShrinksIntoItselfAndAScaleShrinksAboutItsCentre() {
+    fun aWindowSinksIntoItsStripAtTheBottomAndAScaleShrinksAboutItsCentre() {
         val window = BackPreview.leaving(PageAnimationType.LinuxWindow, 1f, 1f)
-        assertNear(PageTransitions.WINDOW_CLOSE_SCALE, window.scale, "window scale at the end")
-        assertEquals(PageTransitions.CLOSING_ORIGIN, window.origin, "the window shrinks towards the same point as a closing page")
+        assertNear(LinuxWindowMotion.STRIP, window.reveal, "what shows of the window at the end: the strip")
+        assertNear(0f, window.alpha, "and the strip has faded away")
+        assertNear(1f, window.scale, "a window is not scaled: it is uncovered, so nothing on it is squashed")
+        assertNear(0f, window.shiftX, "and it goes down, not to the side")
+
+        // Half way down it is a smaller window than it was, and still whole: it fades only when it is nearly the strip.
+        val half = BackPreview.leaving(PageAnimationType.LinuxWindow, 0.5f, 1f)
+        assertTrue(half.reveal < 1f - (1f - LinuxWindowMotion.STRIP) * 0.1f && half.reveal > LinuxWindowMotion.STRIP, "part-way down: ${half.reveal}")
+        assertNear(1f, half.alpha, "half way down it has not started to fade")
 
         val scale = BackPreview.leaving(PageAnimationType.ScaleAndFade, 1f, 1f)
         assertNear(PageTransitions.GROW_SCALE, scale.scale, "scale-and-fade scale at the end")
@@ -156,15 +165,18 @@ class BackPreviewTest {
             var lastAlpha = 1f
             var lastScale = 1f
             var lastShift = 0f
+            var lastReveal = 1f
             var lastBeneath = BackPreview.revealed(type, 0f, 1f)
             for (p in steps) {
                 val leaving = BackPreview.leaving(type, p, 1f)
                 assertTrue(leaving.alpha <= lastAlpha + 1e-4f, "$type: the tab leaving only fades out ($p)")
                 assertTrue(leaving.scale <= lastScale + 1e-4f, "$type: the tab leaving only shrinks ($p)")
                 assertTrue(leaving.shiftX >= lastShift - 1e-4f, "$type: the tab leaving only goes further ($p)")
+                assertTrue(leaving.reveal <= lastReveal + 1e-4f, "$type: the tab leaving only sinks further ($p)")
                 lastAlpha = leaving.alpha
                 lastScale = leaving.scale
                 lastShift = leaving.shiftX
+                lastReveal = leaving.reveal
 
                 val beneath = BackPreview.revealed(type, p, 1f)
                 assertTrue(beneath.scale >= lastBeneath.scale - 1e-4f, "$type: the tab beneath only grows into place ($p)")

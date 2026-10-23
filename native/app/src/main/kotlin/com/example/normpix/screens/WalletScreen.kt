@@ -1,5 +1,11 @@
 package com.example.normpix.screens
 
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import com.example.normpix.wallet.SectionAddButton
+import com.example.normpix.wallet.WalletSectionHeader
+import com.example.normpix.wallet.WalletOverview
+import com.example.normpix.wallet.AccountCarousel
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -63,13 +69,14 @@ import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.BillDue
 import com.example.normpix.finance.domain.creditRoom
 import com.example.normpix.finance.domain.nextBillDue
+import com.example.normpix.finance.domain.percentLabel
+import com.example.normpix.finance.domain.shareOf
 import com.example.normpix.navigation.AmountsVisibilityButton
 import java.time.LocalDate
 import com.example.normpix.finance.ui.ChoiceOption
 import com.example.normpix.finance.ui.ConnectedChoiceRow
 import com.example.normpix.finance.ui.FinanceStatus
 import com.example.normpix.finance.ui.LocalFinance
-import com.example.normpix.finance.ui.SummaryStat
 import com.example.normpix.finance.ui.TABULAR_FIGURES
 import com.example.normpix.finance.ui.icon
 import com.example.normpix.finance.ui.label
@@ -95,8 +102,6 @@ import com.example.normpix.ui.components.LockGate
 import com.example.normpix.settings.AccountsLayout
 import com.example.normpix.settings.CardsLayout
 import com.example.normpix.settings.BankIconStyle
-import com.example.normpix.ui.components.SectionHeader
-import com.example.normpix.ui.components.SectionSubheader
 import com.example.normpix.ui.components.RevealVisibility
 import com.example.normpix.ui.components.SheetHeader
 import com.example.normpix.ui.components.SnackbarKind
@@ -241,6 +246,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                 }
                 AccountsSection(
                     cardsPerBank = cardsPerBank,
+                    amountsHidden = prefs.amountsHidden,
                     showArchived = showArchived,
                     onToggleArchived = { showArchived = !showArchived },
                     layout = prefs.accountsLayout,
@@ -252,17 +258,16 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
         // Cards are shown only while NormPix stores them (Settings > Wallet & Cards > Store cards).
         if (cardsOn) {
             item(key = "cards-header") {
-                Box(Modifier.padding(AppSpacing.page)) {
-                    SectionHeader(
+                val saved = (cardsState as? CardsState.Ready)?.cards?.size
+                Box(Modifier.padding(AppSpacing.page).padding(top = AppSpacing.xxl, bottom = AppSpacing.sm)) {
+                    WalletSectionHeader(
                         title = "Cards",
-                        actionLabel = "Add card",
-                        onAction = flows::addCard,
-                        padding = androidx.compose.foundation.layout.PaddingValues(
-                            start = AppSpacing.lg,
-                            top = AppSpacing.xxl,
-                            end = AppSpacing.sm,
-                            bottom = AppSpacing.sm,
-                        ),
+                        summary = when (saved) {
+                            null -> null
+                            0 -> "None saved yet. Encrypted, and kept on this device"
+                            else -> "$saved ${if (saved == 1) "card" else "cards"}, encrypted and kept on this device"
+                        },
+                        action = { SectionAddButton("Add card", flows::addCard) },
                     )
                 }
             }
@@ -307,9 +312,9 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                         val activeFilter = bankFilter?.takeIf { key -> banks.any { it.key == key } }
                         val visible = if (activeFilter == null) cards else cards.filter { it.bankKey == activeFilter }
                         item(key = "cards-layout") {
-                            // The same cards three ways, as the accounts above; the choice is the Wallet's own (Settings has it too).
+                            // The same cards four ways, as the accounts above; the choice is the Wallet's own (Settings has it too).
                             Box(Modifier.padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.md)) {
-                                ConnectedChoiceRow(
+                                LayoutChoice(
                                     options = cardsLayoutOptions,
                                     // Spread out, the cards are no longer the stack: none is chosen, and "Stack" puts them back.
                                     selected = if (cardsDeck.unfolded) null else prefs.cardsLayout,
@@ -321,6 +326,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                         cardsDeck.fold()
                                         if (!gatheringOnly) container.preferences.setCardsLayout(it)
                                     },
+                                    description = "How the cards are shown",
                                 )
                             }
                         }
@@ -482,6 +488,27 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
     }
 }
 
+/** At or above this font scale the layout choice is two rows of two segments, so no label is cut short. */
+private const val WRAP_CHOICE_AT_FONT_SCALE = 1.3f
+
+/**
+ * The choice of how a section is laid out: a [ConnectedChoiceRow], named for a screen reader ([description]) - and, with large
+ * text, in two rows, because four labels in one row would lose their ends. The choice is whichever segment is selected, in
+ * whichever row it is.
+ */
+@Composable
+private fun <K> LayoutChoice(options: List<ChoiceOption<K>>, selected: K?, onSelect: (K) -> Unit, description: String) {
+    val wrap = LocalDensity.current.fontScale >= WRAP_CHOICE_AT_FONT_SCALE && options.size > 2
+    Column(Modifier.semantics { contentDescription = description }, verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+        if (wrap) {
+            val rows = options.chunked((options.size + 1) / 2)
+            for (row in rows) ConnectedChoiceRow(options = row, selected = selected.takeIf { current -> row.any { it.key == current } }, onSelect = onSelect)
+        } else {
+            ConnectedChoiceRow(options = options, selected = selected, onSelect = onSelect)
+        }
+    }
+}
+
 private val cardsLayoutOptions = listOf(
     ChoiceOption(CardsLayout.Stack, "Stack", Icons.Outlined.Layers),
     ChoiceOption(CardsLayout.Cards, "Cards", Icons.Outlined.ViewAgenda),
@@ -493,12 +520,14 @@ private val accountsLayoutOptions = listOf(
     ChoiceOption(AccountsLayout.Stack, "Stack", Icons.Outlined.Layers),
     ChoiceOption(AccountsLayout.Cards, "Cards", Icons.Outlined.ViewAgenda),
     ChoiceOption(AccountsLayout.Rows, "Rows", Icons.AutoMirrored.Outlined.ViewList),
+    ChoiceOption(AccountsLayout.Carousel, "Carousel", Icons.Outlined.ViewCarousel),
 )
 
-/** Total balance and the accounts, laid out as the Wallet's [layout] says. */
+/** The Wallet's overview - the total balance and the two figures it is made of - and the accounts, laid out as [layout] says. */
 @Composable
 private fun AccountsSection(
     cardsPerBank: Map<String, Int>,
+    amountsHidden: Boolean,
     showArchived: Boolean,
     onToggleArchived: () -> Unit,
     layout: AccountsLayout,
@@ -533,36 +562,50 @@ private fun AccountsSection(
     val archived = finance.accounts.filter { it.archived }
 
     Column {
-        SummaryStat(
-            label = "Total balance",
-            value = finance.money.format(finance.totalBalance),
-            valueStyle = MaterialTheme.typography.displaySmall,
-            modifier = Modifier.padding(start = AppSpacing.lg, end = AppSpacing.lg, bottom = AppSpacing.sm),
+        // The total is what is held minus what is owed (a card's bill, a loan): the two figures are named under it, so the sum can
+        // be checked; and a screen reader hears the whole as one sentence.
+        val total = finance.money.format(finance.totalBalance)
+        val held = finance.money.format(finance.heldBalance)
+        val owed = if (finance.owedBalance > 0) finance.money.format(finance.owedBalance) else null
+        WalletOverview(
+            total = total,
+            held = held,
+            owed = owed,
+            negative = finance.totalBalance < 0,
+            spoken = when {
+                amountsHidden -> "Total balance hidden. Amounts are hidden: show them with the eye button at the top."
+                owed != null -> "Total balance $total: $held in accounts, minus $owed owed."
+                else -> "Total balance $total: $held in accounts."
+            },
+            note = if (active.isEmpty()) null else "Balances are worked out from the starting balance and every transaction recorded.",
         )
-        // The total is what is held minus what is owed (a card's bill, a loan); say so, so the sum can be checked.
-        if (finance.owedBalance > 0) {
-            Text(
-                "${finance.money.format(finance.heldBalance)} in accounts, minus ${finance.money.format(finance.owedBalance)} owed",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = AppSpacing.lg, end = AppSpacing.lg, bottom = AppSpacing.md),
-            )
-        }
-        // The same accounts three ways; the choice is the Wallet's own (Settings > Wallet & Cards has it too).
-        SectionSubheader("Accounts")
-        ConnectedChoiceRow(
+        Spacer(Modifier.height(AppSpacing.xxl))
+        WalletSectionHeader(
+            title = "Accounts",
+            summary = buildString {
+                append(active.size).append(if (active.size == 1) " account" else " accounts")
+                if (archived.isNotEmpty()) append(" · ").append(archived.size).append(" archived")
+            },
+        )
+        Spacer(Modifier.height(AppSpacing.sm))
+        // The same accounts four ways; the choice is the Wallet's own (Settings > Wallet & Cards has it too).
+        LayoutChoice(
             options = accountsLayoutOptions,
             // Spread out, the accounts are no longer the stack: none is chosen, and "Stack" puts them back.
             selected = if (accountsDeck.unfolded) null else layout,
             onSelect = {
                 haptics.selection()
-                if (it == AccountsLayout.Stack && accountsDeck.unfolded) accountsDeck.fold() else onLayout(it)
+                // "Stack" while spread out only gathers them. Any other pick takes the accounts out of the stack for good: they
+                // aren't "spread out" any more, or no segment would show as chosen.
+                val gatheringOnly = it == AccountsLayout.Stack && accountsDeck.unfolded
+                accountsDeck.fold()
+                if (!gatheringOnly) onLayout(it)
             },
+            description = "How the accounts are shown",
         )
         Spacer(Modifier.height(AppSpacing.md))
-        val footer = if (active.isEmpty()) null else "Balances are worked out from the starting balance and every transaction recorded."
         if (layout == AccountsLayout.Rows) {
-            ListSection(footer = footer) {
+            ListSection {
                 for (a in active) item { AccountTile(a, cardsPerBank) }
                 item { AddAccountRow(actions::addAccount) }
             }
@@ -575,14 +618,6 @@ private fun AccountsSection(
                     title = "Add your first account",
                     supporting = "Cash, a bank, a card or a wallet",
                     onClick = actions::addAccount,
-                )
-            }
-            if (footer != null) {
-                Text(
-                    footer,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = AppSpacing.lg, end = AppSpacing.lg, top = AppSpacing.md),
                 )
             }
         }
@@ -674,6 +709,9 @@ private fun AccountCards(
             due = due?.let { "Due ${it.inWords}" },
             dueSoon = due?.soon == true,
             dueSpoken = due?.let { "bill ${it.line().replaceFirstChar(Char::lowercase)}" },
+            // A share of the money held is said only for money that is held, and never while amounts are hidden (it would give them away).
+            share = if (balance >= 0 && finance.heldBalance > 0 && !finance.money.hidden) percentLabel(shareOf(balance, finance.heldBalance)) else null,
+            hidden = finance.money.hidden,
         )
     }
     fun accountOf(card: AccountCardData) = accounts.first { it.id == card.id }
@@ -687,6 +725,20 @@ private fun AccountCards(
                 bankIconStyle = bankIconStyle,
             )
             // The stack's cards are a hair of colour behind the front one: the add tile under it is a slim one.
+            if (onAdd != null) {
+                Spacer(Modifier.height(AppSpacing.lg))
+                AddTile(title = "Add account", supporting = "Cash, a bank, a card or a wallet", onClick = onAdd, compact = true)
+            }
+        }
+    } else if (layout == AccountsLayout.Carousel) {
+        Column {
+            AccountCarousel(
+                accounts = cards,
+                onOpen = { navigator.openAccountHistory(it.id) },
+                onManage = { actions.manageAccount(accountOf(it)) },
+                bankIconStyle = bankIconStyle,
+            )
+            // As under the stack: the next account is a slim tile after the last.
             if (onAdd != null) {
                 Spacer(Modifier.height(AppSpacing.lg))
                 AddTile(title = "Add account", supporting = "Cash, a bank, a card or a wallet", onClick = onAdd, compact = true)
