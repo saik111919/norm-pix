@@ -58,7 +58,7 @@ fun CardCarousel(
             "${card.bankName} $kind card, ending in ${card.last4}, card ${index + 1} of $count"
         },
         modifier = modifier,
-        card = { card, inFront ->
+        card = { card, inFront, space ->
             WalletCardView(
                 card = card,
                 revealed = card.id in revealed,
@@ -72,6 +72,7 @@ fun CardCarousel(
                 onDelete = { onDelete(card) },
                 tilt = tilt.takeIf { inFront },
                 onCopy = { field -> onCopy(card, field) },
+                deck = space,
             )
         },
         details = { card -> CardDetails(card, revealed = card.id in revealed) },
@@ -84,7 +85,7 @@ fun CardCarousel(
                 onDelete = { onDelete(front) },
                 onShareNfc = { onShareNfc(front) },
                 onCopy = { onCopy(front, null) },
-                elevatedReveal = true,
+                compact = true,
             )
         },
     )

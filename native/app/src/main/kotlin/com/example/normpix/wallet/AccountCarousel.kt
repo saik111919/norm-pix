@@ -5,18 +5,23 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.ui.label
 import com.example.normpix.settings.BankIconStyle
 import com.example.normpix.ui.components.DeckCarousel
@@ -51,7 +56,7 @@ fun AccountCarousel(
         },
         bringForwardLabel = "Show this account",
         modifier = modifier,
-        card = { account, inFront ->
+        card = { account, inFront, _ ->
             if (inFront) {
                 AccountCardView(account, onOpen = { onOpen(account) }, onManage = { onManage(account) }, bankIconStyle = bankIconStyle, compact = true)
             } else {
@@ -61,12 +66,12 @@ fun AccountCarousel(
         details = { account -> AccountDetails(account) },
         footer = { front ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ElevatedPillButton(
-                    label = "History",
-                    icon = Icons.Outlined.History,
-                    onClick = { onOpen(front) },
-                    modifier = Modifier.weight(1f),
-                )
+                // The app's own button, as the Wallet's other actions are (Reveal under a card, Add card, Add account).
+                FilledTonalButton(onClick = { onOpen(front) }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Outlined.History, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(AppSpacing.sm))
+                    Text("History", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 Spacer(Modifier.width(AppSpacing.sm))
                 FilledTonalIconButton(onClick = { onManage(front) }) {
                     Icon(Icons.Outlined.Tune, contentDescription = "Manage account")

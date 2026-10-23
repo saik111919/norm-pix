@@ -1,12 +1,5 @@
 package com.example.normpix.wallet
 
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.LocalIndication
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -16,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -36,6 +30,7 @@ import androidx.compose.material.icons.outlined.Nfc
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.rounded.Contactless
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -81,14 +76,18 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.normpix.settings.BankIconStyle
 import com.example.normpix.settings.WalletCardActionStyle
+import com.example.normpix.ui.components.DeckCardSpace
 import com.example.normpix.ui.components.SwipeRevealRow
 import com.example.normpix.ui.components.rememberAppHaptics
+import kotlin.math.roundToInt
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
@@ -144,6 +143,8 @@ fun WalletCardView(
     tilt: CardTiltState? = null,
     /** Copies one [CardField] straight away, or - with null - opens the choice of what to copy. No copy control is shown when this is null. */
     onCopy: ((CardField?) -> Unit)? = null,
+    /** Set for a card standing in a deck: where it is drawn, so its print is scaled to the card's width and kept clear of the panel. */
+    deck: DeckCardSpace? = null,
 ) {
     val haptics = rememberAppHaptics()
     val scope = rememberCoroutineScope()
@@ -169,9 +170,18 @@ fun WalletCardView(
     val number = if (revealed) "number ${groupDigits(card.cardNumber)}" else "ending in ${card.last4}"
     val spoken = "${card.bankName} $kind card, $number, expires ${card.expiryMonth}/${card.expiryYear}, ${card.cardholderName}"
 
-    // Card art keeps a physical card's proportions, so it ignores the system font scale.
+    // Card art keeps a physical card's proportions, so it ignores the system font scale. In a deck the card is narrower than a
+    // card of a list: its print is drawn as it is on that one and shrunk to fit - spacing and size together, so the card is as
+    // roomy as the big one - and the card runs on under the panel, so the print keeps its margin above the panel's edge.
     val density = LocalDensity.current
-    val fixedDensity = remember(density) { Density(density.density, fontScale = 1f) }
+    val printScale = deck?.let { (it.width / PrintReferenceWidth).coerceIn(0.5f, 1f) } ?: 1f
+    // Type shrinks less than the rest: a caption of 9sp at 83% is a caption of 7.5sp.
+    val textScale = maxOf(printScale, MinTypeScale)
+    val fixedDensity = remember(density, printScale, textScale) {
+        Density(density.density * printScale, fontScale = textScale / printScale)
+    }
+    val underlapPx = with(density) { (deck?.underlap ?: 0.dp).roundToPx() }
+    val underlap = (deck?.underlap ?: 0.dp) / printScale
 
     val flipCard: @Composable () -> Unit = {
         CompositionLocalProvider(LocalDensity provides fixedDensity) {
@@ -180,7 +190,7 @@ fun WalletCardView(
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .aspectRatio(CARD_ASPECT)
+                    .cardProportions(underlapPx)
                     .clickable(onClickLabel = if (showingBack) "Shows the front" else showBack, onClick = ::doFlip)
                     .clearAndSetSemantics {
                         contentDescription = spoken
@@ -207,9 +217,9 @@ fun WalletCardView(
                     .then(if (tilt != null) Modifier.drawWithContent { drawContent(); drawSheen(tilt) } else Modifier),
             ) {
                 if (angle > 90f) {
-                    Box(Modifier.fillMaxSize().graphicsLayer { rotationY = 180f }) { CardBack(card, theme, revealed) }
+                    Box(Modifier.fillMaxSize().graphicsLayer { rotationY = 180f }) { CardBack(card, theme, revealed, underlap) }
                 } else {
-                    CardFront(card, theme, revealed, bankIconStyle)
+                    CardFront(card, theme, revealed, bankIconStyle, underlap)
                 }
             }
         }
@@ -279,88 +289,36 @@ internal fun CardActionBar(
     modifier: Modifier = Modifier,
     onShareNfc: (() -> Unit)? = null,
     onCopy: (() -> Unit)? = null,
-    /** Reveal as an [ElevatedPillButton] - a face with an edge under it, pressed down - rather than a tonal button. */
-    elevatedReveal: Boolean = false,
+    /**
+     * For a narrow bar (the carousel's panel, 288dp on a 360dp phone). The icon buttons take 48dp each - their touch targets - which
+     * leaves Reveal about 76dp, and a tonal button's usual 24dp either side left its label none ("Reveal" read as "."). Compact:
+     * the button's padding is tighter, and no gap is added between the icon buttons, whose targets are already 8dp apart.
+     */
+    compact: Boolean = false,
 ) {
+    val gap = if (compact) 0.dp else AppSpacing.xs
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        if (elevatedReveal) {
-            ElevatedPillButton(
-                label = revealLabelOf(revealed, nfcGated),
-                icon = revealIconOf(revealed, nfcGated),
-                onClick = onToggleReveal,
-                modifier = Modifier.weight(1f),
-            )
-        } else {
-            FilledTonalButton(onClick = onToggleReveal, modifier = Modifier.weight(1f)) {
-                Icon(revealIconOf(revealed, nfcGated), contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(AppSpacing.sm))
-                Text(revealLabelOf(revealed, nfcGated), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
+        FilledTonalButton(
+            onClick = onToggleReveal,
+            modifier = Modifier.weight(1f),
+            contentPadding = if (compact) PaddingValues(horizontal = 10.dp) else ButtonDefaults.ContentPadding,
+        ) {
+            Icon(revealIconOf(revealed, nfcGated), contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(if (compact) 6.dp else AppSpacing.sm))
+            Text(revealLabelOf(revealed, nfcGated), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Spacer(Modifier.width(AppSpacing.sm))
+        Spacer(Modifier.width(if (compact) AppSpacing.xs else AppSpacing.sm))
         if (onCopy != null) {
             FilledTonalIconButton(onClick = onCopy) { Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy card details") }
-            Spacer(Modifier.width(AppSpacing.xs))
+            Spacer(Modifier.width(gap))
         }
         if (onShareNfc != null) {
             FilledTonalIconButton(onClick = onShareNfc) { Icon(Icons.Rounded.Contactless, contentDescription = "Share via NFC") }
-            Spacer(Modifier.width(AppSpacing.xs))
+            Spacer(Modifier.width(gap))
         }
         FilledTonalIconButton(onClick = onEdit) { Icon(Icons.Outlined.Edit, contentDescription = "Edit card") }
-        Spacer(Modifier.width(AppSpacing.xs))
+        Spacer(Modifier.width(gap))
         FilledTonalIconButton(onClick = onDelete) { Icon(Icons.Outlined.DeleteOutline, contentDescription = "Delete card") }
-    }
-}
-
-private val ElevatedPillHeight = 48.dp
-private val ElevatedPillEdge = 3.dp
-
-/**
- * A pill in the primary colour with an edge under it - a darker lip a few dp deep - that the face sinks onto while it is
- * pressed: a button with depth, the way CRED's NeoPOP "elevated" buttons have it. The edge is part of the button's height, so
- * nothing moves when it is pressed but the face. With animations off the face still sinks, at once.
- */
-@Composable
-internal fun ElevatedPillButton(label: String, icon: ImageVector, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val scheme = MaterialTheme.colorScheme
-    val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    val reduced = rememberReducedMotion()
-    val sink by animateDpAsState(
-        targetValue = if (pressed) ElevatedPillEdge else 0.dp,
-        animationSpec = if (reduced) snap() else tween(AppMotion.SHORT_MS / 2, easing = AppMotion.standard),
-        label = "elevated_pill_sink",
-    )
-    Box(modifier.height(ElevatedPillHeight + ElevatedPillEdge)) {
-        Box(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(ElevatedPillHeight)
-                .background(lerp(scheme.primary, Color.Black, 0.32f), CircleShape),
-        )
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .height(ElevatedPillHeight)
-                .offset { IntOffset(0, sink.roundToPx()) }
-                .clip(CircleShape)
-                .background(scheme.primary)
-                .clickable(interactionSource = source, indication = LocalIndication.current, role = Role.Button, onClick = onClick),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(icon, contentDescription = null, tint = scheme.onPrimary, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(AppSpacing.sm))
-            Text(
-                label,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = scheme.onPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
     }
 }
 
@@ -417,9 +375,9 @@ private fun DrawScope.drawSheen(tilt: CardTiltState) {
 }
 
 @Composable
-private fun CardFront(card: StoredCard, theme: BankBrandTheme, revealed: Boolean, bankIconStyle: BankIconStyle) {
+private fun CardFront(card: StoredCard, theme: BankBrandTheme, revealed: Boolean, bankIconStyle: BankIconStyle, bottomInset: Dp = 0.dp) {
     val network = CardNetwork.fromNumber(card.cardNumber)
-    CardFace(theme) {
+    CardFace(theme, bottomInset = bottomInset) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f, fill = false)) { BankLogoView(card.bankName, theme, compact = bankIconStyle == BankIconStyle.Compact) }
@@ -532,7 +490,7 @@ private fun ContactlessMark() {
 }
 
 @Composable
-private fun CardBack(card: StoredCard, theme: BankBrandTheme, revealed: Boolean) {
+private fun CardBack(card: StoredCard, theme: BankBrandTheme, revealed: Boolean, bottomInset: Dp) {
     CardFace(theme, padding = 0.dp) {
         Column(Modifier.fillMaxSize()) {
             Spacer(Modifier.height(20.dp))
@@ -597,7 +555,11 @@ private fun CardBack(card: StoredCard, theme: BankBrandTheme, revealed: Boolean)
                 }
             }
             Spacer(Modifier.weight(1f))
-            Row(Modifier.fillMaxWidth().padding(AppSpacing.lg), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = AppSpacing.lg, top = AppSpacing.lg, end = AppSpacing.lg, bottom = AppSpacing.lg + bottomInset),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
                     theme.displayName,
                     modifier = Modifier.weight(1f),
@@ -615,7 +577,13 @@ private fun CardBack(card: StoredCard, theme: BankBrandTheme, revealed: Boolean)
 }
 
 @Composable
-internal fun CardFace(theme: BankBrandTheme, padding: androidx.compose.ui.unit.Dp = AppSpacing.lg, content: @Composable () -> Unit) {
+internal fun CardFace(
+    theme: BankBrandTheme,
+    padding: androidx.compose.ui.unit.Dp = AppSpacing.lg,
+    /** More room under the print, for a card whose lower edge is covered (a deck's panel stands over it). */
+    bottomInset: androidx.compose.ui.unit.Dp = 0.dp,
+    content: @Composable () -> Unit,
+) {
     // The one place a shadow is kept: card faces are physical objects, so a soft contact shadow reads as "card",
     // not "UI panel". It is painted, not an elevation shadow: the card turns in 3D (flip, tilt), and the system's
     // elevation shadow of a turned layer is drawn square and unrelated to the card's corners.
@@ -648,9 +616,31 @@ internal fun CardFace(theme: BankBrandTheme, padding: androidx.compose.ui.unit.D
                     style = Stroke(2.dp.toPx()),
                 )
             }
-            .padding(padding),
+            .padding(start = padding, top = padding, end = padding, bottom = padding + bottomInset),
     ) { content() }
 }
+
+/**
+ * A card's size: a physical card's proportions, plus [extraHeightPx] - the strip of a deck's card that the panel covers, so
+ * what shows above it is a whole card.
+ */
+private fun Modifier.cardProportions(extraHeightPx: Int): Modifier =
+    if (extraHeightPx == 0) {
+        aspectRatio(CARD_ASPECT)
+    } else {
+        layout { measurable, constraints ->
+            val width = constraints.maxWidth
+            val height = (width / CARD_ASPECT).roundToInt() + extraHeightPx
+            val placeable = measurable.measure(Constraints.fixed(width, height))
+            layout(width, height) { placeable.place(0, 0) }
+        }
+    }
+
+/** The width a card's print is drawn for: a card of the list on a 360dp phone. A deck's narrower card shrinks the print to fit. */
+private val PrintReferenceWidth = 328.dp
+
+/** The type on a shrunken card is never smaller than this share of its size on a card of the list. */
+private const val MinTypeScale = 0.9f
 
 /**
  * What every pill on a card is laid on before its own colour: a faint dark, so a translucent-white pill (the usual kind) does not

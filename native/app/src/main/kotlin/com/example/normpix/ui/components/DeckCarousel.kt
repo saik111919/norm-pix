@@ -32,6 +32,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
@@ -63,6 +64,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.normpix.finance.ui.TABULAR_FIGURES
@@ -77,14 +79,21 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /**
- * The card in front leaves this much of the window's width free on each side (within [MinCardWidth] and [MaxCardWidth]): room for
- * the cards beside it to show from behind, and for the panel's own margin to frame it. That makes it nearly as wide as the panel it
- * stands in. It was once two thirds of the window, and a card's print is a fixed size (it keeps a physical card's proportions,
- * whatever the width): on so narrow a card the bank's mark, the number, the cardholder and the expiry crowded one another.
+ * The card in front is this share of the window's width (within [MinCardWidth] and [MaxCardWidth]); the rest is for the ones
+ * beside it, which show from behind it about 44dp each side on a 360dp phone.
  */
-private val CardSideMargin = AppSpacing.xxl
-private val MinCardWidth = 260.dp
+private const val CARD_SHARE = 0.66f
+private val MinCardWidth = 272.dp
 private val MaxCardWidth = 400.dp
+
+/**
+ * Where a deck's card is drawn: how wide it is, and how much of its lower edge the panel covers ([underlap]). A face that
+ * wants its print to stay clear of the panel is drawn that much taller than a physical card - what shows above the panel is a
+ * whole card - and, being narrower than a card of a list, draws its print at the usual size and shrinks it to [width], so it
+ * is as roomy as that card is (a card this narrow once had its print crowded together, and its last line cut off by the panel).
+ */
+@Immutable
+class DeckCardSpace(val width: Dp, val underlap: Dp)
 
 /** Neighbouring cards' centres are this far apart, in card widths: far enough that each shows from behind the one in front of it. */
 private const val STEP_SHARE = 0.52f
@@ -126,8 +135,9 @@ val DeckMarkerInset = AppSpacing.x5l + AppSpacing.lg
  * The details of every card must be the same height (the same rows), so the panel does not change size mid-swipe; the first
  * line of them keeps clear of the page marker with `Modifier.padding(end = DeckMarkerInset)`.
  *
- * @param card one card's face, drawn at the card's full size; [inFront] says whether it is the one in front. It is turned and
- *   shaded by the deck, and is not pressable at the side: a tap there brings the card forward.
+ * @param card one card's face, drawn at the card's full size; [inFront] says whether it is the one in front, and the
+ *   [DeckCardSpace] where it is drawn (how wide, how much of its foot the panel covers). It is turned and shaded by the deck,
+ *   and is not pressable at the side: a tap there brings the card forward.
  * @param sideDescription how a screen reader hears a card that is not in front: it has one action, to bring it forward.
  * @param footer the controls under the details - the same set for every card, so they stay still and act on [front].
  */
@@ -137,7 +147,7 @@ fun <T : Any> DeckCarousel(
     itemKey: (T) -> Any,
     tint: (T) -> Color?,
     sideDescription: (item: T, index: Int, count: Int) -> String,
-    card: @Composable (item: T, inFront: Boolean) -> Unit,
+    card: @Composable (item: T, inFront: Boolean, space: DeckCardSpace) -> Unit,
     details: @Composable ColumnScope.(item: T) -> Unit,
     footer: @Composable ColumnScope.(front: T) -> Unit,
     modifier: Modifier = Modifier,
@@ -165,7 +175,8 @@ fun <T : Any> DeckCarousel(
 
     Box(modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
         BoxWithConstraints(Modifier.widthIn(max = MaxCarouselWidth).fillMaxWidth()) {
-            val cardWidth = (maxWidth - CardSideMargin * 2).coerceIn(MinCardWidth, MaxCardWidth).coerceAtMost(maxWidth - AppSpacing.xxl)
+            val cardWidth = (maxWidth * CARD_SHARE).coerceIn(MinCardWidth, MaxCardWidth).coerceAtMost(maxWidth - AppSpacing.xxl)
+            val space = DeckCardSpace(cardWidth, PocketOverlap)
             val step = cardWidth * STEP_SHARE
             val sidePadding = (maxWidth - step) / 2
             Column(Modifier.fillMaxWidth()) {
@@ -225,7 +236,7 @@ fun <T : Any> DeckCarousel(
                                 },
                             ),
                     ) {
-                        card(item, inFront)
+                        card(item, inFront, space)
                         if (!inFront) {
                             // A card at the side is a way to it, not a card to press: a tap brings it to the front. It has no ripple
                             // (it is turned and shaded), so keyboard focus is shown by a ring.
