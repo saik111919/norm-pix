@@ -60,6 +60,7 @@ import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.SearchField
+import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import java.time.LocalDateTime
@@ -123,6 +124,7 @@ fun PeoplePage() {
     AppSubPage(
         title = "People",
         onBack = navigator::back,
+        maxWidth = AppLayout.maxListWidth,
         actions = {
             IconButton(onClick = { actions.addPerson() }) { Icon(Icons.Rounded.PersonAdd, contentDescription = "Add person") }
         },

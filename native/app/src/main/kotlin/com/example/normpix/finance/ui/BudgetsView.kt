@@ -55,6 +55,7 @@ import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.StatusTag
 import com.example.normpix.ui.components.rememberAppHaptics
+import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppSpacing
 import java.time.LocalDateTime
 import kotlinx.coroutines.CoroutineScope
@@ -374,7 +375,7 @@ fun BudgetHistoryPage() {
     val navigator = LocalNavigator.current
     val until = remember { MonthKey.of(LocalDateTime.now()) }
     val history by rememberFinanceQuery(until) { budgetHistory(until) }
-    AppSubPage(title = "Budget history", onBack = navigator::back) {
+    AppSubPage(title = "Budget history", onBack = navigator::back, maxWidth = AppLayout.maxListWidth) {
         item {
             Column(Modifier.padding(AppSpacing.page)) {
                 when (val value = history) {

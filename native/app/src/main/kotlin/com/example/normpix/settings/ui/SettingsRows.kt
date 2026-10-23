@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -95,10 +96,21 @@ fun SettingsRow(
     onClick: (() -> Unit)? = null,
     /** Something at the row's end (a chevron, for a row that opens a page). */
     trailing: (@Composable () -> Unit)? = null,
+    /**
+     * Null for a row of the list on its own. With the list beside the page it opens (Settings on a tablet), whether that page is the
+     * open one: the row is filled if it is, and every row is announced as one of the list's tabs, the open one as selected.
+     */
+    selected: Boolean? = null,
 ) {
     ListItem(
-        modifier = modifier.then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = modifier.then(
+            when {
+                onClick == null -> Modifier
+                selected != null -> Modifier.selectable(selected = selected, role = Role.Tab, onClick = onClick)
+                else -> Modifier.clickable(onClick = onClick)
+            },
+        ),
+        colors = ListItemDefaults.colors(containerColor = selectedRowColor(selected == true)),
         leadingContent = { SettingsGlyph(icon, hue) },
         headlineContent = { Text(headline, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) },
         supportingContent = supporting?.let {
@@ -106,7 +118,11 @@ fun SettingsRow(
                 Text(
                     it,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (alert) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = when {
+                        alert -> MaterialTheme.colorScheme.error
+                        selected == true -> MaterialTheme.colorScheme.onSecondaryContainer
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -115,6 +131,11 @@ fun SettingsRow(
         trailingContent = trailing,
     )
 }
+
+/** What a row of the Settings list is filled with: nothing, or - for the page that is open beside the list - the secondary container. */
+@Composable
+private fun selectedRowColor(selected: Boolean): Color =
+    if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
 
 /**
  * The top row of Settings: the user's own picture and name - "Set up your profile" until they have given one - leading to the
@@ -128,10 +149,14 @@ fun ProfileSettingsRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     photo: String = "",
+    /** As for [SettingsRow]: null with the list on its own, else whether the Profile is the page open beside it. */
+    selected: Boolean? = null,
 ) {
     ListItem(
-        modifier = modifier.clickable(onClick = onClick),
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = modifier.then(
+            if (selected != null) Modifier.selectable(selected = selected, role = Role.Tab, onClick = onClick) else Modifier.clickable(onClick = onClick),
+        ),
+        colors = ListItemDefaults.colors(containerColor = selectedRowColor(selected == true)),
         leadingContent = { ProfileAvatar(name = name, emoji = emoji, size = 44.dp, photo = photo) },
         headlineContent = {
             Text(name.ifBlank { "Set up your profile" }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)

@@ -124,11 +124,12 @@ enum class WindowSize {
     /** 840-1199dp: tablets in landscape, desktop. Rail, two columns. */
     Expanded,
 
-    /** >= 1200dp: large desktop windows. Extended rail. */
+    /** >= 1200dp: large desktop windows and tablets in landscape. Wide rail (labels beside the icons), when the window is tall enough. */
     Large;
 
     val isCompact: Boolean get() = this == Compact
     val usesRail: Boolean get() = this != Compact
+    val isExpandedOrLarger: Boolean get() = this == Expanded || this == Large
 
     companion object {
         fun fromWidth(widthDp: Int): WindowSize = when {
@@ -154,11 +155,87 @@ fun rememberWindowSize(): WindowSize {
     return remember(width) { WindowSize.fromWidth(width) }
 }
 
+/** The height of the window the app is in, in whole dp. */
+@Composable
+fun rememberWindowHeightDp(): Int {
+    val heightPx = LocalWindowInfo.current.containerSize.height
+    val density = LocalDensity.current.density
+    return remember(heightPx, density) { (heightPx / density).toInt() }
+}
+
+/** What the app has beside its tabs: nothing (the floating dock is under them), the narrow rail, or the wide one with its labels beside the icons. */
+enum class RailStyle {
+    None,
+    Compact,
+    Wide,
+    ;
+
+    /** How much of the window's width it takes. */
+    val width: Dp
+        get() = when (this) {
+            None -> 0.dp
+            Compact -> AppLayout.railWidth
+            Wide -> AppLayout.wideRailWidth
+        }
+
+    companion object {
+        /**
+         * The rail for a window [widthDp] by [heightDp]. A window under 600dp wide has the dock. The wide rail takes a Large window -
+         * a tablet in landscape - as long as it is tall enough to hold its rows ([canBeWide]), unless the user has folded it down
+         * ([collapsed]); a phone on its side, however wide, keeps the narrow one, which holds as much in less room.
+         */
+        fun of(widthDp: Int, heightDp: Int, collapsed: Boolean = false): RailStyle = when {
+            WindowSize.fromWidth(widthDp) == WindowSize.Compact -> None
+            canBeWide(widthDp, heightDp) && !collapsed -> Wide
+            else -> Compact
+        }
+
+        /** Whether a window this size has room for the wide rail, and so for the button that folds it down and opens it again. */
+        fun canBeWide(widthDp: Int, heightDp: Int): Boolean =
+            WindowSize.fromWidth(widthDp) == WindowSize.Large && heightDp >= AppLayout.minRoomyHeight.value
+    }
+}
+
+/** True while the user has folded the wide rail down to the narrow one (Settings holds it, see `AppPrefsState.railCollapsed`). */
+val LocalRailCollapsed = compositionLocalOf { false }
+
+@Composable
+fun rememberRailStyle(): RailStyle {
+    val width = rememberWindowWidthDp()
+    val height = rememberWindowHeightDp()
+    val collapsed = LocalRailCollapsed.current
+    return remember(width, height, collapsed) { RailStyle.of(width, height, collapsed) }
+}
+
+/** Whether the window has room for the wide rail, folded down or not: the rail then has the button that folds it and opens it again. */
+@Composable
+fun rememberRailFoldable(): Boolean {
+    val width = rememberWindowWidthDp()
+    val height = rememberWindowHeightDp()
+    return remember(width, height) { RailStyle.canBeWide(width, height) }
+}
+
+/**
+ * Whether a screen that is a list of things that open pages (Settings) shows the list and the open page side by side: the window
+ * is [WindowSize.Expanded] or wider - room for the list and a page beside it - and tall enough that it is not a phone on its side.
+ */
+fun isListDetail(widthDp: Int, heightDp: Int): Boolean =
+    WindowSize.fromWidth(widthDp).isExpandedOrLarger && heightDp >= AppLayout.minRoomyHeight.value
+
+@Composable
+fun rememberListDetail(): Boolean {
+    val width = rememberWindowWidthDp()
+    val height = rememberWindowHeightDp()
+    return remember(width, height) { isListDetail(width, height) }
+}
+
 /** The width the app's tabs have: the window's, less the rail beside them once the window is wide enough for one. */
 @Composable
 fun rememberTabRoom(): Dp {
     val width = rememberWindowWidthDp()
-    return remember(width) { if (WindowSize.fromWidth(width).usesRail) width.dp - AppLayout.railWidth else width.dp }
+    val height = rememberWindowHeightDp()
+    val collapsed = LocalRailCollapsed.current
+    return remember(width, height, collapsed) { width.dp - RailStyle.of(width, height, collapsed).width }
 }
 
 object AppLayout {
@@ -176,6 +253,15 @@ object AppLayout {
 
     /** The navigation rail's width, on windows wide enough for it in place of the floating dock. */
     val railWidth = 96.dp
+
+    /** The wide rail's width on a Large window: room for a label beside its icon, and for the longest of its add buttons. */
+    val wideRailWidth = 256.dp
+
+    /** The shortest window the wide rail and the list-beside-page Settings are for: under it (a phone on its side) neither fits its rows. */
+    val minRoomyHeight = 480.dp
+
+    /** The width of the list when Settings shows it beside the page that is open. */
+    val listPaneWidth = 360.dp
 
     /** Bottom clearance under a tab that has the rail beside it: there is no dock or button over the list to scroll clear of. */
     val railBottomClearance = AppSpacing.xxl

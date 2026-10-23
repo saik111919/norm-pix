@@ -313,6 +313,11 @@ data class AppPrefsState(
     val walletCardsEnabled: Boolean = true,
     /** Blurs the background behind bottom sheets on supported devices. */
     val sheetBlurEnabled: Boolean = true,
+    /**
+     * The wide navigation rail of a Large window (a tablet in landscape) folded down by hand to the narrow one, with its button at
+     * the top; false, the rail is as wide as the window allows. Only a window that has the wide rail one to fold.
+     */
+    val railCollapsed: Boolean = false,
     /** Back button style and placement on sub-pages. */
     val backButtonStyle: BackButtonStyle = BackButtonStyle.TopFloatingCircle,
     /** How progress bars and loaders look, wherever the app shows progress. */
@@ -428,6 +433,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
             cardCvvEnabled = prefs.getBoolean(K_CARD_CVV, defaults.cardCvvEnabled),
             walletCardsEnabled = prefs.getBoolean(K_WALLET_CARDS, defaults.walletCardsEnabled),
             sheetBlurEnabled = prefs.getBoolean(K_SHEET_BLUR, defaults.sheetBlurEnabled),
+            railCollapsed = prefs.getBoolean(K_RAIL_COLLAPSED, defaults.railCollapsed),
             backButtonStyle = prefs.enum(K_BACK_STYLE, defaults.backButtonStyle),
             progressStyle = prefs.enum(K_PROGRESS_STYLE, defaults.progressStyle),
             monthControlStyle = prefs.enum(K_MONTH_CONTROL, defaults.monthControlStyle),
@@ -547,6 +553,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
 
     fun setSheetBlurEnabled(enabled: Boolean) =
         change({ copy(sheetBlurEnabled = enabled) }) { putBoolean(K_SHEET_BLUR, enabled) }
+
+    fun setRailCollapsed(collapsed: Boolean) =
+        change({ copy(railCollapsed = collapsed) }) { putBoolean(K_RAIL_COLLAPSED, collapsed) }
 
     fun setBackButtonStyle(style: BackButtonStyle) =
         change({ copy(backButtonStyle = style) }) { putString(K_BACK_STYLE, style.name) }
@@ -792,6 +801,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_CARD_CVV = "card_cvv_enabled"
         const val K_WALLET_CARDS = "wallet_cards_enabled"
         const val K_SHEET_BLUR = "sheet_blur_enabled"
+        const val K_RAIL_COLLAPSED = "rail_collapsed"
         const val K_BACK_STYLE = "back_button_style"
         const val K_PROGRESS_STYLE = "progress_style"
         const val K_MONTH_CONTROL = "month_control_style"

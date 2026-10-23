@@ -11,17 +11,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.example.normpix.reminders.ReminderAlertScreen
 import com.example.normpix.settings.AppPreferences
-import com.example.normpix.settings.ui.AppearanceSectionPage
-import com.example.normpix.settings.ui.AppearanceSettingsPage
-import com.example.normpix.settings.ui.AvailabilitySettingsPage
-import com.example.normpix.settings.ui.DataSettingsPage
-import com.example.normpix.settings.ui.NotificationsSettingsPage
-import com.example.normpix.settings.ui.UpdatesSettingsPage
-import com.example.normpix.settings.ui.FinanceSettingsPage
-import com.example.normpix.settings.ui.ProfilePage
-import com.example.normpix.settings.ui.SecuritySettingsPage
-import com.example.normpix.settings.ui.SettingsScreen
-import com.example.normpix.settings.ui.WalletSettingsPage
+import com.example.normpix.settings.ui.SettingsDetail
+import com.example.normpix.settings.ui.SettingsRoute
 import com.example.normpix.ui.components.LockGate
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -78,7 +69,6 @@ import com.example.normpix.finance.ui.PersonDetailPage
 import com.example.normpix.finance.ui.rememberFinanceState
 import com.example.normpix.finance.share.ReceiveSharedTransactions
 import com.example.normpix.updates.ui.OfferAppUpdates
-import com.example.normpix.updates.ui.UpdatePage
 import com.example.normpix.settings.PageAnimationType
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -101,6 +91,7 @@ import com.example.normpix.ui.components.rememberEasedBlur
 import com.example.normpix.ui.components.blurredBy
 import com.example.normpix.ui.theme.AppFont
 import com.example.normpix.ui.theme.Appearance
+import com.example.normpix.ui.theme.LocalRailCollapsed
 import com.example.normpix.ui.theme.LocalSystemReducedMotion
 import com.example.normpix.ui.theme.NormPixTheme
 import com.example.normpix.ui.theme.isDark
@@ -346,6 +337,7 @@ fun ProvideAppEnvironment(container: AppContainer, content: @Composable () -> Un
         LocalAppScope provides scope,
         LocalCategoryIconStyle provides prefs.categoryIconStyle,
         LocalCategoryIconShape provides prefs.categoryIconShape,
+        LocalRailCollapsed provides prefs.railCollapsed,
     ) {
         Box(Modifier.fillMaxSize()) {
             Box(
@@ -516,22 +508,15 @@ private fun AppNavigation(
                 Routes.ACCOUNT_HISTORY,
                 arguments = listOf(navArgument("accountId") { type = NavType.LongType }),
             ) { entry -> AccountHistoryPage(entry.arguments!!.getLong("accountId")) }
-            page(Routes.SETTINGS) { SettingsScreen() }
+            // Settings and the pages in it: a window with room shows the list with the page beside it (see SettingsRoute).
+            page(Routes.SETTINGS) { SettingsRoute() }
             page(
                 Routes.SETTINGS_PAGE,
                 arguments = listOf(navArgument("page") { type = NavType.StringType }),
             ) { entry ->
-                when (SettingsPage.entries.firstOrNull { it.name == entry.arguments?.getString("page") }) {
-                    SettingsPage.Appearance -> AppearanceSettingsPage()
-                    SettingsPage.Finance -> FinanceSettingsPage()
-                    SettingsPage.Data -> DataSettingsPage()
-                    SettingsPage.Security -> SecuritySettingsPage()
-                    SettingsPage.Wallet -> WalletSettingsPage()
-                    SettingsPage.Availability -> AvailabilitySettingsPage()
-                    SettingsPage.Notifications -> NotificationsSettingsPage()
-                    SettingsPage.Updates -> UpdatesSettingsPage()
-                    null -> SettingsScreen()
-                }
+                // A stale link (a name that is no page any more) lands on Settings itself.
+                val page = SettingsPage.entries.firstOrNull { it.name == entry.arguments?.getString("page") }
+                SettingsRoute(page?.let { SettingsDetail.Page(it) })
             }
             page(
                 Routes.APPEARANCE_SECTION,
@@ -539,10 +524,10 @@ private fun AppNavigation(
             ) { entry ->
                 // A stale link (a name that is no section any more) lands on Appearance itself.
                 val section = AppearanceSection.named(entry.arguments?.getString("section"))
-                if (section == null) AppearanceSettingsPage() else AppearanceSectionPage(section)
+                SettingsRoute(if (section == null) SettingsDetail.Page(SettingsPage.Appearance) else SettingsDetail.Appearance(section))
             }
-            page(Routes.PROFILE) { ProfilePage() }
-            page(Routes.UPDATE) { UpdatePage() }
+            page(Routes.PROFILE) { SettingsRoute(SettingsDetail.Profile) }
+            page(Routes.UPDATE) { SettingsRoute(SettingsDetail.Update) }
             page(Routes.SEARCH) { AppSearchPage() }
             page(
                 Routes.REMINDER_ALERT,

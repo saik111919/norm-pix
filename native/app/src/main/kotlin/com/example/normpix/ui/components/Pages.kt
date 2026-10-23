@@ -53,6 +53,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -68,6 +69,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
@@ -98,6 +100,32 @@ import kotlin.math.roundToInt
 
 /** False for the tabs when the rail is beside them: no floating dock (or button above it) is laid over the bottom of their lists. */
 val LocalFloatingDock = staticCompositionLocalOf { true }
+
+/**
+ * Set around a page that is the right-hand side of a list beside its page (Settings on a tablet). Such a page has the list
+ * beside it for a way out, so it has no back control, no floating back dock - unless it is itself a step inside another page
+ * ([canGoBack], an Appearance screen) - and no wish to sit under the dock's clearance.
+ */
+@Immutable
+class DetailPane(
+    val canGoBack: Boolean,
+    /** What the page is drawn on, where the pane has a tone of its own (a panel beside the list); unspecified for the page colour. */
+    val container: Color = Color.Unspecified,
+)
+
+/** The [DetailPane] this page is in, or null for a page that has the whole window. */
+val LocalDetailPane = staticCompositionLocalOf<DetailPane?> { null }
+
+/** What a page is drawn on: the page colour, or the tone of the panel it is the detail of. */
+@Composable
+internal fun pageColor(): Color =
+    LocalDetailPane.current?.container?.takeIf { it.isSpecified } ?: MaterialTheme.colorScheme.surface
+
+/**
+ * True for the list of a two-pane screen whose frame draws the back dock once, across the whole window (Settings, in the bottom-dock
+ * style): its page keeps its room for the dock - and so does the page beside it - but draws none of its own.
+ */
+val LocalDockHosted = staticCompositionLocalOf { false }
 
 /**
  * The frame for every top-level tab and pushed page: a clean, standard top app bar
@@ -225,6 +253,7 @@ private fun PageFrame(
     displayTitle: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val page = pageColor()
     val density = LocalDensity.current
     // A pinned header floats over the list, under the floating controls, and the list runs on beneath it.
     val overlayPinned = floatingTopBar && pinnedHeader != null
@@ -235,7 +264,7 @@ private fun PageFrame(
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val collapse = rememberTitleCollapse(listState)
     // A Surface (not just a background) so every Text on the page defaults to onSurface.
-    androidx.compose.material3.Surface(modifier.fillMaxSize(), color = scheme.surface) {
+    androidx.compose.material3.Surface(modifier.fillMaxSize(), color = page) {
       Box(contentAlignment = Alignment.TopCenter) {
         Column(
             Modifier
@@ -261,7 +290,7 @@ private fun PageFrame(
                     Spacer(Modifier.width(AppSpacing.xs))
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = scheme.surface,
+                    containerColor = page,
                     scrolledContainerColor = scheme.surfaceContainer,
                 ),
                 scrollBehavior = scrollBehavior,
@@ -313,12 +342,12 @@ private fun PageFrame(
                             .drawBehind {
                                 val fade = FloatingTopControls.fade.toPx()
                                 drawRect(
-                                    Brush.verticalGradient(listOf(scheme.surface, scheme.surface.copy(alpha = 0f)), startY = size.height, endY = size.height + fade),
+                                    Brush.verticalGradient(listOf(page, page.copy(alpha = 0f)), startY = size.height, endY = size.height + fade),
                                     topLeft = Offset(0f, size.height),
                                     size = Size(size.width, fade),
                                 )
                             }
-                            .background(scheme.surface),
+                            .background(page),
                     ) {
                         Spacer(Modifier.height(statusBar + FloatingTopControls.clearance))
                         pinnedHeader()
@@ -337,7 +366,7 @@ private fun PageFrame(
  */
 @Composable
 private fun TopScrim(collapse: State<Float>) {
-    val solid = MaterialTheme.colorScheme.surface
+    val solid = pageColor()
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     Box(
         Modifier
@@ -447,18 +476,26 @@ fun AppSubPage(
     showFloatingBack: Boolean = true,
     displayTitle: Boolean = false,
     largeTitle: Boolean = true,
+    /** How wide the page's column may be: a form or settings page keeps its 720dp, a list can take more of a big window. */
+    maxWidth: Dp = AppLayout.maxContentWidth,
     bottomBar: (@Composable () -> Unit)? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val navigator = LocalNavigator.current
     val backStyle = rememberBackButtonStyle()
+    // Beside a list that is always on screen a page has nowhere to go back to (see DetailPane), whatever the style.
+    val detail = LocalDetailPane.current
+    // A page beside a list has a pane to itself, wider than a phone's column: its rows take what they can of it, up to a list's width.
+    val columnMax = if (detail != null) maxOf(maxWidth, AppLayout.maxListWidth) else maxWidth
 
     val isTopFloatingCircle = backStyle == BackButtonStyle.TopFloatingCircle
     val isStandardTopBar = backStyle == BackButtonStyle.StandardTopBar
     val isBottomDock = backStyle == BackButtonStyle.BottomDock
 
-    val showTopBackEffective = showTopBack || isTopFloatingCircle || isStandardTopBar
-    val showFloatingBackEffective = showFloatingBack && isBottomDock
+    val showTopBackEffective = if (detail != null) detail.canGoBack else showTopBack || isTopFloatingCircle || isStandardTopBar
+    // Room for the dock is kept wherever the style has one; it is drawn here only by a page with the window to itself.
+    val reservesDock = showFloatingBack && isBottomDock
+    val showFloatingBackEffective = reservesDock && detail == null && !LocalDockHosted.current
 
     val barScroll = rememberScrollAwareBarState()
     val listAtEdge by remember(listState) {
@@ -499,10 +536,11 @@ fun AppSubPage(
                 // With a bottom bar the list ends where the bar starts, which has cleared the navigation bar and the dock already.
                 bottomPadding = when {
                     bottomBar != null -> AppSpacing.lg
-                    showFloatingBackEffective -> AppLayout.navClearance + 24.dp
+                    reservesDock -> AppLayout.navClearance + 24.dp
                     else -> AppLayout.navClearance
                 },
                 insetBottom = bottomBar == null,
+                maxWidth = columnMax,
                 floatingTopBar = isTopFloatingCircle,
                 displayTitle = displayTitle,
                 largeTitle = largeTitle,
@@ -518,11 +556,11 @@ fun AppSubPage(
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface)
-                        .then(if (showFloatingBackEffective) Modifier.padding(bottom = dockClearance) else Modifier.navigationBarsPadding()),
+                        .background(pageColor())
+                        .then(if (reservesDock) Modifier.padding(bottom = dockClearance) else Modifier.navigationBarsPadding()),
                     contentAlignment = Alignment.TopCenter,
                 ) {
-                    Box(Modifier.widthIn(max = AppLayout.maxContentWidth).fillMaxWidth()) { bottomBar() }
+                    Box(Modifier.widthIn(max = columnMax).fillMaxWidth()) { bottomBar() }
                 }
             }
         }
@@ -531,10 +569,10 @@ fun AppSubPage(
                 title = title,
                 listState = listState,
                 backdrop = backdrop,
-                maxWidth = AppLayout.maxContentWidth,
+                maxWidth = columnMax,
                 titleFromList = true,
                 listUnderRow = true,
-                leading = { FloatingCircleBackButton(onBack = onBack) },
+                leading = if (showTopBackEffective) ({ FloatingCircleBackButton(onBack = onBack) }) else null,
                 actions = actions,
                 actionsVisible = actionsVisible,
             )

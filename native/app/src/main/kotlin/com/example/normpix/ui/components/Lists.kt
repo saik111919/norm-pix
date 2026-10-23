@@ -122,6 +122,9 @@ fun ListSection(
     content: ListSectionScope.() -> Unit,
 ) {
     val rows = ListSectionScope().apply(content).rows
+    // Beside a list (a tablet's Settings) the groups of a page are flat, as the rows of a tablet's own Settings are: no tonal card behind
+    // them, just the rows, one under another. The panel they are on is what sets them off the page.
+    val drawn = if (LocalDetailPane.current != null) FlatListStyle else style
     Column(modifier.fillMaxWidth()) {
         if (title != null) SectionSubheader(title)
         if (intro != null) {
@@ -132,8 +135,8 @@ fun ListSection(
             )
         }
         rows.forEachIndexed { index, row ->
-            Box(Modifier.padding(top = if (index == 0) 0.dp else style.gap)) {
-                ListSegment(isFirst = index == 0, isLast = index == rows.lastIndex, style = style) { row() }
+            Box(Modifier.padding(top = if (index == 0) 0.dp else drawn.gap)) {
+                ListSegment(isFirst = index == 0, isLast = index == rows.lastIndex, style = drawn) { row() }
             }
         }
         if (footer != null) {
@@ -146,6 +149,9 @@ fun ListSection(
         }
     }
 }
+
+/** How a [ListSection] is drawn on a page beside a list: no fill, rows with a 12dp ripple and no gap between them. */
+private val FlatListStyle = ListSectionStyle(outer = AppRadius.md, inner = AppRadius.md, gap = 0.dp, container = Color.Transparent)
 
 /**
  * How a [ListSection] is drawn: the radius of the corners at the ends of the group ([outer]) and between its rows ([inner]),

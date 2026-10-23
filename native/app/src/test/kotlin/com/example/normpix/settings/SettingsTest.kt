@@ -92,6 +92,19 @@ class AppPreferencesTest {
     }
 
     @Test
+    fun theWideRailIsFoldedByHand_keptAndReset() {
+        val store = prefs()
+        val preferences = AppPreferences(store)
+        assertEquals(false, preferences.state.value.railCollapsed, "the rail is as wide as the window allows until it is folded")
+        preferences.setRailCollapsed(true)
+        assertTrue(preferences.state.value.railCollapsed)
+        assertTrue(AppPreferences(store).state.value.railCollapsed, "kept for the next launch")
+        preferences.resetToDefaults()
+        assertEquals(false, preferences.state.value.railCollapsed)
+        assertEquals(false, AppPreferences(store).state.value.railCollapsed)
+    }
+
+    @Test
     fun backButtonStyleCanBeToggled() {
         val store = prefs()
         val preferences = AppPreferences(store)
