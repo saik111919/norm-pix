@@ -187,22 +187,25 @@ fun FinanceSettingsPage() {
     }
 }
 
+/** The currencies as a list to choose from: the Indian rupee can be picked, the others are shown dimmed as coming soon. */
 @Composable
-private fun CurrencySheet(current: CurrencySpec, onPick: (CurrencySpec?) -> Unit) {
+internal fun CurrencySheet(current: CurrencySpec, onPick: (CurrencySpec?) -> Unit) {
     Column(Modifier.verticalScroll(rememberScrollState())) {
         Box(Modifier.padding(start = AppSpacing.xxl, end = AppSpacing.xxl, bottom = AppSpacing.sm)) {
             SheetHeader(
                 title = "Currency",
-                subtitle = "Changes how amounts are shown. Existing amounts are not converted.",
+                subtitle = "Only the Indian rupee is available for now. The others are on their way.",
             )
         }
         Column(Modifier.selectableGroup()) {
             for (c in CurrencySpec.all) {
+                val active = CurrencySpec.isActive(c.code)
                 RadioRow(
                     headline = c.name,
-                    supporting = "${c.code} · ${c.symbol.trim()}",
+                    supporting = "${c.code} · ${c.symbol.trim()}" + if (active) "" else " · Coming soon",
                     selected = c.code == current.code,
                     onClick = { onPick(c) },
+                    enabled = active,
                     modifier = Modifier.padding(horizontal = AppSpacing.sm),
                 )
             }

@@ -34,6 +34,14 @@ data class CurrencySpec(
             CurrencySpec("JPY", "¥", "Japanese yen", 0),
         )
 
+        /**
+         * The currencies that can be chosen for now: only the Indian rupee. The rest of [all] stay in the catalogue - they can
+         * still be shown, formatted and restored from a backup - but are listed as coming soon and can't be picked.
+         */
+        val active: List<CurrencySpec> = listOf(INR)
+
+        fun isActive(code: String): Boolean = active.any { it.code == code }
+
         fun byCode(code: String): CurrencySpec = all.firstOrNull { it.code == code } ?: INR
     }
 }

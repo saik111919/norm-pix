@@ -293,7 +293,10 @@ fun SwitchRow(
     )
 }
 
-/** One option of a single-choice setting. Put a group of these in a [ListSection] with `Modifier.selectableGroup()`. */
+/**
+ * One option of a single-choice setting. Put a group of these in a [ListSection] with `Modifier.selectableGroup()`. An option
+ * that is not [enabled] is shown dimmed, announced as unavailable, and can't be picked.
+ */
 @Composable
 fun RadioRow(
     headline: String,
@@ -302,13 +305,15 @@ fun RadioRow(
     modifier: Modifier = Modifier,
     supporting: String? = null,
     trailing: (@Composable () -> Unit)? = null,
+    enabled: Boolean = true,
 ) {
+    val dim = if (enabled) 1f else 0.38f
     androidx.compose.material3.ListItem(
-        modifier = modifier.selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
+        modifier = modifier.selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick),
         colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
-        leadingContent = { androidx.compose.material3.RadioButton(selected = selected, onClick = null) },
-        headlineContent = { Text(headline) },
-        supportingContent = supporting?.let { { Text(it) } },
+        leadingContent = { androidx.compose.material3.RadioButton(selected = selected, onClick = null, enabled = enabled) },
+        headlineContent = { Text(headline, modifier = Modifier.alpha(dim)) },
+        supportingContent = supporting?.let { { Text(it, modifier = Modifier.alpha(dim)) } },
         trailingContent = trailing,
     )
 }

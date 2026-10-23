@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -23,6 +24,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.height
+import androidx.compose.ui.unit.width
 import com.example.normpix.screens.WalletScreen
 import com.example.normpix.settings.CardsLayout
 import com.example.normpix.testing.InMemoryVault
@@ -271,6 +274,24 @@ class CardsLayoutTest {
         // (Text widths are not measured: this test class runs on Robolectric's legacy text, where a string is a dp a letter.)
         assertTrue(number.left < card.right, "under the card, not off to its right: $number, $card")
         assertTrue(reveal.top >= number.bottom, "and the buttons are under the details")
+    }
+
+    /**
+     * A card's print is a fixed size, so on a narrow card the bank's mark, the number, the cardholder and the expiry crowded one
+     * another: the carousel's card was two thirds of the window. It is nearly the panel's width now, with the ones beside it
+     * still showing from behind either side.
+     */
+    @Test
+    fun theCardInFrontIsNearlyAsWideAsThePanelItStandsIn_withTheOthersStillShowingBesideIt() {
+        showWallet(CardsLayout.Carousel)
+
+        val screen = compose.onRoot().getUnclippedBoundsInRoot()
+        val card = compose.onNodeWithContentDescription("HDFC Bank debit card, ending in", substring = true).getUnclippedBoundsInRoot()
+        assertTrue(card.width > screen.width * 0.8f, "wide: ${card.width} of a ${screen.width} window")
+        assertTrue(card.left - screen.left >= 16.dp, "the next card shows beside it, on the left: $card in $screen")
+        assertTrue(screen.right - card.right >= 16.dp, "and on the right: $card in $screen")
+        // Still the proportions of a physical card.
+        assertEquals(1.586f, card.width.value / card.height.value, 0.02f)
     }
 
     @Test

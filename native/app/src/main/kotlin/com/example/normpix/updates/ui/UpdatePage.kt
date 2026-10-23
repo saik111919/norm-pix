@@ -1,13 +1,13 @@
 package com.example.normpix.updates.ui
 
+import android.text.format.DateFormat
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.UpdateDisabled
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -18,16 +18,24 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
+import com.example.normpix.navigation.SettingsPage
+import com.example.normpix.settings.ui.automaticUpdatesSummary
 import com.example.normpix.ui.components.AppEmptyState
 import com.example.normpix.ui.components.AppSubPage
+import com.example.normpix.ui.components.LeadingIcon
+import com.example.normpix.ui.components.ListRow
+import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.updates.AppUpdater
 import com.example.normpix.updates.UpdateState
 import com.example.normpix.updates.release
+import kotlinx.coroutines.launch
 
 /**
  * Check for updates (Settings, and Automatic updates' Check now) on a page of its own: opened, it asks GitHub for the latest
@@ -39,6 +47,9 @@ import com.example.normpix.updates.release
  * no title of the page's own above them, and all that scrolls while the buttons stay pinned at the foot of the screen
  * ([UpdateActionStack]): Update now - or Install, or whatever is next - filled and across the page, and Later, or whatever
  * the way out is, outlined under it.
+ *
+ * Under that come the changelog ([ChangelogSection]: what every version changed, the installed one open, readable offline from
+ * what was saved) and the way to Automatic updates, so this one page is where everything about updating is.
  *
  * Leaving it never stops a download: that carries on with NormPix closed, its progress in a notification.
  */
@@ -75,6 +86,14 @@ private fun UpdatePageFor(updater: AppUpdater, onClose: () -> Unit) {
         val current = updater.state.value
         if (current.release == null && current !is UpdateState.Checking) updater.check()
     }
+    // The changelog is read as the page opens, whatever the update check finds: what each version changed is there to read
+    // for the version already installed too.
+    val changelog by updater.changelog.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(updater) { updater.loadChangelog() }
+    val prefs by LocalAppContainer.current.preferences.state.collectAsStateWithLifecycle()
+    val is24Hour = DateFormat.is24HourFormat(LocalContext.current)
+    val navigator = LocalNavigator.current
     val actions = updateActionsFor(updater, onClose)
     val listState = rememberLazyListState()
     AppSubPage(
@@ -86,18 +105,37 @@ private fun UpdatePageFor(updater: AppUpdater, onClose: () -> Unit) {
         bottomBar = { UpdateBottomBar(state, actions, listState) },
     ) {
         item(key = "update") {
-            Column {
-                UpdateScreenBody(state, updater.installed, Modifier.padding(horizontal = AppSpacing.xl))
-                if (updater.enabled) {
-                    Spacer(Modifier.height(AppSpacing.lg))
-                    Text(
-                        "Only GitHub is contacted. Every update is checked against its release, and Android installs it only if it's " +
-                            "signed with the same key as the NormPix on this phone. Your data stays as it is.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = AppSpacing.xl),
-                    )
+            UpdateScreenBody(state, updater.installed, Modifier.padding(horizontal = AppSpacing.xl))
+        }
+        item(key = "changelog") {
+            ChangelogSection(
+                state = changelog,
+                installed = updater.installed,
+                onRetry = { scope.launch { updater.loadChangelog() } },
+                modifier = Modifier.padding(AppSpacing.page).padding(top = AppSpacing.lg),
+            )
+        }
+        if (updater.enabled) {
+            item(key = "settings") {
+                ListSection(title = "Update settings", modifier = Modifier.padding(AppSpacing.page)) {
+                    item {
+                        ListRow(
+                            headline = "Automatic updates",
+                            supporting = automaticUpdatesSummary(prefs, is24Hour),
+                            leading = { LeadingIcon(Icons.Outlined.Update) },
+                            onClick = { navigator.openSettings(SettingsPage.Updates) },
+                        )
+                    }
                 }
+            }
+            item(key = "privacy") {
+                Text(
+                    "Only GitHub is contacted. Every update is checked against its release, and Android installs it only if it's " +
+                        "signed with the same key as the NormPix on this phone. Your data stays as it is.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = AppSpacing.xl).padding(top = AppSpacing.lg),
+                )
             }
         }
     }

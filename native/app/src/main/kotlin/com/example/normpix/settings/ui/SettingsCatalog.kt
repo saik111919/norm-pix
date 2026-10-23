@@ -82,6 +82,7 @@ object SettingsCatalog {
         // Finance
         SettingsEntry("Categories", null, listOf("categories", "labels", "tags"), special = SettingsSpecial.Categories),
         SettingsEntry("People", null, listOf("people", "person", "split", "spending by person", "family", "friends", "who"), special = SettingsSpecial.People),
+        SettingsEntry("Currency", SettingsPage.Finance, listOf("currency", "rupee", "inr", "indian", "money", "symbol", "dollar", "euro")),
         SettingsEntry("Default account", SettingsPage.Finance, listOf("default account", "preferred account")),
         SettingsEntry("Swipe actions", SettingsPage.Finance, listOf("swipe", "edit", "delete", "gesture", "list")),
         SettingsEntry("Financial year start", SettingsPage.Finance, listOf("financial year", "fiscal", "april", "january")),
@@ -121,6 +122,7 @@ object SettingsCatalog {
         // System
         SettingsEntry("Reset all settings", null, listOf("defaults", "reset", "clear preferences"), special = SettingsSpecial.Reset),
         SettingsEntry("Check for updates", null, listOf("update", "upgrade", "new version", "latest", "download", "install", "apk", "release", "github", "automatic"), special = SettingsSpecial.Updates),
+        SettingsEntry("What's new & changelog", null, listOf("what's new", "whats new", "changelog", "change log", "release notes", "version history", "latest changes", "new features", "version"), special = SettingsSpecial.Updates),
         SettingsEntry("Automatic updates", SettingsPage.Updates, listOf("automatic updates", "auto update", "background", "install automatically", "download automatically", "wi-fi", "wifi", "mobile data", "cellular", "metered", "hotspot", "network")),
         SettingsEntry("How often to check for updates", SettingsPage.Updates, listOf("how often", "frequency", "interval", "update schedule", "daily", "weekly", "twice a day", "once a day", "every 3 days", "once a week")),
         SettingsEntry("Update check time", SettingsPage.Updates, listOf("check time", "set time", "at a set time", "time of day", "when to check", "any time", "update time")),
@@ -225,7 +227,7 @@ fun rememberSettingsSystemActions(): SettingsSystemActions {
 
     /**
      * The update page: it asks GitHub (unless an update is already found, downloading or waiting) and shows where updating
-     * stands - an update to download, its progress, ready to install, or up to date.
+     * stands - an update to download, its progress, ready to install, or up to date - with the changelog under it.
      */
     fun checkForUpdates() {
         if (container.updates == null) return
