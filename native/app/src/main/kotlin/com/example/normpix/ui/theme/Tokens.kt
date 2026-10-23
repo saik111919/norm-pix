@@ -154,12 +154,31 @@ fun rememberWindowSize(): WindowSize {
     return remember(width) { WindowSize.fromWidth(width) }
 }
 
+/** The width the app's tabs have: the window's, less the rail beside them once the window is wide enough for one. */
+@Composable
+fun rememberTabRoom(): Dp {
+    val width = rememberWindowWidthDp()
+    return remember(width) { if (WindowSize.fromWidth(width).usesRail) width.dp - AppLayout.railWidth else width.dp }
+}
+
 object AppLayout {
     /** Max width for single-column reading content (lists, forms, settings). */
     val maxContentWidth = 720.dp
 
+    /** Max width for a list that is one column on a big window (transactions): wider than a form, short of stretching a row. */
+    val maxListWidth = 840.dp
+
     /** Max width for multi-column dashboards on large windows. */
     val maxWideContentWidth = 1200.dp
+
+    /** The room (after the page's own padding) from which a dashboard page lays itself out in two columns. */
+    val twoColumnMinWidth = 760.dp
+
+    /** The navigation rail's width, on windows wide enough for it in place of the floating dock. */
+    val railWidth = 96.dp
+
+    /** Bottom clearance under a tab that has the rail beside it: there is no dock or button over the list to scroll clear of. */
+    val railBottomClearance = AppSpacing.xxl
 
     /** Bottom clearance so the last list item scrolls above the floating navbar. */
     val navClearance = 100.dp

@@ -59,6 +59,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -94,6 +95,9 @@ import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppSpacing
 import kotlin.math.roundToInt
+
+/** False for the tabs when the rail is beside them: no floating dock (or button above it) is laid over the bottom of their lists. */
+val LocalFloatingDock = staticCompositionLocalOf { true }
 
 /**
  * The frame for every top-level tab and pushed page: a clean, standard top app bar
@@ -134,6 +138,10 @@ fun AppPage(
     largeTitle: Boolean = true,
     content: LazyListScope.() -> Unit,
 ) {
+    // Under a tab with the rail beside it nothing floats over the list: it ends a step under its last row, clear of the system bar.
+    val railBeside = !LocalFloatingDock.current
+    val listBottomPadding = if (railBeside) AppLayout.railBottomClearance else bottomPadding
+    val listInsetBottom = insetBottom || railBeside
     val floatsItself = !floatingTopBar && rememberBackButtonStyle() == BackButtonStyle.TopFloatingCircle
     if (!floatsItself) {
         PageFrame(
@@ -144,8 +152,8 @@ fun AppPage(
             pinnedHeader = pinnedHeader,
             maxWidth = maxWidth,
             listState = listState,
-            bottomPadding = bottomPadding,
-            insetBottom = insetBottom,
+            bottomPadding = listBottomPadding,
+            insetBottom = listInsetBottom,
             imeAware = imeAware,
             floatingTopBar = floatingTopBar,
             displayTitle = displayTitle,
@@ -166,8 +174,8 @@ fun AppPage(
             pinnedHeader = pinnedHeader,
             maxWidth = maxWidth,
             listState = listState,
-            bottomPadding = bottomPadding,
-            insetBottom = insetBottom,
+            bottomPadding = listBottomPadding,
+            insetBottom = listInsetBottom,
             imeAware = imeAware,
             floatingTopBar = true,
             largeTitle = pushed && largeTitle,

@@ -1,7 +1,6 @@
 package com.example.normpix.finance.ui
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
@@ -68,6 +66,7 @@ import com.example.normpix.finance.domain.shareOf
 import com.example.normpix.navigation.AmountsVisibilityButton
 import com.example.normpix.navigation.AppNavigator
 import com.example.normpix.navigation.LocalNavigator
+import com.example.normpix.ui.components.AdaptiveColumns
 import com.example.normpix.ui.components.AppEmptyState
 import com.example.normpix.ui.components.AppErrorState
 import com.example.normpix.ui.components.AppLoadingState
@@ -265,7 +264,7 @@ fun InsightsScreen(listState: LazyListState = rememberLazyListState()) {
                             // and - one tap away - the supporting detail.
                             val hasActivity = data.summary.count > 0
                             val hasDetail = data.daily.isNotEmpty() || data.income.isNotEmpty()
-                            Columns(
+                            AdaptiveColumns(
                                 narrow = {
                                     if (hasActivity) Snapshot(data) else EmptyMonth(data, onAdd = { actions.addTransaction() })
                                     Trend(data)
@@ -304,22 +303,6 @@ fun InsightsScreen(listState: LazyListState = rememberLazyListState()) {
             onDismiss = { picking = false },
             latest = LocalDate.now(),
         )
-    }
-}
-
-/** One column in reading order on phones ([narrow]); two balanced columns on wide windows. */
-@Composable
-private fun Columns(narrow: @Composable () -> Unit, left: @Composable () -> Unit, right: @Composable () -> Unit) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        if (maxWidth < 760.dp) {
-            Column { narrow() }
-        } else {
-            Row {
-                Column(Modifier.weight(1f)) { left() }
-                Spacer(Modifier.width(AppSpacing.xl))
-                Column(Modifier.weight(1f)) { right() }
-            }
-        }
     }
 }
 

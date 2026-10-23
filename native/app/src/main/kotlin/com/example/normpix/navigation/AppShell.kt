@@ -11,13 +11,18 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.automirrored.rounded.CallReceived
@@ -32,9 +37,14 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Insights
+import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
@@ -86,11 +96,13 @@ import com.example.normpix.screens.HomeScreen
 import com.example.normpix.screens.PlansAndTransactionsScreen
 import com.example.normpix.settings.PageAnimationType
 import com.example.normpix.screens.WalletScreen
+import com.example.normpix.ui.components.LocalFloatingDock
 import com.example.normpix.ui.components.LocalFrostedBackdrop
 import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.frostedSource
 import com.example.normpix.ui.components.rememberFrostedBackdrop
 import com.example.normpix.ui.theme.AppIcons
+import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.WindowSize
@@ -254,8 +266,8 @@ fun AppShell(
     // Hardware or predictive back closes the More menu first before navigating back
     BackHandler(enabled = isMoreOpen) { isMoreOpen = false }
 
-    // Contextual actions surfaced inside the More / Actions bottom action area:
-    val contextualActions = remember(current, shell.tab, shell.section, walletLocked, prefs.walletCardsEnabled) {
+    // What the screen in front can add: the first of these, the main one, is the dock's button or the rail's.
+    val pageActions = remember(current, shell.tab, shell.section, walletLocked, prefs.walletCardsEnabled) {
         buildList {
             when (current) {
                 AppDestination.Home -> {
@@ -370,16 +382,16 @@ fun AppShell(
                     )
                 }
             }
-            // Settings are always accessible as part of the More / Actions menu
-            add(
-                FooterAction(
-                    label = "Settings",
-                    icon = Icons.Outlined.Settings,
-                    isPrimary = false,
-                    onClick = { navigator.openSettings() },
-                ),
-            )
         }
+    }
+    // Contextual actions surfaced inside the More / Actions bottom action area; Settings are always accessible as part of it.
+    val contextualActions = remember(pageActions, navigator) {
+        pageActions + FooterAction(
+            label = "Settings",
+            icon = Icons.Outlined.Settings,
+            isPrimary = false,
+            onClick = { navigator.openSettings() },
+        )
     }
 
     val compact = size == WindowSize.Compact
@@ -462,27 +474,42 @@ fun AppShell(
 
     if (!compact) {
         Row(Modifier.fillMaxSize()) {
-            NavigationRail {
-                for (d in AppDestination.entries) {
-                    NavigationRailItem(
-                        selected = d == current,
-                        onClick = { shell.selected = d.ordinal },
-                        icon = { DestinationIcon(d, selected = d == current, overdue = overdue) },
-                        label = { Text(d.label, textAlign = TextAlign.Center, maxLines = 2) },
-                        alwaysShowLabel = true,
-                    )
+            // The rail's label is a word or two, wrapped to its width: unbounded, "Plans & Activity" ran out past both edges.
+            val railLabel = Modifier.widthIn(max = AppLayout.railWidth - AppSpacing.sm)
+            NavigationRail(
+                modifier = Modifier.width(AppLayout.railWidth),
+                header = { RailActions(pageActions) },
+            ) {
+                // The destinations scroll when the window is short (a phone on its side), so none is out of reach;
+                // Settings stays where it is under them.
+                Column(
+                    Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(AppSpacing.md),
+                ) {
+                    for (d in AppDestination.entries) {
+                        NavigationRailItem(
+                            selected = d == current,
+                            onClick = { shell.selected = d.ordinal },
+                            icon = { DestinationIcon(d, selected = d == current, overdue = overdue) },
+                            label = { Text(d.label, textAlign = TextAlign.Center, maxLines = 2, modifier = railLabel) },
+                            alwaysShowLabel = true,
+                        )
+                    }
                 }
-                Spacer(Modifier.weight(1f))
                 NavigationRailItem(
                     selected = false,
                     onClick = { navigator.openSettings() },
                     icon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
-                    label = { Text("Settings") },
+                    label = { Text("Settings", textAlign = TextAlign.Center, maxLines = 1, modifier = railLabel) },
                     alwaysShowLabel = true,
                     modifier = Modifier.padding(bottom = AppSpacing.lg),
                 )
             }
-            tabs(Modifier.weight(1f))
+            // Nothing floats over the tabs here: their lists end under their last row (see LocalFloatingDock).
+            CompositionLocalProvider(LocalFloatingDock provides false) {
+                tabs(Modifier.weight(1f))
+            }
         }
     } else {
         // The dock is glass: it blurs a recording of the tabs it floats over (it must stay out of the recording itself).
@@ -519,6 +546,41 @@ fun AppShell(
                         .offset { IntOffset(0, (goneFraction * barHeightPx).roundToInt()) }
                         .graphicsLayer { alpha = 1f - goneFraction.coerceIn(0f, 1f) },
                 )
+            }
+        }
+    }
+}
+
+/**
+ * The rail's way to add: a button for the main thing the screen in front adds (an expense, a card, a reminder...), and under
+ * it, when there are others, a menu of them. The dock has these in its More control; the rail has no dock to carry them.
+ */
+@Composable
+private fun RailActions(actions: List<FooterAction>) {
+    val main = actions.firstOrNull { it.isPrimary } ?: actions.firstOrNull() ?: return
+    val others = actions.filter { it !== main }
+    var open by remember { mutableStateOf(false) }
+    Column(
+        Modifier.padding(top = AppSpacing.sm),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.xs),
+    ) {
+        FloatingActionButton(onClick = main.onClick) { Icon(main.icon, contentDescription = main.label) }
+        if (others.isNotEmpty()) {
+            Box {
+                IconButton(onClick = { open = true }) { Icon(Icons.Rounded.MoreHoriz, contentDescription = "More actions") }
+                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                    for (action in others) {
+                        DropdownMenuItem(
+                            text = { Text(action.label) },
+                            leadingIcon = { Icon(action.icon, contentDescription = null) },
+                            onClick = {
+                                open = false
+                                action.onClick()
+                            },
+                        )
+                    }
+                }
             }
         }
     }

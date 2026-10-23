@@ -309,6 +309,7 @@ fun TransactionHistory(
         onBack = onBack,
         actions = actions,
         pinnedHeader = pinnedHeader,
+        maxWidth = AppLayout.maxListWidth,
         listState = listState,
         bottomPadding = AppLayout.fabClearance,
         insetBottom = insetBottom,
