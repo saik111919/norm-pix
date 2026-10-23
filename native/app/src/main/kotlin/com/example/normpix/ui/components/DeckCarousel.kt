@@ -76,8 +76,13 @@ import kotlin.math.floor
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
-/** The card in front is this share of the window's width (within [MinCardWidth] and [MaxCardWidth]); the rest is for the ones beside it. */
-private const val CARD_SHARE = 0.66f
+/**
+ * The card in front leaves this much of the window's width free on each side (within [MinCardWidth] and [MaxCardWidth]): room for
+ * the cards beside it to show from behind, and for the panel's own margin to frame it. That makes it nearly as wide as the panel it
+ * stands in. It was once two thirds of the window, and a card's print is a fixed size (it keeps a physical card's proportions,
+ * whatever the width): on so narrow a card the bank's mark, the number, the cardholder and the expiry crowded one another.
+ */
+private val CardSideMargin = AppSpacing.xxl
 private val MinCardWidth = 260.dp
 private val MaxCardWidth = 400.dp
 
@@ -160,7 +165,7 @@ fun <T : Any> DeckCarousel(
 
     Box(modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
         BoxWithConstraints(Modifier.widthIn(max = MaxCarouselWidth).fillMaxWidth()) {
-            val cardWidth = (maxWidth * CARD_SHARE).coerceIn(MinCardWidth, MaxCardWidth).coerceAtMost(maxWidth - AppSpacing.xxl)
+            val cardWidth = (maxWidth - CardSideMargin * 2).coerceIn(MinCardWidth, MaxCardWidth).coerceAtMost(maxWidth - AppSpacing.xxl)
             val step = cardWidth * STEP_SHARE
             val sidePadding = (maxWidth - step) / 2
             Column(Modifier.fillMaxWidth()) {
