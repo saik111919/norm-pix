@@ -102,6 +102,70 @@ class ReleaseMetadataTest {
         rejected(mapOf("mandatory" to JsonPrimitive("yes")))
     }
 
+    // ------------------------------------------------------- one APK per CPU type
+
+    private val arm64 = Releases.apk(600)
+    private val arm32 = Releases.apk(500)
+
+    private fun perCpu(vararg entries: Pair<String, JsonElement>): Map<String, JsonElement?> =
+        mapOf("apks" to kotlinx.serialization.json.JsonObject(mapOf(*entries)))
+
+    private fun cpuEntry(name: String, bytes: ByteArray, size: Int = bytes.size): JsonElement = kotlinx.serialization.json.buildJsonObject {
+        put("apk", JsonPrimitive(name))
+        put("size", JsonPrimitive(size))
+        put("sha256", JsonPrimitive(Releases.sha256(bytes)))
+    }
+
+    private val splitFiles = listOf(
+        "update.json" to 400L,
+        apkName("1.0.3") to 1_000L,
+        "NormPix-1.0.3-arm64-v8a.apk" to 600L,
+        "NormPix-1.0.3-armeabi-v7a.apk" to 500L,
+    )
+
+    private fun readFor(abis: List<String>, changes: Map<String, JsonElement?> = splitChanges, files: List<Pair<String, Long>> = splitFiles) =
+        ReleaseMetadata.metadata(Releases.metadata("1.0.3", 10003, apk, changes), release(files = files), Releases.REPO, abis)
+
+    private val splitChanges = perCpu(
+        "arm64-v8a" to cpuEntry("NormPix-1.0.3-arm64-v8a.apk", arm64),
+        "armeabi-v7a" to cpuEntry("NormPix-1.0.3-armeabi-v7a.apk", arm32),
+    )
+
+    @Test
+    fun `a phone takes the APK made for its own CPU type`() {
+        val update = readFor(listOf("arm64-v8a", "armeabi-v7a", "armeabi")).update
+        assertEquals("NormPix-1.0.3-arm64-v8a.apk", update.apkName)
+        assertEquals("https://github.com/owner/normpix/releases/download/v1.0.3/NormPix-1.0.3-arm64-v8a.apk", update.apkUrl)
+        assertEquals(600L, update.size)
+        assertEquals(Releases.sha256(arm64), update.sha256)
+        // Its first choice may be one the release has no APK for: the next one is taken.
+        assertEquals("NormPix-1.0.3-armeabi-v7a.apk", readFor(listOf("x86_64", "armeabi-v7a")).update.apkName)
+    }
+
+    @Test
+    fun `a phone with no APK of its own, or an app that doesn't ask, takes the universal one`() {
+        assertEquals(apkName("1.0.3"), readFor(listOf("x86_64", "x86")).update.apkName)
+        assertEquals(apkName("1.0.3"), readFor(emptyList()).update.apkName)
+        assertEquals(1_000L, readFor(emptyList()).update.size)
+        // A release made before CPU types were listed has only the universal APK.
+        assertEquals(apkName("1.0.3"), ReleaseMetadata.metadata(Releases.metadata("1.0.3", 10003, apk), release(), Releases.REPO, listOf("arm64-v8a")).update.apkName)
+    }
+
+    @Test
+    fun `an APK for a CPU type is held to the same checks as the universal one`() {
+        // Not attached, another size than attached, a name that isn't a file name, no checksum: the release is refused, not
+        // quietly replaced by the universal APK.
+        val bad = listOf(
+            perCpu("arm64-v8a" to cpuEntry("NormPix-1.0.3-arm64-v8a.apk", arm64)) to splitFiles.filter { it.first != "NormPix-1.0.3-arm64-v8a.apk" },
+            perCpu("arm64-v8a" to cpuEntry("NormPix-1.0.3-arm64-v8a.apk", arm64, size = 601)) to splitFiles,
+            perCpu("arm64-v8a" to cpuEntry("../NormPix-1.0.3-arm64-v8a.apk", arm64)) to splitFiles,
+            perCpu("arm64-v8a" to kotlinx.serialization.json.buildJsonObject { put("apk", JsonPrimitive("NormPix-1.0.3-arm64-v8a.apk")); put("size", JsonPrimitive(600)) }) to splitFiles,
+        )
+        for ((changes, files) in bad) assertFailsWith<UpdateException> { readFor(listOf("arm64-v8a"), changes, files) }
+        // An entry for a CPU type this phone doesn't have is not looked at.
+        assertEquals(apkName("1.0.3"), readFor(listOf("armeabi-v7a"), bad[0].first, splitFiles).update.apkName)
+    }
+
     @Test
     fun `files still uploading are not there yet`() {
         val json = Releases.api("v1.0.3", listOf("update.json" to 400L)).replace("\"uploaded\"", "\"starter\"")

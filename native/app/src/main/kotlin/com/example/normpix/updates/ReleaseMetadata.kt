@@ -20,6 +20,12 @@ import kotlinx.serialization.json.longOrNull
  *   "apk": "NormPix-1.0.3.apk", "size": 12345678, "sha256": "<64 hex>", "minSdk": 26,
  *   "publishedAt": "2026-10-15T10:00:00Z", "mandatory": false, "notes": "What changed" }
  * ```
+ * `apk` is the universal APK (every phone CPU type). A release may also list one APK per CPU type, smaller because it holds
+ * only that type's libraries, which a phone prefers; an installed app that doesn't know `apks` just uses `apk`:
+ * ```
+ *   "apks": { "arm64-v8a": { "apk": "NormPix-1.0.3-arm64-v8a.apk", "size": 9876543, "sha256": "<64 hex>" },
+ *             "armeabi-v7a": { "apk": "NormPix-1.0.3-armeabi-v7a.apk", "size": 9012345, "sha256": "<64 hex>" } }
+ * ```
  */
 object ReleaseMetadata {
     const val FILE = "update.json"
@@ -64,8 +70,11 @@ object ReleaseMetadata {
         )
     }
 
-    /** [json] (the release's `update.json`) as an update from [repository], when it agrees with [release]. */
-    fun metadata(json: String, release: Release, repository: String): Metadata {
+    /**
+     * [json] (the release's `update.json`) as an update from [repository], when it agrees with [release]. [abis] are this
+     * phone's CPU types, most wanted first (`Build.SUPPORTED_ABIS`): an APK made for the first of them the release has one for.
+     */
+    fun metadata(json: String, release: Release, repository: String, abis: List<String> = emptyList()): Metadata {
         val root = objectOf(json)
         val schema = root.long("schema") ?: bad("update.json without a schema")
         if (schema != SCHEMA) bad("update.json schema $schema is not one this version reads")
@@ -76,11 +85,11 @@ object ReleaseMetadata {
         val tagged = TAG.matchEntire(release.tag)?.groupValues?.get(1) ?: bad("release tag ${release.tag} is not vMAJOR.MINOR.PATCH")
         if (tag != release.tag) bad("update.json is for $tag, published with ${release.tag}")
         if (versionName != tagged) bad("versionName $versionName under tag ${release.tag}")
-        val apk = root.string("apk")?.takeIf { APK_NAME.matches(it) } ?: bad("no valid apk name")
-        val size = root.long("size")?.takeIf { it in 1..MAX_APK_BYTES } ?: bad("no valid size")
-        val attached = release.assets[apk] ?: bad("$apk is not attached to ${release.tag}")
-        if (attached != size) bad("$apk is $attached bytes, update.json says $size")
-        val sha256 = root.string("sha256")?.lowercase()?.takeIf { SHA256.matches(it) } ?: bad("no valid sha256")
+        // The universal APK is always described, for an installed app too old to choose by CPU; a release that also has one
+        // APK per CPU type lists them under "apks", and the first of this phone's CPU types that has one is the file.
+        val universal = apkFile(root, release)
+        val perCpu = (root["apks"] as? JsonObject)
+        val file = abis.firstNotNullOfOrNull { abi -> (perCpu?.get(abi) as? JsonObject)?.let { apkFile(it, release) } } ?: universal
         val minSdk = root["minSdk"]?.let { (it as? JsonPrimitive)?.longOrNull?.toInt() ?: bad("minSdk is not a number") } ?: 1
         val mandatory = root["mandatory"]?.let { (it as? JsonPrimitive)?.booleanOrNull ?: bad("mandatory is not true or false") } ?: false
         val notes = (root.string("notes")?.takeIf { it.isNotBlank() } ?: release.notes).trim().take(MAX_NOTES)
@@ -90,13 +99,26 @@ object ReleaseMetadata {
             tag = tag,
             publishedAt = root.string("publishedAt")?.let(::instantOrNull) ?: release.publishedAt,
             notes = notes,
-            apkName = apk,
-            apkUrl = downloadUrl(repository, tag, apk),
-            size = size,
-            sha256 = sha256,
+            apkName = file.name,
+            apkUrl = downloadUrl(repository, tag, file.name),
+            size = file.size,
+            sha256 = file.sha256,
             mandatory = mandatory,
         )
         return Metadata(applicationId, minSdk, update)
+    }
+
+    /** One APK of a release: its name, size and checksum, which have to agree with the file GitHub holds under that name. */
+    private class ApkFile(val name: String, val size: Long, val sha256: String)
+
+    /** The APK [from] describes (`apk`, `size`, `sha256`): the release's own fields, or one CPU type's entry under `apks`. */
+    private fun apkFile(from: JsonObject, release: Release): ApkFile {
+        val apk = from.string("apk")?.takeIf { APK_NAME.matches(it) } ?: bad("no valid apk name")
+        val size = from.long("size")?.takeIf { it in 1..MAX_APK_BYTES } ?: bad("no valid size")
+        val attached = release.assets[apk] ?: bad("$apk is not attached to ${release.tag}")
+        if (attached != size) bad("$apk is $attached bytes, update.json says $size")
+        val sha256 = from.string("sha256")?.lowercase()?.takeIf { SHA256.matches(it) } ?: bad("no valid sha256")
+        return ApkFile(apk, size, sha256)
     }
 
     /**
@@ -191,7 +213,7 @@ class UpdateChecker(
         if (release.draft || release.prerelease) throw UpdateException(UpdateProblem.BadRelease("${release.tag} is not a published release"))
         if (ReleaseMetadata.FILE !in release.assets) throw UpdateException(UpdateProblem.BadRelease("${release.tag} has no ${ReleaseMetadata.FILE}"))
         val metadataUrl = ReleaseMetadata.downloadUrl(repository, release.tag, ReleaseMetadata.FILE)
-        val metadata = ReleaseMetadata.metadata(github.text(metadataUrl, "application/octet-stream", MAX_METADATA_BYTES), release, repository)
+        val metadata = ReleaseMetadata.metadata(github.text(metadataUrl, "application/octet-stream", MAX_METADATA_BYTES), release, repository, installed.abis)
         if (metadata.applicationId != installed.applicationId) throw UpdateException(UpdateProblem.OtherApp(metadata.applicationId))
         val update = metadata.update
         // By number: 1.0.10 (10010) is newer than 1.0.9 (10009), which comparing the names as text would get wrong.

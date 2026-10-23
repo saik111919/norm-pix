@@ -214,7 +214,9 @@ jobs:
             echo "signed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build the release APK
+      # -PsplitAbis: one APK per phone CPU type (smaller: it holds only that type's libraries, the card scanner's above all)
+      # and a universal one with both, which an installed app too old to choose by CPU still downloads.
+      - name: Build the release APKs
         env:
           NORMPIX_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           NORMPIX_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
@@ -223,9 +225,9 @@ jobs:
           NORMPIX_UPDATE_REPOSITORY: ${{ env.UPDATE_REPOSITORY }}
           # A release of main is built as the version worked out above; empty otherwise (versionName as written).
           NORMPIX_VERSION_NAME: ${{ steps.version.outputs.override }}
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease -PsplitAbis
 
-      - name: Collect the APK
+      - name: Collect the APKs
         id: apk
         env:
           APK: ${{ steps.version.outputs.apk }}
@@ -233,34 +235,67 @@ jobs:
           SIGNED: ${{ steps.key.outputs.signed }}
           # The release key's certificate (README.md, Signing key): the one the installed app carries.
           RELEASE_CERT_SHA256: 96b30aae17b879b4854337043b458c2ce6f22ed67b7966384374e7bbb95a3488
+          # The phone CPU types a release has an APK for: the release build type's list in native/app/build.gradle.kts (releaseAbis).
+          ABIS: arm64-v8a armeabi-v7a
         run: |
-          built=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
-          if [ -z "$built" ]; then
-            echo "::error::No release APK was built"
-            exit 1
-          fi
+          out=app/build/outputs/apk/release
           mkdir -p "$GITHUB_WORKSPACE/dist"
-          cp "$built" "$GITHUB_WORKSPACE/dist/$APK"
           cd "$GITHUB_WORKSPACE/dist"
-          sha256sum "$APK" > "$APK.sha256"
           build_tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)"
-          certs=$(java -Xmx1024M -Xss1m --enable-native-access=ALL-UNNAMED -jar "$build_tools/lib/apksigner.jar" verify --print-certs "$APK")
-          echo "$certs"
-          # An APK signed with any other key would not install over the app, so it is never published as the release.
-          if [ "$SIGNED" = "true" ] && ! echo "$certs" | grep -q "certificate SHA-256 digest: $RELEASE_CERT_SHA256"; then
-            echo "::error title=Wrong signing key::The APK is not signed with the release key ($RELEASE_CERT_SHA256). Check the RELEASE_KEYSTORE_* secrets."
+
+          # One APK of the release, checked: signed with the release key, and saying what the build was told it is
+          # (update.json is written from this, not from the build script). Sets package, code, min_sdk and native.
+          check() {
+            local file="$1" certs badging
+            sha256sum "$file" > "$file.sha256"
+            certs=$(java -Xmx1024M -Xss1m --enable-native-access=ALL-UNNAMED -jar "$build_tools/lib/apksigner.jar" verify --print-certs "$file")
+            echo "$certs"
+            # An APK signed with any other key would not install over the app, so it is never published as the release.
+            if [ "$SIGNED" = "true" ] && ! echo "$certs" | grep -q "certificate SHA-256 digest: $RELEASE_CERT_SHA256"; then
+              echo "::error title=Wrong signing key::$file is not signed with the release key ($RELEASE_CERT_SHA256). Check the RELEASE_KEYSTORE_* secrets."
+              exit 1
+            fi
+            badging=$("$build_tools/aapt2" dump badging "$file")
+            package=$(echo "$badging" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+            code=$(echo "$badging" | sed -n "s/^package: .*versionCode='\([0-9]*\)'.*/\1/p")
+            name=$(echo "$badging" | sed -n "s/^package: .*versionName='\([^']*\)'.*/\1/p")
+            min_sdk=$(grep -m 1 -oE "^(minSdkVersion|sdkVersion):'[0-9]+'" <<< "$badging" | grep -oE '[0-9]+')
+            native=$(sed -n "s/^native-code: //p" <<< "$badging" | tr -d "'")
+            if [ "$name" != "$VERSION" ] || [ -z "$code" ] || [ -z "$package" ] || [ -z "$min_sdk" ]; then
+              echo "::error::$file says $package $name ($code, minSdk $min_sdk); expected versionName $VERSION"
+              exit 1
+            fi
+            echo "$file: $package $name ($code), minSdk $min_sdk, native code: ${native:-none}"
+          }
+
+          # An APK for each CPU type, holding that type's libraries and no other's.
+          apks='{}'
+          for abi in $ABIS; do
+            built="$GITHUB_WORKSPACE/native/$out/app-$abi-release.apk"
+            if [ ! -f "$built" ]; then
+              echo "::error::No $abi release APK was built"
+              exit 1
+            fi
+            file="${APK%.apk}-$abi.apk"
+            cp "$built" "$file"
+            check "$file"
+            if [ "$native" != "$abi" ]; then
+              echo "::error::$file has native code for '$native', expected only $abi"
+              exit 1
+            fi
+            apks=$(jq -c --arg abi "$abi" --arg apk "$file" --argjson size "$(stat -c %s "$file")" --arg sha "$(cut -d ' ' -f 1 "$file.sha256")" \
+              '. + {($abi): {apk: $apk, size: $size, sha256: $sha}}' <<< "$apks")
+          done
+          echo "$apks" > "$RUNNER_TEMP/apks.json"
+
+          # The universal APK, with every CPU type's libraries: what an installed app that doesn't choose by CPU downloads.
+          built="$GITHUB_WORKSPACE/native/$out/app-universal-release.apk"
+          if [ ! -f "$built" ]; then
+            echo "::error::No universal release APK was built"
             exit 1
           fi
-          # What the APK itself says it is: update.json is written from this, not from the build script.
-          badging=$("$build_tools/aapt2" dump badging "$APK")
-          package=$(echo "$badging" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
-          code=$(echo "$badging" | sed -n "s/^package: .*versionCode='\([0-9]*\)'.*/\1/p")
-          name=$(echo "$badging" | sed -n "s/^package: .*versionName='\([^']*\)'.*/\1/p")
-          min_sdk=$(grep -m 1 -oE "^(minSdkVersion|sdkVersion):'[0-9]+'" <<< "$badging" | grep -oE '[0-9]+')
-          if [ "$name" != "$VERSION" ] || [ -z "$code" ] || [ -z "$package" ] || [ -z "$min_sdk" ]; then
-            echo "::error::The APK says $package $name ($code, minSdk $min_sdk); expected versionName $VERSION"
-            exit 1
-          fi
+          cp "$built" "$APK"
+          check "$APK"
           {
             echo "package=$package"
             echo "code=$code"
@@ -325,9 +360,9 @@ jobs:
           jq -n \
             --arg app "$PACKAGE" --argjson code "$CODE" --arg name "$VERSION" --arg tag "$TAG" --arg apk "$APK" \
             --argjson size "$SIZE" --arg sha "$SHA256" --argjson minSdk "$MIN_SDK" --argjson mandatory "$mandatory" \
-            --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --rawfile notes "$notes" \
+            --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --rawfile notes "$notes" --slurpfile apks "$RUNNER_TEMP/apks.json" \
             '{schema: 1, applicationId: $app, versionCode: $code, versionName: $name, tag: $tag, apk: $apk, size: $size,
-              sha256: $sha, minSdk: $minSdk, publishedAt: $at, mandatory: $mandatory, notes: ($notes | rtrimstr("\n"))}' \
+              sha256: $sha, apks: $apks[0], minSdk: $minSdk, publishedAt: $at, mandatory: $mandatory, notes: ($notes | rtrimstr("\n"))}' \
             > "$GITHUB_WORKSPACE/dist/update.json"
           cat "$GITHUB_WORKSPACE/dist/update.json"
 

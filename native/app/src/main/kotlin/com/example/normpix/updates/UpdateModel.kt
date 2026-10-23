@@ -10,6 +10,8 @@ data class InstalledApp(
     val versionName: String,
     /** The phone's Android version (API level), which a release may need to be at least. */
     val sdk: Int,
+    /** The phone's CPU types, the one it runs best first (`Build.SUPPORTED_ABIS`): which of a release's APKs is the one to download. */
+    val abis: List<String> = emptyList(),
 )
 
 /** A release the app can update to: what its `update.json` says, checked against its GitHub release (see [ReleaseMetadata]). */

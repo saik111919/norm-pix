@@ -117,7 +117,7 @@ NormPix is a personal finance tracker and card wallet for Android, built nativel
 
 ## Install
 
-1. Download the latest `.apk` from [Releases](../../releases/latest).
+1. Download the latest `.apk` from [Releases](../../releases/latest): `NormPix-<version>-arm64-v8a.apk` for almost every phone made since 2017 (the smallest download), `NormPix-<version>-armeabi-v7a.apk` for an older 32-bit phone, or `NormPix-<version>.apk` that works on both and is the largest.
 2. Open it on your phone. If Android asks, allow your browser or files app to install unknown apps.
 3. That's it: NormPix checks for updates by itself (Settings → Updates & changelog → Automatic updates), and installs them over the app you have, keeping your data.
 
@@ -189,6 +189,9 @@ cd native
 
 # Build release APK (R8 minified and resource-shrunk)
 ./gradlew assembleRelease
+
+# Build it as CI does: one APK per phone CPU type (arm64-v8a, armeabi-v7a) and a universal one holding both
+./gradlew assembleRelease -PsplitAbis
 ```
 
 ## CI/CD and releases
@@ -215,7 +218,7 @@ Every push to `main` publishes one on its own. To publish a version of your choo
    git push origin v1.0.3
    ```
 
-CI fails a tag that doesn't match `versionName`, a release that isn't signed with the release key, and a `versionCode` that isn't above the latest release's. It publishes the APK, its checksum and **`update.json`**, the release's description the app reads (version, APK name, size, SHA-256, minimum Android version, notes), and marks the release latest. The notes are the annotated tag's message, or else the commits since the previous release. A line `mandatory: true` in the tag's message makes the app offer the release at every launch, even after Later; it is still never forced.
+CI fails a tag that doesn't match `versionName`, a release that isn't signed with the release key, and a `versionCode` that isn't above the latest release's. It publishes the APKs (one per phone CPU type, which the app picks from by itself, and a universal one for an app too old to choose), their checksums and **`update.json`**, the release's description the app reads (version, APK name, size, SHA-256 - for the universal APK and for each CPU type under `apks` - minimum Android version, notes), and marks the release latest. The notes are the annotated tag's message, or else the commits since the previous release. A line `mandatory: true` in the tag's message makes the app offer the release at every launch, even after Later; it is still never forced.
 
 **Where the app looks.** The app asks GitHub without signing in and carries no token, so the releases it reads have to be **public**. It looks in the repository it was built for: `NORMPIX_UPDATE_REPOSITORY` (Gradle property `normpixUpdateRepository`), which CI sets from the `UPDATE_REPOSITORY` repository variable and otherwise to this repository. While this repository is private, either:
 
