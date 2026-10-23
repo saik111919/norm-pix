@@ -200,6 +200,7 @@ private fun Plans(listState: LazyListState, switch: @Composable () -> Unit) {
                 PlanSectionTabs()
             }
         },
+        maxWidth = AppLayout.maxListWidth,
         listState = listState,
         bottomPadding = AppLayout.fabClearance,
         insetBottom = false,

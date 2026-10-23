@@ -93,6 +93,7 @@ import com.example.normpix.reminders.Reminder
 import com.example.normpix.reminders.icon
 import com.example.normpix.reminders.reminderDueText
 import com.example.normpix.reminders.rememberReminderFlows
+import com.example.normpix.ui.components.AdaptiveColumns
 import com.example.normpix.ui.components.AppErrorState
 import com.example.normpix.ui.components.AppLoadingState
 import com.example.normpix.ui.components.AppPage
@@ -109,6 +110,7 @@ import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.wallet.CardStack
 import com.example.normpix.wallet.CardsState
+import com.example.normpix.wallet.StoredCard
 import com.example.normpix.wallet.rememberCardFlows
 import java.time.LocalDateTime
 import kotlinx.coroutines.launch
@@ -127,6 +129,14 @@ private const val TOP_SPENDING = 5
 internal val HomeSectionPadding = PaddingValues(
     start = AppSpacing.lg + AppSpacing.xs,
     top = AppSpacing.xxl,
+    end = AppSpacing.sm,
+    bottom = AppSpacing.sm,
+)
+
+/** A section that opens a column of its own (the second one on a wide window) starts level with the top of the page, not a step below it. */
+private val HomeColumnStartPadding = PaddingValues(
+    start = AppSpacing.lg + AppSpacing.xs,
+    top = 0.dp,
     end = AppSpacing.sm,
     bottom = AppSpacing.sm,
 )
@@ -177,6 +187,9 @@ private class HomeData(
 /**
  * Home: this month at a glance and the quick adds, then whatever needs attention (a stack of banners for each kind), then
  * sections for the cards, recent activity, top spending and what's coming up - each links to the tab that owns it.
+ *
+ * On a wide window it is two columns: the month, what needs attention and what is coming up on the left; the cards, recent
+ * activity and top spending on the right.
  */
 @Composable
 fun HomeScreen(listState: LazyListState = rememberLazyListState()) {
@@ -189,6 +202,7 @@ fun HomeScreen(listState: LazyListState = rememberLazyListState()) {
             AmountsVisibilityButton()
             AppSearchButton()
         },
+        maxWidth = AppLayout.maxWideContentWidth,
         listState = listState,
         bottomPadding = AppLayout.fabClearance,
         insetBottom = false,
@@ -204,20 +218,46 @@ fun HomeScreen(listState: LazyListState = rememberLazyListState()) {
                     is AsyncValue.Data -> {
                         val data = value.value
                         // The month first, then whatever needs attention (stacked by kind), then the rest in sections.
-                        MonthOverview(data, onClick = { navigator.go(AppDestination.Insights) })
-                        QuickAdd()
-                        NeedsAttention(data.budgets)
-                        CardsOnHome()
-                        Recent(data.recent, onSeeAll = navigator::openTransactions)
-                        if (data.topSpending.isNotEmpty()) {
-                            TopSpending(data, onSeeAll = { navigator.go(AppDestination.Insights) })
-                        }
-                        ComingUp(data.upcoming, onSeeAll = { section -> navigator.openPlans(section) })
+                        val seeInsights: () -> Unit = { navigator.go(AppDestination.Insights) }
+                        val seePlans: (PlanSection) -> Unit = { section -> navigator.openPlans(section) }
+                        AdaptiveColumns(
+                            narrow = {
+                                MonthOverview(data, onClick = seeInsights)
+                                QuickAdd()
+                                NeedsAttention(data.budgets)
+                                CardsOnHome()
+                                Recent(data.recent, onSeeAll = navigator::openTransactions)
+                                if (data.topSpending.isNotEmpty()) TopSpending(data, onSeeAll = seeInsights)
+                                ComingUp(data.upcoming, onSeeAll = seePlans)
+                            },
+                            left = {
+                                MonthOverview(data, onClick = seeInsights)
+                                QuickAdd()
+                                NeedsAttention(data.budgets)
+                                ComingUp(data.upcoming, onSeeAll = seePlans)
+                            },
+                            right = {
+                                CardsOnHome(padding = HomeColumnStartPadding)
+                                // With no cards above it, Recent opens the column.
+                                val recentPadding = if (rememberHomeCards().isEmpty()) HomeColumnStartPadding else HomeSectionPadding
+                                Recent(data.recent, onSeeAll = navigator::openTransactions, padding = recentPadding)
+                                if (data.topSpending.isNotEmpty()) TopSpending(data, onSeeAll = seeInsights)
+                            },
+                        )
                     }
                 }
             }
         }
     }
+}
+
+/** The saved cards Home shows: none with Store cards off (Settings > Wallet & Cards), even if a sample set holds some. */
+@Composable
+private fun rememberHomeCards(): List<StoredCard> {
+    val container = LocalAppContainer.current
+    val prefs by container.preferences.state.collectAsState()
+    val cardsState by container.cards.state.collectAsState()
+    return if (prefs.walletCardsEnabled) (cardsState as? CardsState.Ready)?.cards.orEmpty() else emptyList()
 }
 
 /**
@@ -226,10 +266,9 @@ fun HomeScreen(listState: LazyListState = rememberLazyListState()) {
  * one row asking to unlock instead - a card's bank and last digits are the wallet's to show, not Home's.
  */
 @Composable
-internal fun CardsOnHome() {
+internal fun CardsOnHome(padding: PaddingValues = HomeSectionPadding) {
     val container = LocalAppContainer.current
     val prefs by container.preferences.state.collectAsState()
-    val cardsState by container.cards.state.collectAsState()
     val lockVersion by container.lock.version.collectAsState()
     val flows = rememberCardFlows()
     val snackbars = LocalSnackbars.current
@@ -237,15 +276,14 @@ internal fun CardsOnHome() {
 
     // The app loads the vault at start; this only covers Home being up before that finished.
     LaunchedEffect(Unit) { if (container.cards.state.value is CardsState.Loading) container.cards.load() }
-    // With Store cards off (Settings > Wallet & Cards) there is nothing to show, even if a sample set holds cards.
-    val cards = if (prefs.walletCardsEnabled) (cardsState as? CardsState.Ready)?.cards.orEmpty() else emptyList()
+    val cards = rememberHomeCards()
     if (cards.isEmpty()) return
 
     @Suppress("UNUSED_EXPRESSION")
     lockVersion // re-evaluate the lock whenever it may have changed
     val deck = rememberDeckStackState()
     // The button that gathers the cards again sits in their header, at its end, while they are spread out.
-    SectionHeader(title = "Cards", padding = HomeSectionPadding, trailing = { StackButton(deck) })
+    SectionHeader(title = "Cards", padding = padding, trailing = { StackButton(deck) })
     if (container.lock.isWalletLocked(prefs)) {
         ListSection {
             item {
@@ -377,10 +415,10 @@ private fun QuickAdd() {
 }
 
 @Composable
-private fun Recent(transactions: List<FinanceTransaction>, onSeeAll: () -> Unit) {
+private fun Recent(transactions: List<FinanceTransaction>, onSeeAll: () -> Unit, padding: PaddingValues = HomeSectionPadding) {
     val actions = rememberFinanceActions()
     if (transactions.isEmpty()) {
-        SectionHeader(title = "Recent", padding = HomeSectionPadding)
+        SectionHeader(title = "Recent", padding = padding)
         ListSection {
             item {
                 ListRow(
@@ -393,7 +431,7 @@ private fun Recent(transactions: List<FinanceTransaction>, onSeeAll: () -> Unit)
         }
         return
     }
-    SectionHeader(title = "Recent", actionLabel = "See all", onAction = onSeeAll, padding = HomeSectionPadding)
+    SectionHeader(title = "Recent", actionLabel = "See all", onAction = onSeeAll, padding = padding)
     SwipeableTransactionSection(transactions)
 }
 

@@ -110,8 +110,10 @@ import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.components.rememberDeckStackState
 import com.example.normpix.ui.theme.AppIconSizes
 import com.example.normpix.ui.theme.AppLayout
+import com.example.normpix.ui.components.isTwoColumn
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.rememberReducedMotion
+import com.example.normpix.ui.theme.rememberTabRoom
 import com.example.normpix.wallet.AccountCardData
 import com.example.normpix.wallet.AccountCardView
 import com.example.normpix.wallet.AccountStack
@@ -222,6 +224,9 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
         return
     }
 
+    // Two columns - the accounts, the cards - when the tab has the room for them; otherwise one list, the accounts then the cards.
+    val wide = isTwoColumn(minOf(rememberTabRoom(), AppLayout.maxWideContentWidth) - AppSpacing.lg * 2)
+
     AppPage(
         title = "Wallet",
         actions = {
@@ -232,32 +237,36 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                 }
             }
         },
+        maxWidth = AppLayout.maxWideContentWidth,
         listState = listState,
         bottomPadding = AppLayout.fabClearance,
         insetBottom = false,
     ) {
-        item(key = "accounts") {
-            Column(Modifier.padding(AppSpacing.page)) {
-                // How many cards each bank has: the other half of the account-to-bank link, seen from the account.
-                val cardsPerBank = if (cardsOn) {
-                    (cardsState as? CardsState.Ready)?.cards.orEmpty().mapNotNull { it.bankKey }.groupingBy { it }.eachCount()
-                } else {
-                    emptyMap()
-                }
-                AccountsSection(
-                    cardsPerBank = cardsPerBank,
-                    amountsHidden = prefs.amountsHidden,
-                    showArchived = showArchived,
-                    onToggleArchived = { showArchived = !showArchived },
-                    layout = prefs.accountsLayout,
-                    onLayout = container.preferences::setAccountsLayout,
-                    bankIconStyle = prefs.bankIconStyle,
-                )
-            }
+        // How many cards each bank has: the other half of the account-to-bank link, seen from the account.
+        val cardsPerBank = if (cardsOn) {
+            (cardsState as? CardsState.Ready)?.cards.orEmpty().mapNotNull { it.bankKey }.groupingBy { it }.eachCount()
+        } else {
+            emptyMap()
         }
-        // Cards are shown only while NormPix stores them (Settings > Wallet & Cards > Store cards).
-        if (cardsOn) {
-            item(key = "cards-header") {
+        val accountsSection: @Composable (Boolean) -> Unit = { overview ->
+            AccountsSection(
+                cardsPerBank = cardsPerBank,
+                amountsHidden = prefs.amountsHidden,
+                showArchived = showArchived,
+                onToggleArchived = { showArchived = !showArchived },
+                layout = prefs.accountsLayout,
+                onLayout = container.preferences::setAccountsLayout,
+                bankIconStyle = prefs.bankIconStyle,
+                overview = overview,
+            )
+        }
+        // Cards are shown only while NormPix stores them (Settings > Wallet & Cards > Store cards). Their blocks, in the order
+        // they sit, are items of the page's list on a phone and the second column's contents on a wide window.
+        val cardBlocks = if (!cardsOn) emptyList() else buildList<WalletBlock> {
+            fun block(key: String, content: @Composable (Modifier) -> Unit) {
+                add(WalletBlock(key, content))
+            }
+            block("cards-header") {
                 val saved = (cardsState as? CardsState.Ready)?.cards?.size
                 Box(Modifier.padding(AppSpacing.page).padding(top = AppSpacing.xxl, bottom = AppSpacing.sm)) {
                     WalletSectionHeader(
@@ -272,8 +281,8 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                 }
             }
             when (val state = cardsState) {
-                is CardsState.Loading -> item(key = "cards-loading") { AppLoadingState(label = "Loading cards") }
-                is CardsState.Failed -> item(key = "cards-failed") {
+                is CardsState.Loading -> block("cards-loading") { AppLoadingState(label = "Loading cards") }
+                is CardsState.Failed -> block("cards-failed") {
                     AppErrorState(
                         title = "Couldn't open the card vault",
                         message = "Your cards are still stored on this device. Try again, or restart the app.",
@@ -283,7 +292,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                 is CardsState.Ready -> {
                     val cards = state.cards
                     if (cards.isEmpty()) {
-                        item(key = "cards-empty") {
+                        block("cards-empty") {
                             Box(Modifier.padding(AppSpacing.page)) {
                                 ListSection {
                                     item {
@@ -311,7 +320,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                         // The filtered bank may have just lost its last card.
                         val activeFilter = bankFilter?.takeIf { key -> banks.any { it.key == key } }
                         val visible = if (activeFilter == null) cards else cards.filter { it.bankKey == activeFilter }
-                        item(key = "cards-layout") {
+                        block("cards-layout") {
                             // The same cards four ways, as the accounts above; the choice is the Wallet's own (Settings has it too).
                             Box(Modifier.padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.md)) {
                                 LayoutChoice(
@@ -331,7 +340,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                             }
                         }
                         if (banks.size > 1) {
-                            item(key = "cards-filter") {
+                            block("cards-filter") {
                                 BankFilter(
                                     banks = banks,
                                     selected = activeFilter,
@@ -345,7 +354,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                         if (prefs.cardsLayout != CardsLayout.Cards) {
                             // A card's expiry needs saying whichever way the cards are laid out.
                             if (visible.any { expiryStates[it.id]?.needsAttention == true }) {
-                                item(key = "cards-notices") {
+                                block("cards-notices") {
                                     Column(Modifier.padding(horizontal = AppSpacing.lg)) {
                                         for (card in visible) {
                                             val expiry = expiryStates[card.id]?.takeIf { it.needsAttention } ?: continue
@@ -365,7 +374,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                 }
                             }
                             if (prefs.cardsLayout == CardsLayout.Stack) {
-                                item(key = "cards-stack") {
+                                block("cards-stack") {
                                     Column(Modifier.padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg)) {
                                         CardStack(cards = visible, onOpen = flows::showCard, state = cardsDeck, bankIconStyle = prefs.bankIconStyle)
                                         // The next card goes where this stack ends: a slim tile, as the cards behind the front one are slim.
@@ -374,7 +383,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                     }
                                 }
                             } else if (prefs.cardsLayout == CardsLayout.Carousel) {
-                                item(key = "cards-carousel") {
+                                block("cards-carousel") {
                                     Column(Modifier.padding(bottom = AppSpacing.lg)) {
                                         CardCarousel(
                                             cards = visible,
@@ -399,7 +408,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                     }
                                 }
                             } else {
-                                item(key = "cards-rows") {
+                                block("cards-rows") {
                                     Box(Modifier.padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg)) {
                                         ListSection {
                                             for (card in visible) {
@@ -425,8 +434,8 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                             }
                         } else {
                           visible.forEachIndexed { index, card ->
-                            item(key = "card-${card.id}") {
-                                Box(Modifier.animateItem().fillMaxWidth().padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg), contentAlignment = Alignment.Center) {
+                            block("card-${card.id}") { itemModifier ->
+                                Box(itemModifier.fillMaxWidth().padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg), contentAlignment = Alignment.Center) {
                                     // Card art keeps a card's proportions; cap it on wide windows.
                                     Box(Modifier.widthIn(max = 440.dp)) {
                                         AnimatedEntrance(delayMs = 40L * index) {
@@ -473,8 +482,8 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                             }
                           }
                           // The next card is one more of them, drawn empty, where it would go.
-                          item(key = "cards-add") {
-                              Box(Modifier.animateItem().fillMaxWidth().padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg), contentAlignment = Alignment.Center) {
+                          block("cards-add") { itemModifier ->
+                              Box(itemModifier.fillMaxWidth().padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg), contentAlignment = Alignment.Center) {
                                   Box(Modifier.widthIn(max = 440.dp)) {
                                       AddTile(title = "Add card", supporting = "Encrypted, and kept on this device", onClick = flows::addCard)
                                   }
@@ -485,8 +494,35 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                 }
             }
         }
+        if (wide) {
+            // The total across the top, then the accounts and the cards side by side, scrolling together.
+            item(key = "overview") {
+                Column(Modifier.padding(AppSpacing.page)) { WalletTotals(prefs.amountsHidden) }
+            }
+            item(key = "columns") {
+                Row(Modifier.fillMaxWidth()) {
+                    Column(Modifier.weight(1f).padding(start = AppSpacing.lg, end = AppSpacing.xs)) { accountsSection(false) }
+                    // The cards' blocks carry the page's side padding themselves, so the two columns end up as far apart as
+                    // Insights' (AdaptiveColumns).
+                    Column(Modifier.weight(1f)) {
+                        for (b in cardBlocks) key(b.key) { b.content(Modifier) }
+                    }
+                }
+            }
+        } else {
+            item(key = "accounts") {
+                Column(Modifier.padding(AppSpacing.page)) { accountsSection(true) }
+            }
+            for (b in cardBlocks) item(key = b.key) { b.content(Modifier.animateItem()) }
+        }
     }
 }
+
+/**
+ * One block of the Wallet's cards section: its key in the page's list and how it is drawn, given the modifier of the place it is
+ * put in (the list's, which animates it as cards come and go, or none in a column).
+ */
+private class WalletBlock(val key: String, val content: @Composable (Modifier) -> Unit)
 
 /** At or above this font scale the layout choice is two rows of two segments, so no label is cut short. */
 private const val WRAP_CHOICE_AT_FONT_SCALE = 1.3f
@@ -523,7 +559,34 @@ private val accountsLayoutOptions = listOf(
     ChoiceOption(AccountsLayout.Carousel, "Carousel", Icons.Outlined.ViewCarousel),
 )
 
-/** The Wallet's overview - the total balance and the two figures it is made of - and the accounts, laid out as [layout] says. */
+/** The Wallet's overview: the total balance and the two figures it is made of. Nothing until the accounts have loaded. */
+@Composable
+private fun WalletTotals(amountsHidden: Boolean) {
+    val finance = rememberFinanceState()
+    if (finance.status != FinanceStatus.Ready) return
+    // The total is what is held minus what is owed (a card's bill, a loan): the two figures are named under it, so the sum can
+    // be checked; and a screen reader hears the whole as one sentence.
+    val total = finance.money.format(finance.totalBalance)
+    val held = finance.money.format(finance.heldBalance)
+    val owed = if (finance.owedBalance > 0) finance.money.format(finance.owedBalance) else null
+    WalletOverview(
+        total = total,
+        held = held,
+        owed = owed,
+        negative = finance.totalBalance < 0,
+        spoken = when {
+            amountsHidden -> "Total balance hidden. Amounts are hidden: show them with the eye button at the top."
+            owed != null -> "Total balance $total: $held in accounts, minus $owed owed."
+            else -> "Total balance $total: $held in accounts."
+        },
+        note = if (finance.activeAccounts.isEmpty()) null else "Balances are worked out from the starting balance and every transaction recorded.",
+    )
+}
+
+/**
+ * The Wallet's overview ([WalletTotals], unless the page puts it elsewhere: [overview] false) and the accounts, laid out as
+ * [layout] says.
+ */
 @Composable
 private fun AccountsSection(
     cardsPerBank: Map<String, Int>,
@@ -533,6 +596,7 @@ private fun AccountsSection(
     layout: AccountsLayout,
     onLayout: (AccountsLayout) -> Unit,
     bankIconStyle: BankIconStyle,
+    overview: Boolean = true,
 ) {
     val controller = LocalFinance.current
     val finance = rememberFinanceState()
@@ -562,23 +626,7 @@ private fun AccountsSection(
     val archived = finance.accounts.filter { it.archived }
 
     Column {
-        // The total is what is held minus what is owed (a card's bill, a loan): the two figures are named under it, so the sum can
-        // be checked; and a screen reader hears the whole as one sentence.
-        val total = finance.money.format(finance.totalBalance)
-        val held = finance.money.format(finance.heldBalance)
-        val owed = if (finance.owedBalance > 0) finance.money.format(finance.owedBalance) else null
-        WalletOverview(
-            total = total,
-            held = held,
-            owed = owed,
-            negative = finance.totalBalance < 0,
-            spoken = when {
-                amountsHidden -> "Total balance hidden. Amounts are hidden: show them with the eye button at the top."
-                owed != null -> "Total balance $total: $held in accounts, minus $owed owed."
-                else -> "Total balance $total: $held in accounts."
-            },
-            note = if (active.isEmpty()) null else "Balances are worked out from the starting balance and every transaction recorded.",
-        )
+        if (overview) WalletTotals(amountsHidden)
         Spacer(Modifier.height(AppSpacing.xxl))
         WalletSectionHeader(
             title = "Accounts",
