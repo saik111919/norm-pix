@@ -139,7 +139,8 @@ private const val BACK_FINISH_MS = 160
 /**
  * The app frame: the top-level destinations with a floating navigation bar on
  * phones and a navigation rail on larger windows - each also holding the one
- * way into Settings - and contextual actions surfaced through the bottom More control.
+ * way into Settings - and contextual actions surfaced through the bottom More control
+ * (on the rail: its button for the screen's main action, and a More menu for the rest).
  *
  * Tabs are composed on first visit and then kept (invisible and
  * non-interactive), so each keeps its scroll position, month and filters
