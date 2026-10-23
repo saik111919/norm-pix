@@ -105,7 +105,8 @@ internal class AppBackupFlows(
             if (source.hasFont) add("your font")
             if (locked != null) add("${count(locked.count, "card")}, locked with your password")
         }
-        snackbars.show("App backup saved: ${contents.joinWords()}")
+        val prefix = if (container.preferences.state.value.dummyDataEnabled) "Sample app backup saved" else "App backup saved"
+        snackbars.show("$prefix: ${contents.joinWords()}")
     }
 
     /**
@@ -114,6 +115,14 @@ internal class AppBackupFlows(
      * with an Undo for a few seconds.
      */
     suspend fun restore(financeText: String?, pictures: Map<String, File>, app: AppBackupArchive.App) {
+        if (container.preferences.state.value.dummyDataEnabled) {
+            overlays.alert(
+                "Sample data is on",
+                "A backup cannot be restored while sample data is on. Turn off sample data in Settings > Data & backup first.",
+                icon = Icons.Outlined.ErrorOutline,
+            )
+            return
+        }
         val plan = when (val parsed = AppBackupReader.parse(financeText, pictures, app)) {
             is AppBackupReader.Parsed.Invalid -> {
                 overlays.cantUse(parsed.errors)

@@ -100,11 +100,11 @@ fun WalletSettingsPage() {
     }
 
     @Composable
-    fun TransferRow(id: String, icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
+    fun TransferRow(id: String, icon: ImageVector, title: String, subtitle: String, enabled: Boolean = true, onClick: () -> Unit) {
         ListRow(
             headline = title,
             supporting = subtitle,
-            enabled = busy == null,
+            enabled = enabled && busy == null,
             onClick = onClick,
             leading = {
                 if (busy == id) {
@@ -171,7 +171,13 @@ fun WalletSettingsPage() {
                             }
                         }
                         item {
-                            TransferRow("import", Icons.Outlined.FileOpen, "Import cards", "From a NormPix cards file") {
+                            TransferRow(
+                                "import",
+                                Icons.Outlined.FileOpen,
+                                "Import cards",
+                                if (sample) "Not while sample data is showing. Turn it off in Data & Backup first." else "From a NormPix cards file",
+                                enabled = !sample,
+                            ) {
                                 run("import") { transfer.import() }
                             }
                         }

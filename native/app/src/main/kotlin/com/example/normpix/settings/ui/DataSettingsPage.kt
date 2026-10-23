@@ -14,10 +14,12 @@ import androidx.compose.material.icons.rounded.SaveAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -83,6 +85,8 @@ fun DataSettingsPage() {
     }
     /** The operation in progress, if any (disables the other rows). */
     var busy by remember { mutableStateOf<String?>(null) }
+    /** If restore was requested while sample data was active, continues after sample data turns off. */
+    var pendingRestoreAfterSampleDataOff by rememberSaveable { mutableStateOf(false) }
 
     suspend fun problem(errors: List<String>) = overlays.cantUse(errors)
 
@@ -118,7 +122,8 @@ fun DataSettingsPage() {
         }
         if (saved) {
             haptics.success()
-            snackbars.show("Backup saved: ${describe(snapshot)}")
+            val prefix = if (prefs.dummyDataEnabled) "Sample data backup saved" else "Backup saved"
+            snackbars.show("$prefix: ${describe(snapshot)}")
         }
     }
 
@@ -141,7 +146,8 @@ fun DataSettingsPage() {
         }
         if (saved) {
             haptics.success()
-            snackbars.show("Backup saved with ${if (pictures == 1) "1 picture" else "$pictures pictures"}: ${describe(snapshot)}")
+            val prefix = if (prefs.dummyDataEnabled) "Sample data backup saved" else "Backup saved"
+            snackbars.show("$prefix with ${if (pictures == 1) "1 picture" else "$pictures pictures"}: ${describe(snapshot)}")
         }
     }
 
@@ -160,11 +166,26 @@ fun DataSettingsPage() {
         if (saved) {
             haptics.success()
             val n = snapshot.transactions.size
-            snackbars.show("$n ${if (n == 1) "transaction" else "transactions"} exported")
+            val countWord = if (n == 1) "transaction" else "transactions"
+            val prefix = if (prefs.dummyDataEnabled) "Sample $countWord" else countWord
+            snackbars.show("$n $prefix exported")
         }
     }
 
     fun restore() = run("restore") {
+        if (prefs.dummyDataEnabled) {
+            val turnOff = overlays.confirm(
+                title = "Sample data is on",
+                message = "A backup restores your actual data, not the sample set, which is discarded when turned off. Turn off sample data to restore your backup?",
+                confirmLabel = "Turn off sample data",
+                icon = Icons.Rounded.Restore,
+            )
+            if (turnOff) {
+                pendingRestoreAfterSampleDataOff = true
+                container.preferences.setDummyDataEnabled(false)
+            }
+            return@run
+        }
         // A backup in a .zip brings its pictures, and an app backup its profile picture and font along; they wait in a folder of
         // their own until the restore is confirmed. With nowhere to keep pictures (no picture store) the folder is a temporary one.
         val store = finance.pictures
@@ -236,19 +257,31 @@ fun DataSettingsPage() {
         }
     }
 
+    LaunchedEffect(pendingRestoreAfterSampleDataOff, prefs.dummyDataEnabled) {
+        if (pendingRestoreAfterSampleDataOff && !prefs.dummyDataEnabled) {
+            pendingRestoreAfterSampleDataOff = false
+            restore()
+        }
+    }
+
     fun eraseAll() = run("erase") {
         val current = finance.repository.snapshot()
+        val isSample = prefs.dummyDataEnabled
         val confirmed = overlays.confirm(
-            title = "Delete all finance data?",
-            message = "This deletes ${describe(current)}, and restores the default Cash account and categories. You can " +
-                "undo it for a few seconds; after that it's gone.\n\nSaved cards, reminders and app settings are kept.",
-            confirmLabel = "Delete everything",
+            title = if (isSample) "Reset sample data?" else "Delete all finance data?",
+            message = if (isSample) {
+                "This deletes the current sample finance data and resets to the default sample set. Your own real data is kept aside and untouched."
+            } else {
+                "This deletes ${describe(current)}, and restores the default Cash account and categories. You can " +
+                    "undo it for a few seconds; after that it's gone.\n\nSaved cards, reminders and app settings are kept."
+            },
+            confirmLabel = if (isSample) "Reset sample data" else "Delete everything",
             destructive = true,
             icon = Icons.Outlined.DeleteForever,
         )
         if (!confirmed) return@run
         val undo = finance.resetAllUndoably()
-        snackbars.offerUndo("Finance data deleted", finance, undo, scope)
+        snackbars.offerUndo(if (isSample) "Sample data reset" else "Finance data deleted", finance, undo, scope)
     }
 
     @Composable
@@ -276,9 +309,9 @@ fun DataSettingsPage() {
                 // First, because it decides which data everything under it works on.
                 ListSection(
                     title = "Try NormPix",
-                    footer = "Your own data is kept aside, untouched, while sample data is on. Backing up, restoring and " +
-                        "erasing here then work on the sample set, which is thrown away when you turn it off. Settings, " +
-                        "profile and font are always your own.",
+                    footer = "Your own data is kept aside, untouched, while sample data is on. Backing up and erasing here work on " +
+                        "the sample set, which is thrown away when you turn it off. Restoring a backup requires turning off sample data so " +
+                        "your actual data is restored. Settings, profile and font are always your own.",
                 ) {
                     item {
                         SettingsSwitchRow(
@@ -293,10 +326,14 @@ fun DataSettingsPage() {
                 }
                 ListSection(
                     title = "Back up",
-                    footer = "The finance backups hold accounts, categories, transactions, budgets, recurring payments and " +
-                        "people. The one with everything also holds your settings, reminders, profile and font, and your saved " +
-                        "cards if you choose - those are locked with a password. Nothing else in a file is encrypted, so keep " +
-                        "files somewhere safe. They are saved only where you choose.",
+                    footer = if (prefs.dummyDataEnabled) {
+                        "Sample data is on: backups exported now will hold the sample data, not your own data. Turn off Sample data above to back up your real data."
+                    } else {
+                        "The finance backups hold accounts, categories, transactions, budgets, recurring payments and " +
+                            "people. The one with everything also holds your settings, reminders, profile and font, and your saved " +
+                            "cards if you choose - those are locked with a password. Nothing else in a file is encrypted, so keep " +
+                            "files somewhere safe. They are saved only where you choose."
+                    },
                 ) {
                     item {
                         Row(
@@ -335,7 +372,11 @@ fun DataSettingsPage() {
                             "restore",
                             Icons.Rounded.Restore,
                             "Restore from backup",
-                            "A backup of everything or a full backup (.zip), or one without pictures (.json). It's checked first, and you confirm what is replaced before anything is.",
+                            if (prefs.dummyDataEnabled) {
+                                "Sample data is on. Turn it off to restore a backup to your actual data."
+                            } else {
+                                "A backup of everything or a full backup (.zip), or one without pictures (.json). It's checked first, and you confirm what is replaced before anything is."
+                            },
                             ::restore,
                         )
                     }
@@ -345,8 +386,8 @@ fun DataSettingsPage() {
                         Row(
                             "erase",
                             Icons.Outlined.DeleteForever,
-                            "Delete all finance data",
-                            "Transactions, accounts, budgets and more",
+                            if (prefs.dummyDataEnabled) "Reset sample data" else "Delete all finance data",
+                            if (prefs.dummyDataEnabled) "Reset sample transactions, accounts and budgets" else "Transactions, accounts, budgets and more",
                             ::eraseAll,
                             destructive = true,
                         )
