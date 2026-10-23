@@ -2,6 +2,7 @@ package com.example.normpix.wallet
 
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -23,6 +24,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
@@ -81,6 +83,16 @@ class CardsLayoutTest {
     @After
     fun tearDown() {
         env?.close()
+    }
+
+    /**
+     * A node's box in the test window's own dp. A deck's card draws its print in a scaled density (it is shrunk to fit), and
+     * `getUnclippedBoundsInRoot` reads pixels in the node's own density: for the card it would say the size its print was drawn
+     * at, not the size it is on screen.
+     */
+    private fun SemanticsNodeInteraction.realBounds(): DpRect {
+        val box = fetchSemanticsNode().boundsInRoot
+        return with(compose.density) { DpRect(box.left.toDp(), box.top.toDp(), box.right.toDp(), box.bottom.toDp()) }
     }
 
     private fun showWallet(layout: CardsLayout? = null, cards: List<StoredCard> = listOf(HDFC_CARD, ICICI_CARD)): TestEnvironment {
@@ -265,7 +277,7 @@ class CardsLayoutTest {
     fun theDetailsSitInAPanelUnderTheCardsThatTheCardsStandIn() {
         showWallet(CardsLayout.Carousel)
 
-        val card = compose.onNodeWithContentDescription("HDFC Bank debit card, ending in", substring = true).getUnclippedBoundsInRoot()
+        val card = compose.onNodeWithContentDescription("HDFC Bank debit card, ending in", substring = true).realBounds()
         val number = compose.onNodeWithText("•••• •••• •••• 4242").getUnclippedBoundsInRoot()
         val reveal = compose.onNodeWithText("Reveal").getUnclippedBoundsInRoot()
         // Directly under the card, in line with it: not a separate block further down the page.
@@ -276,22 +288,26 @@ class CardsLayoutTest {
         assertTrue(reveal.top >= number.bottom, "and the buttons are under the details")
     }
 
-    /**
-     * A card's print is a fixed size, so on a narrow card the bank's mark, the number, the cardholder and the expiry crowded one
-     * another: the carousel's card was two thirds of the window. It is nearly the panel's width now, with the ones beside it
-     * still showing from behind either side.
-     */
+    // (That the print has room in the card is measured with real text in CardCarouselPrintTest: this class's text is shorter than a
+    // phone's, and would not show it not fitting.)
     @Test
-    fun theCardInFrontIsNearlyAsWideAsThePanelItStandsIn_withTheOthersStillShowingBesideIt() {
+    fun theDeckIsKept_theOtherCardsShowingFromBehindTheOneInFrontEitherSide() {
         showWallet(CardsLayout.Carousel)
 
         val screen = compose.onRoot().getUnclippedBoundsInRoot()
-        val card = compose.onNodeWithContentDescription("HDFC Bank debit card, ending in", substring = true).getUnclippedBoundsInRoot()
-        assertTrue(card.width > screen.width * 0.8f, "wide: ${card.width} of a ${screen.width} window")
-        assertTrue(card.left - screen.left >= 16.dp, "the next card shows beside it, on the left: $card in $screen")
-        assertTrue(screen.right - card.right >= 16.dp, "and on the right: $card in $screen")
-        // Still the proportions of a physical card.
-        assertEquals(1.586f, card.width.value / card.height.value, 0.02f)
+        val card = compose.onNodeWithContentDescription("HDFC Bank debit card, ending in", substring = true).realBounds()
+        assertTrue(card.width < screen.width * 0.72f, "not so wide that the others are hidden: ${card.width} of a ${screen.width} window")
+        assertTrue(card.left - screen.left >= 40.dp, "the next card shows beside it, on the left: $card in $screen")
+        assertTrue(screen.right - card.right >= 40.dp, "and on the right: $card in $screen")
+    }
+
+    @Test
+    fun whatShowsAboveThePanelIsACardOfAPhysicalCardsProportions() {
+        showWallet(CardsLayout.Carousel)
+
+        val card = compose.onNodeWithContentDescription("HDFC Bank debit card, ending in", substring = true).realBounds()
+        // The card runs 10dp on under the panel: what is above it is 1.586 wide for every 1 high.
+        assertEquals(1.586f, card.width.value / (card.height - 10.dp).value, 0.03f)
     }
 
     @Test
