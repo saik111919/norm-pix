@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.MaterialTheme
@@ -26,7 +25,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -116,7 +115,6 @@ class EditorStyleTest {
         assertEquals(96f, end.bottomEnd.toPx(size, d), 0.5f)
         assertEquals(12f, start.topEnd.toPx(size, d), 0.5f, "4dp where the chips meet")
         assertEquals(12f, end.topStart.toPx(size, d), 0.5f)
-        assertTrue(start.topStart is CornerSize)
     }
 
     // --- the unified selector --------------------------------------------------------------------------------

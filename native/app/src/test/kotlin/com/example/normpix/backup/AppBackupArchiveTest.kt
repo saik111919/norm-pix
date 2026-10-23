@@ -46,7 +46,7 @@ class AppBackupArchiveTest {
     private val manifestText = AppBackupManifest("1.4.0", "2026-10-19T09:30:00", listOf("finance", "settings")).encode()
 
     private fun file(name: String, bytes: ByteArray): File = File(dir, "source/$name").also {
-        it.parentFile.mkdirs()
+        it.parentFile?.mkdirs()
         it.writeBytes(bytes)
     }
 

@@ -12,9 +12,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NamedNavArgument
@@ -68,12 +70,14 @@ import com.example.normpix.ui.theme.rememberReducedMotion
  * - [PageAnimationType.SharedAxis]: the same, with both pages gliding a short distance along the horizontal axis; going
  *   back the page on top glides away as it fades out, over the one beneath gliding in.
  * - [PageAnimationType.ScaleAndFade]: the new page grows into place as it fades in, over the old one.
- * - [PageAnimationType.LinuxWindow]: a desktop window manager's open and close (GNOME's, near enough). A page opens by
- *   growing out of the bottom edge (where a dock would be) as it fades in, over a page that stays solid and recedes a
- *   little; it closes faster than it opened, shrinking back into itself (a little low, towards the dock) as it fades,
- *   while the page beneath comes forward. Its motion is eased the way a desktop's windows are ([WindowEasing]), not with
- *   Material's emphasized curve, which is three quarters done in its first fifth: a new page's first frames go to
- *   composing it, so on a phone the window had all but opened before it was ever drawn, and seemed not to move at all.
+ * - [PageAnimationType.LinuxWindow]: a desktop window's open and close ([LinuxWindowMotion]). A page opens as a thin
+ *   strip along the bottom edge (where a dock would be) that expands upward into the whole page, over a page that stays
+ *   solid and recedes a little; it closes faster than it opened, sinking back down into the strip as the last of it fades,
+ *   while the page beneath comes forward. The page is uncovered, not scaled, so nothing on it is squashed on the way. Its
+ *   motion is eased softly in and out ([LinuxWindowMotion.openEase], [LinuxWindowMotion.closeEase]), not with Material's
+ *   emphasized curve, which is three quarters done in its first fifth: a new page's first frames go to composing it, so
+ *   on a phone the window had all but opened before it was ever drawn, and seemed not to move at all.
+ *   The navigation host aligns its pages to the bottom for this style, so a page that is only a strip high is a strip at the bottom.
  */
 class PageTransitions(type: PageAnimationType, reduced: Boolean) {
     private val duration = if (reduced) 0 else AppMotion.MEDIUM_MS
@@ -97,22 +101,16 @@ class PageTransitions(type: PageAnimationType, reduced: Boolean) {
     init {
         when (type) {
             PageAnimationType.LinuxWindow -> {
-                val open = if (reduced) 0 else WINDOW_OPEN_MS
-                val close = if (reduced) 0 else WINDOW_CLOSE_MS
-                val grow = tween<Float>(open, easing = WindowEasing.open)
-                // Faded in over the first half, evenly: the window is seen growing, not arriving whole.
-                val fadeInQuick = tween<Float>(open / 2, easing = LinearEasing)
-                val recede = tween<Float>(open, easing = WindowEasing.open)
-                val shrink = tween<Float>(close, easing = WindowEasing.open)
-                // Fades late, so it is seen shrinking before it goes.
-                val fadeOutLate = tween<Float>(close, easing = WindowEasing.close)
-                val comeForward = tween<Float>(close, easing = WindowEasing.open)
-                // The opening window grows from the bottom edge; the page under it only recedes, never fades.
-                forward = (scaleIn(grow, initialScale = WINDOW_OPEN_SCALE, transformOrigin = FROM_BOTTOM) + fadeIn(fadeInQuick)) to
+                val open = if (reduced) 0 else LinuxWindowMotion.OPEN_MS
+                val close = if (reduced) 0 else LinuxWindowMotion.CLOSE_MS
+                val recede = tween<Float>(open, easing = LinuxWindowMotion.openEase)
+                val comeForward = tween<Float>(close, easing = LinuxWindowMotion.openEase)
+                // The opening window expands upward from a strip at the bottom edge; the page under it only recedes, never fades.
+                forward = LinuxWindowMotion.opening(open) to
                     scaleOut(recede, targetScale = WINDOW_BEHIND_SCALE, transformOrigin = TransformOrigin.Center)
-                // The closing window shrinks into itself as it fades; the page under it comes forward.
+                // The closing window sinks back into the strip; the page under it comes forward.
                 backward = scaleIn(comeForward, initialScale = WINDOW_BEHIND_SCALE, transformOrigin = TransformOrigin.Center) to
-                    (scaleOut(shrink, targetScale = WINDOW_CLOSE_SCALE, transformOrigin = CLOSING_ORIGIN) + fadeOut(fadeOutLate))
+                    LinuxWindowMotion.closing(close)
             }
             PageAnimationType.System -> {
                 // In: slides a short way from the edge, fading in over the first part. The page under shifts back.
@@ -165,11 +163,11 @@ class PageTransitions(type: PageAnimationType, reduced: Boolean) {
     val popExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = { backward.second }
 
     companion object {
-        /** A window takes its time to open and is quicker to close, as on a desktop. */
-        const val WINDOW_OPEN_MS = 340
-        const val WINDOW_CLOSE_MS = 240
-        private const val WINDOW_OPEN_SCALE = 0.8f
-        internal const val WINDOW_CLOSE_SCALE = 0.85f
+        /** A window takes its time to open and is quicker to close, as on a desktop (see [LinuxWindowMotion]). */
+        const val WINDOW_OPEN_MS = LinuxWindowMotion.OPEN_MS
+        const val WINDOW_CLOSE_MS = LinuxWindowMotion.CLOSE_MS
+
+        /** The page under a window recedes to this as the window opens over it. */
         internal const val WINDOW_BEHIND_SCALE = 0.94f
 
         // Divisors of the page width: how far a page travels (a larger divisor is a shorter way).
@@ -184,12 +182,6 @@ class PageTransitions(type: PageAnimationType, reduced: Boolean) {
         /** The page beneath a fading page that goes back settles up from this size. */
         internal const val FADE_THROUGH_BACK_SCALE = 0.96f
         internal const val GROW_SCALE = 0.9f
-
-        /** Windows grow from the bottom edge, where a dock would be... */
-        private val FROM_BOTTOM = TransformOrigin(0.5f, 1f)
-
-        /** ...and shrink into themselves, a little low: towards it. */
-        internal val CLOSING_ORIGIN = TransformOrigin(0.5f, 0.75f)
     }
 }
 
@@ -218,7 +210,17 @@ internal object TabMotion {
 
     /** How far into its motion a tab is, [time] (0..1, linear) into it: a window's own curve in the window style, else Material's. */
     fun ease(type: PageAnimationType, time: Float): Float =
-        if (type == PageAnimationType.LinuxWindow) WindowEasing.open.transform(time) else AppMotion.enter.transform(time)
+        if (type == PageAnimationType.LinuxWindow) LinuxWindowMotion.openEase.transform(time) else AppMotion.enter.transform(time)
+
+    /** How much of a tab's height shows as it arrives, [eased] (0..1) of the way: in the window style it rises from [TAB_REVEAL_FROM] of it. */
+    fun reveal(type: PageAnimationType, eased: Float): Float =
+        if (type == PageAnimationType.LinuxWindow) TAB_REVEAL_FROM + (1f - TAB_REVEAL_FROM) * eased else 1f
+
+    /**
+     * A tab is not a new window, so it rises from further up than a page's strip: from this share of its height, still anchored
+     * at the bottom edge - the same motion, shorter.
+     */
+    const val TAB_REVEAL_FROM = 0.55f
 
     fun scale(type: PageAnimationType, progress: Float): Float = when (type) {
         PageAnimationType.LinuxWindow -> 0.9f + 0.1f * progress
@@ -232,7 +234,7 @@ internal object TabMotion {
      * while it grows, as a page opens; a fade-through waits for the leaving tab to go first; the rest fade in as they move.
      */
     fun arrivalAlpha(type: PageAnimationType, time: Float): Float = when (type) {
-        PageAnimationType.LinuxWindow -> (time / 0.5f).coerceIn(0f, 1f)
+        PageAnimationType.LinuxWindow -> LinuxWindowMotion.openAlpha(time)
         PageAnimationType.FadeThrough, PageAnimationType.SharedAxis ->
             LinearOutSlowInEasing.transform(((time - 0.3f) / 0.7f).coerceIn(0f, 1f))
         else -> AppMotion.enter.transform(time.coerceIn(0f, 1f))
@@ -271,6 +273,8 @@ internal class BackPose(
     val origin: TransformOrigin = TransformOrigin.Center,
     val corners: Float = 0f,
     val lift: Float = 0f,
+    /** How much of its height shows, 0..1, the part nearest the bottom edge: a window sinking into its strip ([LinuxWindowMotion]). */
+    val reveal: Float = 1f,
 )
 
 /**
@@ -294,13 +298,12 @@ internal object BackPreview {
         val p = progress.coerceIn(0f, 1f)
         val corners = (p / CORNERS_BY).coerceAtMost(1f)
         return when (type) {
-            // A window shrinks into itself, a little low, as it fades - late, so it is seen shrinking before it goes.
+            // A window sinks down into its strip at the bottom edge, whole until it is nearly the strip - then the last of it fades.
             PageAnimationType.LinuxWindow -> BackPose(
-                scale = 1f + (PageTransitions.WINDOW_CLOSE_SCALE - 1f) * p,
-                alpha = 1f - WindowEasing.close.transform(p),
-                origin = PageTransitions.CLOSING_ORIGIN,
+                alpha = LinuxWindowMotion.closeAlpha(p),
                 corners = corners,
                 lift = p,
+                reveal = LinuxWindowMotion.closeReveal(p),
             )
             PageAnimationType.ScaleAndFade -> BackPose(
                 scale = 1f + (PageTransitions.GROW_SCALE - 1f) * p,
@@ -329,7 +332,7 @@ internal object BackPreview {
         val p = progress.coerceIn(0f, 1f)
         return when (type) {
             PageAnimationType.LinuxWindow -> BackPose(
-                scale = PageTransitions.WINDOW_BEHIND_SCALE + (1f - PageTransitions.WINDOW_BEHIND_SCALE) * WindowEasing.open.transform(p),
+                scale = PageTransitions.WINDOW_BEHIND_SCALE + (1f - PageTransitions.WINDOW_BEHIND_SCALE) * LinuxWindowMotion.openEase.transform(p),
             )
             PageAnimationType.ScaleAndFade -> BackPose()
             PageAnimationType.System -> BackPose(shiftX = -direction * (1f - p) / PageTransitions.SYSTEM_PARALLAX)
@@ -378,11 +381,26 @@ internal fun AnimatedVisibilityScope.PageWindow(content: @Composable () -> Unit)
         },
         label = "page_corners",
     ) { state -> if (state == EnterExitState.Visible) 0.dp else PageCornerRadius }
+    // [visible height, full height]: a page that opens from, or closes into, a strip at the bottom (the Linux window style) is
+    // shown through a window of that height, so its rounded corners belong to the strip's top edge - where the eye is - and not
+    // to the page's own top, which is off the screen's other end. Known after layout, read as it is drawn.
+    val heights = remember { intArrayOf(0, 0) }
     Box(
-        Modifier.fillMaxSize().graphicsLayer {
-            val corner = radius.toPx()
-            clip = corner > 0f
-            shape = if (corner > 0f) RoundedCornerShape(corner) else RectangleShape
-        },
+        Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { coordinates ->
+                heights[0] = coordinates.parentLayoutCoordinates?.size?.height ?: coordinates.size.height
+                heights[1] = coordinates.size.height
+            }
+            .graphicsLayer {
+                val corner = radius.toPx()
+                val reveal = if (heights[1] > 0) (heights[0].toFloat() / heights[1]).coerceIn(0f, 1f) else 1f
+                clip = corner > 0f || reveal < 1f
+                shape = when {
+                    reveal < 1f -> BottomRevealShape(reveal, corner)
+                    corner > 0f -> RoundedCornerShape(corner)
+                    else -> RectangleShape
+                }
+            },
     ) { content() }
 }

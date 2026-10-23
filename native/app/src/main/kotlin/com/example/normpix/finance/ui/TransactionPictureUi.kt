@@ -464,8 +464,12 @@ fun PictureViewer(picture: File, onDismiss: () -> Unit) {
             window?.setWindowAnimations(0)
             window?.setDimAmount(0f)
         }
-        AnimatedVisibility(visibleState = shown, enter = transitions.opening, exit = transitions.closing) {
-            PageWindow { PictureStage(picture, onDismiss = close) }
+        // Aligned to the bottom edge: a Linux window opens from, and closes into, a strip there (see LinuxWindowMotion); the other
+        // styles' page is the whole screen, wherever it is put.
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            AnimatedVisibility(visibleState = shown, enter = transitions.opening, exit = transitions.closing) {
+                PageWindow { PictureStage(picture, onDismiss = close) }
+            }
         }
     }
 }

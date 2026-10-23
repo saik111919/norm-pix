@@ -15,8 +15,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -139,9 +140,17 @@ enum class WindowSize {
     }
 }
 
+/** The width of the window the app is in, in whole dp: what [WindowSize] is worked out from. */
+@Composable
+fun rememberWindowWidthDp(): Int {
+    val widthPx = LocalWindowInfo.current.containerSize.width
+    val density = LocalDensity.current.density
+    return remember(widthPx, density) { (widthPx / density).toInt() }
+}
+
 @Composable
 fun rememberWindowSize(): WindowSize {
-    val width = LocalConfiguration.current.screenWidthDp
+    val width = rememberWindowWidthDp()
     return remember(width) { WindowSize.fromWidth(width) }
 }
 

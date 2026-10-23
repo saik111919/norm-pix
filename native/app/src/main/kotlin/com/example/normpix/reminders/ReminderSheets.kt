@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -61,7 +62,7 @@ import androidx.compose.material.icons.outlined.Work
 import com.example.normpix.finance.ui.ChoiceDropdownField
 import com.example.normpix.finance.ui.ChoicePickerField
 import com.example.normpix.finance.ui.IconBadge
-import com.example.normpix.ui.components.BankGlyph
+import com.example.normpix.banks.ui.BankBadge
 import com.example.normpix.finance.ui.ChoiceOption
 import com.example.normpix.finance.domain.RepeatEnd
 import com.example.normpix.finance.domain.notBefore
@@ -138,8 +139,8 @@ fun RepeatRuleSheet(initial: RepeatRule?, onDone: (RepeatRule?) -> Unit) {
     var weekdays by remember {
         mutableStateOf(initial?.weekdays?.takeIf { it.isNotEmpty() } ?: setOf(LocalDate.now().dayOfWeek.value))
     }
-    var dayOfMonth by remember { mutableStateOf(initial?.dayOfMonth ?: LocalDate.now().dayOfMonth) }
-    var intervalDays by remember { mutableStateOf(initial?.intervalDays ?: 2) }
+    var dayOfMonth by remember { mutableIntStateOf(initial?.dayOfMonth ?: LocalDate.now().dayOfMonth) }
+    var intervalDays by remember { mutableIntStateOf(initial?.intervalDays ?: 2) }
 
     val rule = when (kind) {
         RepeatKind.Weekly -> RepeatRule(RepeatKind.Weekly, weekdays = weekdays)
@@ -461,7 +462,7 @@ fun AddReminderSheet(
                 val link = attached
                 when {
                     link == null -> IconBadge(Icons.Outlined.AttachFile)
-                    link.bankName != null -> IconBadge(null, glyph = { BankGlyph(link.bankName, tint = scheme.onSecondaryContainer, size = 22.dp) })
+                    link.bankName != null -> BankBadge(link.bankName)
                     else -> IconBadge(link.icon)
                 }
             },

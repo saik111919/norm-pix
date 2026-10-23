@@ -31,7 +31,7 @@ internal class LabelledReceipt(
         var type: TransactionType? = null
         var partyLabel: Labelled? = null
         when {
-            payee != null && (payer == null || paidTo.at <= receivedFrom!!.at) -> {
+            payee != null && (payer == null || paidTo.at <= receivedFrom.at) -> {
                 type = TransactionType.Expense
                 partyLabel = paidTo
             }

@@ -46,6 +46,7 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -467,6 +468,9 @@ private fun AppNavigation(
             startDestination = Routes.MAIN,
             // Nothing behind the lock screen is reachable by touch or by TalkBack.
             modifier = if (appLocked) Modifier.clearAndSetSemantics {} else Modifier,
+            // A Linux window opens from a strip along the bottom edge and sinks back into it: a page that is only a strip high is
+            // a strip at the bottom of the screen (the other styles' pages are always the whole screen, wherever they are put).
+            contentAlignment = if (pageAnimation == PageAnimationType.LinuxWindow) Alignment.BottomCenter else Alignment.Center,
             enterTransition = transitions.enter,
             exitTransition = transitions.exit,
             popEnterTransition = transitions.popEnter,

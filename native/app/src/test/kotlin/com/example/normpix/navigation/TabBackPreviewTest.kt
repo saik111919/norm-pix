@@ -8,7 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
 import com.example.normpix.settings.PageAnimationType
 import com.example.normpix.ui.theme.LocalReducedMotionOverride
@@ -99,6 +99,37 @@ class TabBackPreviewTest {
             val pixel = pixelAt(x)
             assertTrue(pixel.red > 0.3f && pixel.blue > 0.3f, "half way: a mix of the two tabs, in place, at $x: $pixel")
         }
+    }
+
+    /** The colour of the screen [x] (0..1 across) and [y] (0..1 down). */
+    private fun pixelAt(x: Float, y: Float): Color {
+        val pixels = compose.onRoot().captureToImage().toPixelMap()
+        return pixels[(pixels.width * x).toInt(), (pixels.height * y).toInt()]
+    }
+
+    @Test
+    fun aLinuxWindowSinksTheTabDownTowardsAStripAtTheBottomEdge() {
+        gesture(target = 3, progress = 0.5f)
+        show(PageAnimationType.LinuxWindow)
+        // Half way its top edge has sunk: where the top of the tab was, the tab beneath shows; the bottom of it is still there, whole.
+        assertEquals(Color.Blue, pixelAt(0.5f, 0.1f), "the top of the tab has gone, and the tab beneath is there")
+        assertEquals(Color.Red, pixelAt(0.5f, 0.95f), "the bottom of the tab is still showing, not faded: it fades only near the end")
+    }
+
+    @Test
+    fun theLinuxWindowSinksFurtherAsTheGestureGoesOn_andIsGoneWhenItIsDone() {
+        gesture(target = 3, progress = 0.5f)
+        show(PageAnimationType.LinuxWindow)
+        val halfWay = pixelAt(0.5f, 0.6f)
+        gesture(target = 3, progress = 0.75f)
+        compose.waitForIdle()
+        val further = pixelAt(0.5f, 0.6f)
+        assertEquals(Color.Red, halfWay, "half way the tab still reaches this far up")
+        assertNotEquals(Color.Red, further, "further on, its top edge has sunk below it")
+
+        gesture(target = 3, progress = 1f)
+        compose.waitForIdle()
+        assertEquals(Color.Blue, pixelAt(0.5f, 0.95f), "when it is done only the tab beneath is left, strip and all")
     }
 
     @Test

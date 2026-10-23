@@ -1,5 +1,6 @@
 package com.example.normpix.finance.data
 
+import androidx.core.graphics.createBitmap
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -90,7 +91,7 @@ class TransactionPictures(
     }
 
     private fun onWhite(bitmap: Bitmap): Bitmap {
-        val out = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        val out = createBitmap(bitmap.width, bitmap.height)
         Canvas(out).apply {
             drawColor(Color.WHITE)
             drawBitmap(bitmap, 0f, 0f, null)

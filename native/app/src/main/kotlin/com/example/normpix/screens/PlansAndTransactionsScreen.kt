@@ -9,8 +9,14 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.PieChart
+import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.PieChart
+import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -139,7 +145,21 @@ private val PlansAndTransactionsTab.selectedIcon
         PlansAndTransactionsTab.Plans -> Icons.Rounded.CalendarMonth
     }
 
-/** Budgets | Recurring | Reminders: the level under the primary switch, so it stays light and label-only. */
+private val PlanSection.icon
+    get() = when (this) {
+        PlanSection.Budgets -> Icons.Outlined.PieChart
+        PlanSection.Recurring -> Icons.Outlined.Repeat
+        PlanSection.Reminders -> Icons.Outlined.Notifications
+    }
+
+private val PlanSection.selectedIcon
+    get() = when (this) {
+        PlanSection.Budgets -> Icons.Rounded.PieChart
+        PlanSection.Recurring -> Icons.Rounded.Repeat
+        PlanSection.Reminders -> Icons.Rounded.Notifications
+    }
+
+/** Budgets | Recurring | Reminders: the level under the primary switch - pills with their icons, lighter than the switch above. */
 @Composable
 private fun PlanSectionTabs() {
     val shell = LocalShellState.current
@@ -148,6 +168,8 @@ private fun PlanSectionTabs() {
         PlanSection.entries.map { section ->
             AppTab(
                 section.label,
+                icon = section.icon,
+                selectedIcon = section.selectedIcon,
                 badge = if (section == PlanSection.Reminders && overdue > 0) {
                     { OverdueBadge(overdue) }
                 } else {
@@ -160,6 +182,7 @@ private fun PlanSectionTabs() {
         tabs = tabs,
         selectedIndex = shell.section.ordinal,
         onSelect = { shell.planSection = it },
+        modifier = Modifier.padding(AppSpacing.page).padding(bottom = AppSpacing.xs),
     )
 }
 

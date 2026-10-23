@@ -1,5 +1,6 @@
 package com.example.normpix.reminders
 
+import androidx.core.net.toUri
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.AlarmManager
@@ -67,7 +68,7 @@ object ReminderNotifications {
         Build.VERSION.SDK_INT < 33 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-    private fun uri(id: Long, what: String): Uri = Uri.parse("normpix://reminder/$id/$what")
+    private fun uri(id: Long, what: String): Uri = "normpix://reminder/$id/$what".toUri()
 
     private fun broadcast(context: Context, receiver: Class<*>, action: String, id: Long): PendingIntent =
         PendingIntent.getBroadcast(
@@ -147,7 +148,7 @@ class AlarmReminderScheduler(
     /** Opens the system page where the user can allow exact alarms for this app. */
     fun exactAlarmSettingsIntent(): Intent? =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))
+            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, "package:${context.packageName}".toUri())
         } else {
             null
         }

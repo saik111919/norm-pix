@@ -385,6 +385,8 @@ private fun DeckItem(
                         scope.launch { drag.animateTo(0f, settle) }
                     },
                 )
+                // No ripple, so keyboard focus is shown by a ring along the item's edge.
+                .focusRing(press, shape)
                 .combinedClickable(
                     interactionSource = press,
                     indication = null,

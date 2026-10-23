@@ -1,5 +1,6 @@
 package com.example.normpix.ui
 
+import com.example.normpix.navigation.LinuxWindowMotion
 import com.example.normpix.settings.SheetAnimationType
 import com.example.normpix.ui.components.SheetPose
 import com.example.normpix.ui.components.sheetLag
@@ -88,11 +89,13 @@ class SheetMotionTest {
     @Test
     fun fadeAndScaleHoldTheSheetWhereItRests() {
         // Drawn at its top, then moved by the pose: always at the resting place.
-        for (style in listOf(SheetAnimationType.Fade, SheetAnimationType.Scale)) {
+        val held = listOf(SheetAnimationType.Fade, SheetAnimationType.Scale, SheetAnimationType.LinuxWindow)
+        for (style in held) {
             for (top in tops) assertNear(open, top + pose(style, top).translationY, "$style at $top")
+            for (top in tops) assertNear(open, top + sheetPose(style, window, top, height, closing = true).translationY, "$style closing at $top")
         }
         // Dragged above its resting place the sheet follows the finger.
-        for (style in listOf(SheetAnimationType.Fade, SheetAnimationType.Scale)) {
+        for (style in held) {
             assertNear(0f, pose(style, 550f).translationY, "$style dragged higher")
         }
     }
@@ -117,6 +120,81 @@ class SheetMotionTest {
         assertNear(1f, pose(SheetAnimationType.Scale, open).alpha, "open alpha")
         // The pivot is the bottom of the sheet where it is held: its resting bottom, in the sheet's own height.
         for (top in tops) assertNear((top + height) / height, pose(SheetAnimationType.Scale, top).pivotY, "pivot at $top")
+    }
+
+    @Test
+    fun linuxWindowOpensFromAStripAtItsBottomEdgeUpIntoTheWholeSheet_heldWhereItRests() {
+        val hiddenPose = pose(SheetAnimationType.LinuxWindow, hidden)
+        assertNear(LinuxWindowMotion.STRIP, hiddenPose.reveal, "hidden: just the strip")
+        assertNear(0f, hiddenPose.alpha, "hidden: nothing is drawn before the sheet has started to come")
+
+        // Within the first few percent of its rise the strip is there to be seen; it never fades the sheet by scaling it.
+        val started = pose(SheetAnimationType.LinuxWindow, hidden - (hidden - open) * 0.06f)
+        assertNear(LinuxWindowMotion.openAlpha(0.06f), started.alpha, "the strip appears")
+
+        val halfPose = pose(SheetAnimationType.LinuxWindow, half)
+        assertNear(LinuxWindowMotion.openReveal(0.5f), halfPose.reveal, "half way up: eased, not a straight line of the rise")
+        assertTrue(halfPose.reveal > 0.75f, "an ease-out is most of the way up by half the rise: ${halfPose.reveal}")
+        assertNear(1f, halfPose.alpha, "whole by half way")
+
+        val openPose = pose(SheetAnimationType.LinuxWindow, open)
+        assertNear(1f, openPose.reveal, "open: all of it")
+        assertNear(1f, openPose.alpha, "open alpha")
+
+        // Not scaled and not risen: held where it rests, its content the size and place it will have.
+        for (top in tops) {
+            val p = pose(SheetAnimationType.LinuxWindow, top)
+            assertNear(1f, p.scale, "never scaled, at $top")
+            assertNear(open, top + p.translationY, "held at $top")
+        }
+    }
+
+    @Test
+    fun linuxWindowClosesSinkingDownIntoTheStripAndFadesTheLastOfItAtTheEnd() {
+        fun closing(top: Float) = sheetPose(SheetAnimationType.LinuxWindow, window, top, height, closing = true)
+
+        assertNear(LinuxWindowMotion.STRIP, closing(hidden).reveal, "gone: just the strip, the one it opened from")
+        assertNear(0f, closing(hidden).alpha, "gone: and the strip has faded")
+        assertNear(1f, closing(open).reveal, "open: all of it")
+        assertNear(1f, closing(open).alpha, "open alpha")
+
+        // Half way down it is a smaller window than it was, and still whole: it fades only when it is nearly the strip.
+        val halfPose = closing(half)
+        assertNear(LinuxWindowMotion.closeReveal(0.5f), halfPose.reveal, "half way down")
+        assertTrue(halfPose.reveal < 0.8f && halfPose.reveal > LinuxWindowMotion.STRIP, "part-way: ${halfPose.reveal}")
+        assertNear(1f, halfPose.alpha, "not faded half way down")
+
+        for (top in tops) {
+            assertNear(1f, closing(top).scale, "never scaled, at $top")
+            assertNear(open, top + closing(top).translationY, "held at $top")
+        }
+    }
+
+    @Test
+    fun linuxWindowGoesAwayDifferentlyFromHowItCame() {
+        val opening = pose(SheetAnimationType.LinuxWindow, half)
+        val closing = sheetPose(SheetAnimationType.LinuxWindow, window, half, height, closing = true)
+        assertTrue(opening.reveal > closing.reveal + 0.1f, "same place, a different height showing: ${opening.reveal} against ${closing.reveal}")
+    }
+
+    @Test
+    fun linuxWindowTopEdgeNeverSinksAsItComesUp_andNeverRisesAsItGoesDown() {
+        var lastReveal = 1f
+        var lastAlpha = 1f
+        for (top in tops.reversed()) {
+            val p = sheetPose(SheetAnimationType.LinuxWindow, window, top, height, closing = true)
+            assertTrue(p.reveal <= lastReveal + 1e-4f && p.alpha <= lastAlpha + 1e-4f, "going down at $top: ${p.reveal}, ${p.alpha}")
+            lastReveal = p.reveal
+            lastAlpha = p.alpha
+        }
+        lastReveal = 0f
+        lastAlpha = 0f
+        for (top in tops) {
+            val p = pose(SheetAnimationType.LinuxWindow, top)
+            assertTrue(p.reveal >= lastReveal - 1e-4f && p.alpha >= lastAlpha - 1e-4f, "coming up at $top: ${p.reveal}, ${p.alpha}")
+            lastReveal = p.reveal
+            lastAlpha = p.alpha
+        }
     }
 
     @Test

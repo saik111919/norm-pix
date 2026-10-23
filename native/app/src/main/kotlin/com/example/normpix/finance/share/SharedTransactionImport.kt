@@ -12,6 +12,7 @@ import com.example.normpix.finance.ui.FinanceState
 import com.example.normpix.finance.ui.label
 import com.example.normpix.finance.ui.shortDate
 import com.example.normpix.finance.ui.timeLabel
+import com.example.normpix.wallet.CardKind
 import com.example.normpix.wallet.StoredCard
 import java.io.File
 import java.time.LocalDateTime
@@ -140,7 +141,7 @@ object SharedTransactionImport {
         }
         // With one account there is nothing to choose between.
         val needsChoice = account == null && draft.maskedNumbers.isNotEmpty() && state.activeAccounts.size > 1
-        val notices = notices(draft, state.money, now, account, categoryOrigin, duplicate = duplicate, accountByNumber = match.byNumber, accountsFit = match.fitting)
+        val notices = notices(draft, state.money, now, account, categoryOrigin, duplicate = duplicate, accountByNumber = match.byNumber, accountsFit = match.fitting, accountCard = match.card)
         return SharedTransactionPrefill(
             type = type,
             amount = draft.amount,
@@ -153,13 +154,17 @@ object SharedTransactionImport {
             accountId = account?.id,
             toAccountId = billCard?.id,
             accountNeedsChoice = needsChoice,
-            accountNotice = accountNotice(draft, account, match.fitting).takeIf { needsChoice },
+            accountNotice = accountNotice(draft, account, match.fitting, match.card).takeIf { needsChoice },
             categoryId = categoryId,
             notices = if (billCard != null) notices + ShareNotice(cardBillNotice(billCard)) else notices,
             reference = draft.reference,
             app = draft.app,
         )
     }
+
+    /** A Wallet card as the form names it to the user: "HDFC Bank credit card ending 4242". Only what the user typed, and its last four digits. */
+    fun describeCard(card: StoredCard): String =
+        "${card.bankName} ${if (card.kind == CardKind.Credit) "credit" else "debit"} card ending ${card.last4}"
 
     /** What the form says when a shared payment is a card's bill, and so was made a transfer onto the card. */
     fun cardBillNotice(card: Account): String =
@@ -185,6 +190,8 @@ object SharedTransactionImport {
         val byNumber: Boolean = false,
         /** How many accounts those digits fit: more than one means they could not choose between them. */
         val fitting: Int = 0,
+        /** The Wallet card the digits are, when no account had them and a card did (see [AccountMatching]); with or without an account for it. */
+        val card: StoredCard? = null,
     )
 
     /** [findAccount]'s answer, for a caller that has no use for how it was found. */
@@ -199,11 +206,12 @@ object SharedTransactionImport {
     ): Account? = findAccount(text, counterparty, instrument, accounts, catalog, maskedNumbers, cards).account
 
     /**
-     * The one active account the message points to. First by its number: the digits it shows ([maskedNumbers]) against each
-     * account's own first and last digits and the number of its Wallet [cards] - when exactly one account has them; then a
-     * Wallet card that has them but is linked to no account, to the one account of that card's bank and kind. Otherwise by
-     * bank (and kind of card or account), when it names one the user has exactly one fitting account with; an account whose
-     * number is known and different from the one shown is not one of those. The payee's name and the "Powered by" bank a
+     * The one active account the message points to - a picture of a receipt is read the same way as its text. The accounts are
+     * asked first: by the digits the message shows ([maskedNumbers]) against each account's own first and last digits and the
+     * number of its Wallet [cards] - when exactly one account has them - and then by bank (and kind of card or account), when it
+     * names one the user has exactly one fitting account with; an account whose number is known and different from the one
+     * shown is not one of those. Only when no account fits are the Wallet's cards asked: a card that has the digits but is
+     * linked to no account points to the one account of that card's bank and kind. The payee's name and the "Powered by" bank a
      * UPI app prints are left out first, so "Paid to Airtel" is not read as Airtel Payments Bank. See [AccountMatching].
      */
     fun findAccount(
@@ -216,21 +224,25 @@ object SharedTransactionImport {
         cards: List<StoredCard> = emptyList(),
     ): AccountMatch {
         val pick = AccountMatching.find(text, counterparty, instrument, accounts, catalog, maskedNumbers, cards)
-        return AccountMatch(pick.account, pick.byNumber, pick.fitting)
+        return AccountMatch(pick.account, pick.byNumber, pick.fitting, pick.card)
     }
 
     /**
      * A number is shown and no account is chosen by it: the account is the user's to pick, not the default's to be assumed.
      * Null when an account was chosen, or the message shows no number.
      */
-    fun accountNotice(draft: ParsedTransactionDraft, account: Account?, accountsFit: Int): ShareNotice? {
+    fun accountNotice(draft: ParsedTransactionDraft, account: Account?, accountsFit: Int, card: StoredCard? = null): ShareNotice? {
         if (account != null || draft.maskedNumbers.isEmpty()) return null
         val shown = draft.maskedNumbers.first().let {
             if (it.prefix.isEmpty()) "ending ${it.suffix}" else "starting ${it.prefix} and ending ${it.suffix}"
         }
         // A number printed with its first digits is a card's: its Wallet card can be linked as well.
         val isCard = draft.maskedNumbers.first().prefix.isNotEmpty()
-        val text = if (accountsFit > 1) {
+        val text = if (card != null && accountsFit <= 1) {
+            // No account has the number, but a card in the Wallet does: say which, and that it has no account to be chosen.
+            "The message shows a number $shown, which is your ${describeCard(card)} in the Wallet, but none of your accounts is " +
+                "linked to it. Choose the account it was paid from, and link the card to it so it's picked next time."
+        } else if (accountsFit > 1) {
             "The message shows a number $shown, which fits more than one of your accounts. Choose the right one."
         } else {
             "The message shows a number $shown, but none of your accounts has it. Choose the account, and add the last " +
@@ -251,6 +263,8 @@ object SharedTransactionImport {
         accountByNumber: Boolean = false,
         /** How many accounts the digits the message shows fit. */
         accountsFit: Int = 0,
+        /** The Wallet card the digits are, when no account had them and a card did. */
+        accountCard: StoredCard? = null,
     ): List<ShareNotice> {
         val attention = buildList {
             duplicate?.let { add("You may have recorded this already: ${describe(it, money, now)}.") }
@@ -269,7 +283,7 @@ object SharedTransactionImport {
                 else -> add("No amount found in the message. Enter it.")
             }
             if (draft.type == null) add("Couldn't tell whether money went out or came in. Choose Expense or Income.")
-            accountNotice(draft, account, accountsFit)?.let { add(it.text) }
+            accountNotice(draft, account, accountsFit, accountCard)?.let { add(it.text) }
             when {
                 draft.dateUnreadable -> add("The message's date couldn't be read. Choose the date.")
                 draft.date != null && draft.date.isAfter(now.toLocalDate()) -> add("The message's date is in the future. Check it.")

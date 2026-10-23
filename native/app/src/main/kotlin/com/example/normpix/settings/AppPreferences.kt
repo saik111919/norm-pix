@@ -1,5 +1,6 @@
 package com.example.normpix.settings
 
+import androidx.core.content.edit
 import android.content.SharedPreferences
 import androidx.compose.ui.graphics.Color
 import com.example.normpix.availability.AvailabilityRule
@@ -58,7 +59,7 @@ enum class ColorSource { System, Custom }
  * the one chosen. [LinuxWindow] is the default.
  */
 enum class PageAnimationType(val label: String, val description: String) {
-    LinuxWindow("Linux window", "Pages open like a window growing into focus and close quicker, shrinking away"),
+    LinuxWindow("Linux window", "Pages open like a desktop window: a thin strip at the bottom that expands upward, then sinks back into it, quicker"),
     System("System default", "Native Android transition with predictive back preview"),
     SlideHorizontal("Slide", "New pages slide in from the side"),
     FadeThrough("Fade through", "Pages fade and scale gently into place"),
@@ -73,6 +74,10 @@ enum class PageAnimationType(val label: String, val description: String) {
  */
 enum class SheetAnimationType(val label: String, val description: String) {
     Window("Window", "Grows out of the bottom edge as it rises, and shrinks back into it as it goes"),
+    LinuxWindow(
+        "Linux window",
+        "Opens like a desktop window: a thin strip at the bottom that expands upward, then sinks back into it as it closes",
+    ),
     Slide("Slide", "The standard bottom sheet: it slides up from the bottom edge"),
     Fade("Fade", "Stays where it rests and fades in, then fades out as it goes"),
     Scale("Scale", "Stays where it rests and grows from its bottom edge as it fades in, then shrinks back as it goes"),
@@ -99,6 +104,16 @@ enum class BackButtonStyle(val label: String, val description: String) {
 enum class ProgressStyle(val label: String, val description: String) {
     Wavy("Wavy", "Bars that fill with a moving wave, and a loader that morphs between shapes"),
     Flat("Flat", "Straight bars, and a round spinner for waits"),
+}
+
+/**
+ * How the month a page shows is switched (Home's history, Plans, Insights, People): [Track] is the one tonal track the tabs above
+ * share, [Split] the earlier look of separate tonal buttons in the split-button family. [Track] is the default; the choice is
+ * the user's, and both stay.
+ */
+enum class MonthControlStyle(val label: String, val description: String) {
+    Track("Track", "One tonal track like the tabs above it: a step back, the month on a filled pill, a step forward"),
+    Split("Split buttons", "The earlier look: the steps and the month as separate tonal buttons, their inner corners opening under a finger"),
 }
 
 /** How wallet cards expose their reveal/edit/delete controls. */
@@ -172,6 +187,7 @@ enum class AccountsLayout(val label: String, val description: String) {
     Stack("Stacked cards", "One account in front as a card, the others tucked behind it. Swipe to bring the next one forward, hold to spread them out"),
     Cards("Card list", "Every account as a card, one under another"),
     Rows("Compact list", "One line for each account: bank, kind and balance"),
+    Carousel("Carousel", "One account in the middle, the next ones turned away either side. Swipe across to change account; what it holds is underneath"),
 }
 
 /** How the Wallet lays out the saved cards. */
@@ -301,6 +317,8 @@ data class AppPrefsState(
     val backButtonStyle: BackButtonStyle = BackButtonStyle.TopFloatingCircle,
     /** How progress bars and loaders look, wherever the app shows progress. */
     val progressStyle: ProgressStyle = ProgressStyle.Wavy,
+    /** How the month a page shows is switched: one tonal track, or the earlier separate buttons. */
+    val monthControlStyle: MonthControlStyle = MonthControlStyle.Track,
     /** The window each [ScheduledFeature] may be used in; a feature missing here is always available. */
     val availability: Map<ScheduledFeature, AvailabilityRule> = emptyMap(),
     /** How the built-in category icons are drawn, wherever a category shows. */
@@ -412,6 +430,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
             sheetBlurEnabled = prefs.getBoolean(K_SHEET_BLUR, defaults.sheetBlurEnabled),
             backButtonStyle = prefs.enum(K_BACK_STYLE, defaults.backButtonStyle),
             progressStyle = prefs.enum(K_PROGRESS_STYLE, defaults.progressStyle),
+            monthControlStyle = prefs.enum(K_MONTH_CONTROL, defaults.monthControlStyle),
             categoryIconStyle = prefs.enum(K_CATEGORY_ICON_STYLE, defaults.categoryIconStyle),
             categoryIconShape = prefs.enum(K_CATEGORY_ICON_SHAPE, defaults.categoryIconShape),
             profileName = prefs.getString(K_PROFILE_NAME, defaults.profileName).orEmpty(),
@@ -534,6 +553,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
 
     fun setProgressStyle(style: ProgressStyle) =
         change({ copy(progressStyle = style) }) { putString(K_PROGRESS_STYLE, style.name) }
+
+    fun setMonthControlStyle(style: MonthControlStyle) =
+        change({ copy(monthControlStyle = style) }) { putString(K_MONTH_CONTROL, style.name) }
 
     fun setCategoryIconStyle(style: CategoryIconStyle) =
         change({ copy(categoryIconStyle = style) }) { putString(K_CATEGORY_ICON_STYLE, style.name) }
@@ -668,7 +690,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
     /** Whether the user was already sent to the system page for exact-alarm access (asked once, then never nagged). */
     var exactAlarmPrompted: Boolean
         get() = prefs.getBoolean(K_EXACT_ALARM_PROMPTED, false)
-        set(value) = prefs.edit().putBoolean(K_EXACT_ALARM_PROMPTED, value).apply()
+        set(value) = prefs.edit { putBoolean(K_EXACT_ALARM_PROMPTED, value) }
 
     /**
      * Restores every preference to its default. Wallet cards and reminders are separate stores and are never affected,
@@ -677,10 +699,10 @@ class AppPreferences(private val prefs: SharedPreferences) {
     fun resetToDefaults() {
         val keep = setOf(K_EXACT_ALARM_PROMPTED, K_PROFILE_NAME, K_PROFILE_EMOJI, K_PROFILE_PHOTO)
         _state.update { AppPrefsState(profileName = it.profileName, profileEmoji = it.profileEmoji, profilePhoto = it.profilePhoto) }
-        prefs.edit().apply {
+        prefs.edit {
             // Everything except the one-time system-prompt marker and the profile.
             prefs.all.keys.filter { it !in keep }.forEach { remove(it) }
-        }.apply()
+        }
     }
 
     /**
@@ -772,6 +794,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_SHEET_BLUR = "sheet_blur_enabled"
         const val K_BACK_STYLE = "back_button_style"
         const val K_PROGRESS_STYLE = "progress_style"
+        const val K_MONTH_CONTROL = "month_control_style"
         const val K_CATEGORY_ICON_STYLE = "category_icon_style"
         const val K_CATEGORY_ICON_SHAPE = "category_icon_shape"
         const val K_PROFILE_NAME = "profile_name"

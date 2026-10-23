@@ -7,6 +7,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import com.example.normpix.banks.BankCatalog
@@ -400,8 +401,8 @@ fun <T> rememberFinanceQuery(key: Any?, query: suspend FinanceRepository.() -> T
     val finance = LocalFinance.current
     val revision = finance.state.collectAsState().value.revision
     val result = remember { mutableStateOf<AsyncValue<T>>(AsyncValue.Loading) }
-    val retry = remember { mutableStateOf(0) }
-    LaunchedEffect(revision, key, retry.value) {
+    val retry = remember { mutableIntStateOf(0) }
+    LaunchedEffect(revision, key, retry.intValue) {
         try {
             result.value = AsyncValue.Data(finance.repository.query())
         } catch (e: CancellationException) {

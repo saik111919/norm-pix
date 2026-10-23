@@ -1,5 +1,6 @@
 package com.example.normpix.finance.ui
 
+import androidx.core.graphics.createBitmap
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
@@ -70,7 +71,7 @@ private const val OPAQUE = 0xFF000000.toInt()
 fun framedReceiptPng(receipt: Bitmap, background: Int, margin: Int): ByteArray {
     // A bitmap that lives on the GPU cannot be drawn into this canvas.
     val source = if (receipt.config == Bitmap.Config.HARDWARE) receipt.copy(Bitmap.Config.ARGB_8888, false) else receipt
-    val framed = Bitmap.createBitmap(source.width + 2 * margin, source.height + 2 * margin, Bitmap.Config.ARGB_8888)
+    val framed = createBitmap(source.width + 2 * margin, source.height + 2 * margin)
     val canvas = Canvas(framed)
     canvas.drawColor(background or OPAQUE)
     canvas.drawBitmap(source, margin.toFloat(), margin.toFloat(), null)

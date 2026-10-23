@@ -71,7 +71,7 @@ class SharedTransactionImportTest {
             assertEquals(shopping.id, repository.lastCategoryForPayee(" swiggy ", TransactionType.Expense))
             assertNull(repository.lastCategoryForPayee("Swiggy", TransactionType.Income))
             assertNull(repository.lastCategoryForPayee("Zomato", TransactionType.Expense))
-            finance.setCategoryArchived(shopping.id!!, true)
+            finance.setCategoryArchived(shopping.id, true)
             assertNull(repository.lastCategoryForPayee("Swiggy", TransactionType.Expense))
         }
     }
@@ -408,5 +408,47 @@ class SharedTransactionImportTest {
         assertEquals("Ref 131074460564", prefill.note)
         // Without the Wallet's cards, the same receipt cannot say which: two HDFC accounts, neither with digits.
         assertNull(prefillOf(googlePay).accountId)
+    }
+
+    @Test
+    fun `no account fits, so the Wallet's cards are asked and the one account of that card's bank is chosen`() {
+        val card = com.example.normpix.wallet.StoredCard(
+            "millennia", "HDFC Bank", "THE USER", "4111111111113588", "08", "29", "123", com.example.normpix.wallet.CardKind.Credit, now,
+        )
+        val millennia = numbered("HDFC Millennia", AccountKind.Card, "hdfc")
+        numbered("HDFC Savings", AccountKind.Bank, "hdfc")
+
+        val prefill = prefillOf(phonePe, listOf(card))
+        assertEquals(millennia.id, prefill.accountId)
+        assertFalse(prefill.accountNeedsChoice)
+        // Without the card the receipt could not say which, as before.
+        assertNull(prefillOf(phonePe).accountId)
+    }
+
+    @Test
+    fun `a Wallet card that has the digits but no account is named in the account notice`() {
+        val card = com.example.normpix.wallet.StoredCard(
+            "millennia", "HDFC Bank", "THE USER", "4111111111113588", "08", "29", "123", com.example.normpix.wallet.CardKind.Credit, now,
+        )
+        // Only a savings account of that bank: a credit card is not it, so the account is the user's to choose.
+        numbered("HDFC Savings", AccountKind.Bank, "hdfc")
+
+        val prefill = prefillOf(phonePe, listOf(card))
+        assertNull(prefill.accountId)
+        assertTrue(prefill.accountNeedsChoice)
+        val notice = kotlin.test.assertNotNull(prefill.accountNotice)
+        assertTrue(notice.attention)
+        assertTrue("your HDFC Bank credit card ending 3588 in the Wallet" in notice.text, notice.text)
+        assertTrue("none of your accounts is linked to it" in notice.text, notice.text)
+        // The number itself is still said, and the picture flow's notice is the one in the list.
+        assertTrue("ending 3588" in notice.text)
+        assertTrue(notice in prefill.notices)
+    }
+
+    @Test
+    fun `with no card either, the notice is the plain one`() {
+        numbered("HDFC Savings", AccountKind.Bank, "hdfc")
+        val notice = kotlin.test.assertNotNull(prefillOf(phonePe).accountNotice)
+        assertTrue("none of your accounts has it" in notice.text, notice.text)
     }
 }

@@ -17,7 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.OpenInNew
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.rounded.Snooze
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -161,7 +161,7 @@ fun ReminderListItem(
                         ActionRow(Icons.Outlined.CheckCircle, "Mark as done") { dismiss(onComplete) }
                         ActionRow(Icons.Rounded.Snooze, "Snooze") { dismiss(onSnooze) }
                     }
-                    if (canOpen && attached != null) ActionRow(Icons.Outlined.OpenInNew, openLabel(attached)) { dismiss { openLink(attached) } }
+                    if (canOpen) ActionRow(Icons.AutoMirrored.Outlined.OpenInNew, openLabel(attached)) { dismiss { openLink(attached) } }
                     ActionRow(Icons.Outlined.Edit, "Edit") { dismiss(onClick) }
                     ActionRow(Icons.Outlined.DeleteOutline, "Delete") { dismiss(onDelete) }
                     Spacer(Modifier.height(AppSpacing.sm))
@@ -183,7 +183,7 @@ fun ReminderListItem(
                     add(CustomAccessibilityAction("Mark as done") { onComplete(); true })
                     add(CustomAccessibilityAction("Snooze") { onSnooze(); true })
                 }
-                if (canOpen && attached != null) add(CustomAccessibilityAction(openLabel(attached)) { openLink(attached); true })
+                if (canOpen) add(CustomAccessibilityAction(openLabel(attached)) { openLink(attached); true })
                 add(CustomAccessibilityAction("Delete") { onDelete(); true })
             }
         },

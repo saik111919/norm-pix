@@ -34,8 +34,8 @@ class AccountNumberMatchTest {
         createdAt = now, updatedAt = now,
     )
 
-    private fun card(id: String, number: String, kind: CardKind = CardKind.Credit) =
-        StoredCard(id, "HDFC Bank", "THE USER", number, "08", "29", "123", kind, now)
+    private fun card(id: String, number: String, kind: CardKind = CardKind.Credit, bank: String = "HDFC Bank") =
+        StoredCard(id, bank, "THE USER", number, "08", "29", "123", kind, now)
 
     private fun masks(vararg m: Pair<String, String>) = m.map { (prefix, suffix) -> MaskedNumber(prefix, suffix) }
 
@@ -165,6 +165,68 @@ class AccountNumberMatchTest {
         val left = find("Rs 250.00 debited from A/c XX3588 on 10-10-26", listOf(icici, hdfc))
         assertNull(left.account)
         assertEquals(2, left.fitting)
+    }
+
+    // ------------------------------------------------ accounts first, then cards
+
+    @Test
+    fun `the accounts are all asked before the Wallet's cards - their bank too`() {
+        val hdfcSavings = account("HDFC Savings", AccountKind.Bank, "hdfc")
+        val iciciCard = account("ICICI Card", AccountKind.Card, "icici")
+        // A card in the Wallet has these digits and belongs to ICICI; the receipt names HDFC, and the user has one HDFC account.
+        val iciciCredit = card("icici-card", "5282000011114242", bank = "ICICI Bank")
+        val sms = "Rs 250.00 debited from HDFC Bank A/c XX4242 on 10-10-26. UPI Ref 428312345678"
+
+        val found = find(sms, listOf(iciciCard, hdfcSavings), listOf(iciciCredit))
+        assertEquals(hdfcSavings.id, found.account?.id, "the accounts answer first: the bank names the one HDFC account")
+        assertFalse(found.byNumber, "by its bank, not by the digits")
+        assertNull(found.card, "the cards were not asked")
+    }
+
+    @Test
+    fun `when no account fits the Wallet's cards are asked, and point to the account of the card's bank and kind`() {
+        // Nothing the receipt shows names a bank or matches an account's digits: both HDFC accounts are unnumbered.
+        val millennia = account("HDFC Millennia", AccountKind.Card, "hdfc")
+        val savings = account("HDFC Savings", AccountKind.Bank, "hdfc")
+        val credit = card("millennia", "4111111111113588", CardKind.Credit)
+
+        val found = find(phonePe, listOf(savings, millennia), listOf(credit))
+        assertEquals(millennia.id, found.account?.id, "a credit card is a card account")
+        assertTrue(found.byNumber, "the card's digits chose it")
+        assertEquals("millennia", found.card?.id)
+        // A debit card with the same digits goes to the bank account.
+        val debit = card("debit", "4111111111113588", CardKind.Debit)
+        assertEquals(savings.id, find(phonePe, listOf(savings, millennia), listOf(debit)).account?.id)
+    }
+
+    @Test
+    fun `a card whose account does not exist is named, not guessed`() {
+        val savings = account("HDFC Savings", AccountKind.Bank, "hdfc")
+        val credit = card("millennia", "4111111111113588", CardKind.Credit)
+
+        val found = find(phonePe, listOf(savings), listOf(credit))
+        assertNull(found.account, "a credit card is not the savings account")
+        assertEquals("millennia", found.card?.id, "but the receipt can say which card it is")
+        assertFalse(found.byNumber)
+    }
+
+    @Test
+    fun `an account's own digits still come before a card's`() {
+        val salary = account("Salary", ending = "3588")
+        val millennia = account("HDFC Millennia", AccountKind.Card, "hdfc")
+        val credit = card("millennia", "4111111111113588")
+
+        val found = find(phonePe, listOf(millennia, salary), listOf(credit))
+        assertEquals(salary.id, found.account?.id)
+        assertNull(found.card)
+    }
+
+    @Test
+    fun `without the Wallet's cards only the accounts are asked`() {
+        val millennia = account("HDFC Millennia", AccountKind.Card, "hdfc")
+        val savings = account("HDFC Savings", AccountKind.Bank, "hdfc")
+        // Locked, or "Store cards" off: no cards come in, and the digits no account has leave the choice.
+        assertNull(find(phonePe, listOf(savings, millennia), emptyList()).account)
     }
 
     @Test

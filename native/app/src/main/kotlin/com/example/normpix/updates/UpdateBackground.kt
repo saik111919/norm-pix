@@ -1,5 +1,6 @@
 package com.example.normpix.updates
 
+import androidx.core.net.toUri
 import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
@@ -343,7 +344,7 @@ class SystemUpdateNotifier(private val context: Context) : UpdateNotifier {
                 context,
                 request,
                 Intent(context, MainActivity::class.java)
-                    .setData(Uri.parse("normpix://updates/$request"))
+                    .setData("normpix://updates/$request".toUri())
                     .putExtra(EXTRA_OPEN_UPDATE, openUpdate)
                     .putExtra(EXTRA_INSTALL_UPDATE, install)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),

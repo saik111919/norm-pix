@@ -46,6 +46,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.WindowCompat
+import com.example.normpix.navigation.BottomRevealShape
+import com.example.normpix.navigation.LinuxWindowMotion
 import com.example.normpix.settings.SheetAnimationType
 import com.example.normpix.ui.theme.AppFrostedTokens
 import com.example.normpix.ui.theme.AppMotion
@@ -146,6 +148,8 @@ fun SheetWindowChrome() {
         @Suppress("DEPRECATION")
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Deprecated in Android 15 (API 35); still what keeps the scrim off the status bar on Android 10 to 14.
+            @Suppress("DEPRECATION")
             window.isStatusBarContrastEnforced = false
             window.isNavigationBarContrastEnforced = false
         }
@@ -314,12 +318,19 @@ private const val SHEET_SCALE_FROM = 0.9f
 private const val WINDOW_FADE_SPAN = 0.5f
 private const val SCALE_FADE_SPAN = 0.6f
 
+/** The Linux window style: by this share of its rise the strip a sheet opens from is as visible as it will be before it fades in on. */
+private const val LINUX_STRIP_APPEARS_BY = 0.06f
+
+/** How far the rise must change between frames to count as a direction: below this it is noise, and the last direction stands. */
+private const val TREND_EPSILON = 0.0005f
+
 /**
  * How a sheet is drawn at one moment: how big ([scale], about the height [pivotY] of its own, as a fraction of its height), how
- * visible ([alpha]) and how far it is moved ([translationY], px, down is positive) from where Material draws it.
+ * visible ([alpha]), how far it is moved ([translationY], px, down is positive) from where Material draws it, and how much of
+ * its height shows ([reveal], 0..1: the part nearest its bottom edge - a window opening from a strip, see [LinuxWindowMotion]).
  */
 @Immutable
-internal class SheetPose(val scale: Float, val alpha: Float, val translationY: Float, val pivotY: Float) {
+internal class SheetPose(val scale: Float, val alpha: Float, val translationY: Float, val pivotY: Float, val reveal: Float = 1f) {
     companion object {
         /** Material's own sheet, untouched: it slides. */
         val Rest = SheetPose(scale = 1f, alpha = 1f, translationY = 0f, pivotY = 0.5f)
@@ -335,10 +346,15 @@ internal class SheetPose(val scale: Float, val alpha: Float, val translationY: F
  *   and shrinks back into it, fading, as it is dragged down or closed.
  * - [SheetAnimationType.Fade]: it does not rise; it is held where it rests and fades in (and out) there.
  * - [SheetAnimationType.Scale]: held where it rests, it grows from its bottom edge as it fades in, and shrinks back into it.
+ * - [SheetAnimationType.LinuxWindow]: a desktop window's open and close, as the pages have them ([LinuxWindowMotion]). Held where
+ *   it rests - it does not rise - it is a thin strip along its bottom edge that expands upward into the whole sheet, its top edge
+ *   rising, on a long soft landing and with a subtle fade. It closes ([closing]: it is going away, as it is when it is dragged
+ *   down too) the other way: the top edge sinks, shrinking it down into the strip, and the last of it fades. Nothing is scaled, so
+ *   nothing in it is squashed on the way. How long each takes is Material's sheet's own.
  *
  * Because it is worked out from where the sheet is, it follows a finger dragging it, and the sheet's own motion, exactly.
  */
-internal fun sheetPose(style: SheetAnimationType, windowHeight: Float, top: Float, height: Float): SheetPose {
+internal fun sheetPose(style: SheetAnimationType, windowHeight: Float, top: Float, height: Float, closing: Boolean = false): SheetPose {
     if (height <= 0f) return SheetPose.Rest
     val share = sheetRiseShare(windowHeight, top, height)
     // The bottom of the sheet as drawn: it grows out of, and shrinks back into, that edge.
@@ -351,6 +367,26 @@ internal fun sheetPose(style: SheetAnimationType, windowHeight: Float, top: Floa
             translationY = 0f,
             pivotY = bottom,
         )
+        SheetAnimationType.LinuxWindow -> if (closing) {
+            val away = 1f - share
+            SheetPose(
+                scale = 1f,
+                alpha = LinuxWindowMotion.closeAlpha(away),
+                translationY = -sheetLag(windowHeight, top, height),
+                pivotY = 0.5f,
+                reveal = LinuxWindowMotion.closeReveal(away),
+            )
+        } else {
+            SheetPose(
+                scale = 1f,
+                // Nothing at all while it is hidden - the strip must not show before the sheet has started to come - and the
+                // strip's own visibility within the first few percent of the rise.
+                alpha = minOf(LinuxWindowMotion.openAlpha(share), share / LINUX_STRIP_APPEARS_BY),
+                translationY = -sheetLag(windowHeight, top, height),
+                pivotY = 0.5f,
+                reveal = LinuxWindowMotion.openReveal(share),
+            )
+        }
         SheetAnimationType.Fade -> SheetPose(
             scale = 1f,
             alpha = share,
@@ -394,6 +430,9 @@ fun Modifier.sheetMotion(state: SheetState, style: SheetAnimationType, enabled: 
     val statusTop = WindowInsets.statusBars.getTop(LocalDensity.current).toFloat()
     // The window's height and the sheet's own, as laid out (neither changes with the scaling below).
     val sizes = remember { floatArrayOf(0f, 0f) }
+    // How far up it was a frame ago, and whether it was last going away (1) or coming up (0): a style that closes differently
+    // from how it opens (Linux window) needs to know which way the sheet is going - by a finger dragging it down, as by closing.
+    val trend = remember { floatArrayOf(0f, 0f) }
     return onGloballyPositioned { coordinates ->
         sizes[0] = (coordinates.parentLayoutCoordinates?.size?.height ?: 0).toFloat()
         sizes[1] = coordinates.size.height.toFloat()
@@ -401,12 +440,21 @@ fun Modifier.sheetMotion(state: SheetState, style: SheetAnimationType, enabled: 
         val height = sizes[1]
         val offset = runCatching { state.requireOffset() }.getOrNull()
         if (offset == null || height <= 0f) return@graphicsLayer
-        val pose = sheetPose(style, sizes[0] - statusTop, offset, height)
+        val windowHeight = sizes[0] - statusTop
+        val share = sheetRiseShare(windowHeight, offset, height)
+        if (share < trend[0] - TREND_EPSILON) trend[1] = 1f else if (share > trend[0] + TREND_EPSILON) trend[1] = 0f
+        trend[0] = share
+        val pose = sheetPose(style, windowHeight, offset, height, closing = trend[1] == 1f)
         scaleX = pose.scale
         scaleY = pose.scale
         alpha = pose.alpha
         translationY = pose.translationY
         transformOrigin = TransformOrigin(0.5f, pose.pivotY)
+        if (pose.reveal < 1f) {
+            // A window opening from, or sinking into, its strip: only the part along its bottom edge shows, its top corners as a sheet's.
+            clip = true
+            shape = BottomRevealShape(pose.reveal, AppFrostedTokens.cornerRadius.toPx())
+        }
         hold?.shift = pose.translationY
     }
 }

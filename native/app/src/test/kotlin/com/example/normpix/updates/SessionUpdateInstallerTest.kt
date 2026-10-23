@@ -20,6 +20,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -111,6 +112,7 @@ class SessionUpdateInstallerTest {
     }
 
     @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun `what the installer broadcasts reaches the updater`() = runTest {
         val fake = FakeInstaller()
         val network = FakeNetwork()

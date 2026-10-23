@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -237,7 +238,7 @@ private fun RepeatPreview(schedule: RepeatSchedule, from: LocalDateTime, modifie
 fun RepeatSheet(initial: RepeatPlan?, from: LocalDateTime, onDone: (RepeatPlan?) -> Unit) {
     val haptics = rememberAppHaptics()
     var frequency by remember { mutableStateOf(initial?.frequency ?: RecurrenceFrequency.Monthly) }
-    var interval by remember { mutableStateOf(initial?.interval ?: 1) }
+    var interval by remember { mutableIntStateOf(initial?.interval ?: 1) }
     var ends by remember { mutableStateOf(initial?.ends ?: RepeatEnd.Never) }
     val frequencies = remember { RecurrenceFrequency.entries.map { ChoiceOption(it, it.label, it.icon) } }
     val plan = RepeatPlan(frequency, interval, ends)

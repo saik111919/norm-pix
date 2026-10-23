@@ -1,5 +1,6 @@
 package com.example.normpix.updates
 
+import androidx.core.content.edit
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -64,7 +65,7 @@ class PrefsUpdateRecords(private val prefs: SharedPreferences) : UpdateRecords {
     private fun long(key: String) = object : kotlin.properties.ReadWriteProperty<Any?, Long> {
         override fun getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): Long = prefs.getLong(key, 0)
 
-        override fun setValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>, value: Long) = prefs.edit().putLong(key, value).apply()
+        override fun setValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>, value: Long) = prefs.edit { putLong(key, value) }
     }
 
     private companion object {

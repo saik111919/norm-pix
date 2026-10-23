@@ -1,5 +1,7 @@
 package com.example.normpix.wallet.expiry
 
+import androidx.core.net.toUri
+import androidx.core.content.edit
 import android.annotation.SuppressLint
 import android.app.AlarmManager
 import android.app.NotificationChannel
@@ -53,7 +55,7 @@ object CardExpiryNotifications {
         return channel == null || channel.importance != NotificationManager.IMPORTANCE_NONE
     }
 
-    private fun uri(cardId: String, what: String): Uri = Uri.parse("normpix://card-expiry/$cardId/$what")
+    private fun uri(cardId: String, what: String): Uri = "normpix://card-expiry/$cardId/$what".toUri()
 
     fun alarmIntent(context: Context, cardId: String): PendingIntent = PendingIntent.getBroadcast(
         context,
@@ -141,11 +143,11 @@ class PrefsCardExpiryStore(private val prefs: SharedPreferences) : CardExpirySto
         }.toMap()
 
     override fun put(record: CardExpiryRecord) {
-        prefs.edit().putString(PREFIX + record.cardId, encode(record).toString()).apply()
+        prefs.edit { putString(PREFIX + record.cardId, encode(record).toString()) }
     }
 
     override fun remove(cardId: String) {
-        prefs.edit().remove(PREFIX + cardId).apply()
+        prefs.edit { remove(PREFIX + cardId) }
     }
 
     private fun encode(r: CardExpiryRecord): JsonObject = buildJsonObject {

@@ -730,7 +730,7 @@ private fun RowScope.DayTile(day: LocalDate, first: LocalDate?, last: LocalDate?
     val spans = first != null && last != null && last.isAfter(first)
     val between = first != null && last != null && day.isAfter(first) && day.isBefore(last)
     val spoken = buildString {
-        append(SpokenDay.format(day))
+        append(spokenDay(day))
         when {
             isFirst && isLast -> append(", chosen")
             isFirst -> append(", first day")
@@ -789,10 +789,10 @@ private fun RowScope.DayTile(day: LocalDate, first: LocalDate?, last: LocalDate?
     }
 }
 
-private val SpokenDay: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.getDefault())
-private val MonthTitle: DateTimeFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault())
+// Built where they are used, so they follow the phone's language if it changes while the app runs.
+private fun spokenDay(day: LocalDate): String = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.getDefault()).format(day)
 
-private fun monthTitle(month: YearMonth): String = MonthTitle.format(month)
+private fun monthTitle(month: YearMonth): String = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()).format(month)
 
 /** "3 Oct", or "3 Oct 2025" for another year. */
 internal fun dayLabel(day: LocalDate): String = shortDate(day.atStartOfDay())
@@ -890,7 +890,7 @@ internal fun RowScope.PickerSegment(
         interactionSource = interactionSource,
     ) {
         Column(Modifier.padding(horizontal = AppSpacing.lg), verticalArrangement = Arrangement.Center) {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = scheme.onSecondaryContainer.copy(alpha = 0.78f), maxLines = 1)
+            Text(label, style = MaterialTheme.typography.labelMedium, color = scheme.onSecondaryContainer, maxLines = 1)
             Text(
                 value,
                 style = valueStyle,

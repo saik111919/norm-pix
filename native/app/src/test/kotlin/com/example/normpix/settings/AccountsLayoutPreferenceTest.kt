@@ -33,7 +33,7 @@ class AccountsLayoutPreferenceTest {
     @Test
     fun anUnknownStoredValueFallsBackToTheDefault() {
         val store = store()
-        store.edit().putString("accounts_layout", "Carousel").commit()
+        store.edit().putString("accounts_layout", "Pyramid").commit()
         assertEquals(AccountsLayout.Stack, AppPreferences(store).state.value.accountsLayout)
     }
 

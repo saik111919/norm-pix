@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -152,7 +153,7 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
     // Who the expenses it records are spent on; only an expense has someone.
     var personId by remember { mutableStateOf(existing?.personId) }
     var frequency by remember { mutableStateOf(existing?.frequency ?: RecurrenceFrequency.Monthly) }
-    var interval by remember { mutableStateOf(existing?.interval ?: 1) }
+    var interval by remember { mutableIntStateOf(existing?.interval ?: 1) }
     var start by remember { mutableStateOf(existing?.startDate ?: startOfDay(LocalDateTime.now())) }
     // How it stops. A rule keeps only the day of its last payment, so a saved one reads back as "On a date" (the form then says
     // how many payments that is); "After 12 payments" is worked out into that day when the rule is saved.
@@ -319,7 +320,7 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
             {
                 Row {
                     // A reminder about this payment: attached to it, due when it next is, repeating the way it does.
-                    if (onRemind != null && existing != null) {
+                    if (onRemind != null) {
                         IconButton(onClick = { onRemind(existing) }) {
                             Icon(Icons.Outlined.NotificationAdd, contentDescription = "Remind me about this payment")
                         }

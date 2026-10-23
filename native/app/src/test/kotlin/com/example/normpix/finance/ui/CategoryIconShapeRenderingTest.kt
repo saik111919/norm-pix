@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PixelMap
@@ -12,9 +14,10 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
+import com.example.normpix.banks.ui.BankBadge
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.Category
@@ -43,9 +46,9 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The shape behind category icons and people ("Icon background" in Appearance): each shape cuts the avatar's corners its
- * own way - told apart by what is drawn in a corner - and with no background there is only the icon. And a payee the app
- * knows by its logo is drawn as that logo on its transaction.
+ * The shape behind category icons, people and banks ("Icon background" in Appearance): each shape cuts the avatar's corners
+ * its own way - told apart by what is drawn in a corner - and with no background there is only the icon. An account's field
+ * and a bank's badge follow it like a category's. And a payee the app knows by its logo is drawn as that logo on its transaction.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -221,14 +224,38 @@ class CategoryIconShapeRenderingTest {
     }
 
     @Test
-    fun anAccountStaysOnItsOwnRoundBadge_whateverTheShape() {
+    fun theAccountFieldFollowsTheShapeToo() {
         val bank = Account(id = 3L, name = "Everyday", kind = AccountKind.Bank, createdAt = now, updatedAt = now)
         showField { AccountSelector(label = "Paid from", accounts = listOf(bank), selected = bank.id, onSelect = {}) }
-        val circle = shot(CategoryIconShape.Circle).startInk()
-        val square = shot(CategoryIconShape.Square).startInk()
-        val bare = shot(CategoryIconShape.None).startInk()
-        assertEquals(circle, square, 1f, "an account is not a category: its badge is the same in every shape")
-        assertEquals(circle, bare, 1f)
+        assertTheFieldsPictureFollowsTheShape("the account")
+    }
+
+    @Test
+    fun theAccountFieldWithNothingChosenFollowsTheShapeToo() {
+        val bank = Account(id = 3L, name = "Everyday", kind = AccountKind.Bank, createdAt = now, updatedAt = now)
+        showField { AccountSelector(label = "Paid from", accounts = listOf(bank), selected = null, onSelect = {}) }
+        assertTheFieldsPictureFollowsTheShape("no account yet")
+    }
+
+    @Test
+    fun aBankBadgeCutsTheCornersTheShapeSays_orIsJustTheMarkWithNoBackground() {
+        showAvatars { BankBadge(bank = null, fallback = Icons.Outlined.AccountBalance, size = 100.dp) }
+
+        shot(CategoryIconShape.Circle).let {
+            assertEquals(page, it.corner(0.12f), "circle: nothing at 12% in")
+            assertNotEquals(page, it.corner(0.5f), "circle: the badge is there")
+        }
+        shot(CategoryIconShape.Rounded).let {
+            assertEquals(page, it.corner(0.05f), "rounded: the corner is cut")
+            assertNotEquals(page, it.corner(0.12f), "rounded: but not as far in as a circle's")
+        }
+        shot(CategoryIconShape.Square).let {
+            assertEquals(page, it.corner(0.01f), "square: just softened at the very corner")
+            assertNotEquals(page, it.corner(0.05f), "square: and filled right up to it")
+        }
+        val bare = shot(CategoryIconShape.None)
+        assertEquals(page, bare.corner(0.12f), "no background: no badge in the corner")
+        assertTrue(bare.hasInk(), "but the mark is drawn")
     }
 
     // ------------------------------------------------------------ payee logos on a transaction row

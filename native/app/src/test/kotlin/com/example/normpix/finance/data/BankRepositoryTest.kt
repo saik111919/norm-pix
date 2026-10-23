@@ -133,7 +133,7 @@ class BankRepositoryTest {
             FinanceTransaction(
                 type = TransactionType.Transfer,
                 amount = 5_000,
-                accountId = salary.id!!,
+                accountId = salary.id,
                 toAccountId = cash.id,
                 occurredAt = now.minusDays(2),
                 createdAt = now,

@@ -1,9 +1,9 @@
 package com.example.normpix.ui.theme
 
+import androidx.core.graphics.drawable.toDrawable
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
@@ -234,7 +234,7 @@ fun NormPixTheme(
     SideEffect {
         var host: Context? = view.context
         while (host is ContextWrapper && host !is Activity) host = host.baseContext
-        (host as? Activity)?.window?.setBackgroundDrawable(ColorDrawable(scheme.surface.toArgb()))
+        (host as? Activity)?.window?.setBackgroundDrawable(scheme.surface.toArgb().toDrawable())
     }
     CompositionLocalProvider(LocalAppStatusColors provides status) {
         MaterialTheme(

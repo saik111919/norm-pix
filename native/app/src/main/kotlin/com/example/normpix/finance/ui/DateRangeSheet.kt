@@ -231,7 +231,7 @@ private fun RowScope.EndSegment(label: String, value: String, active: Boolean, s
         border = BorderStroke(2.dp, ring),
     ) {
         Column(Modifier.padding(horizontal = AppSpacing.lg), verticalArrangement = Arrangement.Center) {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = scheme.onSecondaryContainer.copy(alpha = 0.78f), maxLines = 1)
+            Text(label, style = MaterialTheme.typography.labelMedium, color = scheme.onSecondaryContainer, maxLines = 1)
             Text(
                 value,
                 style = MaterialTheme.typography.titleMedium,

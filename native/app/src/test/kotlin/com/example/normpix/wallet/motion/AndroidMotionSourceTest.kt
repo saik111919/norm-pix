@@ -29,6 +29,8 @@ class AndroidMotionSourceTest {
         shadow = shadowOf(context.getSystemService(Context.SENSOR_SERVICE) as SensorManager)
     }
 
+    /** Robolectric marks ShadowSensor deprecated without offering another way to make a Sensor of a given type. */
+    @Suppress("DEPRECATION")
     private fun addSensor(type: Int): Sensor = org.robolectric.shadows.ShadowSensor.newInstance(type).also { shadow.addSensor(it) }
 
     private fun send(sensor: Sensor, vararg values: Float) {

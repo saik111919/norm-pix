@@ -39,6 +39,10 @@ class UpdateScheduleTest {
 
     private fun scheduled(): JobInfo? = jobs.getPendingJob(UpdateSchedule.JOB_ID)
 
+    /** The network type a job asks for, read back the way it was set (`setRequiredNetworkType`): Android marks only the getter deprecated. */
+    @Suppress("DEPRECATION")
+    private fun networkTypeOf(job: JobInfo): Int = job.networkType
+
     private val hour = 60L * 60 * 1000
 
     /** 2026-10-16 10:00 UTC: a Friday morning. */
@@ -58,7 +62,7 @@ class UpdateScheduleTest {
         assertEquals(6 * hour, job.flexMillis, "the last quarter of the day, as it has always been")
         assertTrue(job.isPersisted)
         assertTrue(job.isRequireBatteryNotLow)
-        assertEquals(JobInfo.NETWORK_TYPE_UNMETERED, job.networkType)
+        assertEquals(JobInfo.NETWORK_TYPE_UNMETERED, networkTypeOf(job))
         assertEquals(JobInfo.NETWORK_TYPE_UNMETERED, UpdateSchedule.networkFor(BackgroundUpdates.Download, mobileData = false))
         assertEquals(JobInfo.NETWORK_TYPE_UNMETERED, UpdateSchedule.networkFor(BackgroundUpdates.Install, mobileData = false))
     }
@@ -141,9 +145,9 @@ class UpdateScheduleTest {
         assertEquals(11 * hour, job.minLatencyMillis, "from 10:00 to 9:00 PM")
         assertTrue(job.isPersisted)
         assertTrue(job.isRequireBatteryNotLow)
-        assertEquals(JobInfo.NETWORK_TYPE_UNMETERED, job.networkType)
+        assertEquals(JobInfo.NETWORK_TYPE_UNMETERED, networkTypeOf(job))
         UpdateSchedule.sync(context, atSetTime(mobileData = true), lastCheckAt = 0, now = morning, zone = ZoneOffset.UTC)
-        assertEquals(JobInfo.NETWORK_TYPE_ANY, assertNotNull(scheduled()).networkType)
+        assertEquals(JobInfo.NETWORK_TYPE_ANY, networkTypeOf(assertNotNull(scheduled())))
     }
 
     @Test

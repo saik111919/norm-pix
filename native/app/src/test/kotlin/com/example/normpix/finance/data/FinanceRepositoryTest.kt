@@ -127,7 +127,7 @@ class FinanceRepositoryTest {
         assertEquals(50_000L, budgets.categories[food.id]!!.spent)
 
         // Scenario 2: 50,000 salary into Cash.
-        add(TransactionType.Income, 5_000_000, accountId = cashAccount.id!!, categoryId = salary.id)
+        add(TransactionType.Income, 5_000_000, accountId = cashAccount.id, categoryId = salary.id)
         balances = repo.accountBalances()
         assertEquals(5_450_000L, balances[cashAccount.id])
         assertEquals(5_000_000L, repo.summary(september.range).income)
@@ -156,14 +156,14 @@ class FinanceRepositoryTest {
         assertEquals(lunch.createdAt, edited!!.createdAt, "identity preserved")
 
         // Scenario 5: delete it.
-        repo.deleteTransaction(lunch.id!!)
+        repo.deleteTransaction(lunch.id)
         balances = repo.accountBalances()
         assertEquals(500_000L + 5_000_000 + 1_000_000, balances[cashAccount.id])
         assertEquals(0L, repo.summary(september.range).expense)
         assertEquals(0L, categoryTotal("Shopping"))
         budgets = repo.budgetOverview(september)
         assertEquals(0L, budgets.overall!!.spent)
-        assertEquals(100_000L, budgets.overall!!.remaining)
+        assertEquals(100_000L, budgets.overall.remaining)
     }
 
     @Test
@@ -179,14 +179,14 @@ class FinanceRepositoryTest {
             payee = "Café \"Madras\", Ltd",
             note = "=cmd",
         )
-        add(TransactionType.Income, 990_000, accountId = bank.id!!, categoryId = salary.id)
-        add(TransactionType.Transfer, 10_000, accountId = bank.id!!, toAccountId = cash().id)
+        add(TransactionType.Income, 990_000, accountId = bank.id, categoryId = salary.id)
+        add(TransactionType.Transfer, 10_000, accountId = bank.id, toAccountId = cash().id)
         repo.setBudget(categoryId = food.id, from = september, amount = 20_000)
         repo.saveRecurringRule(
             RecurringRule(
                 type = TransactionType.Expense,
                 amount = 49_900,
-                accountId = bank.id!!,
+                accountId = bank.id,
                 categoryId = food.id,
                 frequency = RecurrenceFrequency.Monthly,
                 startDate = dt(2026, 10, 1),
@@ -256,7 +256,7 @@ class FinanceRepositoryTest {
         add(TransactionType.Expense, 100, accountId = bank.id!!, categoryId = food.id)
 
         try {
-            repo.deleteAccount(bank.id!!)
+            repo.deleteAccount(bank.id)
             fail("expected a conflict")
         } catch (_: FinanceConflictException) {
         }
@@ -267,7 +267,7 @@ class FinanceRepositoryTest {
         }
 
         // Archiving keeps history intact.
-        repo.setAccountArchived(bank.id!!, archived = true)
+        repo.setAccountArchived(bank.id, archived = true)
         assertEquals(-100L, repo.accountBalances()[bank.id])
 
         // Unused ones can be deleted.

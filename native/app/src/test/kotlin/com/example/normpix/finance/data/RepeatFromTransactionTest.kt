@@ -69,7 +69,7 @@ class RepeatFromTransactionTest {
 
         assertNotNull(saved.id)
         assertEquals(rule.id, saved.recurringId)
-        assertEquals(rule.id, repo.transactionById(saved.id!!)!!.recurringId)
+        assertEquals(rule.id, repo.transactionById(saved.id)!!.recurringId)
         val stored = repo.recurringRules().single()
         assertEquals(64_900L, stored.amount)
         assertEquals("Netflix", stored.payee)
@@ -126,7 +126,7 @@ class RepeatFromTransactionTest {
         val (saved, rule) = repo.saveTransactionAndRepeat(plain.copy(amount = 70_000), RepeatSchedule(RecurrenceFrequency.Weekly, interval = 2))
         assertEquals(plain.id, saved.id)
         assertEquals(rule.id, repo.transactionById(plain.id!!)!!.recurringId)
-        assertEquals(70_000L, repo.transactionById(plain.id!!)!!.amount)
+        assertEquals(70_000L, repo.transactionById(plain.id)!!.amount)
         assertEquals(70_000L, repo.recurringRules().single().amount, "the rule repeats what was saved, edits included")
         assertEquals(plain.occurredAt.plusDays(14), repo.recurringRules().single().nextDate)
     }

@@ -409,7 +409,7 @@ class AppRestorerTest {
 
         val second = restore(plan, setOf(BackupPart.Cards), opened.cards)
         assertEquals(0, assertNotNull(second.cards).added.size)
-        assertEquals(2, second.cards?.alreadyThere)
+        assertEquals(2, second.cards.alreadyThere)
         assertEquals(2, target.vault.cards.size, "no card twice")
         assertEquals(listOf<String?>(), payees(target), "the finance data was not part of this restore")
     }

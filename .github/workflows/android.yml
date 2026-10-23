@@ -27,11 +27,19 @@ env:
   # What a push to main publishes: "release" (the app offers it as an update) or "prerelease" (a test build to install by
   # hand, which the app never offers).
   MAIN_BUILDS: release
+  # JDK 24 and later warn on every native library a Java program loads (Gradle's own, Robolectric's) unless it is allowed
+  # to: GRADLE_OPTS reaches the JVM that starts Gradle, native-access in native/gradle.properties and native/app/build.gradle.kts
+  # the daemon and the test JVMs.
+  GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
+  # The first git of a checkout hints at the name of a new repository's first branch; saying so keeps the log to real news.
+  GIT_CONFIG_COUNT: 1
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
 
 jobs:
   verify:
     name: Tests and lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     defaults:
       run:
@@ -45,7 +53,7 @@ jobs:
           distribution: temurin
           java-version: 25
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
 
       # The output is kept so the step that names failures can point at a compile error too.
       - name: Unit and Robolectric UI tests
@@ -108,7 +116,7 @@ jobs:
 
       - name: Upload test and lint reports
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: reports
           path: |
@@ -119,7 +127,7 @@ jobs:
 
   build:
     name: Release APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     defaults:
       run:
@@ -140,7 +148,7 @@ jobs:
           distribution: temurin
           java-version: 25
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
 
       # A tag is a release, and has to name the version being built. A build of main is a release too (with MAIN_BUILDS set
       # to release), at the next free version: versionName, or the patch after the highest vX.Y.Z tag of its X.Y if that is
@@ -236,7 +244,7 @@ jobs:
           cd "$GITHUB_WORKSPACE/dist"
           sha256sum "$APK" > "$APK.sha256"
           build_tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)"
-          certs=$("$build_tools/apksigner" verify --print-certs "$APK")
+          certs=$(java -Xmx1024M -Xss1m --enable-native-access=ALL-UNNAMED -jar "$build_tools/lib/apksigner.jar" verify --print-certs "$APK")
           echo "$certs"
           # An APK signed with any other key would not install over the app, so it is never published as the release.
           if [ "$SIGNED" = "true" ] && ! echo "$certs" | grep -q "certificate SHA-256 digest: $RELEASE_CERT_SHA256"; then
@@ -324,7 +332,7 @@ jobs:
           cat "$GITHUB_WORKSPACE/dist/update.json"
 
       - name: Upload the APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: apk
           path: dist/
@@ -332,7 +340,7 @@ jobs:
 
       - name: Upload the release notes
         if: ${{ steps.version.outputs.kind == 'release' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-notes
           path: release-notes.md
@@ -340,7 +348,7 @@ jobs:
 
       # R8's mapping turns an obfuscated stack trace from this build back into readable code.
       - name: Upload the R8 mapping
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: r8-mapping
           path: native/app/build/outputs/mapping/release/mapping.txt
@@ -350,17 +358,17 @@ jobs:
     name: GitHub release
     if: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
     needs: [verify, build]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: apk
           path: dist
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: ${{ needs.build.outputs.kind == 'release' }}
         with:
           name: release-notes

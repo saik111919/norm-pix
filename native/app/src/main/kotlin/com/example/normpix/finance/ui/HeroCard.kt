@@ -20,9 +20,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.TrendingDown
-import androidx.compose.material.icons.rounded.TrendingFlat
-import androidx.compose.material.icons.rounded.TrendingUp
+import androidx.compose.material.icons.automirrored.rounded.TrendingDown
+import androidx.compose.material.icons.automirrored.rounded.TrendingFlat
+import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -237,9 +237,9 @@ fun HeroAmount(text: String) {
 
 /** Which way spending went, as the arrow the comparison pill leads with: a fact, not a verdict, so no red or green. */
 fun trendIcon(change: Double?): ImageVector = when {
-    change == null || change == 0.0 -> Icons.Rounded.TrendingFlat
-    change < 0 -> Icons.Rounded.TrendingDown
-    else -> Icons.Rounded.TrendingUp
+    change == null || change == 0.0 -> Icons.AutoMirrored.Rounded.TrendingFlat
+    change < 0 -> Icons.AutoMirrored.Rounded.TrendingDown
+    else -> Icons.AutoMirrored.Rounded.TrendingUp
 }
 
 /** How this compares with before, on a pill washed in the card's own content color: the trend arrow, then the sentence. */
