@@ -245,11 +245,11 @@ fun UpdateBody(state: UpdateState, installed: InstalledApp, modifier: Modifier =
     }
 }
 
-/** "What's new": the release's notes in a tonal box, which scrolls inside itself when [notesMaxHeight] caps it. */
+/** "What's new": the release's changes, as a bulleted list in a tonal box, which scrolls inside itself when [notesMaxHeight] caps it. */
 @Composable
 private fun WhatsNew(release: UpdateRelease, notesMaxHeight: Dp?) {
     val scheme = MaterialTheme.colorScheme
-    Text("What's new", style = MaterialTheme.typography.titleSmall, color = scheme.onSurface)
+    Text("What's new", style = MaterialTheme.typography.titleSmall, color = scheme.onSurface, modifier = Modifier.semantics { heading() })
     Spacer(Modifier.height(AppSpacing.xs))
     Box(
         Modifier
@@ -259,7 +259,7 @@ private fun WhatsNew(release: UpdateRelease, notesMaxHeight: Dp?) {
             .then(if (notesMaxHeight != null) Modifier.verticalScroll(rememberScrollState()) else Modifier)
             .padding(AppSpacing.md),
     ) {
-        Text(release.notes, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+        ReleaseNotesList(release.notes)
     }
 }
 
@@ -591,5 +591,5 @@ fun updateSummary(state: UpdateState, updater: AppUpdater, now: Long = System.cu
     }
 }
 
-private fun releaseDate(at: Instant): String =
+internal fun releaseDate(at: Instant): String =
     DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withZone(ZoneId.systemDefault()).format(at)

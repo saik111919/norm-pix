@@ -12,6 +12,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -47,6 +48,7 @@ class AppUpdaterTest {
     private val installer = FakeInstaller()
     private val inspector = FakeInspector()
     private val notifier = FakeNotifier()
+    private val changelogs = MemoryChangelogStore()
     private var clock = 1_800_000_000_000L
 
     @AfterTest
@@ -77,6 +79,7 @@ class AppUpdaterTest {
             now = { clock },
             enabled = enabled,
             notifier = notifier,
+            changelogs = changelogs,
         ).also { if (onScreen) it.onForeground() }
     }
 
@@ -714,6 +717,89 @@ class AppUpdaterTest {
         updater.runInBackground(BackgroundUpdates.Download)
         updater.later()
         assertEquals(1, notifier.withdrawn)
+    }
+
+    // ------------------------------------------------------------ the changelog
+
+    private fun publishHistory(vararg releases: Pair<String, String>) =
+        network.answer(Releases.HISTORY, Releases.list(*releases.map { (version, notes) -> Releases.note(version, notes) }.toTypedArray()))
+
+    @Test
+    fun `the changelog is what each published version changed, newest first, and is kept`() = runTest {
+        publishHistory("1.0.2" to "- Second", "1.0.3" to "- Third", "1.0.1" to "- First")
+        val updater = updater()
+        assertTrue(updater.changelog.value.loading, "until the page has asked, it is about to")
+        updater.loadChangelog()
+        val state = updater.changelog.value
+        assertEquals(listOf("1.0.3", "1.0.2", "1.0.1"), state.entries.map { it.versionName })
+        assertEquals("- Third", state.entries.first().notes)
+        assertFalse(state.loading)
+        assertNull(state.problem)
+        assertEquals(state.entries, changelogs.load(), "kept for next time")
+    }
+
+    @Test
+    fun `without a connection the changelog saved earlier stays, and says why it is not fresh`() = runTest {
+        publishHistory("1.0.2" to "- Second")
+        updater().loadChangelog()
+        network.fail(Releases.HISTORY, UnknownHostException("api.github.com"))
+        val later = updater()
+        later.loadChangelog()
+        assertEquals(listOf("1.0.2"), later.changelog.value.entries.map { it.versionName })
+        assertEquals(UpdateProblem.Offline, later.changelog.value.problem)
+        assertFalse(later.changelog.value.loading)
+    }
+
+    @Test
+    fun `with nothing saved and no connection the changelog is empty, with the reason`() = runTest {
+        network.fail(Releases.HISTORY, UnknownHostException("api.github.com"))
+        val updater = updater()
+        updater.loadChangelog()
+        assertEquals(emptyList(), updater.changelog.value.entries)
+        assertEquals(UpdateProblem.Offline, updater.changelog.value.problem)
+    }
+
+    @Test
+    fun `an empty answer doesn't wipe the changelog saved`() = runTest {
+        publishHistory("1.0.2" to "- Second")
+        updater().loadChangelog()
+        network.answer(Releases.HISTORY, "[]")
+        val later = updater()
+        later.loadChangelog()
+        assertEquals(listOf("1.0.2"), later.changelog.value.entries.map { it.versionName })
+        assertNull(later.changelog.value.problem)
+    }
+
+    @Test
+    fun `asking twice at once is one look`() = runTest {
+        publishHistory("1.0.2" to "- Second")
+        val updater = updater()
+        val both = listOf(async { updater.loadChangelog() }, async { updater.loadChangelog() })
+        both.forEach { it.await() }
+        assertEquals(1, network.asked.count { it == Releases.HISTORY })
+    }
+
+    @Test
+    fun `a debug build reads the changelog too, though it never checks for an update`() = runTest {
+        publishHistory("1.0.2" to "- Second")
+        val updater = updater(enabled = false)
+        updater.loadChangelog()
+        assertEquals(listOf("1.0.2"), updater.changelog.value.entries.map { it.versionName })
+        assertEquals(listOf(Releases.HISTORY), network.asked, "only the list of releases is read")
+    }
+
+    @Test
+    fun `a check keeps the notes of the release it finds, up to date or not`() = runTest {
+        Releases.publish(network, "1.0.3", 10003, changes = mapOf("notes" to JsonPrimitive("- New in 1.0.3")))
+        assertIs<UpdateState.Available>(updater().check())
+        assertEquals(listOf("1.0.3"), changelogs.load().map { it.versionName })
+        assertEquals("- New in 1.0.3", changelogs.load().single().notes)
+
+        // The release the phone is on: its notes are there to read once an update has taken the page's newest slot.
+        Releases.publish(network, "1.0.2", 10002, changes = mapOf("notes" to JsonPrimitive("- Words of 1.0.2")))
+        assertIs<UpdateState.UpToDate>(updater().check())
+        assertEquals(listOf("1.0.3", "1.0.2"), changelogs.load().map { it.versionName })
+        assertEquals("- Words of 1.0.2", changelogs.load().last().notes)
     }
 }
 

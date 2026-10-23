@@ -62,7 +62,17 @@ object Releases {
     const val APP_ID = "com.example.normpix"
     const val LATEST = "https://api.github.com/repos/$REPO/releases/latest"
 
+    /** Where the changelog is read from: the page of releases the app asks for. */
+    const val HISTORY = "https://api.github.com/repos/$REPO/releases?per_page=15"
+
     val installed = InstalledApp(APP_ID, versionCode = 10002, versionName = "1.0.2", sdk = 34)
+
+    /** What `GET /releases` says: a page of releases, each described as [api] describes one. */
+    fun list(vararg releases: String): String = releases.joinToString(",", "[", "]")
+
+    /** A published release for the changelog: tagged [versionName], its page's text [notes]. */
+    fun note(versionName: String, notes: String, publishedAt: String = "2026-10-15T09:30:00Z", prerelease: Boolean = false): String =
+        api("v$versionName", emptyList(), body = notes, publishedAt = publishedAt, prerelease = prerelease)
 
     fun apk(size: Int = 300_000): ByteArray = ByteArray(size) { (it * 31 % 251).toByte() }
 

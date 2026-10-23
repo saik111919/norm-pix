@@ -1,7 +1,6 @@
 package com.example.normpix.updates
 
 import java.time.Instant
-import java.time.format.DateTimeParseException
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -28,6 +27,7 @@ object ReleaseMetadata {
     const val MAX_APK_BYTES = 200L * 1024 * 1024
     private const val MAX_NOTES = 8_000
     private val TAG = Regex("""v(\d+\.\d+\.\d+)""")
+    private val VERSION = Regex("""(\d+)\.(\d+)\.(\d+)""")
     private val APK_NAME = Regex("""[A-Za-z0-9._-]+\.apk""")
     private val SHA256 = Regex("""[0-9a-f]{64}""")
 
@@ -99,6 +99,42 @@ object ReleaseMetadata {
         return Metadata(applicationId, minSdk, update)
     }
 
+    /**
+     * The changelog in [json], a page of `GET /repos/{repo}/releases`: the published releases with a vMAJOR.MINOR.PATCH tag
+     * (never a draft, nor a prerelease - those are test builds of main), newest version first. The notes are the release's
+     * own text; whatever isn't a release this app can name is left out rather than failing the whole list.
+     */
+    fun history(json: String): List<ChangelogEntry> {
+        val list = try {
+            Json.parseToJsonElement(json) as? JsonArray ?: bad("not a list of releases")
+        } catch (e: SerializationException) {
+            throw UpdateException(UpdateProblem.BadRelease("malformed JSON"), e)
+        } catch (e: IllegalArgumentException) {
+            throw UpdateException(UpdateProblem.BadRelease("malformed JSON"), e)
+        }
+        return list.mapNotNull { element ->
+            val release = element as? JsonObject ?: return@mapNotNull null
+            if (release.boolean("draft") == true || release.boolean("prerelease") == true) return@mapNotNull null
+            val name = TAG.matchEntire(release.string("tag_name").orEmpty())?.groupValues?.get(1) ?: return@mapNotNull null
+            ChangelogEntry(
+                versionName = name,
+                versionCode = versionCodeOf(name) ?: return@mapNotNull null,
+                publishedAt = release.string("published_at")?.let(::instantOrNull),
+                notes = release.string("body").orEmpty().trim().take(MAX_NOTES),
+            )
+        }.distinctBy { it.versionCode }.sortedByDescending { it.versionCode }.take(Changelog.MAX_ENTRIES)
+    }
+
+    /**
+     * The versionCode of a versionName, as the build works it out (`versionCodeOf` in build.gradle.kts): 1.0.3 is 10003 and
+     * 1.12.0 is 11200. Null for a name that isn't major.minor.patch with minor and patch below 100.
+     */
+    fun versionCodeOf(versionName: String): Long? {
+        val (major, minor, patch) = VERSION.matchEntire(versionName)?.groupValues?.drop(1)?.map(String::toLong) ?: return null
+        if (minor >= 100 || patch >= 100) return null
+        return major * 10_000 + minor * 100 + patch
+    }
+
     /** Where GitHub serves a file attached to a release (it redirects from there to its download host). */
     fun downloadUrl(repository: String, tag: String, file: String) = "https://github.com/$repository/releases/download/$tag/$file"
 
@@ -112,11 +148,7 @@ object ReleaseMetadata {
 
     private fun bad(detail: String): Nothing = throw UpdateException(UpdateProblem.BadRelease(detail))
 
-    private fun instantOrNull(text: String): Instant? = try {
-        Instant.parse(text)
-    } catch (_: DateTimeParseException) {
-        null
-    }
+    private fun instantOrNull(text: String): Instant? = Changelog.instantOrNull(text)
 
     private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
 
@@ -132,6 +164,13 @@ sealed interface ReleaseCheck {
     /** The latest release is the installed version, or older. */
     data class Current(val latest: UpdateRelease) : ReleaseCheck
 }
+
+/** The latest release, whether or not it is newer than the installed one. */
+val ReleaseCheck.release: UpdateRelease
+    get() = when (this) {
+        is ReleaseCheck.Newer -> release
+        is ReleaseCheck.Current -> latest
+    }
 
 /**
  * Asks GitHub for the latest release of [repository] and whether it is an update for [installed]. Only the release GitHub
@@ -161,8 +200,18 @@ class UpdateChecker(
         return ReleaseCheck.Newer(update)
     }
 
+    /** What each published version changed, newest first (see [ReleaseMetadata.history]). Blocking: call it off the main thread. */
+    fun history(): List<ChangelogEntry> = ReleaseMetadata.history(
+        github.text(
+            "https://api.github.com/repos/$repository/releases?per_page=${Changelog.MAX_ENTRIES}",
+            "application/vnd.github+json",
+            MAX_HISTORY_BYTES,
+        ),
+    )
+
     private companion object {
         const val MAX_RELEASE_BYTES = 1024 * 1024
+        const val MAX_HISTORY_BYTES = 2 * 1024 * 1024
         const val MAX_METADATA_BYTES = 64 * 1024
         val REPOSITORY = Regex("""[A-Za-z0-9-]+/[A-Za-z0-9._-]+""")
     }

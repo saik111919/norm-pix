@@ -13,6 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -20,6 +22,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
@@ -36,6 +39,7 @@ import com.example.normpix.settings.ui.SettingsScreen
 import com.example.normpix.settings.ui.SettingsSpecial
 import com.example.normpix.settings.ui.UpdatesSettingsPage
 import com.example.normpix.settings.ui.automaticUpdatesSummary
+import com.example.normpix.settings.ui.updateBadgeLabel
 import com.example.normpix.testing.TestEnvironment
 import com.example.normpix.ui.theme.NormPixTheme
 import com.example.normpix.updates.ui.OfferAppUpdates
@@ -135,7 +139,11 @@ class UpdateUiTest {
         compose.waitUntil(10_000) { compose.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty() }
 
     /** An updater on the fake network that does everything on the main thread, as the screen's own work does under test. */
-    private fun updater(enabled: Boolean = true, installer: FakeInstaller = FakeInstaller()) = AppUpdater(
+    private fun updater(
+        enabled: Boolean = true,
+        installer: FakeInstaller = FakeInstaller(),
+        changelogs: ChangelogStore = MemoryChangelogStore(),
+    ) = AppUpdater(
         installed = Releases.installed,
         checker = UpdateChecker(GitHubAccess(network, "NormPix/test"), Releases.REPO, Releases.installed),
         downloads = UpdateDownloader(GitHubAccess(network, "NormPix/test"), dir),
@@ -145,6 +153,7 @@ class UpdateUiTest {
         scope = scope,
         io = Dispatchers.Main.immediate,
         enabled = enabled,
+        changelogs = changelogs,
     )
 
     private fun environment(updater: AppUpdater?) = TestEnvironment(prefsName = "update_ui_test", updates = updater).also { env = it }
@@ -159,7 +168,9 @@ class UpdateUiTest {
         compose.onNodeWithText("1.0.3").assertIsDisplayed()
         compose.onNodeWithText("Released", substring = true).assertIsDisplayed()
         compose.onNodeWithText("What's new").assertIsDisplayed()
-        compose.onNodeWithText("- Faster receipts").assertIsDisplayed()
+        // Each change on a bullet of its own: the dash of the commit line is not shown as text.
+        compose.onNodeWithText("Faster receipts").assertIsDisplayed()
+        absent("- Faster receipts")
         tap("Update now")
         tap("Later")
         assertEquals(listOf("update", "later"), taps)
@@ -284,14 +295,44 @@ class UpdateUiTest {
     }
 
     @Test
-    fun `Check for updates in Settings opens the update page`() {
+    fun `Settings has one row for everything about updating, which opens the update page`() {
         val environment = environment(updater())
         compose.setContent { environment.Content { SettingsScreen() } }
-        compose.onNodeWithText("Check for updates").performScrollTo()
+        compose.onNodeWithText("Updates & changelog").performScrollTo()
         compose.onNodeWithText("Version 1.0.2").assertIsDisplayed()
-        tap("Check for updates")
+        // Not three rows: the check, and Automatic updates, are behind this one.
+        absent("Check for updates")
+        absent("Automatic updates")
+        tap("Updates & changelog")
         assertEquals(1, environment.navigator.updatesOpened)
         assertEquals(emptyList(), network.asked, "the page asks GitHub, not the row")
+    }
+
+    @Test
+    fun `an update waiting is a pill at the end of the row, and what it says is Update or Install`() {
+        Releases.publish(network)
+        val updater = updater()
+        val environment = environment(updater)
+        scope.launch { updater.check() }
+        compose.waitForIdle()
+        compose.setContent { environment.Content { SettingsScreen() } }
+        compose.onNodeWithText("Updates & changelog").performScrollTo()
+        compose.onNodeWithText("Version 1.0.3 is available").assertIsDisplayed()
+        compose.onNodeWithText("Update").assertIsDisplayed()
+        assertEquals("Update", updateBadgeLabel(UpdateState.Available(release)))
+        assertEquals("Install", updateBadgeLabel(UpdateState.Ready(release, apk)))
+        for (quiet in listOf(UpdateState.Idle, UpdateState.UpToDate("1.0.2"), UpdateState.Downloading(release, 1, 2))) {
+            assertNull(updateBadgeLabel(quiet), "$quiet")
+        }
+    }
+
+    @Test
+    fun `no pill while nothing is waiting`() {
+        val environment = environment(updater())
+        compose.setContent { environment.Content { SettingsScreen() } }
+        compose.onNodeWithText("Updates & changelog").performScrollTo()
+        absent("Update")
+        absent("Install")
     }
 
     @Test
@@ -374,8 +415,11 @@ class UpdateUiTest {
         assertTrue(pinned.bottom <= later.top, "Update now over Later")
         assertTrue(screen.right - pinned.right <= 32.dp, "the buttons run across the page")
 
-        // The page scrolls all the way to its last line while the buttons stay where they are.
-        compose.onNodeWithText("Only GitHub is contacted", substring = true).performScrollTo().assertIsDisplayed()
+        // The page scrolls all the way to its last line while the buttons stay where they are. (Its last line is a list item of
+        // its own, composed only once the list has come near it: the list is scrolled to it, rather than the line to the screen.)
+        compose.onNode(hasScrollToNodeAction())
+            .performScrollToNode(hasText("Only GitHub is contacted", substring = true))
+        compose.onNodeWithText("Only GitHub is contacted", substring = true).assertIsDisplayed()
         assertEquals(pinned, boundsOf("Update now"), "the bar doesn't move with the page")
         assertEquals(later, boundsOf("Later"))
         tap("Update now")
@@ -432,9 +476,9 @@ class UpdateUiTest {
     }
 
     @Test
-    fun `Settings leads to Automatic updates, saying what they do`() {
+    fun `the update page leads to Automatic updates, saying what they do`() {
         val environment = environment(updater())
-        compose.setContent { environment.Content { SettingsScreen() } }
+        compose.setContent { environment.Content { UpdatePage() } }
         compose.onNodeWithText("Automatic updates").performScrollTo()
         compose.onNodeWithText("Daily · Download, then ask · Wi-Fi only").assertIsDisplayed()
         tap("Automatic updates")
@@ -469,11 +513,11 @@ class UpdateUiTest {
     }
 
     @Test
-    fun `Settings shows the summary of the choices made`() {
+    fun `the update page shows the summary of the choices made`() {
         val environment = environment(updater())
         environment.preferences.setUpdateCheckEvery(UpdateCheckEvery.OnceAWeek)
         environment.preferences.setUpdateCheckWhen(UpdateCheckWhen.AtSetTime)
-        compose.setContent { environment.Content { SettingsScreen() } }
+        compose.setContent { environment.Content { UpdatePage() } }
         compose.onNodeWithText("Automatic updates").performScrollTo()
         compose.onNodeWithText("Weekly at 9:00 PM · Download, then ask · Wi-Fi only").assertIsDisplayed()
     }
@@ -585,11 +629,129 @@ class UpdateUiTest {
     fun `a debug build says updates come with release builds, and has nothing to switch`() {
         val environment = environment(updater(enabled = false))
         compose.setContent { environment.Content { SettingsScreen() } }
-        compose.onNodeWithText("Check for updates").performScrollTo()
+        compose.onNodeWithText("Updates & changelog").performScrollTo()
         compose.onNodeWithText("Version 1.0.2 · updates come with release builds").assertIsDisplayed()
         absent("Check for updates automatically")
         absent("Automatic updates")
         assertEquals(emptyList(), network.asked)
+    }
+
+    @Test
+    fun `a debug build's update page has no Automatic updates, but still shows the changelog`() {
+        network.answer(Releases.HISTORY, Releases.list(Releases.note("1.0.2", "- Words of 1.0.2")))
+        val environment = environment(updater(enabled = false))
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("Version 1.0.2")
+        compose.onNodeWithText("Words of 1.0.2").performScrollTo().assertIsDisplayed()
+        absent("Automatic updates")
+        assertTrue(compose.onAllNodesWithText("Only GitHub is contacted", substring = true).fetchSemanticsNodes().isEmpty())
+        assertEquals(listOf(Releases.HISTORY), network.asked, "it reads the list of releases and checks for no update")
+    }
+
+    // ------------------------------------------------------------ the changelog
+
+    private fun publishChangelog() = network.answer(
+        Releases.HISTORY,
+        Releases.list(
+            Releases.note("1.0.3", "- Notes for 1.0.3"),
+            Releases.note("1.0.2", "## What's new\n- Notes for 1.0.2\n- A second change in 1.0.2"),
+            Releases.note("1.0.1", "- Notes for 1.0.1"),
+        ),
+    )
+
+    @Test
+    fun `the update page lists what every version changed, the installed one open and marked`() {
+        Releases.publish(network)
+        publishChangelog()
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("Update available")
+        waitFor("Version 1.0.2")
+        compose.onNodeWithText("Changelog").performScrollTo().assertIsDisplayed()
+        // What the phone has is read first: open, as a list of its changes under their heading.
+        compose.onNodeWithText("Notes for 1.0.2").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("A second change in 1.0.2").performScrollTo().assertIsDisplayed()
+        // Two "What's new": the update's own, in the page's body, and the heading the installed version's notes gave themselves.
+        assertEquals(2, compose.onAllNodesWithText("What's new").fetchSemanticsNodes().size)
+        compose.onNodeWithText("2 changes", substring = true).assertExists()
+        compose.onNodeWithText("Installed").assertExists()
+        // The newer one is marked and shut: its notes are the update's own, above; the older one is a tap away.
+        compose.onNodeWithText("New").assertExists()
+        absent("Notes for 1.0.3")
+        absent("Notes for 1.0.1")
+    }
+
+    @Test
+    fun `a version opens to its changes when tapped, and shuts again`() {
+        Releases.publish(network)
+        publishChangelog()
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("Version 1.0.1")
+        scrollTap("Version 1.0.1")
+        waitFor("Notes for 1.0.1")
+        scrollTap("Version 1.0.1")
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Notes for 1.0.1").fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun `up to date, the page already says what the version installed changed`() {
+        Releases.publish(network, "1.0.2", 10002)
+        network.answer(Releases.HISTORY, Releases.list(Releases.note("1.0.2", "- What 1.0.2 brought")))
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("NormPix is up to date")
+        waitFor("What 1.0.2 brought")
+        compose.onNodeWithText("What 1.0.2 brought").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `with no connection the changelog says why, and a tap asks again`() {
+        // GitHub can't be reached at all: no check was heard either, so nothing was saved for the changelog to fall back on.
+        network.fail(Releases.LATEST, java.net.UnknownHostException("api.github.com"))
+        network.fail(Releases.HISTORY, java.net.UnknownHostException("api.github.com"))
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("Couldn't load the changelog")
+        // (The page's own headline says it too, about the update check: this is the changelog row's words.)
+        compose.onNodeWithText("Tap to try again", substring = true).performScrollTo().assertIsDisplayed()
+        val asked = network.asked.count { it == Releases.HISTORY }
+
+        network.answer(Releases.HISTORY, Releases.list(Releases.note("1.0.2", "- Back online")))
+        scrollTap("Couldn't load the changelog")
+        waitFor("Version 1.0.2")
+        assertTrue(network.asked.count { it == Releases.HISTORY } > asked, "the tap asked GitHub again")
+        absent("Couldn't load the changelog")
+    }
+
+    @Test
+    fun `without GitHub the page keeps showing the changelog saved earlier, and says so`() {
+        val saved = ChangelogEntry("1.0.2", 10002, Instant.parse("2026-10-15T09:30:00Z"), "- Saved words")
+        Releases.publish(network)
+        network.fail(Releases.HISTORY, java.net.UnknownHostException("api.github.com"))
+        val environment = environment(updater(changelogs = MemoryChangelogStore(listOf(saved))))
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("Version 1.0.2")
+        compose.onNodeWithText("Saved words").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Couldn't refresh the changelog just now", substring = true).performScrollTo().assertIsDisplayed()
+        absent("Couldn't load the changelog")
+    }
+
+    @Test
+    fun `a version that came with no notes says so`() {
+        Releases.publish(network, "1.0.2", 10002)
+        network.answer(Releases.HISTORY, Releases.list(Releases.note("1.0.2", "")))
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("Version 1.0.2")
+        compose.onNodeWithText("No notes were written for this version.").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `settings search finds the changelog`() {
+        for (query in listOf("changelog", "what's new", "release notes", "version history")) {
+            assertEquals(SettingsSpecial.Updates, SettingsCatalog.search(query).single { it.title == "What's new & changelog" }.special, query)
+        }
     }
 
     @Test

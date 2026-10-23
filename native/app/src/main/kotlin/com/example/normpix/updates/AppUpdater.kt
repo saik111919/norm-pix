@@ -149,9 +149,18 @@ class AppUpdater(
     /** False for debug and qa builds: no release would install over them (see `UPDATES_ENABLED` in build.gradle.kts). */
     val enabled: Boolean = true,
     private val notifier: UpdateNotifier = UpdateNotifier.None,
+    /** What each version changed, kept so it can be read offline and after an update (see [loadChangelog]). */
+    private val changelogs: ChangelogStore = MemoryChangelogStore(),
 ) {
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
+
+    // Loading from the start: the page asks as it opens, so it opens on "Loading", not on "nothing to show".
+    private val _changelog = MutableStateFlow(ChangelogState(loading = true))
+
+    /** What each published version changed, for the update page: empty until [loadChangelog] has looked. */
+    val changelog: StateFlow<ChangelogState> = _changelog.asStateFlow()
+    private var changelogLoad: Deferred<Unit>? = null
 
     private val _downloaded = Channel<UpdateRelease>(Channel.CONFLATED)
 
@@ -258,12 +267,38 @@ class AppUpdater(
         return running.await()
     }
 
+    /**
+     * Shows the changelog: what was saved from an earlier look, at once, then what GitHub says each published version changed.
+     * Unlike [check] it works in builds that don't update (it only reads), and when GitHub can't be reached the saved
+     * changelog stays, with the [ChangelogState.problem]. A look already under way is joined.
+     */
+    suspend fun loadChangelog() {
+        val running = changelogLoad?.takeIf { it.isActive } ?: scope.async { fetchChangelog() }.also { changelogLoad = it }
+        running.await()
+    }
+
+    private suspend fun fetchChangelog() {
+        val saved = withContext(io) { changelogs.load() }
+        _changelog.value = ChangelogState(saved, loading = true)
+        _changelog.value = try {
+            val fresh = withContext(io) { checker.history().also { if (it.isNotEmpty()) changelogs.save(it) } }
+            ChangelogState(fresh.ifEmpty { saved })
+        } catch (e: UpdateException) {
+            ChangelogState(saved, problem = e.problem)
+        } catch (e: CancellationException) {
+            _changelog.value = ChangelogState(saved)
+            throw e
+        }
+    }
+
     private suspend fun fetch(): UpdateState {
         val before = _state.value
         _state.value = UpdateState.Checking
         val result = try {
             val (found, onDisk) = withContext(io) {
                 val latest = checker.latest()
+                // Kept for the changelog, so the notes of the version an update brings are there once it is installed.
+                latest.release.let { changelogs.remember(ChangelogEntry(it.versionName, it.versionCode, it.publishedAt, it.notes)) }
                 latest to (latest as? ReleaseCheck.Newer)?.let { kept(it.release) }
             }
             when (found) {
@@ -664,6 +699,7 @@ class AppUpdater(
                 scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
                 enabled = BuildConfig.UPDATES_ENABLED,
                 notifier = SystemUpdateNotifier(app),
+                changelogs = FileChangelogStore(File(app.filesDir, "changelog.json")),
             )
         }
     }

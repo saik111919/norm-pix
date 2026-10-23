@@ -5,15 +5,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.SystemUpdate
-import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -27,6 +30,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.example.normpix.availability.ScheduledFeature
 import com.example.normpix.availability.summary
 import com.example.normpix.finance.ui.FinanceState
@@ -49,11 +55,14 @@ import com.example.normpix.updates.UpdateState
 import com.example.normpix.updates.ui.updateSummary
 import kotlinx.coroutines.launch
 
-/** The groups listed on the main Settings screen. Automatic updates sits with "Check for updates", under System. */
+/** The space under the search field, in the same list item: not part of the field, so not counted when asking if it is in view. */
+private val SEARCH_GAP = AppSpacing.sm
+
+/** The groups listed on the main Settings screen. Automatic updates is not one: it is reached from the Updates page, under System. */
 val SettingsGroups = SettingsPage.entries - SettingsPage.Updates
 
-/** How far the search field may scroll up before it counts as gone and the header offers it as an icon. */
-private const val SEARCH_GONE_PX = 48
+/** The list item holding the search field, found by this key to tell whether the field is on screen. */
+private const val SEARCH_ITEM_KEY = "search"
 
 val SettingsPage.title: String
     get() = when (this) {
@@ -90,9 +99,18 @@ fun SettingsScreen() {
     val scope = rememberCoroutineScope()
     val searchFocus = remember { FocusRequester() }
     // Once the search field has scrolled away, it waits in the header as an icon: tapping it brings the field back and
-    // puts the cursor in it.
-    val searchOutOfView by remember(listState) {
-        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > SEARCH_GONE_PX }
+    // puts the cursor in it. "Away" is the field itself being out of sight - wholly above the list's content, under the
+    // header's controls or off the top - never merely the first item having moved: the page's own title is an item above the
+    // field, and the icon used to appear the moment that left, with the field still there under it.
+    val gapBelowField = with(LocalDensity.current) { SEARCH_GAP.roundToPx() }
+    val searchOutOfView by remember(listState, gapBelowField) {
+        derivedStateOf {
+            val layout = listState.layoutInfo
+            // Not measured yet: nothing has scrolled anywhere.
+            if (layout.visibleItemsInfo.isEmpty()) return@derivedStateOf false
+            val field = layout.visibleItemsInfo.firstOrNull { it.key == SEARCH_ITEM_KEY } ?: return@derivedStateOf true
+            field.offset + field.size - gapBelowField <= 0
+        }
     }
 
     val groupStyle = settingsGroupStyle()
@@ -116,7 +134,7 @@ fun SettingsScreen() {
             ) { Icon(Icons.Rounded.Search, contentDescription = "Search settings") }
         },
     ) {
-        item(key = "search") {
+        item(key = SEARCH_ITEM_KEY) {
             Column(Modifier.padding(AppSpacing.page)) {
                 SearchField(
                     value = query,
@@ -124,7 +142,7 @@ fun SettingsScreen() {
                     placeholder = "Search settings",
                     modifier = Modifier.focusRequester(searchFocus),
                 )
-                Spacer(Modifier.height(AppSpacing.sm))
+                Spacer(Modifier.height(SEARCH_GAP))
             }
         }
         item(key = "body") {
@@ -184,28 +202,20 @@ fun SettingsScreen() {
                                     onClick = { system.resetSettings() },
                                 )
                             }
+                            // One row for everything about updating: it opens the update page, which holds the check, what
+                            // is new, the changelog and the way to Automatic updates.
                             container.updates?.let { updater ->
                                 item {
                                     val update by updater.state.collectAsState()
                                     SettingsRow(
-                                        headline = "Check for updates",
+                                        headline = UPDATES_ROW_TITLE,
                                         supporting = updateSummary(update, updater),
                                         icon = Icons.Outlined.SystemUpdate,
-                                        hue = 6,
+                                        hue = SettingsPageUpdatesHue,
                                         alert = update is UpdateState.Available || update is UpdateState.Ready,
                                         onClick = { system.checkForUpdates() },
+                                        trailing = updateBadgeLabel(update)?.let { label -> { UpdateBadge(label) } },
                                     )
-                                }
-                                if (updater.enabled) {
-                                    item {
-                                        SettingsRow(
-                                            headline = SettingsPage.Updates.title,
-                                            supporting = automaticUpdatesSummary(prefs),
-                                            icon = Icons.Outlined.Update,
-                                            hue = SettingsPage.Updates.hue,
-                                            onClick = { navigator.openSettings(SettingsPage.Updates) },
-                                        )
-                                    }
                                 }
                             }
                             item {
@@ -221,6 +231,30 @@ fun SettingsScreen() {
                 }
             }
         }
+    }
+}
+
+/** What the Updates row is called: the check, what is new and the changelog are all behind it. */
+internal const val UPDATES_ROW_TITLE = "Updates & changelog"
+
+/** What the small pill at the end of the Updates row says when there is something to do: Update, or Install. Null when there isn't. */
+internal fun updateBadgeLabel(state: UpdateState): String? = when (state) {
+    is UpdateState.Available -> "Update"
+    is UpdateState.Ready -> "Install"
+    else -> null
+}
+
+/** A small filled pill at the end of a row: the one thing waiting for the user, seen from the list. */
+@Composable
+private fun UpdateBadge(label: String) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(shape = CircleShape, color = scheme.primary, contentColor = scheme.onPrimary) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = AppSpacing.md, vertical = AppSpacing.xs + 2.dp),
+        )
     }
 }
 
