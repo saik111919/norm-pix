@@ -51,6 +51,7 @@ import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
+import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
@@ -91,7 +92,7 @@ fun CategoriesPage() {
     val allOpen = withSubs.isNotEmpty() && withSubs.all { it.category.id in expanded }
     val suggestions = missingSuggestions(finance.categories).size
 
-    AppSubPage(title = "Categories", onBack = navigator::back) {
+    AppSubPage(title = "Categories", onBack = navigator::back, maxWidth = AppLayout.maxListWidth) {
         item {
             Column(Modifier.padding(AppSpacing.page)) {
                 // The same Expense | Income control (and primary tonal pill) as the transaction editor.

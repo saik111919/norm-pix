@@ -15,17 +15,22 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.automirrored.rounded.CallReceived
+import androidx.compose.material.icons.automirrored.rounded.MenuOpen
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.AddAlert
@@ -37,16 +42,20 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Insights
+import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailDefaults
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -105,7 +114,10 @@ import com.example.normpix.ui.theme.AppIcons
 import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppSpacing
+import com.example.normpix.ui.theme.RailStyle
 import com.example.normpix.ui.theme.WindowSize
+import com.example.normpix.ui.theme.rememberRailFoldable
+import com.example.normpix.ui.theme.rememberRailStyle
 import com.example.normpix.ui.theme.rememberReducedMotion
 import com.example.normpix.ui.theme.rememberWindowSize
 import com.example.normpix.wallet.rememberCardFlows
@@ -138,8 +150,8 @@ private const val BACK_FINISH_MS = 160
 
 /**
  * The app frame: the top-level destinations with a floating navigation bar on
- * phones and a navigation rail on larger windows - each also holding the one
- * way into Settings - and contextual actions surfaced through the bottom More control
+ * phones and a navigation rail on larger windows (a wide one, with each label beside its icon, on a Large window) - each
+ * also holding the one way into Settings - and contextual actions surfaced through the bottom More control
  * (on the rail: its button for the screen's main action, and a More menu for the rest).
  *
  * Tabs are composed on first visit and then kept (invisible and
@@ -396,6 +408,8 @@ fun AppShell(
     }
 
     val compact = size == WindowSize.Compact
+    val rail = rememberRailStyle()
+    val foldable = rememberRailFoldable()
     DisposableEffect(compact) {
         snackbars.bottomInset = if (compact) 80.dp else 0.dp
         onDispose { snackbars.bottomInset = 0.dp }
@@ -475,37 +489,58 @@ fun AppShell(
 
     if (!compact) {
         Row(Modifier.fillMaxSize()) {
-            // The rail's label is a word or two, wrapped to its width: unbounded, "Plans & Activity" ran out past both edges.
-            val railLabel = Modifier.widthIn(max = AppLayout.railWidth - AppSpacing.sm)
-            NavigationRail(
-                modifier = Modifier.width(AppLayout.railWidth),
-                header = { RailActions(pageActions) },
-            ) {
-                // The destinations scroll when the window is short (a phone on its side), so none is out of reach;
-                // Settings stays where it is under them.
-                Column(
-                    Modifier.weight(1f).verticalScroll(rememberScrollState()),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(AppSpacing.md),
-                ) {
-                    for (d in AppDestination.entries) {
-                        NavigationRailItem(
-                            selected = d == current,
-                            onClick = { shell.selected = d.ordinal },
-                            icon = { DestinationIcon(d, selected = d == current, overdue = overdue) },
-                            label = { Text(d.label, textAlign = TextAlign.Center, maxLines = 2, modifier = railLabel) },
-                            alwaysShowLabel = true,
-                        )
-                    }
-                }
-                NavigationRailItem(
-                    selected = false,
-                    onClick = { navigator.openSettings() },
-                    icon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
-                    label = { Text("Settings", textAlign = TextAlign.Center, maxLines = 1, modifier = railLabel) },
-                    alwaysShowLabel = true,
-                    modifier = Modifier.padding(bottom = AppSpacing.lg),
+            if (rail == RailStyle.Wide) {
+                WideRail(
+                    actions = pageActions,
+                    current = current,
+                    overdue = overdue,
+                    onSelect = { shell.selected = it.ordinal },
+                    onOpenSettings = { navigator.openSettings() },
+                    onFold = { container.preferences.setRailCollapsed(true) },
                 )
+            } else {
+                // The rail's label is a word or two, wrapped to its width: unbounded, "Plans & Activity" ran out past both edges.
+                val railLabel = Modifier.widthIn(max = AppLayout.railWidth - AppSpacing.sm)
+                NavigationRail(
+                    modifier = Modifier.width(AppLayout.railWidth),
+                    header = {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            // Folded down by hand from the wide rail: the button that opens it again is the first thing in it.
+                            if (foldable) {
+                                IconButton(onClick = { container.preferences.setRailCollapsed(false) }) {
+                                    Icon(Icons.Rounded.Menu, contentDescription = "Expand navigation")
+                                }
+                            }
+                            RailActions(pageActions)
+                        }
+                    },
+                ) {
+                    // The destinations scroll when the window is short (a phone on its side), so none is out of reach;
+                    // Settings stays where it is under them.
+                    Column(
+                        Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(AppSpacing.md),
+                    ) {
+                        for (d in AppDestination.entries) {
+                            NavigationRailItem(
+                                selected = d == current,
+                                onClick = { shell.selected = d.ordinal },
+                                icon = { DestinationIcon(d, selected = d == current, overdue = overdue) },
+                                label = { Text(d.label, textAlign = TextAlign.Center, maxLines = 2, modifier = railLabel) },
+                                alwaysShowLabel = true,
+                            )
+                        }
+                    }
+                    NavigationRailItem(
+                        selected = false,
+                        onClick = { navigator.openSettings() },
+                        icon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
+                        label = { Text("Settings", textAlign = TextAlign.Center, maxLines = 1, modifier = railLabel) },
+                        alwaysShowLabel = true,
+                        modifier = Modifier.padding(bottom = AppSpacing.lg),
+                    )
+                }
             }
             // Nothing floats over the tabs here: their lists end under their last row (see LocalFloatingDock).
             CompositionLocalProvider(LocalFloatingDock provides false) {
@@ -570,20 +605,108 @@ private fun RailActions(actions: List<FooterAction>) {
         if (others.isNotEmpty()) {
             Box {
                 IconButton(onClick = { open = true }) { Icon(Icons.Rounded.MoreHoriz, contentDescription = "More actions") }
-                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                    for (action in others) {
-                        DropdownMenuItem(
-                            text = { Text(action.label) },
-                            leadingIcon = { Icon(action.icon, contentDescription = null) },
-                            onClick = {
-                                open = false
-                                action.onClick()
-                            },
-                        )
-                    }
-                }
+                RailActionMenu(others, expanded = open, onDismiss = { open = false })
             }
         }
+    }
+}
+
+/** The menu of the actions a rail has no room for beside its main one. */
+@Composable
+private fun RailActionMenu(actions: List<FooterAction>, expanded: Boolean, onDismiss: () -> Unit) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        for (action in actions) {
+            DropdownMenuItem(
+                text = { Text(action.label) },
+                leadingIcon = { Icon(action.icon, contentDescription = null) },
+                onClick = {
+                    onDismiss()
+                    action.onClick()
+                },
+            )
+        }
+    }
+}
+
+/**
+ * The rail of a Large window (a tablet in landscape), where the narrow one looks lost: a column with room for the words. The
+ * screen's main action is an extended button at the top, naming what it adds, and the others are a row under it that opens the
+ * same menu; each destination is a pill with its label beside its icon, and Settings is the last row, kept at the foot. It is
+ * the same destinations, icons, colours and shapes as the narrow rail and the dock - only laid out for the room. A button above
+ * it folds it down to the narrow rail by hand ([onFold]); the narrow rail of a window with room for this one has the button that
+ * opens it again, and the choice is kept (`AppPrefsState.railCollapsed`).
+ */
+@Composable
+private fun WideRail(
+    actions: List<FooterAction>,
+    current: AppDestination,
+    overdue: Int,
+    onSelect: (AppDestination) -> Unit,
+    onOpenSettings: () -> Unit,
+    onFold: () -> Unit,
+) {
+    Column(
+        Modifier
+            .width(AppLayout.wideRailWidth)
+            .fillMaxHeight()
+            .background(MaterialTheme.colorScheme.surface)
+            .windowInsetsPadding(NavigationRailDefaults.windowInsets)
+            .padding(horizontal = AppSpacing.md),
+    ) {
+        // Folds the rail down to the narrow one; the button that opens it again is the first thing in that.
+        IconButton(onClick = onFold, modifier = Modifier.padding(top = AppSpacing.sm)) {
+            Icon(Icons.AutoMirrored.Rounded.MenuOpen, contentDescription = "Collapse navigation")
+        }
+        val main = actions.firstOrNull { it.isPrimary } ?: actions.firstOrNull()
+        if (main != null) {
+            val others = actions.filter { it !== main }
+            var open by remember { mutableStateOf(false) }
+            Spacer(Modifier.height(AppSpacing.sm))
+            // The content form, not the icon-and-text one: that hides its text from semantics, and the button would have no name.
+            ExtendedFloatingActionButton(
+                onClick = main.onClick,
+                // Starts where the destinations' icons do, not wider than the rail's own padding allows.
+                modifier = Modifier.padding(start = AppSpacing.xs),
+            ) {
+                Icon(main.icon, contentDescription = null)
+                Spacer(Modifier.width(AppSpacing.md))
+                Text(main.label, maxLines = 1)
+            }
+            if (others.isNotEmpty()) {
+                Spacer(Modifier.height(AppSpacing.sm))
+                Box {
+                    NavigationDrawerItem(
+                        label = { Text("More actions", maxLines = 1) },
+                        selected = false,
+                        onClick = { open = true },
+                        icon = { Icon(Icons.Rounded.MoreHoriz, contentDescription = null) },
+                    )
+                    RailActionMenu(others, expanded = open, onDismiss = { open = false })
+                }
+            }
+            Spacer(Modifier.height(AppSpacing.lg))
+        }
+        // The destinations scroll when the window is short, so none is out of reach; Settings stays where it is under them.
+        Column(
+            Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.xs),
+        ) {
+            for (d in AppDestination.entries) {
+                NavigationDrawerItem(
+                    label = { Text(d.label, maxLines = 1) },
+                    selected = d == current,
+                    onClick = { onSelect(d) },
+                    icon = { DestinationIcon(d, selected = d == current, overdue = overdue) },
+                )
+            }
+        }
+        NavigationDrawerItem(
+            label = { Text("Settings", maxLines = 1) },
+            selected = false,
+            onClick = onOpenSettings,
+            icon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
+            modifier = Modifier.padding(bottom = AppSpacing.lg),
+        )
     }
 }
 

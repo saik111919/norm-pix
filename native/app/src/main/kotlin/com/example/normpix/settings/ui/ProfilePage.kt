@@ -57,6 +57,7 @@ import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.AppTab
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.LocalAppScope
+import com.example.normpix.ui.components.LocalDetailPane
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.ProfileAvatar
 import com.example.normpix.ui.components.RadioRow
@@ -272,16 +273,19 @@ fun ProfilePage() {
                         }
                     }
                 }
-                Spacer(Modifier.height(AppSpacing.lg))
-                ListSection {
-                    item {
-                        SettingsRow(
-                            headline = "Settings",
-                            supporting = "Appearance, finance, data, security and more",
-                            icon = Icons.Outlined.Settings,
-                            hue = null,
-                            onClick = { navigator.openSettings() },
-                        )
+                // Beside the Settings list (a tablet) the way to Settings is the list itself.
+                if (LocalDetailPane.current == null) {
+                    Spacer(Modifier.height(AppSpacing.lg))
+                    ListSection {
+                        item {
+                            SettingsRow(
+                                headline = "Settings",
+                                supporting = "Appearance, finance, data, security and more",
+                                icon = Icons.Outlined.Settings,
+                                hue = null,
+                                onClick = { navigator.openSettings() },
+                            )
+                        }
                     }
                 }
             }

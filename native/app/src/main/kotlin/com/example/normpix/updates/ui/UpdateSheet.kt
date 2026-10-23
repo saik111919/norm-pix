@@ -166,6 +166,7 @@ internal fun updateActionsFor(updater: AppUpdater, onClose: () -> Unit) = Update
     allow = updater::allowInstalls,
     retry = updater::retry,
     close = onClose,
+    checkAgain = updater::checkAgain,
 )
 
 /** What the update sheet's buttons do. */
@@ -177,6 +178,8 @@ class UpdateSheetActions(
     val allow: () -> Unit,
     val retry: () -> Unit,
     val close: () -> Unit,
+    /** Asks GitHub again, from "up to date": Check for update. */
+    val checkAgain: () -> Unit = {},
 )
 
 /**
@@ -397,6 +400,9 @@ internal enum class UpdateAction(val label: String) {
     Done("Done"),
     TryAgain("Try again"),
     DownloadAgain("Download again"),
+
+    /** On "up to date", as the Pixel's update screen has it: ask GitHub again, for a release that came out since. */
+    CheckForUpdate("Check for update"),
 }
 
 /** The buttons for a state: the way out, always, and what to do next when there is something to do. */
@@ -407,7 +413,7 @@ internal fun updateButtons(state: UpdateState): UpdateButtons {
     fun laterFor(release: UpdateRelease) = if (release.mandatory) UpdateAction.NotNow else UpdateAction.Later
     return when (state) {
         UpdateState.Idle, UpdateState.Checking -> UpdateButtons(null, UpdateAction.Close)
-        is UpdateState.UpToDate -> UpdateButtons(null, UpdateAction.Done)
+        is UpdateState.UpToDate -> UpdateButtons(UpdateAction.CheckForUpdate, UpdateAction.Done)
         is UpdateState.Available -> UpdateButtons(UpdateAction.UpdateNow, laterFor(state.release))
         is UpdateState.Downloading -> UpdateButtons(null, UpdateAction.CancelDownload)
         is UpdateState.Ready -> UpdateButtons(UpdateAction.Install, laterFor(state.release))
@@ -427,6 +433,7 @@ private fun UpdateSheetActions.perform(action: UpdateAction) {
         UpdateAction.Install -> install()
         UpdateAction.OpenSettings -> allow()
         UpdateAction.TryAgain, UpdateAction.DownloadAgain -> retry()
+        UpdateAction.CheckForUpdate -> checkAgain()
         UpdateAction.NotNow, UpdateAction.Close, UpdateAction.Done -> close()
     }
 }

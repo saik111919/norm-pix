@@ -489,6 +489,11 @@ class AppUpdater(
         }
     }
 
+    /** Asks GitHub again without waiting for it: the update page's Check for update, on "up to date". A check already running is joined. */
+    fun checkAgain() {
+        scope.launch { check() }
+    }
+
     /** Try again, from wherever it stopped: the check, the download, or the install. */
     fun retry() {
         when (val current = _state.value) {

@@ -93,6 +93,7 @@ class UpdateUiTest {
         allow = { taps += "allow" },
         retry = { taps += "retry" },
         close = { taps += "close" },
+        checkAgain = { taps += "check" },
     )
 
     private val network = FakeNetwork()
@@ -200,8 +201,10 @@ class UpdateUiTest {
         val screen = { compose.onRoot().getBoundsInRoot() }
         show(UpdateState.Downloading(release, release.size / 2, release.size))
         assertTrue(screen().right - boundsOf("Cancel download").right <= 32.dp, "Cancel download is on the right")
+        // Up to date has Done on the left and Check for update, the one thing to do next, on the right.
         show(UpdateState.UpToDate("1.0.2"))
-        assertTrue(screen().right - boundsOf("Done").right <= 32.dp, "Done is on the right")
+        assertTrue(boundsOf("Done").right <= boundsOf("Check for update").left)
+        assertTrue(screen().right - boundsOf("Check for update").right <= 32.dp, "Check for update is on the right")
         show(UpdateState.Installing(release, apk))
         assertTrue(screen().right - boundsOf("Close").right <= 32.dp, "Close is on the right")
         // A failure that can't be tried again has Close alone; one that can has Close on the left and Try again on the right.
@@ -269,8 +272,9 @@ class UpdateUiTest {
     fun `up to date`() {
         show(UpdateState.UpToDate("1.0.2"))
         compose.onNodeWithText("NormPix is up to date").assertIsDisplayed()
+        tap("Check for update")
         tap("Done")
-        assertEquals(listOf("close"), taps)
+        assertEquals(listOf("check", "close"), taps)
     }
 
     // ------------------------------------------------------------ Settings
@@ -389,16 +393,32 @@ class UpdateUiTest {
     }
 
     @Test
-    fun `a single action on the update page is one full-width button`() {
+    fun `up to date, the update page has Check for update full width over Done`() {
         Releases.publish(network, "1.0.2", 10002)
         val environment = environment(updater())
         compose.setContent { environment.Content { UpdatePage() } }
         waitFor("NormPix is up to date")
         val screen = compose.onRoot().getBoundsInRoot()
+        val check = boundsOf("Check for update")
         val done = boundsOf("Done")
-        assertTrue(done.width > screen.width * 0.8f, "full width: ${done.width} of ${screen.width}")
-        assertTrue(done.top > screen.top + screen.height / 2, "at the foot of the screen")
+        assertTrue(check.width > screen.width * 0.8f, "full width: ${check.width} of ${screen.width}")
+        assertTrue(check.top > screen.top + screen.height / 2, "at the foot of the screen")
+        assertTrue(done.top >= check.bottom, "Done is under it: $done under $check")
         absent("Later")
+    }
+
+    @Test
+    fun `Check for update asks GitHub again and finds a release that came out since`() {
+        Releases.publish(network, "1.0.2", 10002)
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("NormPix is up to date")
+        // A newer release is published while the page is open; the button is the way to see it, as on a Pixel's update screen.
+        Releases.publish(network, "1.0.3", 10003)
+        tap("Check for update")
+        waitFor("Update available")
+        compose.onNodeWithText("Update now").assertIsDisplayed()
+        absent("Check for update")
     }
 
     @Test

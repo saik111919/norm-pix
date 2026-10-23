@@ -226,6 +226,7 @@ class UpdateBannerTest {
         allow = { taps += "allow" },
         retry = { taps += "retry" },
         close = { taps += "close" },
+        checkAgain = { taps += "check" },
     )
 
     private fun bannerFor(state: UpdateState, offered: Boolean = true) = updateBannerFor(

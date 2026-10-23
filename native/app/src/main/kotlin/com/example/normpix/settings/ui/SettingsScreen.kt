@@ -48,6 +48,7 @@ import com.example.normpix.settings.ThemeMode
 import com.example.normpix.ui.components.AppEmptyState
 import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.ListSection
+import com.example.normpix.ui.components.ListSectionStyle
 import com.example.normpix.ui.components.SearchField
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.AppTheme
@@ -82,19 +83,14 @@ val SettingsPage.icon: ImageVector
 /**
  * Settings: searchable, grouped into a few categories, each summarizing its
  * current state so most people never need to open them.
+ *
+ * This is the list on a phone, on its own, with the page a row opens pushed over it; a tablet shows the list beside that
+ * page instead ([SettingsTwoPane], whose list is [SettingsListPane]).
  */
 @Composable
 fun SettingsScreen() {
     val navigator = LocalNavigator.current
-    val container = LocalAppContainer.current
-    val prefs by container.preferences.state.collectAsState()
-    val finance = rememberFinanceState()
-    val activator = rememberSettingsActivator()
-    val system = rememberSettingsSystemActions()
-    val is24Hour = android.text.format.DateFormat.is24HourFormat(androidx.compose.ui.platform.LocalContext.current)
     var query by rememberSaveable { mutableStateOf("") }
-    val searching = query.isNotBlank()
-    val results = SettingsCatalog.search(query, cardsEnabled = prefs.walletCardsEnabled)
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val searchFocus = remember { FocusRequester() }
@@ -147,87 +143,117 @@ fun SettingsScreen() {
         }
         item(key = "body") {
             Column(Modifier.padding(AppSpacing.page)) {
-                when {
-                    searching && results.isEmpty() -> AppEmptyState(
-                        icon = Icons.Rounded.SearchOff,
-                        title = "No settings match \"${query.trim()}\"",
-                        message = "Try a different word, like \"dark\", \"backup\" or \"lock\".",
+                SettingsListContent(query = query, groupStyle = groupStyle)
+            }
+        }
+    }
+}
+
+/**
+ * What Settings lists under its search field: what [query] finds, or - with none - the profile, the groups and the system rows.
+ * On a phone ([selected] null) every row opens its page over the list. Beside a page (a tablet), [selected] is the page that is
+ * open: its row is filled, and each row is announced as one of the list's tabs. There the profile is the picture by the search
+ * field, not a row ([showProfileRow] false).
+ */
+@Composable
+internal fun SettingsListContent(
+    query: String,
+    groupStyle: ListSectionStyle,
+    selected: SettingsDetail? = null,
+    showProfileRow: Boolean = true,
+) {
+    val navigator = LocalNavigator.current
+    val container = LocalAppContainer.current
+    val prefs by container.preferences.state.collectAsState()
+    val finance = rememberFinanceState()
+    val activator = rememberSettingsActivator()
+    val system = rememberSettingsSystemActions()
+    val is24Hour = android.text.format.DateFormat.is24HourFormat(androidx.compose.ui.platform.LocalContext.current)
+    val searching = query.isNotBlank()
+    val results = SettingsCatalog.search(query, cardsEnabled = prefs.walletCardsEnabled)
+    when {
+        searching && results.isEmpty() -> AppEmptyState(
+            icon = Icons.Rounded.SearchOff,
+            title = "No settings match \"${query.trim()}\"",
+            message = "Try a different word, like \"dark\", \"backup\" or \"lock\".",
+        )
+        searching -> ListSection(title = "${results.size} ${if (results.size == 1) "result" else "results"}", style = groupStyle) {
+            for (entry in results) {
+                item {
+                    SettingsRow(
+                        headline = entry.title,
+                        supporting = entry.location,
+                        icon = entry.icon,
+                        hue = null,
+                        onClick = { activator.activate(entry) },
                     )
-                    searching -> ListSection(title = "${results.size} ${if (results.size == 1) "result" else "results"}", style = groupStyle) {
-                        for (entry in results) {
-                            item {
-                                SettingsRow(
-                                    headline = entry.title,
-                                    supporting = entry.location,
-                                    icon = entry.icon,
-                                    hue = null,
-                                    onClick = { activator.activate(entry) },
-                                )
-                            }
-                        }
+                }
+            }
+        }
+        else -> {
+            if (showProfileRow) {
+                ListSection(style = groupStyle) {
+                    item {
+                        ProfileSettingsRow(
+                            name = prefs.profileName,
+                            emoji = prefs.profileEmoji,
+                            photo = prefs.profilePhoto,
+                            accountButtonLeadsToProfile = prefs.accountButtonTarget == AccountButtonTarget.Profile,
+                            onClick = navigator::openProfile,
+                            selected = selected?.let { it == SettingsDetail.Profile },
+                        )
                     }
-                    else -> {
-                        ListSection(style = groupStyle) {
-                            item {
-                                ProfileSettingsRow(
-                                    name = prefs.profileName,
-                                    emoji = prefs.profileEmoji,
-                                    photo = prefs.profilePhoto,
-                                    accountButtonLeadsToProfile = prefs.accountButtonTarget == AccountButtonTarget.Profile,
-                                    onClick = navigator::openProfile,
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(AppSpacing.md))
-                        ListSection(style = groupStyle) {
-                            for (group in SettingsGroups) {
-                                item {
-                                    SettingsRow(
-                                        headline = group.title,
-                                        supporting = summary(group, prefs, finance, is24Hour),
-                                        icon = group.icon,
-                                        hue = group.hue,
-                                        onClick = { navigator.openSettings(group) },
-                                    )
-                                }
-                            }
-                        }
-                        ListSection(title = "System", style = groupStyle) {
-                            item {
-                                SettingsRow(
-                                    headline = "Reset settings",
-                                    supporting = "Back to defaults. Your data isn't touched.",
-                                    icon = Icons.Outlined.SettingsBackupRestore,
-                                    hue = 5,
-                                    onClick = { system.resetSettings() },
-                                )
-                            }
-                            // One row for everything about updating: it opens the update page, which holds the check, what
-                            // is new, the changelog and the way to Automatic updates.
-                            container.updates?.let { updater ->
-                                item {
-                                    val update by updater.state.collectAsState()
-                                    SettingsRow(
-                                        headline = UPDATES_ROW_TITLE,
-                                        supporting = updateSummary(update, updater),
-                                        icon = Icons.Outlined.SystemUpdate,
-                                        hue = SettingsPageUpdatesHue,
-                                        alert = update is UpdateState.Available || update is UpdateState.Ready,
-                                        onClick = { system.checkForUpdates() },
-                                        trailing = updateBadgeLabel(update)?.let { label -> { UpdateBadge(label) } },
-                                    )
-                                }
-                            }
-                            item {
-                                SettingsRow(
-                                    headline = "About NormPix",
-                                    icon = Icons.Outlined.Info,
-                                    hue = null,
-                                    onClick = { system.showAbout() },
-                                )
-                            }
-                        }
+                }
+                Spacer(Modifier.height(AppSpacing.md))
+            }
+            ListSection(style = groupStyle) {
+                for (group in SettingsGroups) {
+                    item {
+                        SettingsRow(
+                            headline = group.title,
+                            supporting = summary(group, prefs, finance, is24Hour),
+                            icon = group.icon,
+                            hue = group.hue,
+                            onClick = { navigator.openSettings(group) },
+                            selected = selected?.let { it.group == group },
+                        )
                     }
+                }
+            }
+            ListSection(title = "System", style = groupStyle) {
+                item {
+                    SettingsRow(
+                        headline = "Reset settings",
+                        supporting = "Back to defaults. Your data isn't touched.",
+                        icon = Icons.Outlined.SettingsBackupRestore,
+                        hue = 5,
+                        onClick = { system.resetSettings() },
+                    )
+                }
+                // One row for everything about updating: it opens the update page, which holds the check, what
+                // is new, the changelog and the way to Automatic updates.
+                container.updates?.let { updater ->
+                    item {
+                        val update by updater.state.collectAsState()
+                        SettingsRow(
+                            headline = UPDATES_ROW_TITLE,
+                            supporting = updateSummary(update, updater),
+                            icon = Icons.Outlined.SystemUpdate,
+                            hue = SettingsPageUpdatesHue,
+                            alert = update is UpdateState.Available || update is UpdateState.Ready,
+                            onClick = { system.checkForUpdates() },
+                            trailing = updateBadgeLabel(update)?.let { label -> { UpdateBadge(label) } },
+                            selected = selected?.isUpdates,
+                        )
+                    }
+                }
+                item {
+                    SettingsRow(
+                        headline = "About NormPix",
+                        icon = Icons.Outlined.Info,
+                        hue = null,
+                        onClick = { system.showAbout() },
+                    )
                 }
             }
         }
