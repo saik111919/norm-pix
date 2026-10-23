@@ -687,7 +687,7 @@ class AppUpdater(
         /** The updater the app runs with: GitHub over HTTPS, the cache for downloads, Android's own installer. */
         fun forApp(context: Context, host: ActivityHost, lock: AppLockService): AppUpdater {
             val app = context.applicationContext
-            val installed = InstalledApp(BuildConfig.APPLICATION_ID, BuildConfig.VERSION_CODE.toLong(), BuildConfig.VERSION_NAME, Build.VERSION.SDK_INT)
+            val installed = InstalledApp(BuildConfig.APPLICATION_ID, BuildConfig.VERSION_CODE.toLong(), BuildConfig.VERSION_NAME, Build.VERSION.SDK_INT, Build.SUPPORTED_ABIS.toList())
             val github = GitHubAccess(HttpsUpdateNetwork(), userAgent = "NormPix/${BuildConfig.VERSION_NAME}")
             return AppUpdater(
                 installed = installed,

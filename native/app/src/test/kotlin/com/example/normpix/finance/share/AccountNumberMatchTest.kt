@@ -84,6 +84,48 @@ class AccountNumberMatchTest {
     }
 
     @Test
+    fun `a bank account linked to its debit card is still known by its own last digits`() {
+        // Google Pay prints "HDFC Bank 3588": the account's digits, not the card's. The debit card's number ends otherwise.
+        val acct = account("HDFC Salary", AccountKind.Bank, ending = "3588", cardId = "debit")
+        val cards = listOf(card("debit", "4111111111114421", CardKind.Debit))
+        assertEquals(NumberFit.Match, AccountNumbers.fit(acct, masks("" to "3588"), cards))
+        // The card's own digits, as a receipt of a card payment shows them, are this account's too.
+        assertEquals(NumberFit.Match, AccountNumbers.fit(acct, masks("411111" to "4421"), cards))
+        assertEquals(NumberFit.Match, AccountNumbers.fit(acct, masks("" to "4421"), cards))
+        // Digits that are neither the account's nor the card's are not this account.
+        assertEquals(NumberFit.Contradicts, AccountNumbers.fit(acct, masks("" to "9999"), cards))
+    }
+
+    @Test
+    fun `a card's number cannot rule out a bank account whose own digits are not known`() {
+        val acct = account("HDFC Salary", AccountKind.Bank, cardId = "debit")
+        val cards = listOf(card("debit", "4111111111114421", CardKind.Debit))
+        // An account's number is not its card's: a receipt's "…3588" says nothing against this account.
+        assertEquals(NumberFit.Unknown, AccountNumbers.fit(acct, masks("" to "3588"), cards))
+        // A number printed with its first digits is a card's, and this card's digits differ: that is a different card.
+        assertEquals(NumberFit.Contradicts, AccountNumbers.fit(acct, masks("652850" to "55"), cards))
+        assertEquals(NumberFit.Match, AccountNumbers.fit(acct, masks("" to "4421"), cards))
+        // A card account is its card: other digits rule it out, as before.
+        val creditCard = account("HDFC Credit", AccountKind.Card, cardId = "debit")
+        assertEquals(NumberFit.Contradicts, AccountNumbers.fit(creditCard, masks("" to "3588"), cards))
+    }
+
+    @Test
+    fun `a credit card account is told by more than its last four digits when a receipt shows less of them`() {
+        // A RuPay credit card on UPI shows its first six and last two digits ("652850XXXXXXXX55"): the last four alone cannot be checked.
+        val withStart = account("HDFC RuPay", AccountKind.Card, ending = "4455").copy(numberStart = "652850")
+        val endingOnly = account("HDFC Millennia", AccountKind.Card, ending = "4455")
+        // First six + last two agree with what was kept: this card.
+        assertEquals(NumberFit.Match, AccountNumbers.fit(withStart, masks("652850" to "55"), emptyList()))
+        // The same two last digits with other first six: not this card.
+        assertEquals(NumberFit.Contradicts, AccountNumbers.fit(withStart, masks("411111" to "55"), emptyList()))
+        // Only the last four were kept, so two shown digits agree but cannot say it is this card: the choice is left.
+        assertEquals(NumberFit.Weak, AccountNumbers.fit(endingOnly, masks("652850" to "55"), emptyList()))
+        // A statement-style "ending 4455" (four digits) is enough by itself.
+        assertEquals(NumberFit.Match, AccountNumbers.fit(endingOnly, masks("" to "4455"), emptyList()))
+    }
+
+    @Test
     fun `any of several numbers shown may be the account's`() {
         val acct = account("Salary", ending = "3588")
         assertEquals(NumberFit.Match, AccountNumbers.fit(acct, masks("" to "1234", "" to "3588"), emptyList()))

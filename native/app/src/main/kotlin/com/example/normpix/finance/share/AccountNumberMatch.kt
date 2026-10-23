@@ -1,6 +1,7 @@
 package com.example.normpix.finance.share
 
 import com.example.normpix.finance.domain.Account
+import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.numberEndingOrNull
 import com.example.normpix.finance.domain.numberStartOrNull
 import com.example.normpix.wallet.StoredCard
@@ -48,11 +49,20 @@ internal object AccountNumbers {
         var weak = false
         var unknown = false
         for (mask in masks) {
-            when (fit(full ?: start, full ?: ending, mask)) {
-                NumberFit.Match -> return NumberFit.Match
-                NumberFit.Weak -> weak = true
-                NumberFit.Unknown -> unknown = true
-                NumberFit.Contradicts -> Unit
+            // An account is known two ways, and either may be what a receipt shows: first its own digits, and only when those
+            // don't match, the number of its linked card. A bank account's UPI digits ("HDFC Bank 3588") are not its debit
+            // card's, so the card's number only rules the account out when the digits shown are a card's (a card account, or
+            // a number printed with its first digits).
+            val own = if (ending != null || start != null) fit(start, ending, mask) else NumberFit.Unknown
+            if (own == NumberFit.Match) return NumberFit.Match
+            val card = if (full != null) fit(full, full, mask) else NumberFit.Unknown
+            val cardRulesOut = account.kind == AccountKind.Card || mask.prefix.isNotEmpty()
+            val fits = listOf(own, if (card == NumberFit.Contradicts && !cardRulesOut) NumberFit.Unknown else card)
+            when {
+                NumberFit.Match in fits -> return NumberFit.Match
+                NumberFit.Weak in fits -> weak = true
+                NumberFit.Contradicts in fits -> Unit
+                else -> unknown = true
             }
         }
         // Different from every number shown is what rules an account out; one it could not be compared with leaves it open.

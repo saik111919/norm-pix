@@ -37,6 +37,16 @@ class GooglePayReceiptTest {
     }
 
     @Test
+    fun `the account's digits are read whatever the card's expand arrow came out as`() {
+        // The card's chevron, far right on the same row, is a piece of its own and can come out as a letter or a sign.
+        for (arrow in listOf("v", "V", "~", "∨", "^")) {
+            val lines = PhoneReceipts.googlePayUber.map { if (it.text == "HDFC Bank 1234") it.copy(text = "HDFC Bank 3588") else it } +
+                line(arrow, 905, 1056, 940, 1087)
+            assertEquals(listOf(MaskedNumber("", "3588")), read(lines).maskedNumbers, "arrow $arrow")
+        }
+    }
+
+    @Test
     fun `a real Google Pay receipt paid with a RuPay credit card`() {
         val d = read(PhoneReceipts.googlePaySwiggy)
         assertEquals(36_000L, d.amount)

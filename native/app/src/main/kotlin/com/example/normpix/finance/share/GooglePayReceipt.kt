@@ -54,8 +54,8 @@ internal object GooglePayReceipt : PaymentAppReceipt {
         """(?i)^\W*(completed|successful|success|failed|declined|cancell?ed|expired|pending|processing|in\s+progress)\W*$""",
     )
 
-    /** "HDFC Bank 3588": a bank's name, then its account's last digits. */
-    private val bankAndEnding = Regex("""(?i)\bbank\b\D*?(\d{4})$""")
+    /** "HDFC Bank 3588": a bank's name, then its account's last digits - and, beside them, the card's expand arrow, read as a letter or a sign. */
+    private val bankAndEnding = Regex("""(?i)\bbank\b\D*?(?<!\d)(\d{4})(?!\d)""")
 
     /** The name its Share gives the picture's file: "<id> - 30.00 To <payee> on Google Pay.png". */
     private val fileName = Regex(

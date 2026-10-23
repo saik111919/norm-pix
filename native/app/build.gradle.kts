@@ -63,6 +63,12 @@ fun versionCodeOf(name: String): Int {
 val updateRepository = setting("NORMPIX_UPDATE_REPOSITORY", "normpixUpdateRepository") ?: "saik111919/norm-pix"
 check(Regex("""[A-Za-z0-9-]+/[A-Za-z0-9._-]+""").matches(updateRepository)) { "Not a GitHub repository: $updateRepository" }
 
+/** The CPU types a release carries: phones, plus x86_64 for trying a release on an emulator (`-PemulatorAbi`). */
+val releaseAbis = listOf("arm64-v8a", "armeabi-v7a") + listOfNotNull("x86_64".takeIf { project.hasProperty("emulatorAbi") })
+
+/** `-PsplitAbis`: build the release as one APK per CPU type (and a universal one) instead of a single APK with every CPU's libraries. */
+val splitAbis = project.hasProperty("splitAbis")
+
 android {
     namespace = "com.example.normpix"
     compileSdk = 37
@@ -120,17 +126,30 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            ndk {
-                // Phones only. The card-scan OCR library is ~11 MB per CPU type and x86 / x86_64 exist for emulators;
-                // `-PemulatorAbi` adds x86_64 back to check a release build on an emulator.
-                abiFilters += listOf("arm64-v8a", "armeabi-v7a")
-                if (project.hasProperty("emulatorAbi")) abiFilters += "x86_64"
+            // Phones only. The card-scan OCR library is ~11 MB per CPU type and x86 / x86_64 exist for emulators;
+            // `-PemulatorAbi` adds x86_64 back to check a release build on an emulator. With `-PsplitAbis` (CI) the same
+            // list is split into one APK per CPU type instead (see `splits` below), so no phone downloads another CPU's libraries.
+            if (!splitAbis) {
+                ndk {
+                    abiFilters += releaseAbis
+                }
             }
         }
         create("qa") {
             initWith(getByName("debug"))
             applicationIdSuffix = ".qa"
             matchingFallbacks += listOf("debug")
+        }
+    }
+    splits {
+        abi {
+            // One APK per phone CPU type, and a universal one that has them all: the universal APK is what an installed app
+            // too old to choose by CPU still downloads (see updates/ReleaseMetadata.kt). Only when asked: a debug or qa build
+            // is one APK that installs on any emulator.
+            isEnable = splitAbis
+            reset()
+            include(*releaseAbis.toTypedArray())
+            isUniversalApk = true
         }
     }
     compileOptions {
@@ -178,6 +197,9 @@ androidComponents {
         // Store native libraries compressed in the release APK (the OCR library deflates from 11 MB to 4.4 MB). They
         // are unpacked once at install, so the download is what shrinks.
         variant.packaging.jniLibs.useLegacyPackaging.set(true)
+        // The universal APK of a split build has every CPU type's libraries unless told otherwise, emulators' included: it is
+        // the phones' two it is meant to hold (without splits, the build type's abiFilters do this).
+        if (splitAbis && !project.hasProperty("emulatorAbi")) variant.packaging.jniLibs.excludes.addAll("**/x86/**", "**/x86_64/**")
     }
 }
 
