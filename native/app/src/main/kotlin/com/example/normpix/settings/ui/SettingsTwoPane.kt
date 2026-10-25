@@ -36,6 +36,7 @@ import com.example.normpix.ui.components.rememberFrostedBackdrop
 import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.rememberListDetail
+import com.example.normpix.updates.ui.ChangelogPage
 import com.example.normpix.updates.ui.UpdatePage
 
 /**
@@ -73,11 +74,18 @@ sealed interface SettingsDetail {
         override val key = "update"
     }
 
+    /** The changelog page: what changed across NormPix releases. */
+    data object Changelog : SettingsDetail {
+        override val parent: SettingsDetail get() = Update
+        override val key = "changelog"
+    }
+
     companion object {
         /** The detail a [key] stands for, or null for one that is none (a stale saved state). */
         fun fromKey(key: String): SettingsDetail? = when {
             key == Profile.key -> Profile
             key == Update.key -> Update
+            key == Changelog.key -> Changelog
             key.startsWith("page:") -> SettingsPage.entries.firstOrNull { it.name == key.removePrefix("page:") }?.let(::Page)
             key.startsWith("appearance:") -> AppearanceSection.named(key.removePrefix("appearance:"))?.let(::Appearance)
             else -> null
@@ -96,9 +104,9 @@ internal val SettingsDetail.group: SettingsPage?
         else -> null
     }
 
-/** Whether this detail is the one the "Updates & changelog" row stands for: the update page, and Automatic updates under it. */
+/** Whether this detail is the one the "Updates & changelog" row stands for: the update page, the changelog, and Automatic updates under it. */
 internal val SettingsDetail.isUpdates: Boolean
-    get() = this == SettingsDetail.Update || this == SettingsDetail.Page(SettingsPage.Updates)
+    get() = this == SettingsDetail.Update || this == SettingsDetail.Changelog || this == SettingsDetail.Page(SettingsPage.Updates)
 
 private val SettingsDetailSaver = Saver<SettingsDetail, String>(save = { it.key }, restore = { SettingsDetail.fromKey(it) })
 
@@ -134,6 +142,7 @@ fun SettingsRoute(opens: SettingsDetail? = null) {
         is SettingsDetail.Page -> SettingsPageContent(opens.page)
         is SettingsDetail.Appearance -> AppearanceSectionPage(opens.section)
         SettingsDetail.Update -> UpdatePage()
+        SettingsDetail.Changelog -> ChangelogPage()
     }
 }
 
@@ -205,6 +214,7 @@ private fun SettingsDetailPage(detail: SettingsDetail) {
         is SettingsDetail.Page -> SettingsPageContent(detail.page)
         is SettingsDetail.Appearance -> AppearanceSectionPage(detail.section)
         SettingsDetail.Update -> UpdatePage()
+        SettingsDetail.Changelog -> ChangelogPage()
     }
 }
 
@@ -229,4 +239,6 @@ private class PaneNavigator(
     override fun openProfile() = show(SettingsDetail.Profile)
 
     override fun openUpdates() = show(SettingsDetail.Update)
+
+    override fun openChangelog() = show(SettingsDetail.Changelog)
 }

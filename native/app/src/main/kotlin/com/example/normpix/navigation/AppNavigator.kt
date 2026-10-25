@@ -69,6 +69,9 @@ interface AppNavigator {
     /** The update page: checks GitHub for a newer NormPix, and downloads and installs it (a navigator without it does nothing). */
     fun openUpdates() = Unit
 
+    /** The changelog page: what changed across NormPix releases (a navigator without it does nothing). */
+    fun openChangelog() = Unit
+
     /** Switches the shell to [destination]. */
     fun go(destination: AppDestination)
 

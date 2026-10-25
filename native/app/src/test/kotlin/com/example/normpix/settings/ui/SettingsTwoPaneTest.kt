@@ -200,7 +200,7 @@ class SettingsTwoPaneTest {
 
     @Test
     fun aDetailKeyComesBackAsTheSameDetail() {
-        val all = listOf(SettingsDetail.Profile, SettingsDetail.Update) +
+        val all = listOf(SettingsDetail.Profile, SettingsDetail.Update, SettingsDetail.Changelog) +
             SettingsPage.entries.map { SettingsDetail.Page(it) } +
             AppearanceSection.entries.map { SettingsDetail.Appearance(it) }
         for (detail in all) assertEquals(detail, SettingsDetail.fromKey(detail.key))
@@ -212,12 +212,14 @@ class SettingsTwoPaneTest {
     fun stepsKnowWhatTheyAreInside() {
         assertEquals(SettingsDetail.Page(SettingsPage.Appearance), SettingsDetail.Appearance(AppearanceSection.Colors).parent)
         assertEquals(SettingsDetail.Update, SettingsDetail.Page(SettingsPage.Updates).parent)
+        assertEquals(SettingsDetail.Update, SettingsDetail.Changelog.parent)
         assertNull(SettingsDetail.Page(SettingsPage.Finance).parent)
         assertNull(SettingsDetail.Profile.parent)
         assertNull(SettingsDetail.Update.parent)
-        // An Appearance screen is the Appearance row's; Automatic updates and the update page are the Updates row's.
+        // An Appearance screen is the Appearance row's; Automatic updates, the changelog and the update page are the Updates row's.
         assertEquals(SettingsPage.Appearance, SettingsDetail.Appearance(AppearanceSection.Colors).group)
         assertTrue(SettingsDetail.Update.isUpdates)
+        assertTrue(SettingsDetail.Changelog.isUpdates)
         assertTrue(SettingsDetail.Page(SettingsPage.Updates).isUpdates)
         assertFalse(SettingsDetail.Page(SettingsPage.Finance).isUpdates)
         assertEquals(360.dp, AppLayout.listPaneWidth)

@@ -119,6 +119,7 @@ object Routes {
     const val SEARCH = "search"
     const val REMINDER_ALERT = "reminder/{reminderId}"
     const val UPDATE = "update"
+    const val CHANGELOG = "changelog"
 
     fun categoryHistory(categoryId: Long, month: MonthKey) = "category/$categoryId/${month.toInt()}"
     fun categoryHistory(categoryId: Long, range: DateRange) =
@@ -528,6 +529,7 @@ private fun AppNavigation(
             }
             page(Routes.PROFILE) { SettingsRoute(SettingsDetail.Profile) }
             page(Routes.UPDATE) { SettingsRoute(SettingsDetail.Update) }
+            page(Routes.CHANGELOG) { SettingsRoute(SettingsDetail.Changelog) }
             page(Routes.SEARCH) { AppSearchPage() }
             page(
                 Routes.REMINDER_ALERT,
@@ -630,6 +632,10 @@ class NavControllerNavigator(private val nav: NavHostController, private val she
 
     override fun openUpdates() {
         nav.navigate(Routes.UPDATE) { launchSingleTop = true }
+    }
+
+    override fun openChangelog() {
+        nav.navigate(Routes.CHANGELOG) { launchSingleTop = true }
     }
 
     override fun openReminderAlert(reminderId: Long) {
