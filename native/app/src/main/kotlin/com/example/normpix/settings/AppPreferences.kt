@@ -320,6 +320,12 @@ data class AppPrefsState(
     val railCollapsed: Boolean = false,
     /** Back button style and placement on sub-pages. */
     val backButtonStyle: BackButtonStyle = BackButtonStyle.TopFloatingCircle,
+    /**
+     * Settings > Appearance > Bottom controls. On a phone the controls a page has at its top - the way back, its actions, its
+     * search and filters - sit at the bottom instead, within a thumb's reach, beside the dock. The pages follow the bottom dock
+     * style while it is on, whichever [backButtonStyle] is picked; a wider window keeps its rail and its layout.
+     */
+    val bottomControls: Boolean = false,
     /** How progress bars and loaders look, wherever the app shows progress. */
     val progressStyle: ProgressStyle = ProgressStyle.Wavy,
     /** How the month a page shows is switched: one tonal track, or the earlier separate buttons. */
@@ -435,6 +441,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
             sheetBlurEnabled = prefs.getBoolean(K_SHEET_BLUR, defaults.sheetBlurEnabled),
             railCollapsed = prefs.getBoolean(K_RAIL_COLLAPSED, defaults.railCollapsed),
             backButtonStyle = prefs.enum(K_BACK_STYLE, defaults.backButtonStyle),
+            bottomControls = prefs.getBoolean(K_BOTTOM_CONTROLS, defaults.bottomControls),
             progressStyle = prefs.enum(K_PROGRESS_STYLE, defaults.progressStyle),
             monthControlStyle = prefs.enum(K_MONTH_CONTROL, defaults.monthControlStyle),
             categoryIconStyle = prefs.enum(K_CATEGORY_ICON_STYLE, defaults.categoryIconStyle),
@@ -559,6 +566,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
 
     fun setBackButtonStyle(style: BackButtonStyle) =
         change({ copy(backButtonStyle = style) }) { putString(K_BACK_STYLE, style.name) }
+
+    fun setBottomControls(enabled: Boolean) =
+        change({ copy(bottomControls = enabled) }) { putBoolean(K_BOTTOM_CONTROLS, enabled) }
 
     fun setProgressStyle(style: ProgressStyle) =
         change({ copy(progressStyle = style) }) { putString(K_PROGRESS_STYLE, style.name) }
@@ -803,6 +813,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_SHEET_BLUR = "sheet_blur_enabled"
         const val K_RAIL_COLLAPSED = "rail_collapsed"
         const val K_BACK_STYLE = "back_button_style"
+        const val K_BOTTOM_CONTROLS = "bottom_controls"
         const val K_PROGRESS_STYLE = "progress_style"
         const val K_MONTH_CONTROL = "month_control_style"
         const val K_CATEGORY_ICON_STYLE = "category_icon_style"

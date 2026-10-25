@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
@@ -76,10 +77,12 @@ import com.example.normpix.ui.components.AppErrorState
 import com.example.normpix.ui.components.AppLoadingIndicator
 import com.example.normpix.ui.components.AppLoadingState
 import com.example.normpix.ui.components.AppPage
+import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.SearchFilterBar
 import com.example.normpix.ui.components.SwipeRevealHost
+import com.example.normpix.ui.components.rememberBottomControls
 import com.example.normpix.ui.components.segmentShape
 import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppSpacing
@@ -303,30 +306,25 @@ fun TransactionHistory(
     val periodLabel = filters.range?.let { "${shortDate(it.start)} – ${shortDate(it.end.minusDays(1))}" }
         ?: if (searching) "All dates" else if (showAll) "All time" else monthLabel(month)
 
-    SwipeRevealHost(modifier) {
-    AppPage(
-        title = title,
-        onBack = onBack,
-        actions = actions,
-        pinnedHeader = pinnedHeader,
-        maxWidth = AppLayout.maxListWidth,
-        listState = listState,
-        bottomPadding = AppLayout.fabClearance,
-        insetBottom = insetBottom,
-    ) {
+    // Search and filters are one control. They head the list - or, with Bottom controls on, sit in a card at the foot of the
+    // page, within reach of a thumb, and what is filtered still follows in the list as removable chips.
+    val bottomControls = rememberBottomControls()
+    val searchBar: @Composable () -> Unit = {
+        HistorySearchBar(
+            search = searchInput,
+            onSearchChange = { searchInput = it },
+            filters = filters,
+            filterCount = filterCount,
+            onOpenFilters = ::openFilters,
+            onChange = { filters = it },
+        )
+    }
+    val listContent: LazyListScope.() -> Unit = {
         item(key = "controls") {
             Column(Modifier.padding(AppSpacing.page)) {
                 header?.invoke()
                 summaryHeader?.invoke(HistoryView(summary, query, periodLabel))
-                // Search and filters are one control; what is filtered follows as removable chips.
-                HistorySearchBar(
-                    search = searchInput,
-                    onSearchChange = { searchInput = it },
-                    filters = filters,
-                    filterCount = filterCount,
-                    onOpenFilters = ::openFilters,
-                    onChange = { filters = it },
-                )
+                if (!bottomControls) searchBar()
                 FilterChips(
                     chips = activeFilterChips(finance, filters, lockedAccountId) { filters = it },
                     modifier = Modifier.padding(top = AppSpacing.sm),
@@ -432,6 +430,33 @@ fun TransactionHistory(
             }
         }
     }
+
+    SwipeRevealHost(modifier) {
+        if (bottomControls && onBack != null) {
+            // Pushed over another page: the bottom dock's page, with the way back, the actions and the search at the bottom.
+            AppSubPage(
+                title = title,
+                onBack = onBack,
+                actions = actions,
+                maxWidth = AppLayout.maxListWidth,
+                listState = listState,
+                bottomSearch = searchBar,
+                content = listContent,
+            )
+        } else {
+            AppPage(
+                title = title,
+                onBack = onBack,
+                actions = actions,
+                pinnedHeader = pinnedHeader,
+                maxWidth = AppLayout.maxListWidth,
+                listState = listState,
+                bottomPadding = AppLayout.fabClearance,
+                insetBottom = insetBottom,
+                bottomSearch = if (bottomControls) searchBar else null,
+                content = listContent,
+            )
+        }
     }
 }
 

@@ -64,6 +64,7 @@ import com.example.normpix.ui.components.RadioRow
 import com.example.normpix.ui.components.politeLiveRegion
 import com.example.normpix.ui.components.profileInitial
 import com.example.normpix.ui.components.rememberAppHaptics
+import com.example.normpix.ui.components.rememberBackButtonStyle
 import com.example.normpix.ui.theme.AppSpacing
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -252,8 +253,10 @@ fun ProfilePage() {
                 Spacer(Modifier.height(AppSpacing.xl))
                 ListSection(
                     title = "Account button",
-                    footer = if (prefs.backButtonStyle == BackButtonStyle.TopFloatingCircle) {
+                    footer = if (rememberBackButtonStyle() == BackButtonStyle.TopFloatingCircle) {
                         "The round button at the top of Home, Plans, Insights and Wallet. It wears your picture."
+                    } else if (prefs.bottomControls) {
+                        "The round button is hidden while Bottom controls is on (a phone), set in Appearance. Settings is in the dock's More menu."
                     } else {
                         "The round button shows at the top of each tab with the Top floating circle style, set in Appearance."
                     },

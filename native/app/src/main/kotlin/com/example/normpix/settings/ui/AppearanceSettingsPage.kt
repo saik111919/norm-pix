@@ -14,6 +14,7 @@ import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.TextFields
+import androidx.compose.material.icons.outlined.VerticalAlignBottom
 import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -63,7 +64,7 @@ internal enum class AppearanceGroup(val title: String) {
 /**
  * The colour of a section's icon on the Appearance overview (see [SettingsGlyph]): one of its own, so a row is known by its
  * colour at a glance rather than by reading, and no two rows of a group - or neighbouring ones - share one. An index into the
- * category palette, which has eight hues for ten rows: Back button style repeats Colors', six rows and a group away.
+ * category palette, which has eight hues for eleven rows: Back button style repeats Colors', six rows and a group away.
  * (0 coral, 1 green, 2 blue, 3 purple, 4 amber, 5 teal, 6 pink, 7 indigo.)
  */
 internal val AppearanceSection.hue: Int
@@ -77,6 +78,7 @@ internal val AppearanceSection.hue: Int
         AppearanceSection.PageTransitions -> 7
         AppearanceSection.SheetTransitions -> 1
         AppearanceSection.BackButton -> 6
+        AppearanceSection.BottomControls -> 3
         AppearanceSection.MonthControl -> 2
     }
 
@@ -94,6 +96,7 @@ internal val AppearanceSection.group: AppearanceGroup
         AppearanceSection.SheetTransitions,
         -> AppearanceGroup.Motion
         AppearanceSection.BackButton,
+        AppearanceSection.BottomControls,
         AppearanceSection.MonthControl,
         -> AppearanceGroup.Layout
     }
@@ -110,6 +113,7 @@ internal val AppearanceSection.icon: ImageVector
         AppearanceSection.PageTransitions -> Icons.Outlined.SwapHoriz
         AppearanceSection.SheetTransitions -> Icons.Outlined.Layers
         AppearanceSection.BackButton -> Icons.Rounded.ChevronLeft
+        AppearanceSection.BottomControls -> Icons.Outlined.VerticalAlignBottom
         AppearanceSection.MonthControl -> Icons.Outlined.CalendarMonth
     }
 
@@ -129,6 +133,7 @@ internal fun AppearanceSection.summary(prefs: AppPrefsState, appIcon: AppIcon): 
     AppearanceSection.PageTransitions -> prefs.pageAnimation.label
     AppearanceSection.SheetTransitions -> prefs.sheetAnimation.label
     AppearanceSection.BackButton -> prefs.backButtonStyle.label
+    AppearanceSection.BottomControls -> if (prefs.bottomControls) "On" else "Off"
     AppearanceSection.MonthControl -> prefs.monthControlStyle.label
 }
 

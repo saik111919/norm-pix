@@ -105,6 +105,7 @@ import com.example.normpix.screens.HomeScreen
 import com.example.normpix.screens.PlansAndTransactionsScreen
 import com.example.normpix.settings.PageAnimationType
 import com.example.normpix.screens.WalletScreen
+import com.example.normpix.ui.components.LocalDockGone
 import com.example.normpix.ui.components.LocalFloatingDock
 import com.example.normpix.ui.components.LocalFrostedBackdrop
 import com.example.normpix.ui.components.LocalSnackbars
@@ -432,7 +433,10 @@ fun AppShell(
     LaunchedEffect(shell.selected, shell.plansTab) { barScroll.show() }
     val barGone = barScroll.hidden && !listAtEdge
     LaunchedEffect(barGone) { if (barGone) isMoreOpen = false }
-    val goneFraction by animateFloatAsState(if (barGone) 1f else 0f, AppMotion.spatial(), label = "nav_bar_gone")
+    val goneState = animateFloatAsState(if (barGone) 1f else 0f, AppMotion.spatial(), label = "nav_bar_gone")
+    val goneFraction by goneState
+    // For the tabs: a search card sitting on the dock goes down with it (see LocalDockGone). A function, so its motion recomposes nothing.
+    val dockGone: () -> Float = remember(goneState) { { goneState.value } }
     var barHeightPx by remember { mutableIntStateOf(0) }
 
     // Keep tabs composed once visited so they remember scroll and sub-navigation state.
@@ -551,7 +555,9 @@ fun AppShell(
         // The dock is glass: it blurs a recording of the tabs it floats over (it must stay out of the recording itself).
         val backdrop = rememberFrostedBackdrop()
         Box(Modifier.fillMaxSize()) {
-            tabs(Modifier.frostedSource(backdrop))
+            CompositionLocalProvider(LocalDockGone provides dockGone) {
+                tabs(Modifier.frostedSource(backdrop))
+            }
 
             // Outside click dismissal scrim when More is open
             if (isMoreOpen) {

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -107,6 +108,9 @@ private val DockCorner = 30.dp
 private val DockHeight = 60.dp
 private val CompanionCorner = 18.dp
 private val MinLabelWidth = 36.dp
+
+/** How much of the screen's foot, above the system navigation bar, the dock (or the back row) takes: its height and the margin under it. */
+val DockFootprint = DockHeight + 12.dp
 
 @Immutable
 data class DockColors(
@@ -360,6 +364,11 @@ private fun FooterActionPill(
  * [ (←)  Title ]   [ 🔍 / Action ]
  *
  * Matching the Essentials design reference (Image 1).
+ *
+ * [actions] are the page's own (an add button, an options menu): with Bottom controls on, they sit here in a pill made as the
+ * companion tile is, after the back pill, so everything a page has at its top is within the thumb's reach. The back pill gives
+ * up width to them, its title shortening, before they or the tile are squeezed. With [spread] the row takes the whole width
+ * - back at the start, the actions at the end, as a search card above it spans - instead of one cluster in the middle.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -370,6 +379,8 @@ fun FloatingBackRow(
     onCompanionClick: (() -> Unit)? = null,
     companionIcon: ImageVector = Icons.Outlined.Search,
     companionContentDescription: String = "Search",
+    actions: (@Composable RowScope.() -> Unit)? = null,
+    spread: Boolean = false,
     colors: DockColors? = null,
 ) {
     val backdrop = LocalFrostedBackdrop.current
@@ -388,7 +399,9 @@ fun FloatingBackRow(
         contentAlignment = Alignment.Center,
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            // Spread, the row takes the width: the back pill at its start, the page's actions at its end.
+            modifier = if (spread) Modifier.fillMaxWidth() else Modifier,
+            horizontalArrangement = if (spread) Arrangement.SpaceBetween else Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // The floating back pill: [ (←)  Title ]
@@ -405,6 +418,7 @@ fun FloatingBackRow(
                 modifier = Modifier
                     .height(DockHeight)
                     .widthIn(max = 280.dp)
+                    .then(if (actions != null) Modifier.weight(1f, fill = false) else Modifier)
                     .frostedGlass(backdrop, CircleShape)
                     .semantics {
                         role = Role.Button
@@ -441,6 +455,14 @@ fun FloatingBackRow(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(start = 12.dp),
                     )
+                }
+            }
+
+            // The page's own actions, in a pill beside the back pill
+            if (actions != null) {
+                // Spread, nothing spaces the pills but the room left: this keeps a gap when there is none.
+                Box(if (spread) Modifier.padding(start = 10.dp) else Modifier) {
+                    FloatingActionsPill(colors = effectiveColors, backdrop = backdrop, content = actions)
                 }
             }
 
@@ -508,6 +530,37 @@ fun FloatingNavBar(
                 )
             }
         }
+    }
+}
+
+/**
+ * The pill holding a page's actions in the back row: as tall as the dock and made as the companion tile is - one action is a
+ * tile, more make it wider - so the row reads as one set.
+ */
+@Composable
+private fun FloatingActionsPill(
+    colors: DockColors,
+    backdrop: FrostedBackdrop?,
+    content: @Composable RowScope.() -> Unit,
+) {
+    val shape = RoundedCornerShape(CompanionCorner)
+    Surface(
+        shape = shape,
+        color = colors.companionContainer,
+        contentColor = colors.companionContent,
+        shadowElevation = 6.dp,
+        border = BorderStroke(1.dp, colors.border),
+        modifier = Modifier
+            .height(DockHeight)
+            .defaultMinSize(minWidth = DockHeight)
+            .frostedGlass(backdrop, shape),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            content = content,
+        )
     }
 }
 
