@@ -663,6 +663,13 @@ internal data class PictureFill(
      * default one) is a guess, so it is cleared for the user to choose.
      */
     val chooseAccount: Boolean = false,
+    /** Where a transfer the picture shows went: a card whose bill it paid, another of the user's accounts. */
+    val toAccountId: Long? = null,
+    /**
+     * The picture shows a transfer between the user's accounts whose receiving one couldn't be told: the one the form picked
+     * when it became a transfer is a guess, so it is cleared for the user to choose.
+     */
+    val chooseToAccount: Boolean = false,
     /** Something the picture says was left out because the form already had it. */
     val kept: Boolean = false,
 ) {
@@ -676,6 +683,7 @@ internal data class PictureFill(
                 categoryId?.let { "category" },
                 occurredAt?.let { "date" },
                 accountId?.let { "account" },
+                toAccountId?.let { "account it went to" },
                 note?.let { "reference" },
             )
             return when (names.size) {
@@ -712,7 +720,10 @@ internal fun pictureFill(found: SharedTransactionPrefill, gaps: FormGaps): Pictu
         categoryId = found.categoryId?.takeIf { gaps.categoryEmpty && !transfer && categoryFits },
         occurredAt = found.occurredAt?.takeIf { gaps.dateOpen },
         accountId = found.accountId?.takeIf { gaps.accountOpen },
-        chooseAccount = found.accountNeedsChoice && found.accountId == null && gaps.accountOpen && !transfer,
+        // A transfer the user is entering keeps its account; one the picture made a transfer gives up a guessed one.
+        chooseAccount = found.accountNeedsChoice && found.accountId == null && gaps.accountOpen && (!transfer || found.type == TransactionType.Transfer),
+        toAccountId = found.toAccountId?.takeIf { transfer && gaps.accountOpen },
+        chooseToAccount = found.toAccountNeedsChoice && found.toAccountId == null && transfer && gaps.accountOpen,
         kept = kept,
     )
 }
@@ -728,6 +739,8 @@ internal data class FormValues(
     /** Null while the date has to be chosen. */
     val occurredAt: LocalDateTime?,
     val accountId: Long?,
+    /** A transfer's receiving account. */
+    val toAccountId: Long? = null,
 )
 
 /**
@@ -752,5 +765,6 @@ internal fun pictureRefill(found: SharedTransactionPrefill, now: FormValues): Pi
         categoryId = found.categoryId?.takeIf { !transfer && categoryFits && (now.categoryId == null || type != null) && it != now.categoryId },
         occurredAt = occurredAt?.takeIf { it != now.occurredAt },
         accountId = found.accountId?.takeIf { it != now.accountId },
+        toAccountId = found.toAccountId?.takeIf { finalType == TransactionType.Transfer && it != now.toAccountId },
     )
 }

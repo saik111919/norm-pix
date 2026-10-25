@@ -45,10 +45,23 @@ data class SharedTransactionPrefill(
     val dateNeedsChoice: Boolean = false,
     val accountId: Long? = null,
     /**
-     * Set when the message is the user's own credit card's bill being paid ("Paid to HDFC Bank Credit Card"): the entry is
-     * then a [TransactionType.Transfer] onto that card (see `cardBillTarget`), not an expense.
+     * Set when the message is the user's own credit card's bill being paid ("Paid to HDFC Bank Credit Card"), or money moved
+     * to another of their accounts (see [SelfTransfers]): the entry is then a [TransactionType.Transfer] onto that card or
+     * account (see `cardBillTarget`), not an expense.
      */
     val toAccountId: Long? = null,
+    /**
+     * A transfer between the user's own accounts whose receiving account couldn't be told: the form starts with none chosen,
+     * rather than any other account, which would be a guess.
+     */
+    val toAccountNeedsChoice: Boolean = false,
+    /** What to say about it when [toAccountNeedsChoice]: which number the message shows for it, if any, and that it is the user's to choose. */
+    val toAccountNotice: ShareNotice? = null,
+    /**
+     * Why the entry is a transfer, when it was read as one (a card's bill, money moved between the user's accounts): said again
+     * by a picture read in the form, which has no notice list of its own.
+     */
+    val transferNotice: ShareNotice? = null,
     /**
      * The message shows an account's number and none of the user's accounts (of several) is that one, or more than one is: the
      * form starts with no account chosen, rather than the default one, which would be a guess.
@@ -112,16 +125,23 @@ object SharedTransactionImport {
             null
         }
         // The card is where the money went, so it is never also where it came from.
-        val account = match.account?.takeIf { it.id != billCard?.id }
-        val type = if (billCard != null) TransactionType.Transfer else draft.type
+        val own = match.account?.takeIf { it.id != billCard?.id }
+        // Money moved to (or from) another of the user's own accounts: a transfer between the two. It takes two accounts to
+        // record one; with fewer, it stays as read, and the form says why.
+        val found = if (billCard == null) SelfTransfers.find(draft, own, state.activeAccounts, state.catalog, cards) else null
+        val self = found?.takeIf { state.activeAccounts.size >= MIN_TRANSFER_ACCOUNTS }
+        val transfer = billCard != null || self != null
+        val account = if (self != null) self.from else own
+        val toAccount = billCard ?: self?.to
+        val type = if (transfer) TransactionType.Transfer else draft.type
         // The user's own filing of this payee first; a merchant the app knows only for a payee they haven't filed yet.
-        val fromHistory = if (billCard == null && draft.type != null && payee != null) {
+        val fromHistory = if (!transfer && draft.type != null && payee != null) {
             quietly { repository.lastCategoryForPayee(payee, draft.type) }
         } else {
             null
         }
-        val fromMerchant = if (billCard == null && fromHistory == null) MerchantCategories.categoryFor(payee, draft.type, state.categories) else null
-        val fromMessage = if (billCard == null && fromHistory == null && fromMerchant == null) {
+        val fromMerchant = if (!transfer && fromHistory == null) MerchantCategories.categoryFor(payee, draft.type, state.categories) else null
+        val fromMessage = if (!transfer && fromHistory == null && fromMerchant == null) {
             MerchantCategories.categoryForMessage(draft.message, draft.type, state.categories)
         } else {
             null
@@ -135,31 +155,94 @@ object SharedTransactionImport {
         }
         val duplicate = quietly {
             repository.possibleDuplicates(
-                type, draft.amount, occurredAt ?: now, if (billCard != null) null else payee, draft.reference, limit = 1,
+                type, draft.amount, occurredAt ?: now, if (transfer) null else payee, draft.reference, limit = 1,
                 timeKnown = draft.date != null && draft.time != null,
             ).firstOrNull()
         }
-        // With one account there is nothing to choose between.
-        val needsChoice = account == null && draft.maskedNumbers.isNotEmpty() && state.activeAccounts.size > 1
-        val notices = notices(draft, state.money, now, account, categoryOrigin, duplicate = duplicate, accountByNumber = match.byNumber, accountsFit = match.fitting, accountCard = match.card)
+        // With one account there is nothing to choose between. A transfer's side that couldn't be told is always chosen by the
+        // user: either account could be the default one.
+        val needsChoice = if (self != null) {
+            account == null
+        } else {
+            account == null && draft.maskedNumbers.isNotEmpty() && state.activeAccounts.size > 1
+        }
+        val sides = self?.let { selfTransferSides(draft, it, match) }
+        val transferNotice = when {
+            billCard != null -> ShareNotice(cardBillNotice(billCard))
+            self != null -> ShareNotice(selfTransferNotice(self))
+            else -> null
+        }
+        val notices = notices(
+            draft, state.money, now, account, categoryOrigin, duplicate = duplicate, accountByNumber = match.byNumber, accountsFit = match.fitting,
+            accountCard = match.card, selfTransfer = self != null,
+        ) + listOfNotNull(transferNotice, sides?.first, sides?.second, found?.takeIf { self == null }?.let { ShareNotice(oneAccountNotice(it)) })
         return SharedTransactionPrefill(
             type = type,
             amount = draft.amount,
             payee = payee,
             // A transfer keeps no payee, so the note says what it was (and keeps the reference duplicates are found by).
-            note = if (billCard != null) listOfNotNull("Card bill payment", draft.note).joinToString(" · ") else draft.note,
+            note = when {
+                billCard != null -> listOfNotNull("Card bill payment", draft.note).joinToString(" · ")
+                self != null -> listOfNotNull("Self transfer", draft.note).joinToString(" · ")
+                else -> draft.note
+            },
             occurredAt = occurredAt,
             timeRead = draft.date != null && draft.time != null,
             dateNeedsChoice = draft.dateUnreadable,
             accountId = account?.id,
-            toAccountId = billCard?.id,
+            toAccountId = toAccount?.id,
+            toAccountNeedsChoice = self != null && toAccount == null,
+            toAccountNotice = sides?.second?.takeIf { it.attention },
+            transferNotice = transferNotice,
             accountNeedsChoice = needsChoice,
-            accountNotice = accountNotice(draft, account, match.fitting, match.card).takeIf { needsChoice },
+            accountNotice = (sides?.first ?: accountNotice(draft, account, match.fitting, match.card))?.takeIf { needsChoice && it.attention },
             categoryId = categoryId,
-            notices = if (billCard != null) notices + ShareNotice(cardBillNotice(billCard)) else notices,
+            // What needs checking first, wherever it came from.
+            notices = notices.sortedByDescending { it.attention },
             reference = draft.reference,
             app = draft.app,
         )
+    }
+
+    /** A transfer is between two accounts: with fewer, a self transfer stays as it was read. */
+    private const val MIN_TRANSFER_ACCOUNTS = 2
+
+    /** Why a shared payment was read as a transfer between the user's own accounts, and what that does. */
+    internal fun selfTransferNotice(transfer: SelfTransfer): String {
+        val why = when (transfer.said) {
+            SelfTransferCue.Words -> "The message says it's a self transfer"
+            SelfTransferCue.SameName -> "The same name is on both sides of the payment"
+            null -> "The account it ${if (transfer.incoming) "came from" else "went to"} is one of yours, by the number the message shows"
+        }
+        return "$why, so it's recorded as a transfer between your accounts: not spending, and not income. " +
+            "Switch to ${if (transfer.incoming) "Income" else "Expense"} if it wasn't between your accounts."
+    }
+
+    /** What the form says of a self transfer when the user has only one account: it can't be a transfer yet. */
+    private fun oneAccountNotice(transfer: SelfTransfer): String =
+        "${if (transfer.said == SelfTransferCue.SameName) "The same name is on both sides of the payment" else "The message says it's a self transfer"}, " +
+            "but you have only one account in NormPix. Add the other one to record it as a transfer between them."
+
+    /**
+     * What the form says of each side of a transfer between the user's accounts, "From" first: the account it is and how it was
+     * found, or - needing attention - that it is the user's to choose, with the number the message shows for it.
+     */
+    private fun selfTransferSides(draft: ParsedTransactionDraft, transfer: SelfTransfer, ownMatch: AccountMatch): Pair<ShareNotice, ShareNotice> {
+        val ownSide = Side(ownMatch.account, ownMatch.byNumber, draft.maskedNumbers, ownMatch.fitting, ownMatch.card)
+        val other = transfer.other
+        val otherSide = Side(transfer.otherAccount, other.byNumber, draft.otherMaskedNumbers, other.fitting, other.card)
+        val (from, to) = if (transfer.incoming) otherSide to ownSide else ownSide to otherSide
+        return from.notice("From", "it came from") to to.notice("To", "it went to")
+    }
+
+    /** One side of a transfer as the message shows it: the account found for it (null when none), how, and the numbers shown for it. */
+    private class Side(val account: Account?, val byNumber: Boolean, val masks: List<MaskedNumber>, val fitting: Int, val card: StoredCard?) {
+        fun notice(label: String, role: String): ShareNotice =
+            if (account != null) {
+                ShareNotice("$label: ${account.name}, by the ${if (byNumber) "number" else "bank"} in the message.")
+            } else {
+                numberNotice(masks, fitting, card, role) ?: ShareNotice("Choose the account $role.", attention = true)
+            }
     }
 
     /** A Wallet card as the form names it to the user: "HDFC Bank credit card ending 4242". Only what the user typed, and its last four digits. */
@@ -231,21 +314,27 @@ object SharedTransactionImport {
      * A number is shown and no account is chosen by it: the account is the user's to pick, not the default's to be assumed.
      * Null when an account was chosen, or the message shows no number.
      */
-    fun accountNotice(draft: ParsedTransactionDraft, account: Account?, accountsFit: Int, card: StoredCard? = null): ShareNotice? {
-        if (account != null || draft.maskedNumbers.isEmpty()) return null
-        val shown = draft.maskedNumbers.first().let {
-            if (it.prefix.isEmpty()) "ending ${it.suffix}" else "starting ${it.prefix} and ending ${it.suffix}"
-        }
+    fun accountNotice(draft: ParsedTransactionDraft, account: Account?, accountsFit: Int, card: StoredCard? = null): ShareNotice? =
+        if (account != null) null else numberNotice(draft.maskedNumbers, accountsFit, card)
+
+    /**
+     * That the account shown by [masks] (the first of them) is the user's to choose: no account has it, more than one does
+     * ([accountsFit]), or only a Wallet [card] does. [role] says which account of a transfer it is ("it went to"); null for the
+     * account a payment was made from. Null when no number is shown.
+     */
+    private fun numberNotice(masks: List<MaskedNumber>, accountsFit: Int, card: StoredCard?, role: String? = null): ShareNotice? {
+        val first = masks.firstOrNull() ?: return null
+        val shown = if (first.prefix.isEmpty()) "ending ${first.suffix}" else "starting ${first.prefix} and ending ${first.suffix}"
         // A number printed with its first digits is a card's: its Wallet card can be linked as well.
-        val isCard = draft.maskedNumbers.first().prefix.isNotEmpty()
+        val isCard = first.prefix.isNotEmpty()
         val text = if (card != null && accountsFit <= 1) {
             // No account has the number, but a card in the Wallet does: say which, and that it has no account to be chosen.
             "The message shows a number $shown, which is your ${describeCard(card)} in the Wallet, but none of your accounts is " +
-                "linked to it. Choose the account it was paid from, and link the card to it so it's picked next time."
+                "linked to it. Choose the account ${role ?: "it was paid from"}, and link the card to it so it's picked next time."
         } else if (accountsFit > 1) {
-            "The message shows a number $shown, which fits more than one of your accounts. Choose the right one."
+            "The message shows a number $shown, which fits more than one of your accounts. Choose the right one${role?.let { ": the account $it" }.orEmpty()}."
         } else {
-            "The message shows a number $shown, but none of your accounts has it. Choose the account, and add the last " +
+            "The message shows a number $shown, but none of your accounts has it. Choose the account${role?.let { " $it" }.orEmpty()}, and add the last " +
                 "$NUMBER_ENDING_LENGTH digits${if (isCard) " (or its card from the Wallet)" else ""} to it so it's picked next time."
         }
         return ShareNotice(text, attention = true)
@@ -265,6 +354,8 @@ object SharedTransactionImport {
         accountsFit: Int = 0,
         /** The Wallet card the digits are, when no account had them and a card did. */
         accountCard: StoredCard? = null,
+        /** It was read as a transfer between the user's accounts: which way it went is known, and its two accounts are said apart. */
+        selfTransfer: Boolean = false,
     ): List<ShareNotice> {
         val attention = buildList {
             duplicate?.let { add("You may have recorded this already: ${describe(it, money, now)}.") }
@@ -282,8 +373,8 @@ object SharedTransactionImport {
                     add("The message mentions ${draft.ambiguousAmounts.joinToString(" and ") { money.format(it) }}. Enter the one that moved.")
                 else -> add("No amount found in the message. Enter it.")
             }
-            if (draft.type == null) add("Couldn't tell whether money went out or came in. Choose Expense or Income.")
-            accountNotice(draft, account, accountsFit, accountCard)?.let { add(it.text) }
+            if (draft.type == null && !selfTransfer) add("Couldn't tell whether money went out or came in. Choose Expense or Income.")
+            if (!selfTransfer) accountNotice(draft, account, accountsFit, accountCard)?.let { add(it.text) }
             when {
                 draft.dateUnreadable -> add("The message's date couldn't be read. Choose the date.")
                 draft.date != null && draft.date.isAfter(now.toLocalDate()) -> add("The message's date is in the future. Check it.")
@@ -305,7 +396,7 @@ object SharedTransactionImport {
                 CategoryOrigin.Message -> draft.message?.let { add("Category picked from your message \"$it\". Change it if it doesn't fit.") }
                 null -> Unit
             }
-            account?.let {
+            account?.takeIf { !selfTransfer }?.let {
                 add(if (accountByNumber) "Account from the number in the message: ${it.name}." else "Account from the bank in the message: ${it.name}.")
             }
         }

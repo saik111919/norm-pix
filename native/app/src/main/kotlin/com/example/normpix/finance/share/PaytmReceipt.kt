@@ -66,11 +66,12 @@ internal object PaytmReceipt : PaymentAppReceipt {
         }
     }
 
-    /** [side]'s name, with the next line when the receipt ran a long one on to it (see [runOn]). */
+    /** [side]'s name, with the next line when the receipt ran a long one on to it (see [runOn]) - never its bank and digits. */
     private fun nameOf(receipt: ReceiptLayout, side: Side?): String? {
         val name = side?.person ?: return null
         val beside = side.label.besideCell
-        return if (beside != null && partyName(side.label.beside) == name) receipt.runOn(name, beside, side.rows.take(1)) else name
+        val next = side.rows.take(1).filterNot { it.text.trim() in side.account }
+        return if (beside != null && partyName(side.label.beside) == name) receipt.runOn(name, beside, next) else name
     }
 
     private fun sideOf(receipt: ReceiptLayout, found: Labelled?, today: LocalDate): Side? {
@@ -127,6 +128,11 @@ internal object PaytmReceipt : PaymentAppReceipt {
             maskedNumbers = masks,
             accountText = accountText,
             message = messageBelow(receipt, firstSide, ledger),
+            // In a self transfer the other side shows a bank over its digits as well - the user's other account - and both
+            // sides the user's name.
+            selfTransfer = SelfTransferCue.SameName.takeIf { samePerson(nameOf(receipt, own), nameOf(receipt, other)) },
+            otherAccountText = other?.account?.joinToString("\n")?.ifEmpty { null },
+            otherMaskedNumbers = otherSideNumbers(other?.account.orEmpty()),
         )
     }
 

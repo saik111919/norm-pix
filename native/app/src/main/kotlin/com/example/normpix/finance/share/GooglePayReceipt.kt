@@ -112,6 +112,16 @@ internal object GooglePayReceipt : PaymentAppReceipt {
         val otherDetail = if (type == TransactionType.Income) fromDetail else toDetail
         val party = file?.groupValues?.get(3)?.let(::nameIn) ?: titleName ?: otherDetail?.replace(ownBank, "")?.let(::nameIn)
 
+        // The other side's detail row and the one under it (their UPI id, or an account's bank and digits): in a self
+        // transfer, the user's other account - named, like the user's own, after the user.
+        val otherAt = if (type == TransactionType.Income) fromRow else toRow
+        val otherLines = listOfNotNull(
+            otherDetail,
+            rows.getOrNull(otherAt + 1)?.text?.takeIf { otherAt >= 0 && !detailTo.matches(it) && !detailFrom.matches(it) && !googleId.containsMatchIn(it) },
+        )
+        val ownName = (if (type == TransactionType.Income) toDetail else fromDetail)?.replace(ownBank, "")?.let(::nameIn)
+        val sameName = samePerson(party, ownName) || samePerson(otherDetail?.replace(ownBank, "")?.let(::nameIn), ownName)
+
         // The amount: the figure printed largest (or the first figure under the title), and the sentence repeating it.
         val sentenceAt = receipt.indexOf { sentence.containsMatchIn(it.text) }
         val printed = receipt.headline?.let(::amountSighting)
@@ -153,6 +163,9 @@ internal object GooglePayReceipt : PaymentAppReceipt {
             instrument = SharedTransactionParser.instrument(shown, masks),
             maskedNumbers = masks,
             accountText = accountText,
+            selfTransfer = SelfTransferCue.SameName.takeIf { sameName },
+            otherAccountText = otherLines.joinToString("\n").ifEmpty { null },
+            otherMaskedNumbers = otherSideNumbers(otherLines),
         )
     }
 

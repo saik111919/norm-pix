@@ -55,7 +55,10 @@ object PaymentAppReceipts {
             val receipt = ReceiptLayout.of(picture)
             val app = appOf(receipt)
             if (app != null) {
-                val read = app.read(receipt, ledger, today).copy(app = app.name)
+                val byApp = app.read(receipt, ledger, today)
+                // Whichever app it is, a receipt that says it was a self transfer was one (see SelfTransfers).
+                val said = byApp.selfTransfer ?: SelfTransferCue.Words.takeIf { SelfTransferWords.saidIn(receipt.text) }
+                val read = byApp.copy(app = app.name, selfTransfer = said)
                 if (read.amount != null || read.ambiguousAmounts.isNotEmpty() || read.counterparty != null) {
                     val fromWords = (SharedTransactionParser.read(words, ledger, today) as? SharedTextReading.Draft)?.draft
                     return SharedTextReading.Draft(if (fromWords == null) read else read.filledFrom(fromWords))
@@ -84,6 +87,9 @@ object PaymentAppReceipts {
             instrument = instrument ?: other.instrument,
             maskedNumbers = maskedNumbers.ifEmpty { other.maskedNumbers },
             message = message ?: other.message,
+            selfTransfer = selfTransfer ?: other.selfTransfer,
+            otherAccountText = otherAccountText ?: other.otherAccountText,
+            otherMaskedNumbers = otherMaskedNumbers.ifEmpty { other.otherMaskedNumbers },
         )
     }
 }

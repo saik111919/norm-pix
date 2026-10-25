@@ -86,6 +86,13 @@ internal object PhonePeReceipt : PaymentAppReceipt {
         }
 
         val party = if (heading >= 0) receipt.nameBelow(heading, NAME_REACH, rupeePrinted = true) { it.has(partTitle) } else NamedRow(null, null)
+        // The other side's rows - the name, then their UPI id, phone number or account - down to the next part. In a transfer
+        // to the user's own account, that account.
+        val otherRows = if (heading >= 0) {
+            rows.drop(heading + 1).take(NAME_REACH + 1).takeWhile { !it.has(partTitle) }.map { amountAtEnd(it, rupeePrinted = true).second.joinToString(" ") }
+        } else {
+            emptyList()
+        }
 
         // The user's account: below "Debited from", down to the UTR. Its last digits, and the amount once more.
         val accountRows = if (accountHeading >= 0) {
@@ -114,6 +121,8 @@ internal object PhonePeReceipt : PaymentAppReceipt {
             instrument = SharedTransactionParser.instrument(accountText, masks),
             maskedNumbers = masks,
             accountText = accountText,
+            otherAccountText = otherRows.joinToString("\n").ifEmpty { null },
+            otherMaskedNumbers = otherSideNumbers(otherRows),
         )
     }
 

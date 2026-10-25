@@ -105,4 +105,39 @@ class PictureFillTest {
         // A transfer's accounts are not chosen from a payment's number.
         assertFalse(pictureFill(unmatched, blank.copy(type = TransactionType.Transfer, typeOpen = false)).chooseAccount)
     }
+
+    @Test
+    fun `a picture of a transfer between the user's accounts fills in where it went, or clears a guess`() {
+        val transfer = found.copy(type = TransactionType.Transfer, categoryId = null, toAccountId = 9)
+        val fill = pictureFill(transfer, blank)
+        assertEquals(TransactionType.Transfer, fill.type)
+        assertEquals(7L, fill.accountId)
+        assertEquals(9L, fill.toAccountId)
+        assertNull(fill.payee)
+        assertFalse(fill.chooseToAccount)
+        assertEquals("the type, amount, date, account, account it went to and reference", fill.summary)
+
+        // Where it went couldn't be told: the account the form picks for a new transfer is a guess, so it is cleared.
+        val unknown = pictureFill(transfer.copy(toAccountId = null, toAccountNeedsChoice = true), blank)
+        assertNull(unknown.toAccountId)
+        assertTrue(unknown.chooseToAccount)
+        // So is where it came from, when that couldn't be told either.
+        assertTrue(pictureFill(transfer.copy(accountId = null, accountNeedsChoice = true), blank).chooseAccount)
+
+        // A form the user already made an expense of stays one, with no account to send it to.
+        val expense = pictureFill(transfer, blank.copy(typeOpen = false))
+        assertNull(expense.toAccountId)
+        assertFalse(expense.chooseToAccount)
+    }
+
+    @Test
+    fun `reading a picture again makes an expense the transfer it shows`() {
+        val transfer = found.copy(type = TransactionType.Transfer, categoryId = null, toAccountId = 9)
+        val now = FormValues(TransactionType.Expense, 25_000, "Swiggy", "", 3, at, 7)
+        val fill = pictureRefill(transfer, now)
+        assertEquals(TransactionType.Transfer, fill.type)
+        assertEquals(9L, fill.toAccountId)
+        // Already going there: nothing to change.
+        assertNull(pictureRefill(transfer, now.copy(type = TransactionType.Transfer, toAccountId = 9)).toAccountId)
+    }
 }
