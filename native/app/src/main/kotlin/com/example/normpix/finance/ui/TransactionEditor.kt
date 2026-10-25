@@ -191,9 +191,10 @@ private fun TransactionEditor(
     var toAccountId by remember {
         mutableStateOf(
             existing?.toAccountId
-                // A shared payment to the user's own credit card arrives as that card's bill: a transfer onto it.
+                // A shared payment to the user's own credit card arrives as that card's bill: a transfer onto it; one to another of
+                // their accounts, as a transfer to that account. Where that account couldn't be told, none is picked for them.
                 ?: prefill?.toAccountId?.takeIf { id -> finance.activeAccounts.any { it.id == id } }
-                ?: if (initialType == TransactionType.Transfer) {
+                ?: if (initialType == TransactionType.Transfer && prefill?.toAccountNeedsChoice != true) {
                     finance.activeAccounts.firstOrNull { it.id != startAccountId }?.id
                 } else {
                     null
@@ -435,6 +436,13 @@ private fun TransactionEditor(
             accountId = null
             accountError = null
         }
+        // Where a transfer went: the card or account the picture shows, or - when it couldn't tell - none, not the one the form
+        // picked when it became a transfer.
+        fill.toAccountId?.takeIf { it != accountId }?.let {
+            toAccountId = it
+            accountError = null
+        }
+        if (fill.chooseToAccount) toAccountId = null
     }
 
     /**
@@ -460,7 +468,12 @@ private fun TransactionEditor(
         readFromPicture = true
         pictureReference = found.reference
         val summary = fill.summary
-        val accountNotice = found.accountNotice.takeIf { fill.chooseAccount }
+        // Why it became a transfer, when the picture made it one, and which of its accounts are the user's to choose.
+        val accountNotices = listOfNotNull(
+            found.transferNotice.takeIf { fill.type == TransactionType.Transfer },
+            found.accountNotice.takeIf { fill.chooseAccount },
+            found.toAccountNotice.takeIf { fill.chooseToAccount },
+        )
         sayAboutPicture(
             if (summary != null) {
                 PictureNote(
@@ -470,15 +483,14 @@ private fun TransactionEditor(
                     notices = listOfNotNull(
                         ShareNotice("Filled in $summary."),
                         ShareNotice("Anything already filled in stays as it was.").takeIf { fill.kept },
-                        accountNotice,
-                    ),
+                    ) + accountNotices,
                     readText = readText,
                 )
             } else {
                 PictureNote(
                     "Picture attached",
                     "What it shows is already filled in.",
-                    notices = listOfNotNull(accountNotice),
+                    notices = accountNotices,
                     readText = readText,
                 )
             },
@@ -523,6 +535,7 @@ private fun TransactionEditor(
                             categoryId = categoryId,
                             occurredAt = occurredAt.takeIf { !dateUnset },
                             accountId = accountId,
+                            toAccountId = toAccountId,
                         ),
                     )
                     applyFill(fill)
