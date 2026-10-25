@@ -451,4 +451,29 @@ class SharedTransactionImportTest {
         val notice = kotlin.test.assertNotNull(prefillOf(phonePe).accountNotice)
         assertTrue("none of your accounts has it" in notice.text, notice.text)
     }
+    @Test
+    fun `a self transfer prefills both from and to accounts`() {
+        val hdfc = numbered("HDFC Savings", AccountKind.Bank, "hdfc", ending = "3588")
+        val kotak = numbered("Kotak Account", AccountKind.Bank, "kotak", ending = "7890")
+        val draft = ParsedTransactionDraft(
+            amount = 480_000L,
+            type = TransactionType.Transfer,
+            kind = SharedKind.Transfer,
+            status = SharedStatus.Completed,
+            date = LocalDate.of(2026, 10, 25),
+            reference = "131826136987",
+            accountText = "HDFC Bank ••••3588",
+            maskedNumbers = listOf(MaskedNumber("", "3588")),
+            toAccountText = "Kotak Mahindra Bank ••••7890",
+            toMaskedNumbers = listOf(MaskedNumber("", "7890")),
+        )
+        val prefill = runBlocking { SharedTransactionImport.prefill(draft, "", finance.state.value, repository, now) }
+        assertEquals(TransactionType.Transfer, prefill.type)
+        assertEquals(480_000L, prefill.amount)
+        assertNull(prefill.payee)
+        assertEquals(hdfc.id, prefill.accountId)
+        assertEquals(kotak.id, prefill.toAccountId)
+        assertTrue(prefill.notices.any { "Account from the number in the message: HDFC Savings" in it.text })
+        assertTrue(prefill.notices.any { "Transfer destination from the number in the message: Kotak Account" in it.text })
+    }
 }

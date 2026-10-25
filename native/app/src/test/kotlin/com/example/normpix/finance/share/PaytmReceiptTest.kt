@@ -189,4 +189,31 @@ class PaytmReceiptTest {
         assertSame(KreditPeReceipt, PaymentAppReceipts.appOf(ReceiptLayout.of(picture(PhoneReceipts.kreditPeBells))))
         assertEquals("PhonePe", read(PhoneReceipts.phonePeShop).app)
     }
+    @Test
+    fun `a Paytm self transfer moves money between user accounts`() {
+        val lines = listOf(
+            line("Money Sent Successfully", 0, 10, 100, 20),
+            line("₹1,000", 0, 30, 80, 40),
+            line("Rupees One Thousand Only", 0, 50, 150, 60),
+            line("To Your: Union Bank Of India - 1234", 0, 70, 200, 80),
+            line("From: Kusumanchi Sai", 0, 90, 150, 100),
+            line("State Bank of India - 5678", 0, 110, 180, 120),
+            line("UPI Ref No: 501223406492", 0, 130, 180, 140),
+            line("08:13 PM, 12 Jan 2025", 0, 150, 150, 160),
+            line("Powered by UPI | YES BANK", 0, 170, 180, 180),
+        )
+        val d = read(lines)
+        assertEquals("Paytm", d.app)
+        assertEquals(TransactionType.Transfer, d.type)
+        assertEquals(SharedKind.Transfer, d.kind)
+        assertEquals(100_000L, d.amount)
+        assertEquals(SharedStatus.Completed, d.status)
+        assertNull(d.counterparty)
+        assertEquals("501223406492", d.reference)
+        assertEquals(LocalDate.of(2025, 1, 12), d.date)
+        assertEquals(LocalTime.of(20, 13), d.time)
+        assertEquals(listOf(MaskedNumber("", "5678")), d.maskedNumbers)
+        assertEquals(listOf(MaskedNumber("", "1234")), d.toMaskedNumbers)
+        assertEquals(true, d.toAccountText?.contains("Union Bank Of India"))
+    }
 }

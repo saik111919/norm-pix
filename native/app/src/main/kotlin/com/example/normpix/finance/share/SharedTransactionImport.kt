@@ -112,8 +112,24 @@ object SharedTransactionImport {
             null
         }
         // The card is where the money went, so it is never also where it came from.
-        val account = match.account?.takeIf { it.id != billCard?.id }
-        val type = if (billCard != null) TransactionType.Transfer else draft.type
+        val isTransfer = draft.type == TransactionType.Transfer || billCard != null
+        val type = if (isTransfer) TransactionType.Transfer else draft.type
+        val toMatch = if (draft.type == TransactionType.Transfer && draft.toAccountText != null) {
+            findAccount(
+                text = draft.toAccountText,
+                counterparty = null,
+                instrument = null,
+                accounts = state.activeAccounts.filter { it.id != match.account?.id },
+                catalog = state.catalog,
+                maskedNumbers = draft.toMaskedNumbers,
+                cards = cards,
+            )
+        } else {
+            null
+        }
+        val destination = billCard?.id ?: toMatch?.account?.id
+        val account = match.account?.takeIf { it.id != destination }
+        val finalPayee = if (isTransfer) null else payee
         // The user's own filing of this payee first; a merchant the app knows only for a payee they haven't filed yet.
         val fromHistory = if (billCard == null && draft.type != null && payee != null) {
             quietly { repository.lastCategoryForPayee(payee, draft.type) }
@@ -135,24 +151,32 @@ object SharedTransactionImport {
         }
         val duplicate = quietly {
             repository.possibleDuplicates(
-                type, draft.amount, occurredAt ?: now, if (billCard != null) null else payee, draft.reference, limit = 1,
+                type, draft.amount, occurredAt ?: now, finalPayee, draft.reference, limit = 1,
                 timeKnown = draft.date != null && draft.time != null,
             ).firstOrNull()
         }
         // With one account there is nothing to choose between.
         val needsChoice = account == null && draft.maskedNumbers.isNotEmpty() && state.activeAccounts.size > 1
-        val notices = notices(draft, state.money, now, account, categoryOrigin, duplicate = duplicate, accountByNumber = match.byNumber, accountsFit = match.fitting, accountCard = match.card)
+        val notices = notices(
+            draft, state.money, now, account, categoryOrigin,
+            duplicate = duplicate,
+            accountByNumber = match.byNumber,
+            accountsFit = match.fitting,
+            accountCard = match.card,
+            toAccount = toMatch?.account,
+            toAccountByNumber = toMatch?.byNumber ?: false,
+        )
         return SharedTransactionPrefill(
             type = type,
             amount = draft.amount,
-            payee = payee,
+            payee = finalPayee,
             // A transfer keeps no payee, so the note says what it was (and keeps the reference duplicates are found by).
             note = if (billCard != null) listOfNotNull("Card bill payment", draft.note).joinToString(" · ") else draft.note,
             occurredAt = occurredAt,
             timeRead = draft.date != null && draft.time != null,
             dateNeedsChoice = draft.dateUnreadable,
             accountId = account?.id,
-            toAccountId = billCard?.id,
+            toAccountId = destination,
             accountNeedsChoice = needsChoice,
             accountNotice = accountNotice(draft, account, match.fitting, match.card).takeIf { needsChoice },
             categoryId = categoryId,
@@ -265,6 +289,8 @@ object SharedTransactionImport {
         accountsFit: Int = 0,
         /** The Wallet card the digits are, when no account had them and a card did. */
         accountCard: StoredCard? = null,
+        toAccount: Account? = null,
+        toAccountByNumber: Boolean = false,
     ): List<ShareNotice> {
         val attention = buildList {
             duplicate?.let { add("You may have recorded this already: ${describe(it, money, now)}.") }
@@ -307,6 +333,9 @@ object SharedTransactionImport {
             }
             account?.let {
                 add(if (accountByNumber) "Account from the number in the message: ${it.name}." else "Account from the bank in the message: ${it.name}.")
+            }
+            toAccount?.let {
+                add(if (toAccountByNumber) "Transfer destination from the number in the message: ${it.name}." else "Transfer destination from the bank in the message: ${it.name}.")
             }
         }
         return attention.map { ShareNotice(it, attention = true) } + info.map { ShareNotice(it) }

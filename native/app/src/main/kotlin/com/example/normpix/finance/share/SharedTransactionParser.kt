@@ -21,6 +21,9 @@ enum class SharedKind {
     /** A debit the bank undid (usually a payment that didn't go through). Also income. */
     Reversal,
 
+    /** Money moved between the user's own accounts. */
+    Transfer,
+
     /** The message doesn't say which way the money went. */
     Unknown,
 }
@@ -65,6 +68,10 @@ data class ParsedTransactionDraft(
      * that is (empty when it shows none); null when it can't tell, and the whole message is looked through instead.
      */
     val accountText: String? = null,
+    /** What the receipt says about the destination account in a transfer, when the app's layout shows which part that is. */
+    val toAccountText: String? = null,
+    /** The destination account's masked numbers in a transfer. */
+    val toMaskedNumbers: List<MaskedNumber> = emptyList(),
     /** What the payer wrote with the payment ("Auto", "Rent"), when the receipt shows it: the first thing in the [note]. */
     val message: String? = null,
 ) {
@@ -75,6 +82,7 @@ data class ParsedTransactionDraft(
             when (kind) {
                 SharedKind.Refund -> "Refund"
                 SharedKind.Reversal -> "Reversal"
+                SharedKind.Transfer -> "Self transfer"
                 else -> null
             },
             reference?.let { "Ref $it" },
@@ -199,6 +207,7 @@ object SharedTransactionParser {
             reversal -> SharedKind.Reversal
             type == TransactionType.Income -> SharedKind.Received
             type == TransactionType.Expense -> SharedKind.Payment
+            type == TransactionType.Transfer -> SharedKind.Transfer
             else -> SharedKind.Unknown
         }
         val when_ = dateIn(body, today)

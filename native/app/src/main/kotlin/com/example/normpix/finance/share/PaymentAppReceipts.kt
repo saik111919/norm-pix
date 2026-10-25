@@ -83,6 +83,8 @@ object PaymentAppReceipts {
             reference = reference ?: other.reference,
             instrument = instrument ?: other.instrument,
             maskedNumbers = maskedNumbers.ifEmpty { other.maskedNumbers },
+            toAccountText = toAccountText ?: other.toAccountText,
+            toMaskedNumbers = toMaskedNumbers.ifEmpty { other.toMaskedNumbers },
             message = message ?: other.message,
         )
     }
@@ -413,5 +415,6 @@ private const val MAX_NAME = 60
 internal fun kindOf(type: TransactionType?): SharedKind = when (type) {
     TransactionType.Expense -> SharedKind.Payment
     TransactionType.Income -> SharedKind.Received
+    TransactionType.Transfer -> SharedKind.Transfer
     else -> SharedKind.Unknown
 }

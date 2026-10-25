@@ -36,6 +36,7 @@ internal object GooglePayReceipt : PaymentAppReceipt {
     private val logo = Regex("""(?i)^\W*(?:g\s?pay|google\s+pay)\W*$""")
     private val upiIdLabel = Regex("""(?i)\bupi\s+(?:transaction|txn|ref(?:erence)?)\s*(?:id|no\.?|number)?\b\W*(\d{10,16})?""")
     private val lonePaymentReference = Regex("""^\d{10,16}$""")
+    private val selfTransfer = Regex("""(?i)^\W*self\s+transfer\W*$""")
 
     /** The title: "To <payee>" (paid) or "From <payer>" (received). A colon makes it a detail row instead. */
     private val titleTo = Regex("""(?i)^(?:paid\s+)?to\s+([^:\s].*)$""")
@@ -51,7 +52,7 @@ internal object GooglePayReceipt : PaymentAppReceipt {
         """(?i)\bpayment\s+of\s+(.+?)\s+(completed|successful|received|failed|declined|pending|processing|is\s+pending)\b""",
     )
     private val statusWord = Regex(
-        """(?i)^\W*(completed|successful|success|failed|declined|cancell?ed|expired|pending|processing|in\s+progress)\W*$""",
+        """(?i)^\W*(completed|successful|success|transferred|failed|declined|cancell?ed|expired|pending|processing|in\s+progress)\W*$""",
     )
 
     /** "HDFC Bank 3588": a bank's name, then its account's last digits - and, beside them, the card's expand arrow, read as a letter or a sign. */
@@ -72,6 +73,7 @@ internal object GooglePayReceipt : PaymentAppReceipt {
         Tell.piece(2, logo),
         Tell(3) { receipt -> receipt.name?.let { fileName.matches(it.trim()) } == true },
         Tell.row(1, upiIdLabel),
+        Tell.piece(1, selfTransfer),
     )
 
     override fun read(receipt: ReceiptLayout, ledger: CurrencySpec, today: LocalDate): ParsedTransactionDraft {
@@ -84,6 +86,12 @@ internal object GooglePayReceipt : PaymentAppReceipt {
         var titleName: String? = null
         for ((i, row) in rows.withIndex()) {
             val text = row.text.trim()
+            if (selfTransfer.matches(text)) {
+                titleAt = i
+                titleType = TransactionType.Transfer
+                titleName = null
+                break
+            }
             val to = titleTo.matchEntire(text)
             val from = titleFrom.matchEntire(text)
             val bare = text.lowercase().removePrefix("paid ").removePrefix("received ")
@@ -108,9 +116,18 @@ internal object GooglePayReceipt : PaymentAppReceipt {
             else -> null
         }
         val fileType = file?.groupValues?.get(2)?.let { if (it.equals("to", ignoreCase = true)) TransactionType.Expense else TransactionType.Income }
-        val type = fileType ?: titleType ?: detailType
-        val otherDetail = if (type == TransactionType.Income) fromDetail else toDetail
-        val party = file?.groupValues?.get(3)?.let(::nameIn) ?: titleName ?: otherDetail?.replace(ownBank, "")?.let(::nameIn)
+        val bankLike = Regex("""(?i)\b(?:bank|a/?c|account)\b""")
+        val isSelfTransfer = titleType == TransactionType.Transfer ||
+            (fromDetail != null && toDetail != null && bankLike.containsMatchIn(fromDetail) && bankLike.containsMatchIn(toDetail))
+        val type = if (isSelfTransfer) TransactionType.Transfer else (fileType ?: titleType ?: detailType)
+        val otherDetail = when (type) {
+            TransactionType.Income -> fromDetail
+            TransactionType.Transfer -> null
+            else -> toDetail
+        }
+        val party = if (type == TransactionType.Transfer) null else (
+            file?.groupValues?.get(3)?.let(::nameIn) ?: titleName ?: otherDetail?.replace(ownBank, "")?.let(::nameIn)
+        )
 
         // The amount: the figure printed largest (or the first figure under the title), and the sentence repeating it.
         val sentenceAt = receipt.indexOf { sentence.containsMatchIn(it.text) }
@@ -131,11 +148,17 @@ internal object GooglePayReceipt : PaymentAppReceipt {
         val dateRow = receipt.indexOf { SharedTransactionParser.dateIn(it.text, today).date != null }.takeIf { it in 0 until end }
         val start = maxOf(titleAt, dateRow ?: -1) + 1
         val ownRows = if (start < end) rows.subList(start, end).filterNot { statusWord.matches(it.text) } else emptyList()
-        val ownDetail = (if (type == TransactionType.Income) toDetail else fromDetail)?.let { ownBank.find(it)?.groupValues?.get(1) }
+        val ownDetail = when (type) {
+            TransactionType.Income -> toDetail?.let { ownBank.find(it)?.groupValues?.get(1) }
+            TransactionType.Transfer -> fromDetail
+            else -> fromDetail?.let { ownBank.find(it)?.groupValues?.get(1) }
+        }
         val accountText = (ownRows.map { it.text } + listOfNotNull(ownDetail)).joinToString("\n")
         val shown = ownRows.joinToString("\n") { it.text }
         val masks = SharedTransactionParser.maskedNumbers(shown).ifEmpty {
             ownRows.mapNotNull { row -> bankAndEnding.find(row.text)?.groupValues?.get(1) }.distinct().map { MaskedNumber("", it) }
+        }.ifEmpty {
+            SharedTransactionParser.maskedNumbers(accountText)
         }
 
         val date = SharedTransactionParser.dateIn(receipt.text, today)
@@ -153,6 +176,14 @@ internal object GooglePayReceipt : PaymentAppReceipt {
             instrument = SharedTransactionParser.instrument(shown, masks),
             maskedNumbers = masks,
             accountText = accountText,
+            toAccountText = if (type == TransactionType.Transfer) toDetail else null,
+            toMaskedNumbers = if (type == TransactionType.Transfer && toDetail != null) {
+                SharedTransactionParser.maskedNumbers(toDetail).ifEmpty {
+                    bankAndEnding.find(toDetail)?.groupValues?.get(1)?.let { listOf(MaskedNumber("", it)) }.orEmpty()
+                }
+            } else {
+                emptyList()
+            },
         )
     }
 
