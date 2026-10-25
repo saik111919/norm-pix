@@ -391,7 +391,7 @@ jobs:
 
   release:
     name: GitHub release
-    if: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+    if: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') }}
     needs: [verify, build]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -434,7 +434,7 @@ jobs:
               signing="> [!WARNING]
           > Signed with the debug key: it won't install over the app."
             fi
-            notes="A test build of main ($GITHUB_SHA), not a release: the app doesn't offer it as an update. Install it by hand to try it.
+            notes="A test build of $GITHUB_REF_NAME ($GITHUB_SHA), not a release: the app doesn't offer it as an update. Install it by hand to try it.
 
           $signing"
             if [ "$UPDATE_REPOSITORY" = "$GITHUB_REPOSITORY" ]; then here+=(--generate-notes); fi
