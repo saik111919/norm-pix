@@ -1,8 +1,8 @@
 package com.example.normpix.settings.ui
 
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -13,8 +13,6 @@ import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.testing.TestEnvironment
-import com.example.normpix.ui.components.LocalOverlays
-import com.example.normpix.ui.components.OverlayHost
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.Locale
@@ -49,7 +47,9 @@ class LedgerCheckFlowTest {
     @After
     fun tearDown() = env.close()
 
-    private fun shown(text: String) = compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty()
+    // A transaction's row reads as one phrase (its content description), so what it says is looked for there too.
+    private fun shown(text: String) = compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() ||
+        compose.onAllNodesWithContentDescription(text, substring = true).fetchSemanticsNodes().isNotEmpty()
 
     private fun waitFor(text: String) = compose.waitUntil(15_000) {
         compose.waitForIdle()
@@ -57,14 +57,8 @@ class LedgerCheckFlowTest {
     }
 
     private fun open() {
-        compose.setContent {
-            env.Content {
-                Box {
-                    DataSettingsPage()
-                    OverlayHost(LocalOverlays.current)
-                }
-            }
-        }
+        // The app's environment hosts the sheets and decisions itself.
+        compose.setContent { env.Content { DataSettingsPage() } }
         compose.waitForIdle()
         compose.onNodeWithText("Check and recalculate").performScrollTo().performClick()
     }
