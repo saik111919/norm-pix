@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The clock widget's face: the disc, and the marker at nine o'clock. It stays still; the rings turn over it.
+     Drawn by design/clock-widget/clock_face.py: change it there, not here. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <path
+        android:fillColor="@color/widget_clock_face"
+        android:pathData="M0,100 A100,100 0 1,1 200,100 A100,100 0 1,1 0,100 Z" />
+    <path
+        android:fillColor="@color/widget_clock_accent"
+        android:pathData="M24.9,100 A2.6,2.6 0 1,1 30.1,100 A2.6,2.6 0 1,1 24.9,100 Z" />
+</vector>

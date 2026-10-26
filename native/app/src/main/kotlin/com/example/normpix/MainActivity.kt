@@ -12,6 +12,7 @@ import com.example.normpix.reminders.ReminderNotifications
 import com.example.normpix.updates.SystemUpdateNotifier
 import com.example.normpix.wallet.BiometricAuthenticator
 import com.example.normpix.wallet.expiry.CardExpiryNotifications
+import com.example.normpix.widgets.WidgetIntents
 
 // BiometricPrompt needs a FragmentActivity host.
 class MainActivity : FragmentActivity() {
@@ -62,7 +63,8 @@ class MainActivity : FragmentActivity() {
 
     /**
      * A tapped reminder notification asks for that reminder's alert screen; a tapped card-expiry one for Wallet; a tapped
-     * update one for the update page (and its Install button for the update to be installed).
+     * update one for the update page (and its Install button for the update to be installed); a widget's tap for what it
+     * offers (a new transaction, one transaction, Activity).
      */
     private fun handleIntent(intent: Intent?) {
         val id = intent?.getLongExtra(ReminderNotifications.EXTRA_REMINDER_ID, -1) ?: -1
@@ -80,6 +82,11 @@ class MainActivity : FragmentActivity() {
             container.updateRequests.value = true
             intent.removeExtra(SystemUpdateNotifier.EXTRA_OPEN_UPDATE)
             intent.removeExtra(SystemUpdateNotifier.EXTRA_INSTALL_UPDATE)
+        }
+        // A home-screen widget's button or row: the UI does it once the app is unlocked.
+        WidgetIntents.requestOf(intent)?.let { request ->
+            container.widgetRequests.value = request
+            intent?.let(WidgetIntents::clear)
         }
     }
 

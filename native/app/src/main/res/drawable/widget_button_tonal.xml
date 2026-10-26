@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Add widget's other buttons: Material 3's tonal icon button, a secondary-container disc in a 48dp target. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="@color/widget_ripple">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/widget_secondary_container" />
+        </shape>
+    </item>
+</ripple>

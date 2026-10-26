@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Add widget in one cell: a single button, like the app's own add button, that adds an expense. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_button_fab"
+    android:clipToOutline="true"
+    android:contentDescription="@string/widget_add_expense">
+
+    <ImageView
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:layout_gravity="center"
+        android:importantForAccessibility="no"
+        android:src="@drawable/widget_ic_add"
+        android:tint="@color/widget_on_primary_container" />
+</FrameLayout>

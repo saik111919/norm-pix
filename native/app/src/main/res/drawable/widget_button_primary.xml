@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Add widget's main button: Material 3's filled button, a primary pill. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="@color/widget_ripple">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_primary" />
+            <corners android:radius="100dp" />
+        </shape>
+    </item>
+</ripple>

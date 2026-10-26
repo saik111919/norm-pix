@@ -33,6 +33,10 @@
         <intent>
             <action android:name="android.media.action.IMAGE_CAPTURE" />
         </intent>
+        <!-- The clock widget opens the phone's clock app when tapped (NormPix where there is none). -->
+        <intent>
+            <action android:name="android.intent.action.SHOW_ALARMS" />
+        </intent>
     </queries>
 
     <application
@@ -198,6 +202,47 @@
             </intent-filter>
         </activity>
 
+        <!-- Home-screen widgets. Only the system's widget service reaches them (not exported). The clock keeps time by itself
+             (AnalogClock and TextClock); the Add widget only opens the app; the Recent widget is drawn again by the app when
+             the ledger changes, and here when the day turns (its own alarm, or a restart or a change of clock). -->
+        <receiver
+            android:name=".widgets.ClockWidget"
+            android:exported="false"
+            android:label="@string/widget_clock_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_clock_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.RecentWidget"
+            android:exported="false"
+            android:label="@string/widget_recent_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_recent_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.AddWidget"
+            android:exported="false"
+            android:label="@string/widget_add_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_add_info" />
+        </receiver>
         <!-- NFC Outlet Host Card Emulation Service for two-way card exchange -->
         <service
             android:name=".wallet.nfc.NfcCardOutletService"
