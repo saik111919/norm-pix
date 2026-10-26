@@ -102,6 +102,7 @@ fun AppearanceSectionPage(section: AppearanceSection) {
                     }
                     AppearanceSection.Effects -> EffectsSection(prefs, preferences, haptics)
                     AppearanceSection.Controls -> {
+                        FooterLabelsSection(prefs, preferences, haptics)
                         BottomControlsSection(prefs, preferences, haptics)
                         BackButtonSection(prefs, preferences, haptics)
                         MonthControlSection(prefs, preferences, haptics)
@@ -411,6 +412,27 @@ private fun BackButtonSection(prefs: AppPrefsState, preferences: AppPreferences,
                     },
                 )
             }
+        }
+    }
+}
+
+/** Switch for showing or hiding destination labels on the bottom navigation bar / dock. */
+@Composable
+private fun FooterLabelsSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
+    ListSection(
+        title = "Navigation bar",
+        footer = "When turned off, the bottom navigation bar stays compact with icons only, without destination labels.",
+    ) {
+        item {
+            SwitchRow(
+                headline = "Footer labels",
+                supporting = "Show destination label on the active bottom bar item",
+                checked = prefs.showFooterLabels,
+                onCheckedChange = { on ->
+                    haptics.selection()
+                    preferences.setShowFooterLabels(on)
+                },
+            )
         }
     }
 }

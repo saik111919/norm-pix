@@ -352,6 +352,11 @@ data class AppPrefsState(
      * style while it is on, whichever [backButtonStyle] is picked; a wider window keeps its rail and its layout.
      */
     val bottomControls: Boolean = false,
+    /**
+     * Settings > Appearance > Navigation & controls. Show text labels next to the active destination in the bottom navigation bar.
+     * When off, destinations are represented by icons only.
+     */
+    val showFooterLabels: Boolean = true,
     /** How progress bars and loaders look, wherever the app shows progress. */
     val progressStyle: ProgressStyle = ProgressStyle.Wavy,
     /** Settings > Appearance > Layouts: Home's biggest categories as a stack or a carousel. */
@@ -472,6 +477,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
             railCollapsed = prefs.getBoolean(K_RAIL_COLLAPSED, defaults.railCollapsed),
             backButtonStyle = prefs.enum(K_BACK_STYLE, defaults.backButtonStyle),
             bottomControls = prefs.getBoolean(K_BOTTOM_CONTROLS, defaults.bottomControls),
+            showFooterLabels = prefs.getBoolean(K_FOOTER_LABELS, defaults.showFooterLabels),
             progressStyle = prefs.enum(K_PROGRESS_STYLE, defaults.progressStyle),
             topSpendingLayout = prefs.enum(K_TOP_SPENDING_LAYOUT, defaults.topSpendingLayout),
             monthControlStyle = prefs.enum(K_MONTH_CONTROL, defaults.monthControlStyle),
@@ -603,6 +609,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
 
     fun setBottomControls(enabled: Boolean) =
         change({ copy(bottomControls = enabled) }) { putBoolean(K_BOTTOM_CONTROLS, enabled) }
+
+    fun setShowFooterLabels(enabled: Boolean) =
+        change({ copy(showFooterLabels = enabled) }) { putBoolean(K_FOOTER_LABELS, enabled) }
 
     fun setProgressStyle(style: ProgressStyle) =
         change({ copy(progressStyle = style) }) { putString(K_PROGRESS_STYLE, style.name) }
@@ -852,6 +861,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_RAIL_COLLAPSED = "rail_collapsed"
         const val K_BACK_STYLE = "back_button_style"
         const val K_BOTTOM_CONTROLS = "bottom_controls"
+        const val K_FOOTER_LABELS = "show_footer_labels"
         const val K_PROGRESS_STYLE = "progress_style"
         const val K_TOP_SPENDING_LAYOUT = "top_spending_layout"
         const val K_MONTH_CONTROL = "month_control_style"

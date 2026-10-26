@@ -74,7 +74,7 @@ class BottomControlsSettingTest {
     fun theControlsPageHasOneSwitch_thatTurnsItOnAndOff() {
         compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.Controls) } }
         compose.waitForIdle()
-        val switch = compose.onNode(isToggleable())
+        val switch = compose.onNodeWithText("Bottom controls")
         switch.assertIsOff()
 
         switch.performClick()
