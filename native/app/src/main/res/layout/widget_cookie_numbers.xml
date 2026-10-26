@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The cookie clock with numerals: the same AnalogClock over a face that numbers the hours (shorter hands, to stay off the
+     numbers). Drawn by design/cookie-clock/CookieFace.java. Before Android 12 AnalogClock has no second hand (layout-v31 has it). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_cookie_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <AnalogClock
+        android:id="@+id/widget_cookie_clock"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:dial="@drawable/widget_cookie_dial_numbers"
+        android:hand_hour="@drawable/widget_cookie_hour_numbers"
+        android:hand_minute="@drawable/widget_cookie_minute_numbers" />
+</FrameLayout>

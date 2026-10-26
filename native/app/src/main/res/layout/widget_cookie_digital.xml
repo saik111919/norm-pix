@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The cookie digital clock: the hour over the minute and the date, on a cookie-shaped face. The platform keeps it on time
+     (TextClock), so NormPix never wakes up to redraw it; CookieDigitalWidget sizes and places the three texts for the
+     widget's size. The root is one stop for a screen reader, which reads the three texts as one: "10 09 Mon 26 Oct".
+     tools:targetApi: screenReaderFocusable is Android 9; before that each text is read on its own, which is as good as it gets.
+     tools:ignore: the text sizes are dp, not sp, on purpose - the face decides them (CookieFace), so the phone's text size does not
+     push the digits off the cookie; textFontWeight is Android 9 and the font falls back to its regular weight before that. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/widget_cookie_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:screenReaderFocusable="true"
+    tools:ignore="SpUsage,UnusedAttribute"
+    tools:targetApi="p">
+
+    <ImageView
+        android:id="@+id/widget_cookie_face"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitCenter"
+        android:src="@drawable/widget_cookie_face" />
+
+    <TextClock
+        android:id="@+id/widget_cookie_hour"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:fontFamily="@font/gs_flex"
+        android:format12Hour="h"
+        android:format24Hour="HH"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:textColor="@color/widget_clock_ink"
+        android:textFontWeight="520"
+        android:textSize="60dp" />
+
+    <TextClock
+        android:id="@+id/widget_cookie_minute"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:fontFamily="@font/gs_flex"
+        android:format12Hour="mm"
+        android:format24Hour="mm"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:textColor="@color/widget_clock_secondary"
+        android:textFontWeight="520"
+        android:textSize="60dp" />
+
+    <TextClock
+        android:id="@+id/widget_cookie_date"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:fontFamily="@font/gs_flex"
+        android:format12Hour="EEE d MMM"
+        android:format24Hour="EEE d MMM"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:textAllCaps="true"
+        android:textColor="@color/widget_clock_secondary"
+        android:textFontWeight="520"
+        android:textSize="14dp" />
+</FrameLayout>

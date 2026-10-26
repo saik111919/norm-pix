@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The cookie analog clock's minute hand, pointing at twelve; its cap is the pivot.
+     Drawn by design/cookie-clock/CookieFace.java: change it there, not here. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="VectorRaster"
+    android:width="280dp"
+    android:height="280dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <path
+        android:strokeColor="@color/widget_clock_face"
+        android:strokeWidth="8.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M100,109 L100,34" />
+    <path
+        android:strokeColor="@color/widget_clock_ink"
+        android:strokeWidth="4.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M100,109 L100,34" />
+    <path
+        android:fillColor="@color/widget_clock_ink"
+        android:pathData="M105.6,100 C105.6,103.09 103.09,105.6 100,105.6 C96.91,105.6 94.4,103.09 94.4,100 C94.4,96.91 96.91,94.4 100,94.4 C103.09,94.4 105.6,96.91 105.6,100 Z" />
+    <path
+        android:fillColor="@color/widget_clock_accent"
+        android:pathData="M102.2,100 C102.2,101.22 101.22,102.2 100,102.2 C98.78,102.2 97.8,101.22 97.8,100 C97.8,98.78 98.78,97.8 100,97.8 C101.22,97.8 102.2,98.78 102.2,100 Z" />
+</vector>

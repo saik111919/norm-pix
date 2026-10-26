@@ -69,6 +69,7 @@ private const val SEARCH_ITEM_KEY = "search"
 val SettingsPage.title: String
     get() = when (this) {
         SettingsPage.Appearance -> "Appearance"
+        SettingsPage.Widgets -> "Widgets"
         SettingsPage.Finance -> "Finance"
         SettingsPage.Data -> "Data & Backup"
         SettingsPage.Wallet -> "Wallet & Cards"
@@ -310,6 +311,7 @@ private fun summary(group: SettingsPage, prefs: AppPrefsState, finance: FinanceS
         },
         if (prefs.colorSource == ColorSource.System && AppTheme.dynamicColorSupported) "Wallpaper colors" else prefs.accent.label,
     ).joinToString(" · ")
+    SettingsPage.Widgets -> "Clocks, recent transactions, quick add"
     SettingsPage.Finance -> buildList {
         add(finance.currency.code)
         finance.defaultAccount?.let { add("Default: ${it.name}") }

@@ -59,7 +59,7 @@ NormPix is a personal finance tracker and card wallet for Android, built nativel
 - **Plans that keep up.** Monthly budgets per category, repeating payments that record themselves, and reminders with snooze, all on the Plans & Activity tab.
 - **Insights that answer questions.** Where the money went, what changed from last month, spending per person, and any range of days you pick.
 - **A wallet you can trust.** Card numbers are encrypted, hidden until you unlock (fingerprint, face or screen lock, or a tap on your own NFC tag), and cleared from the clipboard after copying. Screenshots of the app are blocked.
-- **On your home screen.** Three widgets: your recent transactions at a glance, one tap to add an expense, income or a transfer, and a clock with turning rings after a watch face. They follow your wallpaper's colours on Android 12 and later, and show nothing of your ledger while NormPix is locked.
+- **On your home screen.** Six widgets: your recent transactions at a glance, one tap to add an expense, income or a transfer, and four clocks - one with turning rings after a watch face, and a cookie-shaped one in three styles (analog, analog with numbers, digital). Settings > Widgets has a pill for each with a preview and an **Add to home screen** button, so nothing needs hunting for in the launcher's picker. They follow your wallpaper's colours on Android 12 and later, and show nothing of your ledger while NormPix is locked.
 - **Made to feel native.** Material 3 Expressive throughout, your choice of accent and font (or a Pure black-and-white theme), ten app icons, and six page-transition styles, including a Linux-like window open and close.
 - **A guide inside the app.** Settings → About NormPix explains how each feature works, step by step, with pictures drawn in your own theme.
 
@@ -158,7 +158,7 @@ native/                         The Android app (Kotlin, Jetpack Compose)
 │   ├── ui/                     Design system: theme, tokens, sheets, lists, components
 │   └── banks/, availability/   Bank directory, scheduled features
 ├── app/src/test/               Unit and Robolectric UI tests (and the README's screenshots)
-└── design/app-icon/            Where the launcher icons come from
+└── design/                     Where the launcher icons (app-icon/) and the clock widgets' faces (clock-widget/, cookie-clock/) come from
 docs/                           README pictures (docs/screenshots is generated)
 lib/                            The earlier Flutter app, kept for reference
 .github/workflows/              CI: tests, lint, releases, screenshots

@@ -193,8 +193,13 @@ class AboutPageTest {
     fun aTopicWithoutAScreen_hasNoButton() {
         showGuide(GuideTopic.ShareReceipt)
         for (link in GuideLink.entries) compose.onAllNodesWithText(link.label).assertCountEquals(0)
-        show(GuideTopic.Widgets)
-        for (link in GuideLink.entries) compose.onAllNodesWithText(link.label).assertCountEquals(0)
+    }
+
+    @Test
+    fun theWidgetsTopic_opensSettingsWidgets() {
+        showGuide(GuideTopic.Widgets)
+        compose.onNodeWithText(GuideLink.Widgets.label).performScrollTo().performClick()
+        assertEquals(listOf<SettingsPage?>(SettingsPage.Widgets), env.navigator.settingsPages)
     }
 
     @Test

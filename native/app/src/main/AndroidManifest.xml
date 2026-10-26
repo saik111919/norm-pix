@@ -202,8 +202,9 @@
             </intent-filter>
         </activity>
 
-        <!-- Home-screen widgets. Only the system's widget service reaches them (not exported). The clock keeps time by itself
-             (AnalogClock and TextClock); the Add widget only opens the app; the Recent widget is drawn again by the app when
+        <!-- Home-screen widgets. Only the system's widget service reaches them (not exported). The watch dial keeps its hour and minute by itself
+             (TextClock) and has its rings drawn again every minute by an alarm that wakes nothing; the cookie clocks keep time by
+             themselves (AnalogClock and TextClock); the Add widget only opens the app; the Recent widget is drawn again by the app when
              the ledger changes, and here when the day turns (its own alarm, or a restart or a change of clock). -->
         <receiver
             android:name=".widgets.ClockWidget"
@@ -211,10 +212,47 @@
             android:label="@string/widget_clock_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_clock_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.CookieAnalogWidget"
+            android:exported="false"
+            android:label="@string/widget_cookie_analog_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_cookie_analog_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.CookieNumbersWidget"
+            android:exported="false"
+            android:label="@string/widget_cookie_numbers_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_cookie_numbers_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.CookieDigitalWidget"
+            android:exported="false"
+            android:label="@string/widget_cookie_digital_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_cookie_digital_info" />
         </receiver>
         <receiver
             android:name=".widgets.RecentWidget"

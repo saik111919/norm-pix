@@ -24,6 +24,16 @@ internal fun viewsForSizes(options: Bundle?, fallback: Pair<Float, Float>, build
     return build(width, height)
 }
 
+/** The sizes (width, height in dp) [viewsForSizes] lays a widget out for: every one the launcher may show it at, or the one size it is upright. */
+internal fun sizesOf(options: Bundle?, fallback: Pair<Float, Float>): List<Pair<Float, Float>> {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        @Suppress("DEPRECATION")
+        val sizes = options?.getParcelableArrayList<SizeF>(AppWidgetManager.OPTION_APPWIDGET_SIZES)
+        if (!sizes.isNullOrEmpty()) return sizes.distinct().take(16).map { it.width to it.height }
+    }
+    return listOf(uprightSize(options) ?: fallback)
+}
+
 /** The widget's size with the phone upright, in dp; null when the launcher hasn't said. */
 internal fun uprightSize(options: Bundle?): Pair<Float, Float>? {
     val width = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH) ?: 0

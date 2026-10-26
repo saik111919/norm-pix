@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The cookie analog clock: 2 x 2 to start, resizable. It never asks to be updated (updatePeriodMillis 0): the platform
+     keeps the time, and NormPix only sets the tap when it is placed or resized. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="UnusedAttribute"
+    android:description="@string/widget_cookie_analog_description"
+    android:initialLayout="@layout/widget_cookie_analog"
+    android:maxResizeHeight="280dp"
+    android:maxResizeWidth="280dp"
+    android:minHeight="110dp"
+    android:minResizeHeight="80dp"
+    android:minResizeWidth="80dp"
+    android:minWidth="110dp"
+    android:previewImage="@drawable/widget_cookie_analog_preview"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="2"
+    android:targetCellWidth="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

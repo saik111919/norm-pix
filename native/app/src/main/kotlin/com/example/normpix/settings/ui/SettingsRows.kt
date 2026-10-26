@@ -43,6 +43,7 @@ import com.example.normpix.ui.components.ProfileAvatar
 val SettingsPage.hue: Int
     get() = when (this) {
         SettingsPage.Appearance -> 3
+        SettingsPage.Widgets -> 6
         SettingsPage.Finance -> 1
         SettingsPage.Data -> 2
         SettingsPage.Wallet -> 7

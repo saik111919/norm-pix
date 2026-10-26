@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Update
+import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
@@ -86,6 +87,11 @@ object SettingsCatalog {
         SettingsEntry("Bank logo style", SettingsPage.Appearance, listOf("logo", "brand", "icon", "compact", "full", "bank", "wallet"), appearance = AppearanceSection.CategoryIcons),
         SettingsEntry("Card tilt", SettingsPage.Appearance, listOf("tilt", "motion", "gyroscope", "sensor", "parallax", "animation"), appearance = AppearanceSection.Effects, cardsOnly = true),
 
+        // Widgets
+        SettingsEntry("Home-screen widgets", SettingsPage.Widgets, listOf("widget", "widgets", "home screen", "launcher", "preview", "pill", "pills", "clock", "recent", "quick add")),
+        SettingsEntry("Add a widget to the home screen", SettingsPage.Widgets, listOf("add widget", "add to home screen", "put on home screen", "install widget")),
+        SettingsEntry("Cookie clock widgets", SettingsPage.Widgets, listOf("cookie", "clock", "analog", "analogue", "digital", "numerals", "watch dial")),
+
         // Finance
         SettingsEntry("Categories", null, listOf("categories", "labels", "tags"), special = SettingsSpecial.Categories),
         SettingsEntry("People", null, listOf("people", "person", "split", "spending by person", "family", "friends", "who"), special = SettingsSpecial.People),
@@ -154,6 +160,7 @@ object SettingsCatalog {
 
     fun iconFor(page: SettingsPage?): ImageVector = when (page) {
         SettingsPage.Appearance -> Icons.Outlined.Palette
+        SettingsPage.Widgets -> Icons.Outlined.Widgets
         SettingsPage.Finance -> Icons.Outlined.Payments
         SettingsPage.Data -> Icons.Outlined.Storage
         SettingsPage.Wallet -> AppIcons.Wallet
