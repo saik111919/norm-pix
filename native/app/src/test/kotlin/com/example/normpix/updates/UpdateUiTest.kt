@@ -44,6 +44,7 @@ import com.example.normpix.testing.TestEnvironment
 import com.example.normpix.ui.theme.NormPixTheme
 import com.example.normpix.updates.ui.OfferAppUpdates
 import com.example.normpix.updates.ui.UpdateBody
+import com.example.normpix.updates.ui.ChangelogPage
 import com.example.normpix.updates.ui.UpdatePage
 import com.example.normpix.updates.ui.UpdateSheetActions
 import com.example.normpix.updates.ui.UpdateSheetContent
@@ -657,15 +658,15 @@ class UpdateUiTest {
     }
 
     @Test
-    fun `a debug build's update page has no Automatic updates, but still shows the changelog`() {
-        network.answer(Releases.HISTORY, Releases.list(Releases.note("1.0.2", "- Words of 1.0.2")))
+    fun `a debug build's update page has no Automatic updates, but still shows the changelog pill`() {
         val environment = environment(updater(enabled = false))
         compose.setContent { environment.Content { UpdatePage() } }
-        waitFor("Version 1.0.2")
-        compose.onNodeWithText("Words of 1.0.2").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Changelog").performScrollTo().assertIsDisplayed()
         absent("Automatic updates")
         assertTrue(compose.onAllNodesWithText("Only GitHub is contacted", substring = true).fetchSemanticsNodes().isEmpty())
-        assertEquals(listOf(Releases.HISTORY), network.asked, "it reads the list of releases and checks for no update")
+        assertTrue(network.asked.isEmpty(), "it does not load changelog history on open")
+        compose.onNodeWithText("Changelog").performClick()
+        assertEquals(1, environment.navigator.changelogOpened)
     }
 
     // ------------------------------------------------------------ the changelog
@@ -680,22 +681,32 @@ class UpdateUiTest {
     )
 
     @Test
-    fun `the update page lists what every version changed, the installed one open and marked`() {
+    fun `the update page shows a changelog pill that opens the changelog page and does not load history on open`() {
         Releases.publish(network)
         publishChangelog()
         val environment = environment(updater())
         compose.setContent { environment.Content { UpdatePage() } }
         waitFor("Update available")
-        waitFor("Version 1.0.2")
         compose.onNodeWithText("Changelog").performScrollTo().assertIsDisplayed()
+        assertFalse(network.asked.contains(Releases.HISTORY), "history is not loaded on update page open")
+        compose.onNodeWithText("Changelog").performClick()
+        assertEquals(1, environment.navigator.changelogOpened)
+    }
+
+    @Test
+    fun `the changelog page lists what every version changed, the installed one open and marked`() {
+        publishChangelog()
+        val environment = environment(updater())
+        compose.setContent { environment.Content { ChangelogPage() } }
+        waitFor("Version 1.0.2")
+        compose.onNodeWithText("Changelog").assertIsDisplayed()
         // What the phone has is read first: open, as a list of its changes under their heading.
         compose.onNodeWithText("Notes for 1.0.2").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("A second change in 1.0.2").performScrollTo().assertIsDisplayed()
-        // Two "What's new": the update's own, in the page's body, and the heading the installed version's notes gave themselves.
-        assertEquals(2, compose.onAllNodesWithText("What's new").fetchSemanticsNodes().size)
+        compose.onNodeWithText("What's new").assertIsDisplayed()
         compose.onNodeWithText("2 changes", substring = true).assertExists()
         compose.onNodeWithText("Installed").assertExists()
-        // The newer one is marked and shut: its notes are the update's own, above; the older one is a tap away.
+        // The newer one is marked and shut: its notes are a tap away.
         compose.onNodeWithText("New").assertExists()
         absent("Notes for 1.0.3")
         absent("Notes for 1.0.1")
@@ -703,10 +714,9 @@ class UpdateUiTest {
 
     @Test
     fun `a version opens to its changes when tapped, and shuts again`() {
-        Releases.publish(network)
         publishChangelog()
         val environment = environment(updater())
-        compose.setContent { environment.Content { UpdatePage() } }
+        compose.setContent { environment.Content { ChangelogPage() } }
         waitFor("Version 1.0.1")
         scrollTap("Version 1.0.1")
         waitFor("Notes for 1.0.1")
@@ -715,12 +725,10 @@ class UpdateUiTest {
     }
 
     @Test
-    fun `up to date, the page already says what the version installed changed`() {
-        Releases.publish(network, "1.0.2", 10002)
+    fun `up to date, the changelog page says what the version installed changed`() {
         network.answer(Releases.HISTORY, Releases.list(Releases.note("1.0.2", "- What 1.0.2 brought")))
         val environment = environment(updater())
-        compose.setContent { environment.Content { UpdatePage() } }
-        waitFor("NormPix is up to date")
+        compose.setContent { environment.Content { ChangelogPage() } }
         waitFor("What 1.0.2 brought")
         compose.onNodeWithText("What 1.0.2 brought").performScrollTo().assertIsDisplayed()
     }
@@ -728,12 +736,10 @@ class UpdateUiTest {
     @Test
     fun `with no connection the changelog says why, and a tap asks again`() {
         // GitHub can't be reached at all: no check was heard either, so nothing was saved for the changelog to fall back on.
-        network.fail(Releases.LATEST, java.net.UnknownHostException("api.github.com"))
         network.fail(Releases.HISTORY, java.net.UnknownHostException("api.github.com"))
         val environment = environment(updater())
-        compose.setContent { environment.Content { UpdatePage() } }
+        compose.setContent { environment.Content { ChangelogPage() } }
         waitFor("Couldn't load the changelog")
-        // (The page's own headline says it too, about the update check: this is the changelog row's words.)
         compose.onNodeWithText("Tap to try again", substring = true).performScrollTo().assertIsDisplayed()
         val asked = network.asked.count { it == Releases.HISTORY }
 
@@ -747,10 +753,9 @@ class UpdateUiTest {
     @Test
     fun `without GitHub the page keeps showing the changelog saved earlier, and says so`() {
         val saved = ChangelogEntry("1.0.2", 10002, Instant.parse("2026-10-15T09:30:00Z"), "- Saved words")
-        Releases.publish(network)
         network.fail(Releases.HISTORY, java.net.UnknownHostException("api.github.com"))
         val environment = environment(updater(changelogs = MemoryChangelogStore(listOf(saved))))
-        compose.setContent { environment.Content { UpdatePage() } }
+        compose.setContent { environment.Content { ChangelogPage() } }
         waitFor("Version 1.0.2")
         compose.onNodeWithText("Saved words").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Couldn't refresh the changelog just now", substring = true).performScrollTo().assertIsDisplayed()
@@ -759,14 +764,12 @@ class UpdateUiTest {
 
     @Test
     fun `a version that came with no notes says so`() {
-        Releases.publish(network, "1.0.2", 10002)
         network.answer(Releases.HISTORY, Releases.list(Releases.note("1.0.2", "")))
         val environment = environment(updater())
-        compose.setContent { environment.Content { UpdatePage() } }
+        compose.setContent { environment.Content { ChangelogPage() } }
         waitFor("Version 1.0.2")
         compose.onNodeWithText("No notes were written for this version.").performScrollTo().assertIsDisplayed()
     }
-
     @Test
     fun `settings search finds the changelog`() {
         for (query in listOf("changelog", "what's new", "release notes", "version history")) {

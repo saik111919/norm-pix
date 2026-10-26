@@ -1,5 +1,6 @@
 package com.example.normpix.screens
 
+import com.example.normpix.finance.ui.FinanceState
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import com.example.normpix.wallet.SectionAddButton
@@ -579,8 +580,26 @@ private fun WalletTotals(amountsHidden: Boolean) {
             owed != null -> "Total balance $total: $held in accounts, minus $owed owed."
             else -> "Total balance $total: $held in accounts."
         },
-        note = if (finance.activeAccounts.isEmpty()) null else "Balances are worked out from the starting balance and every transaction recorded.",
+        note = if (finance.activeAccounts.isEmpty()) null else walletNote(finance),
     )
+}
+
+/**
+ * What the Wallet's totals are made of, in words: worked out from every account's starting balance and its transactions up to
+ * today. It says so too when money in archived accounts is in them (those accounts are not shown), and when entries dated after
+ * today are not yet - the two things that would otherwise make the total read as something other than the accounts above it.
+ */
+private fun walletNote(finance: FinanceState): String {
+    val archivedHeld = finance.accounts.filter { it.archived }.sumOf { finance.balanceOf(it.id ?: return@sumOf 0L) }
+    return buildString {
+        append("Balances are worked out from the starting balance and every transaction up to today.")
+        if (archivedHeld != 0L) append(" They include ${finance.money.format(archivedHeld)} in archived accounts.")
+        when (val n = finance.upcomingCount) {
+            0 -> Unit
+            1 -> append(" 1 entry dated after today counts from its day.")
+            else -> append(" $n entries dated after today count from their day.")
+        }
+    }
 }
 
 /**

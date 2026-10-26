@@ -13,8 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -95,24 +94,31 @@ private fun Banner.spoken(index: Int, count: Int): String = buildString {
 }
 
 /**
- * The banner itself. As a [plate] it is the same banner with nothing visible in it - and nothing to press, so a button on
- * a banner behind can never be pressed by mistake - which is the same size by construction, not by measurement.
+ * The banner itself, in the family of Home's other sections: a tonal segment of the page's own surface (as a list section is),
+ * not a slab of status colour. What kind of attention it needs is said by its eyebrow, in the status colour, and by its icon on a
+ * soft disc of that colour - so an overdue reminder still reads as urgent and a budget as a heads-up - while the title and its
+ * detail are the page's ink, and its buttons are the app's own: a tonal one for the way to deal with it, a text one for the
+ * quieter choice.
+ *
+ * As a [plate] it is the same banner with nothing visible in it - and nothing to press, so a button on a banner behind can never
+ * be pressed by mistake - which is the same size by construction, not by measurement.
  */
 @Composable
 private fun BannerFace(banner: Banner, plate: Boolean) {
     val role = banner.tone.resolve()
+    val scheme = MaterialTheme.colorScheme
     val text = MaterialTheme.typography
-    Surface(Modifier.fillMaxWidth(), color = role.container, shape = AppRadius.rXl) {
+    Surface(Modifier.fillMaxWidth(), color = scheme.surfaceContainer, contentColor = scheme.onSurface, shape = AppRadius.rXl) {
         Column(Modifier.padding(start = AppSpacing.lg, top = AppSpacing.lg, end = AppSpacing.lg, bottom = AppSpacing.sm)) {
             Row(Modifier.graphicsLayer { alpha = if (plate) 0f else 1f }) {
-                Box(Modifier.size(40.dp).background(role.color, CircleShape), contentAlignment = Alignment.Center) {
-                    Icon(banner.icon, contentDescription = null, tint = role.onColor, modifier = Modifier.size(22.dp))
+                Box(Modifier.size(40.dp).background(role.container, CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(banner.icon, contentDescription = null, tint = role.onContainer, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.width(AppSpacing.md))
                 Column(Modifier.weight(1f)) {
-                    Text(banner.eyebrow, style = text.labelLarge, color = role.onContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(banner.title, style = text.titleMedium, color = role.onContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(banner.message, style = text.bodyMedium, color = role.onContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(banner.eyebrow, style = text.labelLarge, color = role.color, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(banner.title, style = text.titleMedium, color = scheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(banner.message, style = text.bodyMedium, color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             Spacer(Modifier.height(AppSpacing.xs))
@@ -125,19 +131,16 @@ private fun BannerFace(banner: Banner, plate: Boolean) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     banner.secondary?.let { action ->
-                        TextButton(
-                            onClick = action.onClick,
-                            colors = ButtonDefaults.textButtonColors(contentColor = role.onContainer),
-                            modifier = Modifier.weight(1f, fill = false),
-                        ) { Text(action.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        TextButton(onClick = action.onClick, modifier = Modifier.weight(1f, fill = false)) {
+                            Text(action.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
-                    Button(
-                        onClick = banner.primary.onClick,
-                        colors = ButtonDefaults.buttonColors(containerColor = role.color, contentColor = role.onColor),
-                        modifier = Modifier.weight(1f, fill = false),
-                    ) { Text(banner.primary.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    FilledTonalButton(onClick = banner.primary.onClick, modifier = Modifier.weight(1f, fill = false)) {
+                        Text(banner.primary.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
         }
     }
 }
+

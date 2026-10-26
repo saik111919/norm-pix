@@ -53,12 +53,15 @@ import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.comparisonRange
 import com.example.normpix.finance.domain.relativeChange
+import com.example.normpix.finance.domain.settledBy
+import com.example.normpix.finance.domain.settledCutoff
 import com.example.normpix.finance.domain.shareOf
 import com.example.normpix.finance.domain.upcomingOccurrences
 import com.example.normpix.finance.ui.AsyncValue
 import com.example.normpix.finance.ui.CategoryAvatar
 import com.example.normpix.finance.ui.CategorySpend
 import com.example.normpix.finance.ui.CategorySpendSheet
+import com.example.normpix.finance.ui.CategoryCarousel
 import com.example.normpix.finance.ui.CategoryStack
 import com.example.normpix.finance.ui.Hero
 import com.example.normpix.finance.ui.HeroAmount
@@ -89,6 +92,7 @@ import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.navigation.PlanSection
 import com.example.normpix.reminders.LocalReminders
+import com.example.normpix.settings.TopSpendingLayout
 import com.example.normpix.reminders.Reminder
 import com.example.normpix.reminders.icon
 import com.example.normpix.reminders.reminderDueText
@@ -159,6 +163,9 @@ private class HomeData(
         suspend fun load(repo: FinanceRepository): HomeData {
             val now = LocalDateTime.now()
             val month = MonthKey.of(now)
+            // As of today: an entry dated ahead is upcoming, and counts on its own day (see settledCutoff).
+            val asOf = settledCutoff(now)
+            val soFar = month.range.settledBy(asOf)
             val horizon = now.plusDays(COMING_UP_DAYS)
             // The biggest are per top-level category: a sub-category's spending counts toward its parent.
             val parents = repo.categories().parentMap()
@@ -169,15 +176,16 @@ private class HomeData(
                 .sortedBy { it.first }
             return HomeData(
                 month = month,
-                summary = repo.summary(month.range),
+                summary = repo.summary(soFar),
                 previous = repo.summary(compare),
-                recent = repo.transactions(TransactionQuery(), limit = 5).items,
-                topSpending = rollUpToParents(repo.categoryTotals(month.range, TransactionType.Expense), parents).take(TOP_SPENDING),
+                // What was spent most recently: today's first, not an entry dated ahead of it (Activity lists those as upcoming).
+                recent = repo.transactions(TransactionQuery(before = asOf), limit = 5).items,
+                topSpending = rollUpToParents(repo.categoryTotals(soFar, TransactionType.Expense), parents).take(TOP_SPENDING),
                 // The same days of last month as the total above (all of it once this month is over): a month still going is
                 // never set against the whole of the one before, which would make every category look down.
                 previousSpending = rollUpToParents(repo.categoryTotals(compare, TransactionType.Expense), parents)
                     .associate { it.categoryId to it.amount },
-                budgets = repo.budgetOverview(month),
+                budgets = repo.budgetOverview(month, asOf = asOf),
                 upcoming = upcoming,
             )
         }
@@ -457,7 +465,10 @@ private fun TopSpending(data: HomeData, onSeeAll: () -> Unit) {
     TopSpendingStack(spends, onSeeAll)
 }
 
-/** The stack itself, from what the month came to per category; nothing at all when there was no spending. */
+/**
+ * The stack (or, as Settings > Appearance > Top spending has it, the carousel) itself, from what the month came to per category;
+ * nothing at all when there was no spending.
+ */
 @Composable
 internal fun TopSpendingStack(spends: List<CategorySpend>, onSeeAll: () -> Unit) {
     if (spends.isEmpty()) return
@@ -465,27 +476,38 @@ internal fun TopSpendingStack(spends: List<CategorySpend>, onSeeAll: () -> Unit)
     val navigator = LocalNavigator.current
     val scope = rememberCoroutineScope()
     val deck = rememberDeckStackState()
+    val layout = LocalAppContainer.current.preferences.state.collectAsState().value.topSpendingLayout
+    val open: (CategorySpend) -> Unit = { spend ->
+        scope.launch {
+            // The sheet sits above the navigation graph: it closes, and this does the navigating.
+            val seeAll = overlays.sheet<Boolean>(expandable = true) { dismiss ->
+                CategorySpendSheet(spend, onSeeAll = { dismiss(true) })
+            }
+            if (seeAll == true) navigator.openCategoryHistory(spend.categoryId, spend.month)
+        }
+    }
     SectionHeader(
         title = "Top spending",
         actionLabel = "Insights",
         onAction = onSeeAll,
         padding = HomeSectionPadding,
-        trailing = { StackButton(deck) },
+        // Only a stack can be spread out, and gathered again.
+        trailing = if (layout == TopSpendingLayout.Stack) ({ StackButton(deck) }) else null,
     )
-    CategoryStack(
-        spends = spends,
-        state = deck,
-        onOpen = { spend ->
-            scope.launch {
-                // The sheet sits above the navigation graph: it closes, and this does the navigating.
-                val seeAll = overlays.sheet<Boolean>(expandable = true) { dismiss ->
-                    CategorySpendSheet(spend, onSeeAll = { dismiss(true) })
-                }
-                if (seeAll == true) navigator.openCategoryHistory(spend.categoryId, spend.month)
-            }
-        },
-        modifier = Modifier.padding(top = AppSpacing.xs),
-    )
+    when (layout) {
+        TopSpendingLayout.Stack -> CategoryStack(
+            spends = spends,
+            state = deck,
+            onOpen = open,
+            modifier = Modifier.padding(top = AppSpacing.xs),
+        )
+        TopSpendingLayout.Carousel -> CategoryCarousel(
+            spends = spends,
+            onOpen = open,
+            onSeeAll = { spend -> navigator.openCategoryHistory(spend.categoryId, spend.month) },
+            modifier = Modifier.padding(top = AppSpacing.xs),
+        )
+    }
 }
 
 /** Recurring payments and reminders in the next 7 days. */

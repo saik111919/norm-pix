@@ -138,7 +138,7 @@ fun ConfirmSheetContent(
  * Cancel at thumb height. See [AppOverlays.loading].
  */
 @Composable
-fun LoadingSheetContent(title: String, message: String?, onCancel: () -> Unit, modifier: Modifier = Modifier) {
+fun LoadingSheetContent(title: String, message: String?, onCancel: (() -> Unit)?, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
     Column(
         modifier
@@ -158,8 +158,13 @@ fun LoadingSheetContent(title: String, message: String?, onCancel: () -> Unit, m
             Text(message, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(AppSpacing.xl))
-        TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-            Text("Cancel", style = MaterialTheme.typography.titleMedium)
+        // Without a way to stop it (work that must finish), the sheet keeps the button's room, so it is the same size either way.
+        if (onCancel != null) {
+            TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                Text("Cancel", style = MaterialTheme.typography.titleMedium)
+            }
+        } else {
+            Spacer(Modifier.height(AppSpacing.md))
         }
     }
 }

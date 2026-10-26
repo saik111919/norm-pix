@@ -1,16 +1,26 @@
 package com.example.normpix.updates.ui
 
 import android.text.format.DateFormat
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.UpdateDisabled
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -18,9 +28,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
@@ -31,11 +43,11 @@ import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
+import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.updates.AppUpdater
 import com.example.normpix.updates.UpdateState
 import com.example.normpix.updates.release
-import kotlinx.coroutines.launch
 
 /**
  * Check for updates (Settings, and Automatic updates' Check now) on a page of its own: opened, it asks GitHub for the latest
@@ -48,8 +60,8 @@ import kotlinx.coroutines.launch
  * ([UpdateActionStack]): Update now - or Install, or whatever is next - filled and across the page, and Later, or whatever
  * the way out is, outlined under it.
  *
- * Under that come the changelog ([ChangelogSection]: what every version changed, the installed one open, readable offline from
- * what was saved) and the way to Automatic updates, so this one page is where everything about updating is.
+ * Under that come the changelog pill (which opens [ChangelogPage] on tap) and the way to Automatic updates, so this one page
+ * is where everything about updating is.
  *
  * Leaving it never stops a download: that carries on with NormPix closed, its progress in a notification.
  */
@@ -86,11 +98,6 @@ private fun UpdatePageFor(updater: AppUpdater, onClose: () -> Unit) {
         val current = updater.state.value
         if (current.release == null && current !is UpdateState.Checking) updater.check()
     }
-    // The changelog is read as the page opens, whatever the update check finds: what each version changed is there to read
-    // for the version already installed too.
-    val changelog by updater.changelog.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(updater) { updater.loadChangelog() }
     val prefs by LocalAppContainer.current.preferences.state.collectAsStateWithLifecycle()
     val is24Hour = DateFormat.is24HourFormat(LocalContext.current)
     val navigator = LocalNavigator.current
@@ -108,12 +115,9 @@ private fun UpdatePageFor(updater: AppUpdater, onClose: () -> Unit) {
             UpdateScreenBody(state, updater.installed, Modifier.padding(horizontal = AppSpacing.xl))
         }
         item(key = "changelog") {
-            ChangelogSection(
-                state = changelog,
-                installed = updater.installed,
-                onRetry = { scope.launch { updater.loadChangelog() } },
-                modifier = Modifier.padding(AppSpacing.page).padding(top = AppSpacing.lg),
-            )
+            Box(Modifier.padding(horizontal = AppSpacing.xl).padding(top = AppSpacing.lg)) {
+                ChangelogPill(onClick = navigator::openChangelog)
+            }
         }
         if (updater.enabled) {
             item(key = "settings") {
@@ -137,6 +141,32 @@ private fun UpdatePageFor(updater: AppUpdater, onClose: () -> Unit) {
                     modifier = Modifier.padding(horizontal = AppSpacing.xl).padding(top = AppSpacing.lg),
                 )
             }
+        }
+    }
+}
+
+/** A pill button that opens the full changelog page. */
+@Composable
+fun ChangelogPill(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    val haptics = rememberAppHaptics()
+    Surface(
+        onClick = {
+            haptics.selection()
+            onClick()
+        },
+        shape = CircleShape,
+        color = scheme.secondaryContainer,
+        contentColor = scheme.onSecondaryContainer,
+        modifier = modifier,
+    ) {
+        Row(
+            Modifier.heightIn(min = 36.dp).padding(start = AppSpacing.md, end = AppSpacing.lg),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.History, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(AppSpacing.sm))
+            Text("Changelog", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
         }
     }
 }

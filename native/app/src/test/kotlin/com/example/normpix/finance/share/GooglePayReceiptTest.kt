@@ -166,4 +166,34 @@ class GooglePayReceiptTest {
         assertEquals("UBER INDIA SYSTEMS PRIVATE LIMITED", d.counterparty)
         assertEquals("131100000001", d.reference)
     }
+
+    @Test
+    fun `a Google Pay self transfer is read as money out of the user's account to another of theirs`() {
+        val lines = listOf(
+            line("Self transfer", 0, 10, 100, 20),
+            line("Transferred", 0, 30, 80, 40),
+            line("₹4,800", 0, 50, 90, 70),
+            line("25 Oct 2026, 11:16 am", 0, 80, 120, 90),
+            line("HDFC Bank ••••3588", 0, 100, 150, 110),
+            line("UPI transaction ID: 131826136987", 0, 130, 200, 140),
+            line("To: Kotak Mahindra Bank ••••7890", 0, 150, 200, 160),
+            line("From: HDFC Bank ••••3588", 0, 170, 200, 180),
+            line("Google transaction ID: CICAgPjhq5mwIQ", 0, 190, 220, 200),
+        )
+        val d = read(lines)
+        assertEquals("Google Pay", d.app)
+        // Which way it went for the user's own side; the import makes it a transfer (see SelfTransfers).
+        assertEquals(TransactionType.Expense, d.type)
+        assertEquals(SelfTransferCue.Words, d.selfTransfer)
+        assertEquals(480_000L, d.amount)
+        assertEquals(SharedStatus.Completed, d.status)
+        // The other side is the user's other account, not a person to name as the payee.
+        assertNull(d.counterparty)
+        assertEquals(LocalDate.of(2026, 10, 25), d.date)
+        assertEquals(LocalTime.of(11, 16), d.time)
+        assertEquals("131826136987", d.reference)
+        assertEquals(listOf(MaskedNumber("", "3588")), d.maskedNumbers)
+        assertTrue("Kotak Mahindra Bank" in d.otherAccountText.orEmpty(), d.otherAccountText)
+        assertEquals(listOf(MaskedNumber("", "7890")), d.otherMaskedNumbers)
+    }
 }

@@ -56,3 +56,26 @@ data class MonthKey(val year: Int, val month: Int) : Comparable<MonthKey> {
 
 /** Midnight at the start of [moment]'s day. */
 fun startOfDay(moment: LocalDateTime): LocalDateTime = moment.toLocalDate().atStartOfDay()
+
+/*
+ * As of today. An entry dated after today - a bill entered ahead of its day, a salary that lands at the month's end - has not
+ * happened yet: until its day comes it is upcoming, and counts toward nothing. Every figure (what was spent, what is left of a
+ * budget, what an account holds) is the money that has moved by the end of today; once its day comes the entry counts like any
+ * other, nothing having been stored. Today counts whole, whatever the time: the day's entries are its own, early or late.
+ */
+
+/** The first moment after the day [now] is in: entries dated before it have happened, those from it on are upcoming. */
+fun settledCutoff(now: LocalDateTime): LocalDateTime = now.toLocalDate().plusDays(1).atStartOfDay()
+
+/** This range as of [cutoff] (see [settledCutoff]): ending there when it goes past it, and empty when it starts after. */
+fun DateRange.settledBy(cutoff: LocalDateTime): DateRange = when {
+    !end.isAfter(cutoff) -> this
+    !start.isBefore(cutoff) -> DateRange(start, start)
+    else -> DateRange(start, cutoff)
+}
+
+/** True when nothing can fall in this range: it ends where it starts. */
+val DateRange.isEmpty: Boolean get() = !end.isAfter(start)
+
+/** The whole of [day], midnight to midnight. */
+fun dayRange(day: LocalDate): DateRange = DateRange(day.atStartOfDay(), day.plusDays(1).atStartOfDay())

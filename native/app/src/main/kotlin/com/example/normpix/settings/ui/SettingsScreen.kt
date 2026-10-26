@@ -50,6 +50,7 @@ import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.ListSectionStyle
 import com.example.normpix.ui.components.SearchField
+import com.example.normpix.ui.components.rememberBottomControls
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.AppTheme
 import com.example.normpix.updates.UpdateState
@@ -110,6 +111,9 @@ fun SettingsScreen() {
     }
 
     val groupStyle = settingsGroupStyle()
+    // With Bottom controls on the field is in a card at the foot of the page for good, so there is no scrolling away from it:
+    // no header icon to bring it back, and no place for it in the list.
+    val searchAtBottom = rememberBottomControls()
 
     AppSubPage(
         title = "Settings",
@@ -119,26 +123,37 @@ fun SettingsScreen() {
         listState = listState,
         // The header's pill holds nothing but this icon, so it appears with it: not before the field has scrolled away.
         actionsVisible = searchOutOfView,
-        actions = {
-            IconButton(
-                onClick = {
-                    scope.launch {
-                        listState.animateScrollToItem(0)
-                        runCatching { searchFocus.requestFocus() }
-                    }
-                },
-            ) { Icon(Icons.Rounded.Search, contentDescription = "Search settings") }
+        actions = if (searchAtBottom) {
+            null
+        } else {
+            {
+                IconButton(
+                    onClick = {
+                        scope.launch {
+                            listState.animateScrollToItem(0)
+                            runCatching { searchFocus.requestFocus() }
+                        }
+                    },
+                ) { Icon(Icons.Rounded.Search, contentDescription = "Search settings") }
+            }
+        },
+        bottomSearch = if (searchAtBottom) {
+            { SearchField(value = query, onValueChange = { query = it }, placeholder = "Search settings") }
+        } else {
+            null
         },
     ) {
-        item(key = SEARCH_ITEM_KEY) {
-            Column(Modifier.padding(AppSpacing.page)) {
-                SearchField(
-                    value = query,
-                    onValueChange = { query = it },
-                    placeholder = "Search settings",
-                    modifier = Modifier.focusRequester(searchFocus),
-                )
-                Spacer(Modifier.height(SEARCH_GAP))
+        if (!searchAtBottom) {
+            item(key = SEARCH_ITEM_KEY) {
+                Column(Modifier.padding(AppSpacing.page)) {
+                    SearchField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = "Search settings",
+                        modifier = Modifier.focusRequester(searchFocus),
+                    )
+                    Spacer(Modifier.height(SEARCH_GAP))
+                }
             }
         }
         item(key = "body") {

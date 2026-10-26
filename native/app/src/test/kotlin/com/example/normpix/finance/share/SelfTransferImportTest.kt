@@ -127,6 +127,54 @@ class SelfTransferImportTest {
     }
 
     @Test
+    fun `PhonePe's "Transfer to" an account of the user's own is a transfer between the two`() {
+        val kotak = account("Kotak Savings", "kotak", ending = "1234")
+        val hdfc = account("HDFC Salary", "hdfc", ending = "5678")
+        val lines = listOf(
+            line("Transaction Successful", 0, 10, 100, 20),
+            line("12:27 pm on 22 Aug 2026", 0, 30, 120, 40),
+            line("Transfer to", 0, 50, 80, 60),
+            line("XXXXXXXXXX1234 ₹1,000", 0, 70, 150, 80),
+            line("Kotak Mahindra Bank", 0, 90, 80, 100),
+            line("Banking Name : Kusumanchi Sai", 0, 110, 150, 120),
+            line("Transfer Details", 0, 130, 100, 140),
+            line("PhonePe Transaction ID T2608221227467285779046", 0, 150, 250, 160),
+            line("Debited from", 0, 170, 80, 180),
+            line("XXXXXXXX5678 ₹1,000", 0, 190, 150, 200),
+            line("UTR: 179259041561", 0, 210, 150, 220),
+        )
+        val prefill = prefillOf(lines)
+
+        assertEquals(TransactionType.Transfer, prefill.type)
+        assertEquals(hdfc.id, prefill.accountId)
+        assertEquals(kotak.id, prefill.toAccountId)
+        assertEquals(100_000L, prefill.amount)
+    }
+
+    @Test
+    fun `PhonePe's "Transfer to" someone else's account stays a payment to them`() {
+        account("HDFC Salary", "hdfc", ending = "5678")
+        account("Kotak Savings", "kotak", ending = "9999")
+        val lines = listOf(
+            line("Transaction Successful", 0, 10, 100, 20),
+            line("12:27 pm on 22 Aug 2026", 0, 30, 120, 40),
+            line("Transfer to", 0, 50, 80, 60),
+            line("XXXXXXXXXX1234 ₹1,000", 0, 70, 150, 80),
+            line("Kotak Mahindra Bank", 0, 90, 80, 100),
+            line("Banking Name : Ravi Kumar", 0, 110, 150, 120),
+            line("Transfer Details", 0, 130, 100, 140),
+            line("Debited from", 0, 170, 80, 180),
+            line("XXXXXXXX5678 ₹1,000", 0, 190, 150, 200),
+            line("UTR: 179259041562", 0, 210, 150, 220),
+        )
+        val prefill = prefillOf(lines)
+
+        assertEquals(TransactionType.Expense, prefill.type)
+        assertEquals("Ravi Kumar", prefill.payee)
+        assertNull(prefill.toAccountId)
+    }
+
+    @Test
     fun `Google Pay's receipt with the user's name on both sides finds the other account by its bank`() {
         val hdfc = account("HDFC Salary", "hdfc", ending = "1234")
         val sbi = account("SBI Savings", "sbi")

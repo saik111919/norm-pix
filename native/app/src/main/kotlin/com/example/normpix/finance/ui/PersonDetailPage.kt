@@ -91,7 +91,9 @@ private fun PersonSummary(person: Person, view: HistoryView) {
     val finance = rememberFinanceState()
     val money = finance.money
     // Everything spent in the same stretch of time, whoever it was for: what the share is a share of.
-    val everything by rememberFinanceQuery(view.query.range) { summaryFor(TransactionQuery(range = view.query.range)) }
+    val everything by rememberFinanceQuery(view.query.range to view.query.before) {
+        summaryFor(TransactionQuery(range = view.query.range, before = view.query.before))
+    }
     val whole = (everything as? AsyncValue.Data)?.value ?: PeriodSummary.Empty
     val spent = view.summary.expense
     val count = view.summary.count

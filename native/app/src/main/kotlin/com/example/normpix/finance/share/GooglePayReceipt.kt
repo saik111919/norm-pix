@@ -37,6 +37,9 @@ internal object GooglePayReceipt : PaymentAppReceipt {
     private val upiIdLabel = Regex("""(?i)\bupi\s+(?:transaction|txn|ref(?:erence)?)\s*(?:id|no\.?|number)?\b\W*(\d{10,16})?""")
     private val lonePaymentReference = Regex("""^\d{10,16}$""")
 
+    /** A self transfer's title, "Self transfer": no person on the other side, only the user's other account in its details. */
+    private val selfTransferTitle = Regex("""(?i)^\W*self\s+transfer\W*$""")
+
     /** The title: "To <payee>" (paid) or "From <payer>" (received). A colon makes it a detail row instead. */
     private val titleTo = Regex("""(?i)^(?:paid\s+)?to\s+([^:\s].*)$""")
     private val titleFrom = Regex("""(?i)^(?:received\s+)?from\s+([^:\s].*)$""")
@@ -51,7 +54,7 @@ internal object GooglePayReceipt : PaymentAppReceipt {
         """(?i)\bpayment\s+of\s+(.+?)\s+(completed|successful|received|failed|declined|pending|processing|is\s+pending)\b""",
     )
     private val statusWord = Regex(
-        """(?i)^\W*(completed|successful|success|failed|declined|cancell?ed|expired|pending|processing|in\s+progress)\W*$""",
+        """(?i)^\W*(completed|successful|success|transferred|failed|declined|cancell?ed|expired|pending|processing|in\s+progress)\W*$""",
     )
 
     /** "HDFC Bank 3588": a bank's name, then its account's last digits - and, beside them, the card's expand arrow, read as a letter or a sign. */
@@ -72,6 +75,7 @@ internal object GooglePayReceipt : PaymentAppReceipt {
         Tell.piece(2, logo),
         Tell(3) { receipt -> receipt.name?.let { fileName.matches(it.trim()) } == true },
         Tell.row(1, upiIdLabel),
+        Tell.piece(1, selfTransferTitle),
     )
 
     override fun read(receipt: ReceiptLayout, ledger: CurrencySpec, today: LocalDate): ParsedTransactionDraft {
@@ -82,8 +86,16 @@ internal object GooglePayReceipt : PaymentAppReceipt {
         var titleAt = -1
         var titleType: TransactionType? = null
         var titleName: String? = null
+        var selfTitled = false
         for ((i, row) in rows.withIndex()) {
             val text = row.text.trim()
+            // "Self transfer" over the amount: the payer's receipt (Google Pay shows the one), so the money left the user's own side.
+            if (selfTransferTitle.matches(text)) {
+                titleAt = i
+                titleType = TransactionType.Expense
+                selfTitled = true
+                break
+            }
             val to = titleTo.matchEntire(text)
             val from = titleFrom.matchEntire(text)
             val bare = text.lowercase().removePrefix("paid ").removePrefix("received ")
@@ -110,7 +122,8 @@ internal object GooglePayReceipt : PaymentAppReceipt {
         val fileType = file?.groupValues?.get(2)?.let { if (it.equals("to", ignoreCase = true)) TransactionType.Expense else TransactionType.Income }
         val type = fileType ?: titleType ?: detailType
         val otherDetail = if (type == TransactionType.Income) fromDetail else toDetail
-        val party = file?.groupValues?.get(3)?.let(::nameIn) ?: titleName ?: otherDetail?.replace(ownBank, "")?.let(::nameIn)
+        // A self transfer's other side is an account ("Kotak Mahindra Bank ••••7890"), not a person to name as the payee.
+        val party = if (selfTitled) null else file?.groupValues?.get(3)?.let(::nameIn) ?: titleName ?: otherDetail?.replace(ownBank, "")?.let(::nameIn)
 
         // The other side's detail row and the one under it (their UPI id, or an account's bank and digits): in a self
         // transfer, the user's other account - named, like the user's own, after the user.
@@ -163,7 +176,7 @@ internal object GooglePayReceipt : PaymentAppReceipt {
             instrument = SharedTransactionParser.instrument(shown, masks),
             maskedNumbers = masks,
             accountText = accountText,
-            selfTransfer = SelfTransferCue.SameName.takeIf { sameName },
+            selfTransfer = SelfTransferCue.Words.takeIf { selfTitled } ?: SelfTransferCue.SameName.takeIf { sameName },
             otherAccountText = otherLines.joinToString("\n").ifEmpty { null },
             otherMaskedNumbers = otherSideNumbers(otherLines),
         )

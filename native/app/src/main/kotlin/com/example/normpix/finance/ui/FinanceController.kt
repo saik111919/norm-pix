@@ -13,8 +13,10 @@ import androidx.compose.runtime.remember
 import com.example.normpix.banks.BankCatalog
 import com.example.normpix.finance.data.FinanceRepository
 import com.example.normpix.finance.data.FinanceSnapshot
+import com.example.normpix.finance.data.LedgerCheckResult
 import com.example.normpix.finance.data.TransactionPictures
 import com.example.normpix.finance.domain.Account
+import com.example.normpix.finance.domain.CardBillExpense
 import com.example.normpix.finance.domain.Category
 import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.CurrencySpec
@@ -25,8 +27,11 @@ import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.RepeatSchedule
+import com.example.normpix.finance.domain.SelfTransferPair
+import com.example.normpix.finance.domain.asTransfer
 import com.example.normpix.navigation.LocalAppPreferences
 import java.io.File
+import java.time.LocalDateTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -60,6 +65,13 @@ data class FinanceState(
     val people: List<Person> = emptyList(),
     /** Amounts are kept off the screen (see [MoneyFormatter.hidden]); set by [rememberFinanceState] from the user's choice. */
     val amountsHidden: Boolean = false,
+    /**
+     * The moment [balances] are worked out as of: the end of the day they were read on (see `settledCutoff`). What is dated
+     * from it on is upcoming and not in them yet. Null before the first load.
+     */
+    val asOf: LocalDateTime? = null,
+    /** How many transactions are dated after [asOf]'s day: entered ahead, they count from their own day. */
+    val upcomingCount: Int = 0,
 ) {
     val money: MoneyFormatter = MoneyFormatter(currency, hidden = amountsHidden)
 
@@ -146,16 +158,23 @@ class FinanceController(
         }
     }
 
-    /** Catches recurring transactions up (e.g. when the app resumes). */
+    /**
+     * Catches recurring transactions up (e.g. when the app resumes) - and, on a new day, works everything out again: an entry
+     * dated today, entered ahead, counts from today (see [FinanceState.asOf]).
+     */
     suspend fun refreshRecurring() {
         if (_state.value.status != FinanceStatus.Ready) return load()
-        if (repository.processRecurring() > 0) reload(FinanceStatus.Ready)
+        val newDay = _state.value.asOf != repository.settledCutoff()
+        if (repository.processRecurring() > 0 || newDay) reload(FinanceStatus.Ready)
     }
 
     private suspend fun reload(status: FinanceStatus) {
         val accounts = repository.accounts()
         val categories = repository.categories()
-        val balances = repository.accountBalances()
+        // As of today: an entry dated ahead moves its account on its own day (see `settledCutoff`).
+        val asOf = repository.settledCutoff()
+        val balances = repository.accountBalances(asOf = asOf)
+        val upcoming = repository.countFrom(asOf)
         val defaultAccountId = repository.defaultAccountId()
         val code = repository.currencyCode()
         val customBanks = repository.customBanks()
@@ -171,6 +190,8 @@ class FinanceController(
             customBanks = customBanks,
             people = people,
             currency = if (code != previous.currency.code) CurrencySpec.byCode(code) else previous.currency,
+            asOf = asOf,
+            upcomingCount = upcoming,
         )
     }
 
@@ -297,6 +318,32 @@ class FinanceController(
     suspend fun resetAll() {
         mutate { it.resetAll() }
         pictures?.deleteAll()
+    }
+
+    // ---------------------------------------------------------------- check
+
+    /**
+     * Checks the whole ledger and puts right what has one right answer (see [FinanceRepository.checkAndRepair]), then works every
+     * figure out again. What it changed can be undone for a few moments: the [FinanceUndo] given back is null when it changed
+     * nothing.
+     */
+    suspend fun checkAndRepair(): Pair<LedgerCheckResult, FinanceUndo?> {
+        val before = repository.snapshot()
+        val result = mutate { it.checkAndRepair() }
+        val changed = result.issues.repairCount > 0 || result.recordedRepeats > 0
+        return result to if (changed) FinanceUndo(before, _state.value.revision, emptyList()) else null
+    }
+
+    /** Records [pair] as the one transfer between the user's accounts it is (see [FinanceRepository.combineSelfTransfer]). */
+    suspend fun combineSelfTransfer(pair: SelfTransferPair): FinanceUndo = undoable {
+        mutate { it.combineSelfTransfer(pair) }
+        emptyList()
+    }
+
+    /** Records [bill] as the payment onto its card that it is: a transfer, not spending (see [cardBillTarget]). */
+    suspend fun recordCardBill(bill: CardBillExpense): FinanceUndo = undoable {
+        mutate { it.saveTransaction(bill.asTransfer(LocalDateTime.now())) }
+        emptyList()
     }
 
     // ----------------------------------------------------------------- undo

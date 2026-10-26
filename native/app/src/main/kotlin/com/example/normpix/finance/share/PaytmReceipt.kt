@@ -31,7 +31,10 @@ internal object PaytmReceipt : PaymentAppReceipt {
 
     private val paidTitle = Regex("""(?i)^\W*(?:[\p{L}\d]{1,2}\s+)?(?:paid|money\s+sent|payment\s+sent)(?:\s+successfully)?\W*$""")
     private val receivedTitle = Regex("""(?i)^\W*(?:[\p{L}\d]{1,2}\s+)?(?:money\s+|payment\s+)?received(?:\s+successfully)?\W*$""")
-    private val toColon = Label("to(?=\\s*:)")
+    private val toColon = Label("""to(?:\s+your)?(?=\s*:)""")
+
+    /** "To Your: Union Bank Of India - 1234": Paytm's receipt of money sent to one of the user's own accounts. */
+    private val toYourColon = Label("""to\s+your(?=\s*:)""")
     private val fromColon = Label("from(?=\\s*:)")
     private val referenceLabel = Regex("""(?i)^\W*upi\s*ref\.?\s*no\b""")
     private val footer = Regex("""(?i)\bpowered\s+by\b""")
@@ -50,6 +53,7 @@ internal object PaytmReceipt : PaymentAppReceipt {
         Tell.piece(1, paidTitle),
         Tell.piece(1, receivedTitle),
         Tell.row(1, referenceLabel),
+        Tell(1) { receipt -> receipt.labelled(toYourColon) != null },
     )
 
     /** One side of the payment: its label, and the rows under it down to the next label, the date or the footer. */
@@ -130,7 +134,11 @@ internal object PaytmReceipt : PaymentAppReceipt {
             message = messageBelow(receipt, firstSide, ledger),
             // In a self transfer the other side shows a bank over its digits as well - the user's other account - and both
             // sides the user's name.
-            selfTransfer = SelfTransferCue.SameName.takeIf { samePerson(nameOf(receipt, own), nameOf(receipt, other)) },
+            selfTransfer = when {
+                receipt.labelled(toYourColon) != null -> SelfTransferCue.Words
+                samePerson(nameOf(receipt, own), nameOf(receipt, other)) -> SelfTransferCue.SameName
+                else -> null
+            },
             otherAccountText = other?.account?.joinToString("\n")?.ifEmpty { null },
             otherMaskedNumbers = otherSideNumbers(other?.account.orEmpty()),
         )

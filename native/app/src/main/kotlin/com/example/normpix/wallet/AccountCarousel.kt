@@ -1,5 +1,6 @@
 package com.example.normpix.wallet
 
+import com.example.normpix.finance.domain.percentLabel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -111,7 +112,7 @@ private fun AccountDetails(account: AccountCardData) {
             1.4f to { m: Modifier ->
                 DeckDetail("Credit left", account.credit.removeSuffix(" left"), m, valueColor = if (account.overLimit) scheme.error else Color.Unspecified)
             },
-            0.8f to { m: Modifier -> DeckDetail("Used", "${(used.coerceIn(0f, 1f) * 100).toInt()}%", m) },
+            0.8f to { m: Modifier -> DeckDetail("Used", percentLabel(used.toDouble()), m) },
             1.2f to { m: Modifier ->
                 DeckDetail(
                     "Bill",

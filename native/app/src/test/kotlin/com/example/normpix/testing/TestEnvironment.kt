@@ -89,6 +89,12 @@ class RecordingNavigator : AppNavigator {
     override fun openUpdates() {
         updatesOpened++
     }
+
+    var changelogOpened = 0
+
+    override fun openChangelog() {
+        changelogOpened++
+    }
     override fun go(destination: AppDestination) {}
     override fun openTransactions() {}
     override fun openPlans(section: PlanSection?) {

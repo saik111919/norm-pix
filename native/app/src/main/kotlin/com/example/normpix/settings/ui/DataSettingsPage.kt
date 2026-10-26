@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.DeleteForever
+import androidx.compose.material.icons.outlined.FactCheck
 import androidx.compose.material.icons.outlined.FolderZip
 import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material.icons.outlined.TableView
@@ -32,6 +33,7 @@ import com.example.normpix.finance.data.FinanceBackupCodec
 import com.example.normpix.finance.data.FinanceSnapshot
 import com.example.normpix.finance.ui.LocalFinance
 import com.example.normpix.finance.ui.offerUndo
+import com.example.normpix.finance.ui.rememberFinanceActions
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.ui.components.AppLoadingIndicator
@@ -78,6 +80,7 @@ fun DataSettingsPage() {
     val snackbars = LocalSnackbars.current
     val scope = LocalAppScope.current
     val haptics = rememberAppHaptics()
+    val financeActions = rememberFinanceActions()
     val files = rememberBackupFiles()
     val appContext = LocalContext.current.applicationContext
     val appBackup = remember(appContext, container, overlays, snackbars, files, scope, haptics) {
@@ -107,6 +110,9 @@ fun DataSettingsPage() {
     }
 
     fun exportAppBackup() = run("app") { appBackup.export() }
+
+    // Works every figure out again from data that is checked first (see runLedgerCheck), under a loading sheet.
+    fun check() = run("check") { runLedgerCheck(finance, overlays, snackbars, financeActions, scope) }
 
     fun exportBackup() = run("backup") {
         val now = LocalDateTime.now()
@@ -192,8 +198,12 @@ fun DataSettingsPage() {
         val staging = store?.newRestoreFolder() ?: kotlin.io.path.createTempDirectory("restore").toFile()
         try {
             val read = try {
-                files.openStreaming { input -> withContext(Dispatchers.IO) { readBackup(input, staging, keepPictures = store != null) } }
-                    ?: return@run
+                files.openStreaming { input ->
+                    // Picked: read under a loading sheet, since a backup with pictures can take a while to unpack.
+                    overlays.loading("Reading the backup", "Checking the file before anything is changed.") {
+                        withContext(Dispatchers.IO) { readBackup(input, staging, keepPictures = store != null) }
+                    }
+                } ?: return@run
             } catch (e: CancellationException) {
                 throw e
             } catch (_: BackupTooLargeException) {
@@ -240,11 +250,14 @@ fun DataSettingsPage() {
             if (!confirmed) return@run
             try {
                 // The backup's pictures go in first, so the transactions that name them find them there.
-                if (store != null) for ((name, file) in read.pictures) store.adopt(file, name)
-                val undo = finance.undoable {
-                    this.restore(snapshot)
-                    emptyList()
-                }
+                // Replacing the data can't stop half way, so it runs under a sheet that has no Cancel.
+                val undo = overlays.loading("Restoring your data", "Replacing what is here with the backup, then working out balances and totals.", cancellable = false) {
+                    if (store != null) for ((name, file) in read.pictures) store.adopt(file, name)
+                    finance.undoable {
+                        this.restore(snapshot)
+                        emptyList()
+                    }
+                } ?: return@run
                 haptics.success()
                 snackbars.offerUndo("Backup restored", finance, undo, scope)
             } catch (e: CancellationException) {
@@ -280,7 +293,9 @@ fun DataSettingsPage() {
             icon = Icons.Outlined.DeleteForever,
         )
         if (!confirmed) return@run
-        val undo = finance.resetAllUndoably()
+        val undo = overlays.loading(if (isSample) "Resetting sample data" else "Deleting finance data", cancellable = false) {
+            finance.resetAllUndoably()
+        } ?: return@run
         snackbars.offerUndo(if (isSample) "Sample data reset" else "Finance data deleted", finance, undo, scope)
     }
 
@@ -378,6 +393,25 @@ fun DataSettingsPage() {
                                 "A backup of everything or a full backup (.zip), or one without pictures (.json). It's checked first, and you confirm what is replaced before anything is."
                             },
                             ::restore,
+                        )
+                    }
+                }
+                ListSection(
+                    title = "Check",
+                    footer = "Balances, budgets and totals are worked out from every entry each time they are shown. If a number looks " +
+                        "wrong, this checks every entry, puts right what it safely can, and shows what's left to look at.",
+                ) {
+                    item {
+                        Row(
+                            "check",
+                            Icons.Outlined.FactCheck,
+                            "Check and recalculate",
+                            if (prefs.dummyDataEnabled) {
+                                "Checks the sample data and works its numbers out again"
+                            } else {
+                                "Checks every entry and works out balances and totals again"
+                            },
+                            ::check,
                         )
                     }
                 }

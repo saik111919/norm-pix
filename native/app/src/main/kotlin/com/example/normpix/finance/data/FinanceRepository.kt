@@ -28,6 +28,7 @@ import com.example.normpix.finance.domain.FinanceValidationException
 import com.example.normpix.finance.domain.MAX_PERSON_NAME
 import com.example.normpix.finance.domain.NUMBER_ENDING_LENGTH
 import com.example.normpix.finance.domain.NUMBER_START_LENGTH
+import com.example.normpix.finance.domain.LedgerIssues
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.MonthTotals
 import com.example.normpix.finance.domain.PeopleSpending
@@ -40,12 +41,16 @@ import com.example.normpix.finance.domain.numberEndingOrNull
 import com.example.normpix.finance.domain.numberStartOrNull
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.RepeatSchedule
+import com.example.normpix.finance.domain.SelfTransferPair
+import com.example.normpix.finance.domain.asTransfer
+import com.example.normpix.finance.domain.checkLedger
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.accountBalance
 import com.example.normpix.finance.domain.buildBudgetOverview
 import com.example.normpix.finance.domain.dueOccurrences
 import com.example.normpix.finance.domain.nextRecurrence
 import com.example.normpix.finance.domain.resolveBudgets
+import com.example.normpix.finance.domain.settledBy
 import com.example.normpix.finance.domain.startOfDay
 import com.example.normpix.wallet.BankLogoResolver
 import java.time.Duration
@@ -69,6 +74,10 @@ data class TransactionQuery(
     val maxAmount: Long? = null,
     /** Case-insensitive match on payee, note, category, account or person name. */
     val text: String? = null,
+    /** Only what is dated before this moment, whatever the [range] says: what has happened by then (see `settledCutoff`). */
+    val before: LocalDateTime? = null,
+    /** Only what is dated at or after this moment: what is still to come, when it is the settled cutoff. */
+    val notBefore: LocalDateTime? = null,
 ) {
     /** True when anything besides [range] narrows the results. */
     val hasFilters: Boolean
@@ -80,6 +89,17 @@ data class TransactionQuery(
             maxAmount != null ||
             !text.isNullOrBlank()
 }
+
+/** What [FinanceRepository.checkAndRepair] read, put right and found (see `LedgerCheck.kt`). */
+data class LedgerCheckResult(
+    val accounts: Int,
+    val categories: Int,
+    val transactions: Int,
+    val rules: Int,
+    val issues: LedgerIssues,
+    /** Repeating payments that were due and are now recorded. */
+    val recordedRepeats: Int = 0,
+)
 
 /** Keyset pagination position: newest-first by (occurred_at, id). */
 data class TransactionCursor(val occurredAtMs: Long, val id: Long)
@@ -307,8 +327,19 @@ class FinanceRepository(
         }
     }
 
-    /** Current balance of every account (archived included), by id. */
-    suspend fun accountBalances(): Map<Long, Long> = io {
+    /**
+     * The first moment after today by this repository's clock: what is dated before it has happened, what is dated from it on is
+     * upcoming (see `settledCutoff`).
+     */
+    fun settledCutoff(): LocalDateTime = com.example.normpix.finance.domain.settledCutoff(clock())
+
+    /**
+     * Balance of every account (archived included), by id: from everything recorded, or - with [asOf] - from what is dated
+     * before it, so an entry dated ahead (a bill entered before its day) moves the balance on its day, not before.
+     */
+    suspend fun accountBalances(asOf: LocalDateTime? = null): Map<Long, Long> = io {
+        val dated = asOf?.let { "WHERE occurred_at < ${it.toStorage()}" } ?: ""
+        val datedAnd = asOf?.let { "AND occurred_at < ${it.toStorage()} " } ?: ""
         val openings = query(FinanceDatabase.ACCOUNTS, arrayOf("id", "opening_balance"), null, null, null, null, null)
             .map { it.long("id") to it.long("opening_balance") }
 
@@ -316,7 +347,7 @@ class FinanceRepository(
         val expense = mutableMapOf<Long, Long>()
         val transferOut = mutableMapOf<Long, Long>()
         rawQuery(
-            "SELECT account_id, type, SUM(amount) AS total FROM ${FinanceDatabase.TRANSACTIONS} GROUP BY account_id, type",
+            "SELECT account_id, type, SUM(amount) AS total FROM ${FinanceDatabase.TRANSACTIONS} $dated GROUP BY account_id, type",
             null,
         ).map { Triple(it.long("account_id"), it.string("type"), it.long("total")) }
             .forEach { (account, type, total) ->
@@ -328,7 +359,7 @@ class FinanceRepository(
             }
         val transferIn = rawQuery(
             "SELECT to_account_id, SUM(amount) AS total FROM ${FinanceDatabase.TRANSACTIONS} " +
-                "WHERE type = 'transfer' GROUP BY to_account_id",
+                "WHERE type = 'transfer' ${datedAnd}GROUP BY to_account_id",
             null,
         ).map { it.long("to_account_id") to it.long("total") }.toMap()
 
@@ -584,8 +615,10 @@ class FinanceRepository(
      * the same number the dashboard shows; a person's part is only ever a share of it, since an expense is one record that
      * names at most one person. Transfers and income are never spending.
      */
-    suspend fun peopleSpending(range: DateRange? = null): PeopleSpending = io {
-        val window = range?.let { " AND occurred_at >= ${it.start.toStorage()} AND occurred_at < ${it.end.toStorage()}" }.orEmpty()
+    suspend fun peopleSpending(range: DateRange? = null, asOf: LocalDateTime? = null): PeopleSpending = io {
+        // With [asOf], only what is dated before it: what has been spent by then (see `settledCutoff`).
+        val window = range?.let { " AND occurred_at >= ${it.start.toStorage()} AND occurred_at < ${it.end.toStorage()}" }.orEmpty() +
+            asOf?.let { " AND occurred_at < ${it.toStorage()}" }.orEmpty()
         val (total, count) = rawQuery(
             "SELECT COALESCE(SUM(amount), 0), COUNT(*) FROM ${FinanceDatabase.TRANSACTIONS} WHERE type = 'expense'$window",
             null,
@@ -736,6 +769,8 @@ class FinanceRepository(
         q.range?.let { range ->
             clauses += "t.occurred_at >= ${range.start.toStorage()} AND t.occurred_at < ${range.end.toStorage()}"
         }
+        q.before?.let { clauses += "t.occurred_at < ${it.toStorage()}" }
+        q.notBefore?.let { clauses += "t.occurred_at >= ${it.toStorage()}" }
         if (q.types.isNotEmpty()) {
             clauses += "t.type IN (${marks(q.types.size)})"
             args += q.types.map { it.key }
@@ -921,14 +956,18 @@ class FinanceRepository(
         ).map { DailyTotal(day = LocalDate.parse(it.string("day")), amount = it.long("total")) }
     }
 
-    /** Income and expense per month from [from] through [to] inclusive - months without activity are included as zeros. */
-    suspend fun monthlyTotals(from: MonthKey, to: MonthKey): List<MonthTotals> = io {
+    /**
+     * Income and expense per month from [from] through [to] inclusive - months without activity are included as zeros. With
+     * [asOf], only what is dated before it (the month in progress so far, see `settledCutoff`).
+     */
+    suspend fun monthlyTotals(from: MonthKey, to: MonthKey, asOf: LocalDateTime? = null): List<MonthTotals> = io {
+        val end = asOf?.takeIf { it.isBefore(to.end) } ?: to.end
         val income = mutableMapOf<Int, Long>()
         val expense = mutableMapOf<Int, Long>()
         rawQuery(
             "SELECT CAST(strftime('%Y%m', occurred_at / 1000, 'unixepoch') AS INTEGER) AS month, type, SUM(amount) AS total " +
                 "FROM ${FinanceDatabase.TRANSACTIONS} " +
-                "WHERE type IN ('income', 'expense') AND occurred_at >= ${from.start.toStorage()} AND occurred_at < ${to.end.toStorage()} " +
+                "WHERE type IN ('income', 'expense') AND occurred_at >= ${from.start.toStorage()} AND occurred_at < ${end.toStorage()} " +
                 "GROUP BY month, type",
             null,
         ).map { Triple(it.int("month"), it.string("type"), it.long("total")) }
@@ -940,6 +979,11 @@ class FinanceRepository(
             .takeWhile { !it.isAfter(to) }
             .map { MonthTotals(it, income[it.toInt()] ?: 0, expense[it.toInt()] ?: 0) }
             .toList()
+    }
+
+    /** How many transactions are dated at or after [from]: the upcoming ones, when it is the settled cutoff. */
+    suspend fun countFrom(from: LocalDateTime): Int = io {
+        (scalarLong("SELECT COUNT(*) FROM ${FinanceDatabase.TRANSACTIONS} WHERE occurred_at >= ${from.toStorage()}") ?: 0).toInt()
     }
 
     /** The first month with any recorded transaction, if any. */
@@ -1015,9 +1059,14 @@ class FinanceRepository(
         }
     }
 
-    suspend fun budgetOverview(month: MonthKey): BudgetOverview {
-        val limits = resolveBudgets(budgetRows(), month)
-        val totals = categoryTotals(month.range, TransactionType.Expense)
+    /**
+     * [month]'s budgets against what was spent in it - with [asOf], what was spent by then (see `settledCutoff`). From the
+     * current month on, a budget on an archived category is left out: nothing can be spent in it any more, and its unspent limit
+     * would only add to what is "left to spend". Past months keep theirs, as they were.
+     */
+    suspend fun budgetOverview(month: MonthKey, asOf: LocalDateTime? = null): BudgetOverview {
+        val limits = withoutArchived(resolveBudgets(budgetRows(), month), month)
+        val totals = categoryTotals(asOf?.let { month.range.settledBy(it) } ?: month.range, TransactionType.Expense)
         val parents = io { parentIds() }
         return buildBudgetOverview(
             month = month,
@@ -1028,11 +1077,21 @@ class FinanceRepository(
         )
     }
 
+    /** [limits] without the budgets on archived categories, from the current month on (see [budgetOverview]). */
+    private suspend fun withoutArchived(limits: Map<Long?, Long>, month: MonthKey): Map<Long?, Long> {
+        if (month.isBefore(MonthKey.of(clock())) || limits.keys.all { it == null }) return limits
+        val archived = io {
+            rawQuery("SELECT id FROM ${FinanceDatabase.CATEGORIES} WHERE archived = 1", null).map { it.long("id") }.toSet()
+        }
+        return if (archived.isEmpty()) limits else limits.filterKeys { it == null || it !in archived }
+    }
+
     /**
      * Month-by-month budget results, newest first, for months (up to
-     * [maxMonths] back from [until]) that had any budget in effect.
+     * [maxMonths] back from [until]) that had any budget in effect. With [asOf], spending dated from it on is left out (the
+     * month in progress so far).
      */
-    suspend fun budgetHistory(until: MonthKey, maxMonths: Int = 24): List<BudgetHistoryEntry> {
+    suspend fun budgetHistory(until: MonthKey, maxMonths: Int = 24, asOf: LocalDateTime? = null): List<BudgetHistoryEntry> {
         val rows = budgetRows()
         if (rows.isEmpty()) return emptyList()
         val parents = io { parentIds() }
@@ -1040,13 +1099,14 @@ class FinanceRepository(
         val earliest = until.addMonths(-(maxMonths - 1))
         if (start.isBefore(earliest)) start = earliest
         if (start.isAfter(until)) return emptyList()
+        val historyEnd = asOf?.takeIf { it.isBefore(until.end) } ?: until.end
 
         val byMonth = io {
             val result = mutableMapOf<Int, MutableMap<Long, Long>>()
             rawQuery(
                 "SELECT CAST(strftime('%Y%m', occurred_at / 1000, 'unixepoch') AS INTEGER) AS month, category_id, SUM(amount) AS total " +
                     "FROM ${FinanceDatabase.TRANSACTIONS} " +
-                    "WHERE type = 'expense' AND occurred_at >= ${start.start.toStorage()} AND occurred_at < ${until.end.toStorage()} " +
+                    "WHERE type = 'expense' AND occurred_at >= ${start.start.toStorage()} AND occurred_at < ${historyEnd.toStorage()} " +
                     "GROUP BY month, category_id",
                 null,
             ).map { Triple(it.int("month"), it.long("category_id"), it.long("total")) }
@@ -1057,7 +1117,7 @@ class FinanceRepository(
         val entries = mutableListOf<BudgetHistoryEntry>()
         var m = until
         while (!m.isBefore(start)) {
-            val limits = resolveBudgets(rows, m)
+            val limits = withoutArchived(resolveBudgets(rows, m), m)
             if (limits.isNotEmpty()) {
                 val categories = byMonth[m.toInt()] ?: emptyMap()
                 entries += BudgetHistoryEntry(
@@ -1221,6 +1281,91 @@ class FinanceRepository(
             }
         }
         created
+    }
+
+    // ---------------------------------------------------------------- check
+
+    /**
+     * Reads every account, category, transaction, repeating payment and budget, puts right what has one right answer (see
+     * `LedgerCheck.kt`) in one SQL transaction, then records any repeating payments that are due - so what is shown afterwards
+     * is worked out again from data that holds together. Says what it read, what it put right and what is left to look at.
+     */
+    suspend fun checkAndRepair(): LedgerCheckResult {
+        val now = clock()
+        val balances = accountBalances(asOf = com.example.normpix.finance.domain.settledCutoff(now))
+        val read = io {
+            val accounts = query(FinanceDatabase.ACCOUNTS, null, null, null, null, null, "archived ASC, sort_order ASC, id ASC").map(FinanceRows::toAccount)
+            val categories = query(FinanceDatabase.CATEGORIES, null, null, null, null, null, "id ASC").map(FinanceRows::toCategory)
+            val transactions = query(FinanceDatabase.TRANSACTIONS, null, null, null, null, null, "occurred_at DESC, id DESC").map(FinanceRows::toTransaction)
+            val catalog = bankCatalog()
+            val rules = readRules()
+            val issues = checkLedger(
+                accounts = accounts,
+                categories = categories,
+                transactions = transactions,
+                rules = rules,
+                budgets = readBudgets(),
+                balances = balances,
+                defaultAccountId = meta("default_account_id")?.toLongOrNull(),
+                now = now,
+                bankKeyIn = { catalog.resolve(it)?.key },
+            )
+            if (issues.repairCount > 0) {
+                transaction {
+                    val stamp = now.toStorage()
+                    for (loose in issues.looseSubCategories) {
+                        update(
+                            FinanceDatabase.CATEGORIES,
+                            ContentValues().apply {
+                                putNull("parent_id")
+                                put("updated_at", stamp)
+                            },
+                            "id = ?",
+                            arrayOf(loose.category.id.toString()),
+                        )
+                    }
+                    for (budget in issues.incomeBudgets) delete(FinanceDatabase.BUDGETS, "id = ?", arrayOf(budget.id.toString()))
+                    for (catchUp in issues.ruleCatchUps) {
+                        update(
+                            FinanceDatabase.RECURRING_RULES,
+                            ContentValues().apply {
+                                put("next_date", catchUp.nextDate.toStorage())
+                                put("updated_at", stamp)
+                            },
+                            "id = ?",
+                            arrayOf(catchUp.rule.id.toString()),
+                        )
+                    }
+                    if (issues.staleDefaultAccount) delete(FinanceDatabase.META, "key = ?", arrayOf("default_account_id"))
+                }
+            }
+            LedgerCheckResult(
+                accounts = accounts.size,
+                categories = categories.size,
+                transactions = transactions.size,
+                rules = rules.size,
+                issues = issues,
+            )
+        }
+        val recorded = processRecurring()
+        return read.copy(recordedRepeats = recorded)
+    }
+
+    /**
+     * Records [pair] as the one transfer it is (see `SelfTransferPair`): the expense becomes a transfer to the account the income
+     * came into, and the income goes - in one SQL transaction, so the money is never counted twice nor lost on the way.
+     */
+    suspend fun combineSelfTransfer(pair: SelfTransferPair): FinanceTransaction = io {
+        val transfer = pair.asTransfer(clock())
+        validateShape(transfer.type, transfer.amount, transfer.accountId, transfer.toAccountId, transfer.categoryId)
+        transaction {
+            val updated = update(FinanceDatabase.TRANSACTIONS, FinanceRows.transaction(transfer), "id = ?", arrayOf(transfer.id.toString()))
+            if (updated == 0) throw FinanceConflictException("This transaction no longer exists.")
+            if (delete(FinanceDatabase.TRANSACTIONS, "id = ?", arrayOf(pair.income.id.toString())) == 0) {
+                throw FinanceConflictException("This transaction no longer exists.")
+            }
+        }
+        transfer
     }
 
     // ----------------------------------------------------- backup / restore

@@ -1,6 +1,20 @@
 package com.example.normpix.finance.ui
 
 import androidx.compose.foundation.background
+import com.example.normpix.ui.theme.AppRadius
+import com.example.normpix.ui.theme.AppIconSizes
+import com.example.normpix.ui.components.ListSegment
+import com.example.normpix.ui.components.ListRow
+import com.example.normpix.finance.domain.settledCutoff
+import com.example.normpix.finance.domain.dayRange
+import com.example.normpix.finance.domain.MoneyFormatter
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +28,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
@@ -76,10 +91,12 @@ import com.example.normpix.ui.components.AppErrorState
 import com.example.normpix.ui.components.AppLoadingIndicator
 import com.example.normpix.ui.components.AppLoadingState
 import com.example.normpix.ui.components.AppPage
+import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.SearchFilterBar
 import com.example.normpix.ui.components.SwipeRevealHost
+import com.example.normpix.ui.components.rememberBottomControls
 import com.example.normpix.ui.components.segmentShape
 import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppSpacing
@@ -192,9 +209,20 @@ fun TransactionHistory(
     val swipe = if (prefs.swipeActionsEnabled) prefs.transactionSwipeActions else null
 
     var month by remember { mutableStateOf(initialMonth ?: MonthKey.of(LocalDateTime.now())) }
+    /** One day shown instead of the month (see [DaySwitcher]), or null. */
+    var day by remember { mutableStateOf<java.time.LocalDate?>(null) }
     var ownAllTime by remember { mutableStateOf(false) }
-    val showAll = allTime ?: ownAllTime
+    val showAll = (allTime ?: ownAllTime) && day == null
     val setAllTime = { all: Boolean -> if (onAllTimeChange != null) onAllTimeChange(all) else ownAllTime = all }
+    val showDay = { d: java.time.LocalDate ->
+        day = d
+        month = MonthKey.of(d)
+        setAllTime(false)
+    }
+    // Entries dated after today are upcoming: they head the list in a group of their own, folded, rather than above today's
+    // spending, and count toward nothing until their day (see settledCutoff).
+    val cutoff = finance.asOf ?: settledCutoff(LocalDateTime.now())
+    var upcomingOpen by remember { mutableStateOf(false) }
     var filters by remember { mutableStateOf(initialFilters) }
     var searchInput by remember { mutableStateOf("") }
     var searchText by remember { mutableStateOf("") }
@@ -203,6 +231,8 @@ fun TransactionHistory(
     var items by remember { mutableStateOf(emptyList<FinanceTransaction>()) }
     var next by remember { mutableStateOf<TransactionCursor?>(null) }
     var summary by remember { mutableStateOf(PeriodSummary.Empty) }
+    var upcoming by remember { mutableStateOf(emptyList<FinanceTransaction>()) }
+    var upcomingSummary by remember { mutableStateOf(PeriodSummary.Empty) }
     var hasAnyData by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
@@ -217,13 +247,29 @@ fun TransactionHistory(
     val searching = searchText.isNotBlank()
 
     /** Search and "All time" look across every month; otherwise the list shows one month - unless a custom date range was chosen. */
-    val query = remember(filters, searchText, month, lockedAccountId, lockedPersonId, showAll) {
+    val shownDay = day
+    val query = remember(filters, searchText, month, shownDay, lockedAccountId, lockedPersonId, showAll, cutoff) {
         filters.copy(
             text = if (searching) searchText else null,
-            range = filters.range ?: if (searching || showAll) null else month.range,
+            range = filters.range ?: when {
+                searching || showAll -> null
+                shownDay != null -> dayRange(shownDay)
+                else -> month.range
+            },
             accountIds = if (lockedAccountId == null) filters.accountIds else setOf(lockedAccountId),
             personIds = if (lockedPersonId == null) filters.personIds else setOf(lockedPersonId),
+            before = cutoff,
         )
+    }
+    // The same search and filters over what is dated after today. Days that are all over by then have none; this month has
+    // whatever is still to come, in later months too, as no month after this one can be shown; dates picked keep their bounds.
+    val upcomingQuery = remember(query, cutoff, filters.range) {
+        val range = query.range
+        when {
+            range == null || filters.range != null && range.end.isAfter(cutoff) -> query.copy(before = null, notBefore = cutoff)
+            !range.end.isAfter(cutoff) -> null
+            else -> query.copy(range = null, before = null, notBefore = cutoff)
+        }
     }
     val hasUserFilters = filters.hasFilters || filters.range != null || searching
 
@@ -232,8 +278,11 @@ fun TransactionHistory(
             val repo = controller.repository
             val page = repo.transactions(query, limit = PAGE_SIZE)
             val totals = repo.summaryFor(query)
+            // Soonest first: the next thing to come is the first one read.
+            val ahead = upcomingQuery?.let { repo.transactions(it, limit = UPCOMING_MAX).items.asReversed() }.orEmpty()
+            val aheadTotals = if (ahead.isEmpty()) PeriodSummary.Empty else repo.summaryFor(upcomingQuery!!)
             // Whether there is anything to show at all: for one person's history, whether they have any expense.
-            val anyData = page.items.isNotEmpty() || if (lockedPersonId != null) {
+            val anyData = page.items.isNotEmpty() || ahead.isNotEmpty() || if (lockedPersonId != null) {
                 repo.transactions(TransactionQuery(personIds = setOf(lockedPersonId)), limit = 1).items.isNotEmpty()
             } else {
                 repo.firstActiveMonth() != null
@@ -241,6 +290,8 @@ fun TransactionHistory(
             items = page.items
             next = page.next
             summary = totals
+            upcoming = ahead
+            upcomingSummary = aheadTotals
             hasAnyData = anyData
             state = AsyncValue.Data(Unit)
         } catch (e: CancellationException) {
@@ -301,46 +352,55 @@ fun TransactionHistory(
     val today = LocalDateTime.now()
     // What the list covers, in words: the custom range, every date a search looks across, all time, or the month shown.
     val periodLabel = filters.range?.let { "${shortDate(it.start)} – ${shortDate(it.end.minusDays(1))}" }
-        ?: if (searching) "All dates" else if (showAll) "All time" else monthLabel(month)
+        ?: if (searching) "All dates" else if (showAll) "All time" else shownDay?.let { dayPillLabel(it, today.toLocalDate()) } ?: monthLabel(month)
 
-    SwipeRevealHost(modifier) {
-    AppPage(
-        title = title,
-        onBack = onBack,
-        actions = actions,
-        pinnedHeader = pinnedHeader,
-        maxWidth = AppLayout.maxListWidth,
-        listState = listState,
-        bottomPadding = AppLayout.fabClearance,
-        insetBottom = insetBottom,
-    ) {
+    // Search and filters are one control. They head the list - or, with Bottom controls on, sit in a card at the foot of the
+    // page, within reach of a thumb, and what is filtered still follows in the list as removable chips.
+    val bottomControls = rememberBottomControls()
+    val searchBar: @Composable () -> Unit = {
+        HistorySearchBar(
+            search = searchInput,
+            onSearchChange = { searchInput = it },
+            filters = filters,
+            filterCount = filterCount,
+            onOpenFilters = ::openFilters,
+            onChange = { filters = it },
+        )
+    }
+    val listContent: LazyListScope.() -> Unit = {
         item(key = "controls") {
             Column(Modifier.padding(AppSpacing.page)) {
                 header?.invoke()
                 summaryHeader?.invoke(HistoryView(summary, query, periodLabel))
-                // Search and filters are one control; what is filtered follows as removable chips.
-                HistorySearchBar(
-                    search = searchInput,
-                    onSearchChange = { searchInput = it },
-                    filters = filters,
-                    filterCount = filterCount,
-                    onOpenFilters = ::openFilters,
-                    onChange = { filters = it },
-                )
+                if (!bottomControls) searchBar()
                 FilterChips(
                     chips = activeFilterChips(finance, filters, lockedAccountId) { filters = it },
                     modifier = Modifier.padding(top = AppSpacing.sm),
                 )
                 if (!searching && filters.range == null) {
-                    if (showAll) {
-                        AllTimeSwitcher(onByMonth = { setAllTime(false) }, modifier = Modifier.padding(top = AppSpacing.sm))
-                    } else {
-                        MonthSwitcher(
+                    when {
+                        shownDay != null -> DaySwitcher(
+                            day = shownDay,
+                            onChanged = showDay,
+                            onByMonth = { day = null },
+                            modifier = Modifier.padding(top = AppSpacing.sm),
+                            latest = today.toLocalDate(),
+                        )
+                        showAll -> AllTimeSwitcher(onByMonth = { setAllTime(false) }, modifier = Modifier.padding(top = AppSpacing.sm))
+                        else -> MonthSwitcher(
                             month = month,
                             latest = MonthKey.of(today),
                             onChanged = { month = it },
                             modifier = Modifier.padding(top = AppSpacing.sm),
                             trailing = { MonthScopeButton("All time", onClick = { setAllTime(true) }, icon = Icons.Rounded.AllInclusive) },
+                            onPickDay = {
+                                scope.launch {
+                                    val latestDay = today.toLocalDate()
+                                    val initial = if (month == MonthKey.of(latestDay)) latestDay else month.end.toLocalDate().minusDays(1)
+                                    val picked = overlays.sheet<java.time.LocalDate>(expandable = true) { done -> DateSheet(initial, latestDay, onPick = done) }
+                                    if (picked != null) showDay(picked)
+                                }
+                            },
                         )
                     }
                 } else {
@@ -362,7 +422,35 @@ fun TransactionHistory(
             }
         }
 
-        when (val current = state) {
+        // What is dated after today, folded into one row at the head of the list until it is opened.
+        fun upcomingGroup() {
+            item(key = "upcoming") {
+                UpcomingHeader(
+                    count = upcoming.size,
+                    summary = upcomingSummary,
+                    open = upcomingOpen,
+                    onToggle = { upcomingOpen = !upcomingOpen },
+                    money = finance.money,
+                    modifier = Modifier.animateItem(),
+                )
+            }
+            if (upcomingOpen) {
+                timeline(
+                    upcoming,
+                    today,
+                    swipe,
+                    perspectiveAccountId = lockedAccountId,
+                    onOpen = financeActions::showDetails,
+                    onEdit = financeActions::editTransaction,
+                    onDelete = financeActions::deleteTransaction,
+                    keyPrefix = "up-",
+                    complete = true,
+                    money = finance.money,
+                )
+            }
+        }
+
+        when (state) {
             is AsyncValue.Loading -> item(key = "loading") { AppLoadingState(label = "Loading transactions") }
             is AsyncValue.Failure -> item(key = "failure") {
                 AppErrorState(
@@ -371,7 +459,9 @@ fun TransactionHistory(
                     onRetry = { retry++ },
                 )
             }
-            is AsyncValue.Data -> if (items.isEmpty()) {
+            is AsyncValue.Data -> {
+                if (upcoming.isNotEmpty()) upcomingGroup()
+                if (items.isEmpty()) {
                 item(key = "empty") {
                     val addExpense = { financeActions.addTransaction(TransactionType.Expense, personId = lockedPersonId) }
                     val personName = finance.person(lockedPersonId)?.name
@@ -401,10 +491,11 @@ fun TransactionHistory(
                         )
                         else -> AppEmptyState(
                             icon = Icons.Outlined.EventBusy,
-                            title = if (personName != null) {
-                                "Nothing spent on $personName in ${monthLabel(month)}"
-                            } else {
-                                "Nothing recorded in ${monthLabel(month)}"
+                            title = when {
+                                personName != null && shownDay != null -> "Nothing spent on $personName on ${dayPillLabel(shownDay, today.toLocalDate())}"
+                                personName != null -> "Nothing spent on $personName in ${monthLabel(month)}"
+                                shownDay != null -> "Nothing recorded on ${dayPillLabel(shownDay, today.toLocalDate())}"
+                                else -> "Nothing recorded in ${monthLabel(month)}"
                             },
                             actionLabel = "Add expense",
                             actionIcon = Icons.Rounded.Add,
@@ -421,6 +512,10 @@ fun TransactionHistory(
                     onOpen = financeActions::showDetails,
                     onEdit = financeActions::editTransaction,
                     onDelete = financeActions::deleteTransaction,
+                    // A day's total is only said once all of its entries are here: the last day of a page may go on in the next.
+                    complete = next == null,
+                    money = finance.money,
+                    onDay = if (shownDay == null) showDay else null,
                 )
                 if (loadingMore) {
                     item(key = "more") {
@@ -430,12 +525,44 @@ fun TransactionHistory(
                     }
                 }
             }
+            }
         }
     }
+
+    SwipeRevealHost(modifier) {
+        if (bottomControls && onBack != null) {
+            // Pushed over another page: the bottom dock's page, with the way back, the actions and the search at the bottom.
+            AppSubPage(
+                title = title,
+                onBack = onBack,
+                actions = actions,
+                maxWidth = AppLayout.maxListWidth,
+                listState = listState,
+                bottomSearch = searchBar,
+                content = listContent,
+            )
+        } else {
+            AppPage(
+                title = title,
+                onBack = onBack,
+                actions = actions,
+                pinnedHeader = pinnedHeader,
+                maxWidth = AppLayout.maxListWidth,
+                listState = listState,
+                bottomPadding = AppLayout.fabClearance,
+                insetBottom = insetBottom,
+                bottomSearch = if (bottomControls) searchBar else null,
+                content = listContent,
+            )
+        }
     }
 }
 
-/** Day headers followed by the day's transactions as tonal segments. */
+/**
+ * Day headers followed by the day's transactions as tonal segments. Each header says what went out that day - once the day is
+ * [complete]ly here, or the last day of a page would say less than it was - and, with [onDay], opens that day on its own.
+ * [keyPrefix] keeps a second timeline in the same list (the upcoming one) apart from this one.
+ */
 private fun androidx.compose.foundation.lazy.LazyListScope.timeline(
     items: List<FinanceTransaction>,
     now: LocalDateTime,
@@ -444,13 +571,28 @@ private fun androidx.compose.foundation.lazy.LazyListScope.timeline(
     onOpen: (FinanceTransaction) -> Unit,
     onEdit: (FinanceTransaction) -> Unit,
     onDelete: (FinanceTransaction) -> Unit,
+    money: MoneyFormatter,
+    complete: Boolean,
+    keyPrefix: String = "",
+    onDay: ((java.time.LocalDate) -> Unit)? = null,
 ) {
     val groups = items.groupBy { startOfDay(it.occurredAt) }
+    val lastDay = groups.keys.lastOrNull()
     for ((day, rows) in groups) {
+        val whole = complete || day != lastDay
+        val spent = rows.filter { it.type == TransactionType.Expense }.sumOf { it.amount }
         // Rows glide to their new places when one is deleted, edited into another day or filtered out, rather than jumping.
-        item(key = "day-$day") { DayHeader(day, now, Modifier.animateItem()) }
+        item(key = "${keyPrefix}day-$day") {
+            DayHeader(
+                day = day,
+                now = now,
+                spent = if (whole && spent > 0) money.format(spent) else null,
+                onOpen = onDay?.let { open -> { open(day.toLocalDate()) } },
+                modifier = Modifier.animateItem(),
+            )
+        }
         rows.forEachIndexed { index, t ->
-            item(key = "tx-${t.id}") {
+            item(key = "${keyPrefix}tx-${t.id}") {
                 Box(Modifier.animateItem().padding(horizontal = AppSpacing.lg).padding(top = if (index == 0) 0.dp else 2.dp)) {
                     SwipeableTransactionRow(
                         transaction = t,
@@ -468,16 +610,83 @@ private fun androidx.compose.foundation.lazy.LazyListScope.timeline(
     }
 }
 
+/**
+ * A day's heading: its name ("Today", "Fri, 23 Oct"), what went out on it at the end of the line, and - when the list can show
+ * the day on its own ([onOpen]) - a chevron saying a tap does that.
+ */
 @Composable
-private fun DayHeader(day: LocalDateTime, now: LocalDateTime, modifier: Modifier = Modifier) {
-    Text(
-        dayHeading(day, now),
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = modifier
-            .padding(start = AppSpacing.xl, top = AppSpacing.lg, end = AppSpacing.lg, bottom = AppSpacing.sm)
-            .semantics { heading() },
-    )
+private fun DayHeader(day: LocalDateTime, now: LocalDateTime, spent: String?, onOpen: (() -> Unit)?, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    val name = dayHeading(day, now)
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(start = AppSpacing.md, top = AppSpacing.sm, end = AppSpacing.md)
+            .clip(AppRadius.rFull)
+            .then(if (onOpen != null) Modifier.clickable(onClickLabel = "Show only this day", onClick = onOpen) else Modifier)
+            .heightIn(min = 40.dp)
+            .padding(start = AppSpacing.sm, end = AppSpacing.sm)
+            .semantics(mergeDescendants = true) {
+                heading()
+                if (spent != null) contentDescription = "$name, spent $spent"
+            },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(name, style = MaterialTheme.typography.titleSmall, color = scheme.primary, modifier = Modifier.weight(1f))
+        if (spent != null) {
+            Text(
+                spent,
+                style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = TABULAR_FIGURES),
+                color = scheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
+        if (onOpen != null) {
+            Icon(
+                Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = scheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = AppSpacing.xs).size(AppIconSizes.md),
+            )
+        }
+    }
+}
+
+/** At most this many entries dated after today are listed in the upcoming group: what is coming soonest. */
+private const val UPCOMING_MAX = 50
+
+/**
+ * The head of the entries dated after today: how many, and what they will come to, as one tonal row that opens and folds them.
+ * They are listed here rather than above today's, and are in no total yet - each counts from its own day.
+ */
+@Composable
+private fun UpcomingHeader(
+    count: Int,
+    summary: PeriodSummary,
+    open: Boolean,
+    onToggle: () -> Unit,
+    money: MoneyFormatter,
+    modifier: Modifier = Modifier,
+) {
+    val entries = if (count == 1) "1 entry" else if (count >= UPCOMING_MAX) "$UPCOMING_MAX or more entries" else "$count entries"
+    val amounts = listOfNotNull(
+        summary.expense.takeIf { it > 0 }?.let { "${money.format(it)} to go out" },
+        summary.income.takeIf { it > 0 }?.let { "${money.format(it)} to come in" },
+    ).joinToString(" · ")
+    Box(modifier.padding(horizontal = AppSpacing.lg).padding(top = AppSpacing.sm)) {
+        ListSegment {
+            ListRow(
+                headline = "Upcoming",
+                supporting = listOf("$entries dated after today", amounts.ifEmpty { null }, "not counted until their day")
+                    .filterNotNull().joinToString(" · "),
+                supportingMaxLines = 3,
+                leading = { LeadingIcon(Icons.Outlined.Schedule) },
+                trailing = { Icon(if (open) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, contentDescription = null) },
+                onClick = onToggle,
+                modifier = Modifier.semantics { stateDescription = if (open) "Expanded" else "Collapsed" },
+            )
+        }
+    }
 }
 
 /**

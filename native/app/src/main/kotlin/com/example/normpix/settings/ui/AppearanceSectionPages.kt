@@ -71,6 +71,7 @@ import com.example.normpix.settings.CategoryIconStyle
 import com.example.normpix.settings.ColorSource
 import com.example.normpix.settings.InterfaceFont
 import com.example.normpix.settings.MonthControlStyle
+import com.example.normpix.settings.TopSpendingLayout
 import com.example.normpix.settings.PageAnimationType
 import com.example.normpix.settings.ProgressStyle
 import com.example.normpix.settings.SheetAnimationType
@@ -115,7 +116,9 @@ fun AppearanceSectionPage(section: AppearanceSection) {
                     AppearanceSection.PageTransitions -> PageTransitionsSection(prefs, preferences, haptics)
                     AppearanceSection.SheetTransitions -> SheetTransitionsSection(prefs, preferences, haptics)
                     AppearanceSection.BackButton -> BackButtonSection(prefs, preferences, haptics)
+                    AppearanceSection.BottomControls -> BottomControlsSection(prefs, preferences, haptics)
                     AppearanceSection.MonthControl -> MonthControlSection(prefs, preferences, haptics)
+                    AppearanceSection.TopSpending -> TopSpendingSection(prefs, preferences, haptics)
                 }
             }
         }
@@ -397,7 +400,8 @@ private fun SheetTransitionsSection(prefs: AppPrefsState, preferences: AppPrefer
 private fun BackButtonSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
     ListSection(
         footer = "Choose how pages present their back navigation. Top floating circle also floats the header of Home, " +
-            "Plans & Activity, Insights, Wallet and search over their content.",
+            "Plans & Activity, Insights, Wallet and search over their content." +
+            if (prefs.bottomControls) " Bottom controls is on, so on a phone pages are in the Bottom dock style whichever you pick." else "",
         modifier = Modifier.selectableGroup(),
     ) {
         for (style in BackButtonStyle.entries) {
@@ -409,6 +413,52 @@ private fun BackButtonSection(prefs: AppPrefsState, preferences: AppPreferences,
                     onClick = {
                         haptics.selection()
                         preferences.setBackButtonStyle(style)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** The one switch for putting a page's controls where a thumb reaches: what moves, and what stays put. */
+@Composable
+private fun BottomControlsSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
+    ListSection(
+        footer = "On a phone, the back button and a page's own buttons join the bar at the bottom, and the search and filters " +
+            "of Activity, People, Settings and Search move down to a card above it. The dock stays where it is. " +
+            "While this is on, pages are in the Bottom dock style of the back button. Tablets and wide windows keep their layout.",
+    ) {
+        item {
+            SwitchRow(
+                headline = "Bottom controls",
+                supporting = "Back, page buttons and search at the bottom of the screen",
+                checked = prefs.bottomControls,
+                onCheckedChange = { on ->
+                    haptics.selection()
+                    preferences.setBottomControls(on)
+                },
+            )
+        }
+    }
+}
+
+/** Home's biggest spending categories: a stack, as the cards are, or a carousel, as the accounts can be. */
+@Composable
+private fun TopSpendingSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
+    ListSection(
+        footer = "How Home shows the month's biggest spending categories. Either way a tap opens the category's month, and " +
+            "Insights has every category.",
+        modifier = Modifier.selectableGroup(),
+    ) {
+        for (layout in TopSpendingLayout.entries) {
+            item {
+                RadioRow(
+                    headline = layout.label,
+                    supporting = layout.description,
+                    selected = prefs.topSpendingLayout == layout,
+                    onClick = {
+                        haptics.selection()
+                        preferences.setTopSpendingLayout(layout)
                     },
                 )
             }

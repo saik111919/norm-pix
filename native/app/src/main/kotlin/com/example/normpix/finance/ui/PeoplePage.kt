@@ -1,5 +1,6 @@
 package com.example.normpix.finance.ui
 
+import com.example.normpix.finance.domain.settledCutoff
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -60,6 +61,7 @@ import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.SearchField
+import com.example.normpix.ui.components.rememberBottomControls
 import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
@@ -110,7 +112,8 @@ fun PeoplePage() {
         Period.Custom -> custom?.let { "${shortDate(it.start)} – ${shortDate(it.end.minusDays(1))}" } ?: "Pick a range"
     }
 
-    val spending by rememberFinanceQuery(range) { peopleSpending(range) }
+    // As of today: an expense dated ahead counts on its own day (see settledCutoff).
+    val spending by rememberFinanceQuery(range) { peopleSpending(range, asOf = settledCutoff(LocalDateTime.now())) }
     val totals = (spending as? AsyncValue.Data)?.value ?: PeopleSpending.Empty
     val loaded = spending is AsyncValue.Data
 
@@ -121,12 +124,19 @@ fun PeoplePage() {
     val shownActive = active.filter(matches).rankedBy(totals)
     val shownArchived = archived.filter(matches).rankedBy(totals)
 
+    // With Bottom controls on, the search sits in a card at the foot of the page (nothing to search until there is someone).
+    val searchAtBottom = rememberBottomControls() && finance.people.isNotEmpty()
     AppSubPage(
         title = "People",
         onBack = navigator::back,
         maxWidth = AppLayout.maxListWidth,
         actions = {
             IconButton(onClick = { actions.addPerson() }) { Icon(Icons.Rounded.PersonAdd, contentDescription = "Add person") }
+        },
+        bottomSearch = if (searchAtBottom) {
+            { SearchField(value = search, onValueChange = { search = it }, placeholder = "Search people") }
+        } else {
+            null
         },
     ) {
         if (finance.people.isEmpty()) {
@@ -176,9 +186,11 @@ fun PeoplePage() {
             }
         }
 
-        item(key = "search") {
-            Column(Modifier.padding(AppSpacing.page).padding(top = AppSpacing.sm)) {
-                SearchField(value = search, onValueChange = { search = it }, placeholder = "Search people")
+        if (!searchAtBottom) {
+            item(key = "search") {
+                Column(Modifier.padding(AppSpacing.page).padding(top = AppSpacing.sm)) {
+                    SearchField(value = search, onValueChange = { search = it }, placeholder = "Search people")
+                }
             }
         }
 

@@ -3,16 +3,19 @@ package com.example.normpix.ui.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -24,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -146,6 +150,10 @@ val LocalDockHosted = staticCompositionLocalOf { false }
  *    circle that opens Settings;
  *  - a pushed page opens with a Back circle, its title (large on the page, up in the row once scrolled) and an [actions] pill.
  * A page with a [pinnedHeader] hangs it under that row, over the list, which fades out beneath it.
+ *
+ * With Bottom controls on ([rememberBottomControls]) a tab's [bottomSearch] - its search field and filters, which the tab
+ * otherwise sets in its list - sits in a card at the foot of the page, above the dock. A pushed page ([onBack]) holds its search
+ * in [AppSubPage]'s card instead, with its back row.
  */
 @Composable
 fun AppPage(
@@ -164,6 +172,7 @@ fun AppPage(
     displayTitle: Boolean = false,
     /** False for a page whose content opens with a heading of its own, so the page's name isn't set above it as well. */
     largeTitle: Boolean = true,
+    bottomSearch: (@Composable () -> Unit)? = null,
     content: LazyListScope.() -> Unit,
 ) {
     // Under a tab with the rail beside it nothing floats over the list: it ends a step under its last row, clear of the system bar.
@@ -172,6 +181,32 @@ fun AppPage(
     val listInsetBottom = insetBottom || railBeside
     val floatsItself = !floatingTopBar && rememberBackButtonStyle() == BackButtonStyle.TopFloatingCircle
     if (!floatsItself) {
+        val dockedSearch = bottomSearch != null && onBack == null && rememberBottomControls()
+        if (dockedSearch) {
+            var cardHeightPx by remember { mutableIntStateOf(0) }
+            val cardHeight = with(LocalDensity.current) { cardHeightPx.toDp() }
+            Box(modifier.fillMaxSize()) {
+                PageFrame(
+                    title = title,
+                    modifier = Modifier,
+                    navigationIcon = navigationIcon,
+                    actions = actions ?: {},
+                    pinnedHeader = pinnedHeader,
+                    maxWidth = maxWidth,
+                    listState = listState,
+                    // The list ends above the card, which sits on the dock.
+                    bottomPadding = maxOf(listBottomPadding, searchCardClearance(cardHeight, liftedOverDock = true)),
+                    insetBottom = listInsetBottom,
+                    imeAware = imeAware,
+                    floatingTopBar = floatingTopBar,
+                    displayTitle = displayTitle,
+                    largeTitle = largeTitle,
+                    content = content,
+                )
+                DockedSearchCard(onHeightChange = { cardHeightPx = it }) { bottomSearch() }
+            }
+            return
+        }
         PageFrame(
             title = title,
             modifier = modifier,
@@ -462,7 +497,13 @@ private object FloatingTopControls {
  * A [bottomBar] is pinned at the foot of the page, under the list (which ends where it starts), on the page's colour: the
  * update page's buttons, say. It clears the navigation bar and, in the bottom dock style, the floating back dock as well.
  * None by default.
+ *
+ * With Bottom controls on ([rememberBottomControls]) the page is in the bottom dock style, and what it would have at its top
+ * goes down with the back row: the [actions] join it in a pill, and the page's search - [bottomSearch], which the page then
+ * leaves out of its list - sits in a card over it. The card stays while the row steps out of the way on a scroll down, settling
+ * where the row was, and rests on the keyboard (with the row folded away) while the user types.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AppSubPage(
     title: String,
@@ -478,11 +519,13 @@ fun AppSubPage(
     largeTitle: Boolean = true,
     /** How wide the page's column may be: a form or settings page keeps its 720dp, a list can take more of a big window. */
     maxWidth: Dp = AppLayout.maxContentWidth,
+    bottomSearch: (@Composable () -> Unit)? = null,
     bottomBar: (@Composable () -> Unit)? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val navigator = LocalNavigator.current
     val backStyle = rememberBackButtonStyle()
+    val bottomControls = rememberBottomControls()
     // Beside a list that is always on screen a page has nowhere to go back to (see DetailPane), whatever the style.
     val detail = LocalDetailPane.current
     // A page beside a list has a pane to itself, wider than a phone's column: its rows take what they can of it, up to a list's width.
@@ -496,6 +539,13 @@ fun AppSubPage(
     // Room for the dock is kept wherever the style has one; it is drawn here only by a page with the window to itself.
     val reservesDock = showFloatingBack && isBottomDock
     val showFloatingBackEffective = reservesDock && detail == null && !LocalDockHosted.current
+    // Bottom controls: the page's actions ride in the back row, and its search is a card over it.
+    val actionsAtBottom = bottomControls && detail == null && actions != null
+    val searchCard = bottomControls && detail == null && bottomSearch != null
+    var searchCardPx by remember { mutableIntStateOf(0) }
+    val searchCardRoom = if (searchCard) with(LocalDensity.current) { searchCardPx.toDp() } + SearchCardGap + AppSpacing.sm else 0.dp
+    val typing = WindowInsets.isImeVisible
+    val navigationBarPx = WindowInsets.navigationBars.getBottom(LocalDensity.current)
 
     val barScroll = rememberScrollAwareBarState()
     val listAtEdge by remember(listState) {
@@ -525,7 +575,7 @@ fun AppSubPage(
                     {}
                 },
                 actions = {
-                    if (!isTopFloatingCircle && actions != null) {
+                    if (!isTopFloatingCircle && !actionsAtBottom && actions != null) {
                         AnimatedVisibility(visible = actionsVisible, enter = ActionsEnter, exit = ActionsExit) {
                             Row(verticalAlignment = Alignment.CenterVertically, content = actions)
                         }
@@ -534,11 +584,12 @@ fun AppSubPage(
                 listState = listState,
                 imeAware = imeAware,
                 // With a bottom bar the list ends where the bar starts, which has cleared the navigation bar and the dock already.
+                // A search card over the back row takes room of its own.
                 bottomPadding = when {
                     bottomBar != null -> AppSpacing.lg
                     reservesDock -> AppLayout.navClearance + 24.dp
                     else -> AppLayout.navClearance
-                },
+                } + searchCardRoom,
                 insetBottom = bottomBar == null,
                 maxWidth = columnMax,
                 floatingTopBar = isTopFloatingCircle,
@@ -577,12 +628,48 @@ fun AppSubPage(
                 actionsVisible = actionsVisible,
             )
         }
-        if (showFloatingBackEffective) {
+        // The page's own search or actions stand in for the tile that opens Search.
+        val backRowCompanion = if (actionsAtBottom || searchCard) null else ({ navigator.openSearch() })
+        val backRowActions = if (actionsAtBottom && actionsVisible) actions else null
+        if (searchCard) {
+            CompositionLocalProvider(LocalFrostedBackdrop provides backdrop) {
+                Column(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        // With the back row under it the row clears the navigation bar; without, the card does.
+                        .then(if (showFloatingBackEffective) Modifier else Modifier.navigationBarsPadding())
+                        .imePadding()
+                        // As the row goes, the card goes down into its place, above the navigation bar.
+                        .offset { IntOffset(0, (goneFraction * (barHeightPx - navigationBarPx).coerceAtLeast(0)).roundToInt()) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    BottomSearchCard(onHeightChange = { searchCardPx = it }) { bottomSearch() }
+                    Spacer(Modifier.height(SearchCardGap))
+                    if (showFloatingBackEffective) {
+                        // Folded away while typing: the card keeps the keyboard's top to itself.
+                        AnimatedVisibility(visible = !typing, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+                            FloatingBackRow(
+                                title = title,
+                                onBack = onBack,
+                                onCompanionClick = backRowCompanion,
+                                actions = backRowActions,
+                                spread = bottomControls,
+                                modifier = Modifier
+                                    .onSizeChanged { barHeightPx = it.height }
+                                    .graphicsLayer { alpha = 1f - goneFraction.coerceIn(0f, 1f) },
+                            )
+                        }
+                    }
+                }
+            }
+        } else if (showFloatingBackEffective) {
             CompositionLocalProvider(LocalFrostedBackdrop provides backdrop) {
                 FloatingBackRow(
                     title = title,
                     onBack = onBack,
-                    onCompanionClick = { navigator.openSearch() },
+                    onCompanionClick = backRowCompanion,
+                    actions = backRowActions,
+                    spread = bottomControls,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .onSizeChanged { barHeightPx = it.height }
@@ -635,10 +722,14 @@ const val ACCOUNT_BUTTON_LABEL = "Account and settings"
 /** ... and while it opens the Profile. */
 const val PROFILE_BUTTON_LABEL = "Profile"
 
-/** How the app is set to present its pages' controls. */
+/**
+ * How the app is set to present its pages' controls. With Bottom controls on (see [rememberBottomControls]) the pages are in the
+ * bottom dock style, whichever style was picked: the way back is at the bottom, and the rest of their controls with it.
+ */
 @Composable
 internal fun rememberBackButtonStyle(): BackButtonStyle {
     val state = LocalAppPreferences.current?.state?.collectAsState()
+    if (rememberBottomControls()) return BackButtonStyle.BottomDock
     return state?.value?.backButtonStyle ?: AppPrefsState().backButtonStyle
 }
 

@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -58,6 +60,7 @@ import com.example.normpix.settings.BackButtonStyle
 import com.example.normpix.settings.ui.SettingsCatalog
 import com.example.normpix.settings.ui.rememberSettingsActivator
 import com.example.normpix.ui.components.BackButton
+import com.example.normpix.ui.components.BottomSearchCard
 import com.example.normpix.ui.components.FloatingCircleBackButton
 import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
@@ -65,6 +68,7 @@ import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.SearchField
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.components.rememberBackButtonStyle
+import com.example.normpix.ui.components.rememberBottomControls
 import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.wallet.CardKind
@@ -143,27 +147,31 @@ fun AppSearchPage() {
         ) {
             // In the top floating circle style the way back is the circle the other pages open with, beside the field.
             val floatingBack = rememberBackButtonStyle() == BackButtonStyle.TopFloatingCircle
-            Row(
-                Modifier.fillMaxWidth().padding(
-                    start = if (floatingBack) AppSpacing.lg else AppSpacing.xs,
-                    end = AppSpacing.lg,
-                    top = AppSpacing.sm,
-                    bottom = AppSpacing.sm,
-                ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (floatingBack) {
-                    FloatingCircleBackButton(onBack = navigator::back)
-                    Spacer(Modifier.width(AppSpacing.sm))
-                } else {
-                    BackButton(navigator::back)
+            // With Bottom controls on the field, with the way back beside it, is a card at the foot - over the keyboard - instead.
+            val bottomControls = rememberBottomControls()
+            if (!bottomControls) {
+                Row(
+                    Modifier.fillMaxWidth().padding(
+                        start = if (floatingBack) AppSpacing.lg else AppSpacing.xs,
+                        end = AppSpacing.lg,
+                        top = AppSpacing.sm,
+                        bottom = AppSpacing.sm,
+                    ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (floatingBack) {
+                        FloatingCircleBackButton(onBack = navigator::back)
+                        Spacer(Modifier.width(AppSpacing.sm))
+                    } else {
+                        BackButton(navigator::back)
+                    }
+                    SearchField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = "Search NormPix",
+                        modifier = Modifier.weight(1f).focusRequester(focus),
+                    )
                 }
-                SearchField(
-                    value = query,
-                    onValueChange = { query = it },
-                    placeholder = "Search NormPix",
-                    modifier = Modifier.weight(1f).focusRequester(focus),
-                )
             }
             LazyColumn(
                 Modifier.fillMaxWidth().weight(1f),
@@ -268,6 +276,20 @@ fun AppSearchPage() {
                         }
                     }
                 }
+            }
+            if (bottomControls) {
+                BottomSearchCard(Modifier.navigationBarsPadding()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        BackButton(navigator::back)
+                        SearchField(
+                            value = query,
+                            onValueChange = { query = it },
+                            placeholder = "Search NormPix",
+                            modifier = Modifier.weight(1f).focusRequester(focus),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(AppSpacing.sm))
             }
         }
       }

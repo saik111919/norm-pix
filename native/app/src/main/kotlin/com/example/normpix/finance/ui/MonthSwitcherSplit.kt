@@ -87,7 +87,7 @@ internal fun SplitMonthControl(
 }
 
 @Composable
-private fun SplitStepSegment(icon: ImageVector, description: String, outerStart: Boolean, enabled: Boolean, onClick: () -> Unit) {
+internal fun SplitStepSegment(icon: ImageVector, description: String, outerStart: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val press = remember { MutableInteractionSource() }
     val inner = CornerSize(pressedCorner(press))
@@ -195,7 +195,7 @@ private fun RowScope.SplitByMonthSegment(onClick: () -> Unit, press: MutableInte
 
 /** The same way back, standing on its own under the pill (large text, see [SplitAllTimeSwitcher]): a pill of the buttons' tone. */
 @Composable
-private fun SplitByMonthPill(onClick: () -> Unit) {
+internal fun SplitByMonthPill(onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val haptics = rememberAppHaptics()
     Surface(

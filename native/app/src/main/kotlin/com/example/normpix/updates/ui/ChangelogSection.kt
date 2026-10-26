@@ -75,19 +75,25 @@ internal fun ReleaseNotesList(notes: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * The changelog, on the update page: every published version, newest first, each a row that opens to the changes it made. The
+ * The changelog, on the changelog page: every published version, newest first, each a row that opens to the changes it made. The
  * version installed (or, if it isn't in the list, the newest one before it) is open to begin with, so what the user has is
  * the first thing they read; a newer one is marked, and its notes are the update's own, shown above.
  *
  * Saved notes are shown at once and the list refreshes under them; with no connection they stay, and say so.
  */
 @Composable
-fun ChangelogSection(state: ChangelogState, installed: InstalledApp, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+fun ChangelogSection(
+    state: ChangelogState,
+    installed: InstalledApp,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+    title: String? = null,
+) {
     val entries = state.entries
     val opening = entries.firstOrNull { it.versionCode <= installed.versionCode }?.versionCode
     ListSection(
         modifier = modifier,
-        title = "Changelog",
+        title = title,
         footer = if (entries.isNotEmpty() && state.problem != null) {
             "Couldn't refresh the changelog just now, so these are the changes NormPix saved earlier."
         } else {

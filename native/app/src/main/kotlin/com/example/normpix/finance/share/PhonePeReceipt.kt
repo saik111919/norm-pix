@@ -43,7 +43,11 @@ internal object PhonePeReceipt : PaymentAppReceipt {
     /** PhonePe's own transaction id: a T and twenty-odd digits. */
     private val ownId = Regex("""^T\d{18,}$""")
 
-    private val paidTo = Regex("""(?i)^\W*(?:paid|sent|transferred)\s+to\W*$""")
+    /** "Paid to" (a UPI id, a shop), "Transfer to" (a bank account by its number: someone's, or the user's own). */
+    private val paidTo = Regex("""(?i)^\W*(?:paid|sent|transfer(?:red)?)\s+to\W*$""")
+
+    /** "Banking Name : Rahul Mehta": the name the receiving bank has for the account a transfer went to. */
+    private val bankingName = Regex("""(?i)^\W*banking\s+name\s*[:\-]?\s*(.+)$""")
     private val receivedFrom = Regex("""(?i)^\W*(?:money\s+)?received\s+from\W*$""")
     private val debitedFrom = Regex("""(?i)^\W*(?:debited|paid)\s+from\W*$""")
     private val creditedTo = Regex("""(?i)^\W*credited\s+to\W*$""")
@@ -85,7 +89,16 @@ internal object PhonePeReceipt : PaymentAppReceipt {
             else -> null
         }
 
-        val party = if (heading >= 0) receipt.nameBelow(heading, NAME_REACH, rupeePrinted = true) { it.has(partTitle) } else NamedRow(null, null)
+        val below = if (heading >= 0) receipt.nameBelow(heading, NAME_REACH, rupeePrinted = true) { it.has(partTitle) } else NamedRow(null, null)
+        // A transfer to an account shows its number and bank under "Transfer to", and the account holder's name after them: that
+        // name is the other side, not the bank's ("HDFC Bank"). A person's own name, shown at the top, stays the one used.
+        val holder = if (heading >= 0) {
+            rows.drop(heading + 1).take(NAME_REACH + 1).takeWhile { !it.has(partTitle) }
+                .firstNotNullOfOrNull { row -> bankingName.matchEntire(row.text.trim())?.groupValues?.get(1)?.let(::partyName) }
+        } else {
+            null
+        }
+        val party = if (holder != null && below.name?.let(ownAccountWords::containsMatchIn) != false) NamedRow(holder, below.amount) else below
         // The other side's rows - the name, then their UPI id, phone number or account - down to the next part. In a transfer
         // to the user's own account, that account.
         val otherRows = if (heading >= 0) {
