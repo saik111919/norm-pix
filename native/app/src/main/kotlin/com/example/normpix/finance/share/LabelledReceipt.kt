@@ -81,6 +81,21 @@ internal class LabelledReceipt(
         val accountText = (shown + ownRows).distinct().joinToString("\n").ifEmpty { null }
         val masks = accountText?.let(SharedTransactionParser::maskedNumbers).orEmpty()
 
+        // The other side's account, where the receipt shows one: just below their name, a bare "To" (or "From") that names an
+        // account rather than a person, and - of money paid - a row about where it went ("TRANSFER TO XXXX2094").
+        val otherLines = buildList {
+            partyLabel?.let { found -> receipt.rows.drop(found.at + 1).take(2).forEach { add(it.text) } }
+            when (type) {
+                TransactionType.Expense -> {
+                    to?.takeIf { toIsOwn }?.let { add(receipt.valueOf(it)) }
+                    receipt.rows.filter { otherSideRow.containsMatchIn(it.text) && SharedTransactionParser.maskedNumbers(it.text).isNotEmpty() }
+                        .forEach { add(it.text) }
+                }
+                TransactionType.Income -> from?.takeIf { fromIsOwn }?.let { add(receipt.valueOf(it)) }
+                else -> Unit
+            }
+        }.distinct().filterNot { it in shown }
+
         // The amount: the figure printed largest and the one labelled "Amount"; without either, every figure with a ₹ in front.
         val sightings = buildList {
             receipt.headline?.let(::amountSighting)?.let(::add)
@@ -106,6 +121,8 @@ internal class LabelledReceipt(
             instrument = accountText?.let { SharedTransactionParser.instrument(it, masks) },
             maskedNumbers = masks,
             accountText = accountText,
+            otherAccountText = otherLines.joinToString("\n").ifEmpty { null },
+            otherMaskedNumbers = otherSideNumbers(otherLines).filterNot { it in masks },
         )
     }
 

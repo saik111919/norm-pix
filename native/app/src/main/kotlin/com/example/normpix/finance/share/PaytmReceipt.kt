@@ -31,7 +31,9 @@ internal object PaytmReceipt : PaymentAppReceipt {
 
     private val paidTitle = Regex("""(?i)^\W*(?:[\p{L}\d]{1,2}\s+)?(?:paid|money\s+sent|payment\s+sent)(?:\s+successfully)?\W*$""")
     private val receivedTitle = Regex("""(?i)^\W*(?:[\p{L}\d]{1,2}\s+)?(?:money\s+|payment\s+)?received(?:\s+successfully)?\W*$""")
-    private val toColon = Label("""(?:to\s+your|to)(?=\s*:)""")
+    private val toColon = Label("""to(?:\s+your)?(?=\s*:)""")
+
+    /** "To Your: Union Bank Of India - 1234": Paytm's receipt of money sent to one of the user's own accounts. */
     private val toYourColon = Label("""to\s+your(?=\s*:)""")
     private val fromColon = Label("from(?=\\s*:)")
     private val referenceLabel = Regex("""(?i)^\W*upi\s*ref\.?\s*no\b""")
@@ -68,11 +70,12 @@ internal object PaytmReceipt : PaymentAppReceipt {
         }
     }
 
-    /** [side]'s name, with the next line when the receipt ran a long one on to it (see [runOn]). */
+    /** [side]'s name, with the next line when the receipt ran a long one on to it (see [runOn]) - never its bank and digits. */
     private fun nameOf(receipt: ReceiptLayout, side: Side?): String? {
         val name = side?.person ?: return null
         val beside = side.label.besideCell
-        return if (beside != null && partyName(side.label.beside) == name) receipt.runOn(name, beside, side.rows.take(1)) else name
+        val next = side.rows.take(1).filterNot { it.text.trim() in side.account }
+        return if (beside != null && partyName(side.label.beside) == name) receipt.runOn(name, beside, next) else name
     }
 
     private fun sideOf(receipt: ReceiptLayout, found: Labelled?, today: LocalDate): Side? {
@@ -85,17 +88,13 @@ internal object PaytmReceipt : PaymentAppReceipt {
     override fun read(receipt: ReceiptLayout, ledger: CurrencySpec, today: LocalDate): ParsedTransactionDraft {
         val rows = receipt.rows
         // "To:" and "From:" with their colon - a payer's message that begins with "To" is not one; without it, as the recognizer may drop it.
-        val toLabel = receipt.labelled(toYourColon) ?: receipt.labelled(toColon) ?: receipt.labelled(ReceiptWords.to)
-        val to = sideOf(receipt, toLabel, today)
+        val to = sideOf(receipt, receipt.labelled(toColon) ?: receipt.labelled(ReceiptWords.to), today)
         val from = sideOf(receipt, receipt.labelled(fromColon) ?: receipt.labelled(ReceiptWords.from), today)
 
         // Which way the money went: the title says it; else the side that shows a bank over its digits is the user's.
-        val toIsYour = receipt.labelled(toYourColon) != null || toLabel?.let { receipt.rows[it.at].has(Regex("""(?i)^\W*to\s+your\b.*""")) } == true
-        val isTransfer = toIsYour || (to?.account?.isNotEmpty() == true && from?.account?.isNotEmpty() == true)
         val paid = rows.any { it.has(paidTitle) }
         val received = rows.any { it.has(receivedTitle) }
         val type = when {
-            isTransfer -> TransactionType.Transfer
             paid && !received -> TransactionType.Expense
             received && !paid -> TransactionType.Income
             from?.account?.isNotEmpty() == true && to?.account.isNullOrEmpty() -> TransactionType.Expense
@@ -105,17 +104,8 @@ internal object PaytmReceipt : PaymentAppReceipt {
         val own = if (type == TransactionType.Income) to else from
         val other = if (type == TransactionType.Income) from else to
 
-        val accountText = own?.account?.joinToString("\n").orEmpty().ifEmpty {
-            if (type == TransactionType.Transfer) own?.lines?.joinToString("\n").orEmpty() else ""
-        }
+        val accountText = own?.account?.joinToString("\n").orEmpty()
         val masks = SharedTransactionParser.maskedNumbers(accountText)
-        val toAccountText = if (type == TransactionType.Transfer) {
-            to?.account?.joinToString("\n").orEmpty().ifEmpty { to?.lines?.joinToString("\n").orEmpty() }
-        } else {
-            null
-        }
-        val toMasks = toAccountText?.let(SharedTransactionParser::maskedNumbers).orEmpty()
-        val counterparty = if (type == TransactionType.Transfer) null else nameOf(receipt, other)?.let(::tidyName)
 
         // The amount: the first figure above the sides, and the amount in words under it.
         val firstSide = listOfNotNull(to?.label?.at, from?.label?.at).minOrNull() ?: rows.size
@@ -133,7 +123,7 @@ internal object PaytmReceipt : PaymentAppReceipt {
             type = type,
             kind = kindOf(type),
             status = status,
-            counterparty = counterparty,
+            counterparty = nameOf(receipt, other)?.let(::tidyName),
             date = date.date,
             time = date.time,
             dateUnreadable = date.unreadable,
@@ -141,9 +131,16 @@ internal object PaytmReceipt : PaymentAppReceipt {
             instrument = SharedTransactionParser.instrument(accountText, masks),
             maskedNumbers = masks,
             accountText = accountText,
-            toAccountText = toAccountText,
-            toMaskedNumbers = toMasks,
             message = messageBelow(receipt, firstSide, ledger),
+            // In a self transfer the other side shows a bank over its digits as well - the user's other account - and both
+            // sides the user's name.
+            selfTransfer = when {
+                receipt.labelled(toYourColon) != null -> SelfTransferCue.Words
+                samePerson(nameOf(receipt, own), nameOf(receipt, other)) -> SelfTransferCue.SameName
+                else -> null
+            },
+            otherAccountText = other?.account?.joinToString("\n")?.ifEmpty { null },
+            otherMaskedNumbers = otherSideNumbers(other?.account.orEmpty()),
         )
     }
 

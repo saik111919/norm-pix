@@ -21,9 +21,6 @@ enum class SharedKind {
     /** A debit the bank undid (usually a payment that didn't go through). Also income. */
     Reversal,
 
-    /** Money moved between the user's own accounts. */
-    Transfer,
-
     /** The message doesn't say which way the money went. */
     Unknown,
 }
@@ -68,12 +65,18 @@ data class ParsedTransactionDraft(
      * that is (empty when it shows none); null when it can't tell, and the whole message is looked through instead.
      */
     val accountText: String? = null,
-    /** What the receipt says about the destination account in a transfer, when the app's layout shows which part that is. */
-    val toAccountText: String? = null,
-    /** The destination account's masked numbers in a transfer. */
-    val toMaskedNumbers: List<MaskedNumber> = emptyList(),
     /** What the payer wrote with the payment ("Auto", "Rent"), when the receipt shows it: the first thing in the [note]. */
     val message: String? = null,
+    /**
+     * How the message says the money moved between two of the user's own accounts - in words ("Self transfer", "To self
+     * account") or by naming the same person on both sides (see [SelfTransfers]) - or null when it doesn't. [type] still says
+     * which way it went for the user's own side: out of it (the payer's receipt) or into it.
+     */
+    val selfTransfer: SelfTransferCue? = null,
+    /** What the message shows of the other side's account - its bank, its number - when it shows which part that is; else null. */
+    val otherAccountText: String? = null,
+    /** The other side's account numbers, as the message shows them partly hidden: one of the user's own, in a self transfer. */
+    val otherMaskedNumbers: List<MaskedNumber> = emptyList(),
 ) {
     /** A short description for the note: the payer's message, what kind of entry this is, and its reference. Null when there is nothing to say. */
     val note: String?
@@ -82,7 +85,6 @@ data class ParsedTransactionDraft(
             when (kind) {
                 SharedKind.Refund -> "Refund"
                 SharedKind.Reversal -> "Reversal"
-                SharedKind.Transfer -> "Self transfer"
                 else -> null
             },
             reference?.let { "Ref $it" },
@@ -207,11 +209,11 @@ object SharedTransactionParser {
             reversal -> SharedKind.Reversal
             type == TransactionType.Income -> SharedKind.Received
             type == TransactionType.Expense -> SharedKind.Payment
-            type == TransactionType.Transfer -> SharedKind.Transfer
             else -> SharedKind.Unknown
         }
         val when_ = dateIn(body, today)
-        val masks = maskedNumbers(body)
+        val sides = accountSides(body, type)
+        val masks = sides.own
         return SharedTextReading.Draft(
             ParsedTransactionDraft(
                 amount = choice.amount,
@@ -227,6 +229,9 @@ object SharedTransactionParser {
                 reference = reference,
                 instrument = instrument(body, masks),
                 maskedNumbers = masks,
+                selfTransfer = SelfTransferCue.Words.takeIf { SelfTransferWords.saidIn(body) },
+                otherAccountText = sides.otherText,
+                otherMaskedNumbers = sides.other,
             ),
         )
     }
@@ -744,6 +749,39 @@ object SharedTransactionParser {
         endingCue.findAll(text).forEach { add(MaskedNumber("", it.groupValues[1])) }
         bankDashEnding.findAll(text).forEach { add(MaskedNumber("", it.groupValues[1])) }
         return found
+    }
+
+    /** A message's account numbers, the user's [own] and the [other] side's, with what it says of the other's ([otherText]). */
+    internal class AccountSides(val own: List<MaskedNumber>, val other: List<MaskedNumber>, val otherText: String?)
+
+    /**
+     * "SBI A/c no. XXXX5678": an account (perhaps with its bank's name) and its number, after "to" or "from" - not "to your
+     * A/c", and not across another such word ("sent to self from HDFC Bank A/c XX1234" is the account it came from).
+     */
+    private const val ACCOUNT_AFTER = """((?:(?!(?:your|ur|from|to|by|on|via|using|with|at)\b)[\p{L}&.]+\s+){0,4}?""" +
+        """(?:a/?c|acct|account|card)(?:\s*(?:no\.?|number))?\s*[:.\-]?\s*[\d$MASK_CHARS]{4,24})"""
+
+    /** The other side's account: the one the money went to, of an expense; the one it came from, of income. */
+    private val accountOfOtherSide = mapOf(
+        TransactionType.Expense to Regex("""\b(?:to|towards|into)\s+$ACCOUNT_AFTER""", RegexOption.IGNORE_CASE),
+        TransactionType.Income to Regex("""\b(?:from|by)\s+$ACCOUNT_AFTER""", RegexOption.IGNORE_CASE),
+    )
+
+    /**
+     * Which of [text]'s numbers are the user's and which the other side's: a bank's "debited from A/c XX1234 to A/c XX5678"
+     * shows both. An account after "to" is where an expense went, one after "from" where income came from; every other number
+     * is the user's, as it always was. Without a [type] there is no telling, and they all are.
+     */
+    internal fun accountSides(text: String, type: TransactionType?): AccountSides {
+        val cue = accountOfOtherSide[type] ?: return AccountSides(maskedNumbers(text), emptyList(), null)
+        val found = cue.findAll(text).map { it.groups[1]!! }.filter { maskedNumbers(it.value).isNotEmpty() }.toList()
+        if (found.isEmpty()) return AccountSides(maskedNumbers(text), emptyList(), null)
+        // Blanked rather than cut out, so what is around the user's own numbers stays where it was.
+        val ownText = found.fold(StringBuilder(text)) { all, part ->
+            all.replace(part.range.first, part.range.last + 1, " ".repeat(part.value.length))
+        }.toString()
+        val other = found.flatMap { maskedNumbers(it.value) }.distinct()
+        return AccountSides(maskedNumbers(ownText), other, found.joinToString("\n") { it.value })
     }
 
     /** "HDFC Bank - 3588", "State Bank Of India - 1234" (Paytm's): a bank's name, a dash, then the account's last four digits and nothing else. */

@@ -11,6 +11,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 /**
  * Paytm's receipts, read by [PaytmReceipt]: the one the owner shared ([PhoneReceipts.paytmAuto]: a ₹74 payment, with a
@@ -189,8 +190,9 @@ class PaytmReceiptTest {
         assertSame(KreditPeReceipt, PaymentAppReceipts.appOf(ReceiptLayout.of(picture(PhoneReceipts.kreditPeBells))))
         assertEquals("PhonePe", read(PhoneReceipts.phonePeShop).app)
     }
+
     @Test
-    fun `a Paytm self transfer moves money between user accounts`() {
+    fun `Paytm's "To Your" receipt is a self transfer to another of the user's accounts`() {
         val lines = listOf(
             line("Money Sent Successfully", 0, 10, 100, 20),
             line("₹1,000", 0, 30, 80, 40),
@@ -204,8 +206,8 @@ class PaytmReceiptTest {
         )
         val d = read(lines)
         assertEquals("Paytm", d.app)
-        assertEquals(TransactionType.Transfer, d.type)
-        assertEquals(SharedKind.Transfer, d.kind)
+        assertEquals(TransactionType.Expense, d.type)
+        assertEquals(SelfTransferCue.Words, d.selfTransfer)
         assertEquals(100_000L, d.amount)
         assertEquals(SharedStatus.Completed, d.status)
         assertNull(d.counterparty)
@@ -213,7 +215,7 @@ class PaytmReceiptTest {
         assertEquals(LocalDate.of(2025, 1, 12), d.date)
         assertEquals(LocalTime.of(20, 13), d.time)
         assertEquals(listOf(MaskedNumber("", "5678")), d.maskedNumbers)
-        assertEquals(listOf(MaskedNumber("", "1234")), d.toMaskedNumbers)
-        assertEquals(true, d.toAccountText?.contains("Union Bank Of India"))
+        assertEquals(listOf(MaskedNumber("", "1234")), d.otherMaskedNumbers)
+        assertTrue("Union Bank Of India" in d.otherAccountText.orEmpty(), d.otherAccountText)
     }
 }

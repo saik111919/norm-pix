@@ -43,8 +43,11 @@ internal object PhonePeReceipt : PaymentAppReceipt {
     /** PhonePe's own transaction id: a T and twenty-odd digits. */
     private val ownId = Regex("""^T\d{18,}$""")
 
-    private val transferTo = Regex("""(?i)^\W*transfer\s+to\W*$""")
-    private val paidTo = Regex("""(?i)^\W*(?:paid|sent|transferred|transfer)\s+to\W*$""")
+    /** "Paid to" (a UPI id, a shop), "Transfer to" (a bank account by its number: someone's, or the user's own). */
+    private val paidTo = Regex("""(?i)^\W*(?:paid|sent|transfer(?:red)?)\s+to\W*$""")
+
+    /** "Banking Name : Rahul Mehta": the name the receiving bank has for the account a transfer went to. */
+    private val bankingName = Regex("""(?i)^\W*banking\s+name\s*[:\-]?\s*(.+)$""")
     private val receivedFrom = Regex("""(?i)^\W*(?:money\s+)?received\s+from\W*$""")
     private val debitedFrom = Regex("""(?i)^\W*(?:debited|paid)\s+from\W*$""")
     private val creditedTo = Regex("""(?i)^\W*credited\s+to\W*$""")
@@ -74,38 +77,35 @@ internal object PhonePeReceipt : PaymentAppReceipt {
         Tell(2) { receipt -> receipt.rows.any { row -> row.cells.any { ownId.matches(it.text.trim()) } } },
         Tell(1) { receipt -> receipt.rows.any { it.has(debitedFrom) || it.has(creditedTo) } },
         Tell(1) { receipt -> receipt.rows.any { it.has(paidTo) || it.has(receivedFrom) } },
-        Tell.piece(1, transferTo),
     )
 
     override fun read(receipt: ReceiptLayout, ledger: CurrencySpec, today: LocalDate): ParsedTransactionDraft {
         val rows = receipt.rows
         val heading = receipt.indexOf { it.has(paidTo) || it.has(receivedFrom) }
         val accountHeading = receipt.indexOf { it.has(debitedFrom) || it.has(creditedTo) }
-        val isTransfer = heading >= 0 && rows[heading].has(transferTo)
         val type = when {
-            isTransfer -> TransactionType.Transfer
             heading >= 0 -> if (rows[heading].has(paidTo)) TransactionType.Expense else TransactionType.Income
             accountHeading >= 0 -> if (rows[accountHeading].has(debitedFrom)) TransactionType.Expense else TransactionType.Income
             else -> null
         }
 
-        val party = if (heading >= 0 && !isTransfer) {
-            receipt.nameBelow(heading, NAME_REACH, rupeePrinted = true) { it.has(partTitle) }
-        } else {
-            NamedRow(null, null)
-        }
-        val toRows = if (isTransfer && heading >= 0) {
-            rows.drop(heading + 1).take(NAME_REACH).takeWhile { !it.has(partTitle) }
-        } else {
-            emptyList()
-        }
-        val toRead = toRows.map { amountAtEnd(it, rupeePrinted = true) }
-        val toAccountText = if (isTransfer) {
-            toRead.joinToString("\n") { (_, rest) -> rest.joinToString(" ") }.trim().ifEmpty { null }
+        val below = if (heading >= 0) receipt.nameBelow(heading, NAME_REACH, rupeePrinted = true) { it.has(partTitle) } else NamedRow(null, null)
+        // A transfer to an account shows its number and bank under "Transfer to", and the account holder's name after them: that
+        // name is the other side, not the bank's ("HDFC Bank"). A person's own name, shown at the top, stays the one used.
+        val holder = if (heading >= 0) {
+            rows.drop(heading + 1).take(NAME_REACH + 1).takeWhile { !it.has(partTitle) }
+                .firstNotNullOfOrNull { row -> bankingName.matchEntire(row.text.trim())?.groupValues?.get(1)?.let(::partyName) }
         } else {
             null
         }
-        val toMasks = toAccountText?.let(SharedTransactionParser::maskedNumbers).orEmpty()
+        val party = if (holder != null && below.name?.let(ownAccountWords::containsMatchIn) != false) NamedRow(holder, below.amount) else below
+        // The other side's rows - the name, then their UPI id, phone number or account - down to the next part. In a transfer
+        // to the user's own account, that account.
+        val otherRows = if (heading >= 0) {
+            rows.drop(heading + 1).take(NAME_REACH + 1).takeWhile { !it.has(partTitle) }.map { amountAtEnd(it, rupeePrinted = true).second.joinToString(" ") }
+        } else {
+            emptyList()
+        }
 
         // The user's account: below "Debited from", down to the UTR. Its last digits, and the amount once more.
         val accountRows = if (accountHeading >= 0) {
@@ -117,8 +117,7 @@ internal object PhonePeReceipt : PaymentAppReceipt {
         val accountText = accountRead.joinToString("\n") { (_, rest) -> rest.joinToString(" ") }
         val masks = SharedTransactionParser.maskedNumbers(accountText)
 
-        val toAmounts = if (isTransfer) toRead.mapNotNull { it.first } else listOfNotNull(party.amount)
-        val amount = receipt.settleAmount(toAmounts + accountRead.mapNotNull { it.first }, ledger.decimals, rupeePrinted = true)
+        val amount = receipt.settleAmount(listOfNotNull(party.amount) + accountRead.mapNotNull { it.first }, ledger.decimals, rupeePrinted = true)
         val printed = SharedTransactionParser.dateIn(receipt.text, today)
         val date = if (printed.date == null && !printed.unreadable) idDate(receipt, today) ?: printed else printed
         return ParsedTransactionDraft(
@@ -127,7 +126,7 @@ internal object PhonePeReceipt : PaymentAppReceipt {
             type = type,
             kind = kindOf(type),
             status = statusOf(rows),
-            counterparty = if (isTransfer) null else party.name?.let(::tidyName),
+            counterparty = party.name?.let(::tidyName),
             date = date.date,
             time = date.time,
             dateUnreadable = date.unreadable,
@@ -135,8 +134,8 @@ internal object PhonePeReceipt : PaymentAppReceipt {
             instrument = SharedTransactionParser.instrument(accountText, masks),
             maskedNumbers = masks,
             accountText = accountText,
-            toAccountText = toAccountText,
-            toMaskedNumbers = toMasks,
+            otherAccountText = otherRows.joinToString("\n").ifEmpty { null },
+            otherMaskedNumbers = otherSideNumbers(otherRows),
         )
     }
 

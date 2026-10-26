@@ -12,6 +12,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 /** PhonePe's receipts, read by [PhonePeReceipt]: the real ones the owner's phone read ([PhoneReceipts]), then variations of them. */
 class PhonePeReceiptTest {
@@ -367,8 +368,9 @@ class PhonePeReceiptTest {
         // Google Pay prints "…@ybl on PhonePe" for a payee who uses PhonePe.
         assertSame(GooglePayReceipt, PaymentAppReceipts.appOf(ReceiptLayout.of(picture(PhoneReceipts.googlePayTen))))
     }
+
     @Test
-    fun `a PhonePe self transfer moves money between user accounts`() {
+    fun `a PhonePe transfer to a bank account names its holder and shows the account it went to`() {
         val lines = listOf(
             line("Transaction Successful", 0, 10, 100, 20),
             line("12:27 pm on 22 Aug 2026", 0, 30, 120, 40),
@@ -384,16 +386,17 @@ class PhonePeReceiptTest {
         )
         val d = read(lines)
         assertEquals("PhonePe", d.app)
-        assertEquals(TransactionType.Transfer, d.type)
-        assertEquals(SharedKind.Transfer, d.kind)
+        // A transfer to an account is money paid out; it is the user's own only when that account's number is theirs (the import).
+        assertEquals(TransactionType.Expense, d.type)
+        assertNull(d.selfTransfer)
         assertEquals(100_000L, d.amount)
         assertEquals(SharedStatus.Completed, d.status)
-        assertNull(d.counterparty)
+        assertEquals("Kusumanchi Sai", d.counterparty)
         assertEquals(LocalDate.of(2026, 8, 22), d.date)
         assertEquals(LocalTime.of(12, 27), d.time)
         assertEquals("179259041561", d.reference)
         assertEquals(listOf(MaskedNumber("", "5678")), d.maskedNumbers)
-        assertEquals(listOf(MaskedNumber("", "1234")), d.toMaskedNumbers)
-        assertEquals(true, d.toAccountText?.contains("HDFC Bank"))
+        assertEquals(listOf(MaskedNumber("", "1234")), d.otherMaskedNumbers)
+        assertTrue("HDFC Bank" in d.otherAccountText.orEmpty(), d.otherAccountText)
     }
 }
