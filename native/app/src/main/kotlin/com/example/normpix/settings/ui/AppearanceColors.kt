@@ -97,6 +97,7 @@ internal fun ColorsSection(prefs: AppPrefsState, preferences: AppPreferences, ha
             selected = if (usingWallpaper) ColorSource.System else ColorSource.Custom,
             onSelect = preferences::setColorSource,
         )
+        Spacer(Modifier.height(AppSpacing.lg))
     }
     ListSection(
         footer = if (!wallpaperColors) "This device doesn't provide wallpaper colors, so NormPix uses the color you pick." else null,
