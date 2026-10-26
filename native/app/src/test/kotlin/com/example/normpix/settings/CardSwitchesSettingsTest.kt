@@ -85,7 +85,8 @@ class CardSwitchesSettingsTest {
         )
     }
 
-    private val cardOnlyRows = listOf("Export cards", "Import cards", "Card actions", "Cards layout", "Card tilt", "Clear copied card details after", "Save CVV")
+    // (How cards are laid out and whether they tilt are in Appearance, with the rest of how NormPix looks.)
+    private val cardOnlyRows = listOf("Export cards", "Import cards", "Card actions", "Clear copied card details after", "Save CVV")
 
     // ----- defaults -----
 
@@ -214,8 +215,7 @@ class CardSwitchesSettingsTest {
         compose.onNodeWithText("Store cards").performScrollTo().assertIsOff()
         for (row in cardOnlyRows) compose.onAllNodesWithText(row).assertCountEquals(0)
         // What belongs to accounts stays.
-        compose.onNodeWithText("Accounts layout").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Bank logos").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Accounts and cards layout").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Card numbers on accounts").performScrollTo().assertIsDisplayed()
     }
 

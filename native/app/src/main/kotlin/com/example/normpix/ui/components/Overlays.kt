@@ -315,7 +315,7 @@ fun OverlayHost(overlays: AppOverlays) {
     val preferences = LocalAppPreferences.current
     val prefsState = preferences?.state?.collectAsState()
     val sheetBlurEnabled = prefsState?.value?.sheetBlurEnabled ?: true
-    // Sheets and decisions open and close in the style chosen for them (Settings > Appearance > Sheet & dialog transitions; see
+    // Sheets and decisions open and close in the style chosen for them (Settings > Appearance > Transitions; see
     // sheetMotion) - apart from the pages' style - and with no motion of their own when the system asks for reduced motion.
     val sheetStyle = prefsState?.value?.sheetAnimation ?: SheetAnimationType.Window
     val sheetMotionOn = !rememberReducedMotion()

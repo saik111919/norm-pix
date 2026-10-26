@@ -61,11 +61,14 @@ import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.settings.AccentColor
+import com.example.normpix.settings.AccountsLayout
 import com.example.normpix.settings.AppIcon
 import com.example.normpix.settings.AppIcons
 import com.example.normpix.settings.AppPreferences
 import com.example.normpix.settings.AppPrefsState
 import com.example.normpix.settings.BackButtonStyle
+import com.example.normpix.settings.BankIconStyle
+import com.example.normpix.settings.CardsLayout
 import com.example.normpix.settings.CategoryIconShape
 import com.example.normpix.settings.CategoryIconStyle
 import com.example.normpix.settings.ColorSource
@@ -112,13 +115,20 @@ fun AppearanceSectionPage(section: AppearanceSection) {
                     AppearanceSection.InterfaceFont -> InterfaceFontSection(prefs, preferences, haptics)
                     AppearanceSection.CategoryIcons -> CategoryIconsSection(prefs, preferences, haptics)
                     AppearanceSection.ProgressIndicators -> ProgressIndicatorsSection(prefs, preferences, haptics)
+                    AppearanceSection.Transitions -> {
+                        PageTransitionsSection(prefs, preferences, haptics)
+                        SheetTransitionsSection(prefs, preferences, haptics)
+                    }
                     AppearanceSection.Effects -> EffectsSection(prefs, preferences, haptics)
-                    AppearanceSection.PageTransitions -> PageTransitionsSection(prefs, preferences, haptics)
-                    AppearanceSection.SheetTransitions -> SheetTransitionsSection(prefs, preferences, haptics)
-                    AppearanceSection.BackButton -> BackButtonSection(prefs, preferences, haptics)
-                    AppearanceSection.BottomControls -> BottomControlsSection(prefs, preferences, haptics)
-                    AppearanceSection.MonthControl -> MonthControlSection(prefs, preferences, haptics)
-                    AppearanceSection.TopSpending -> TopSpendingSection(prefs, preferences, haptics)
+                    AppearanceSection.Controls -> {
+                        BottomControlsSection(prefs, preferences, haptics)
+                        BackButtonSection(prefs, preferences, haptics)
+                        MonthControlSection(prefs, preferences, haptics)
+                    }
+                    AppearanceSection.Layouts -> {
+                        TopSpendingSection(prefs, preferences, haptics)
+                        WalletLayoutSections(prefs, preferences, haptics)
+                    }
                 }
             }
         }
@@ -237,6 +247,25 @@ private fun CategoryIconsSection(prefs: AppPrefsState, preferences: AppPreferenc
         }
     }
     ListSection(
+        title = "Bank logos",
+        footer = "How a bank is shown on the Wallet's accounts and cards.",
+        modifier = Modifier.selectableGroup(),
+    ) {
+        for (style in BankIconStyle.entries) {
+            item {
+                RadioRow(
+                    headline = style.label,
+                    supporting = style.description,
+                    selected = prefs.bankIconStyle == style,
+                    onClick = {
+                        haptics.selection()
+                        preferences.setBankIconStyle(style)
+                    },
+                )
+            }
+        }
+    }
+    ListSection(
         title = "Icon background",
         footer = "The shape behind category icons, people and banks in lists, charts and the editors. Brand logos, " +
             "like a payee's, are cut to the same shape.",
@@ -282,9 +311,11 @@ private fun ProgressIndicatorsSection(prefs: AppPrefsState, preferences: AppPref
     }
 }
 
+/** The touches that are only for the eye: the blur behind what floats, and the saved cards' tilt (while cards are kept). */
 @Composable
 private fun EffectsSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
     ListSection(
+        title = "Blur",
         footer = "Needs Android 12 or later with the system's blur effects on. Where blur is off or unavailable, " +
             "sheets, dialogs and the floating bars are solid and the page behind them stays sharp.",
     ) {
@@ -300,13 +331,32 @@ private fun EffectsSection(prefs: AppPrefsState, preferences: AppPreferences, ha
             )
         }
     }
+    if (prefs.walletCardsEnabled) {
+        ListSection(
+            title = "Saved cards",
+            footer = "Stays flat when animations are turned off in system settings.",
+        ) {
+            item {
+                SwitchRow(
+                    headline = "Card tilt",
+                    supporting = "Cards lean a few degrees as you move your phone",
+                    checked = prefs.cardTiltEnabled,
+                    onCheckedChange = { on ->
+                        haptics.selection()
+                        preferences.setCardTiltEnabled(on)
+                    },
+                )
+            }
+        }
+    }
 }
 
 @Composable
 private fun PageTransitionsSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
     ListSection(
+        title = "Pages",
         footer = "Pages, tabs, a screen's sections and the back gesture's preview all move in the style you pick. " +
-            "Sheets and dialogs have a style of their own, under Sheet & dialog transitions. " +
+            "Sheets and dialogs have a style of their own, below. " +
             "When animations are turned off in system settings, pages change without animating.",
         modifier = Modifier.selectableGroup(),
     ) {
@@ -331,6 +381,7 @@ private fun SheetTransitionsSection(prefs: AppPrefsState, preferences: AppPrefer
     val overlays = LocalOverlays.current
     val scope = LocalAppScope.current
     ListSection(
+        title = "Sheets & dialogs",
         footer = "Every sheet - the forms and pickers - and every yes-or-no question moves in this style, whichever style " +
             "your pages use. When animations are turned off in system settings, they come up without extra motion.",
         modifier = Modifier.selectableGroup(),
@@ -399,6 +450,7 @@ private fun SheetTransitionsSection(prefs: AppPrefsState, preferences: AppPrefer
 @Composable
 private fun BackButtonSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
     ListSection(
+        title = "Back button",
         footer = "Choose how pages present their back navigation. Top floating circle also floats the header of Home, " +
             "Plans & Activity, Insights, Wallet and search over their content." +
             if (prefs.bottomControls) " Bottom controls is on, so on a phone pages are in the Bottom dock style whichever you pick." else "",
@@ -424,9 +476,10 @@ private fun BackButtonSection(prefs: AppPrefsState, preferences: AppPreferences,
 @Composable
 private fun BottomControlsSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
     ListSection(
+        title = "Within reach",
         footer = "On a phone, the back button and a page's own buttons join the bar at the bottom, and the search and filters " +
             "of Activity, People, Settings and Search move down to a card above it. The dock stays where it is. " +
-            "While this is on, pages are in the Bottom dock style of the back button. Tablets and wide windows keep their layout.",
+            "While this is on, pages are in the Bottom dock style of the back button below. Tablets and wide windows keep their layout.",
     ) {
         item {
             SwitchRow(
@@ -446,6 +499,7 @@ private fun BottomControlsSection(prefs: AppPrefsState, preferences: AppPreferen
 @Composable
 private fun TopSpendingSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
     ListSection(
+        title = "Top spending on Home",
         footer = "How Home shows the month's biggest spending categories. Either way a tap opens the category's month, and " +
             "Insights has every category.",
         modifier = Modifier.selectableGroup(),
@@ -469,6 +523,7 @@ private fun TopSpendingSection(prefs: AppPrefsState, preferences: AppPreferences
 @Composable
 private fun MonthControlSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
     ListSection(
+        title = "Month control",
         footer = "How the month is switched on Activity, Budgets, Insights and People. Both work the same - the steps, the " +
             "month picker, \"Dates\" and \"All time\" - and only the look differs.",
         modifier = Modifier.selectableGroup(),
@@ -487,6 +542,54 @@ private fun MonthControlSection(prefs: AppPrefsState, preferences: AppPreference
                         onClick = choose,
                     )
                     MonthControlPreview(style, onClick = choose, modifier = Modifier.padding(start = AppSpacing.lg, end = AppSpacing.lg, bottom = AppSpacing.lg))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * How the Wallet lays out the accounts, and the saved cards while NormPix keeps them: the same choices the Wallet's own layout
+ * switch makes, with what each does.
+ */
+@Composable
+private fun WalletLayoutSections(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
+    ListSection(
+        title = "Accounts in the Wallet",
+        footer = "The Wallet has a switch for this above the accounts too.",
+        modifier = Modifier.selectableGroup(),
+    ) {
+        for (layout in AccountsLayout.entries) {
+            item {
+                RadioRow(
+                    headline = layout.label,
+                    supporting = layout.description,
+                    selected = prefs.accountsLayout == layout,
+                    onClick = {
+                        haptics.selection()
+                        preferences.setAccountsLayout(layout)
+                    },
+                )
+            }
+        }
+    }
+    if (prefs.walletCardsEnabled) {
+        ListSection(
+            title = "Cards in the Wallet",
+            footer = "The Wallet has a switch for this above the cards too.",
+            modifier = Modifier.selectableGroup(),
+        ) {
+            for (layout in CardsLayout.entries) {
+                item {
+                    RadioRow(
+                        headline = layout.label,
+                        supporting = layout.description,
+                        selected = prefs.cardsLayout == layout,
+                        onClick = {
+                            haptics.selection()
+                            preferences.setCardsLayout(layout)
+                        },
+                    )
                 }
             }
         }

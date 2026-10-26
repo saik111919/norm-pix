@@ -136,7 +136,7 @@ internal fun SwitcherTrack(modifier: Modifier = Modifier, content: @Composable R
     )
 }
 
-/** The user's choice of how the month is switched (Settings > Appearance > Month control), unless the caller says which. */
+/** The user's choice of how the month is switched (Settings > Appearance > Navigation & controls), unless the caller says which. */
 @Composable
 internal fun rememberMonthControlStyle(): MonthControlStyle =
     LocalAppPreferences.current?.state?.collectAsState()?.value?.monthControlStyle ?: MonthControlStyle.Track

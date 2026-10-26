@@ -98,15 +98,15 @@ class SheetAnimationPreferenceTest {
     }
 
     @Test
-    fun settingsSearchFindsItAndOpensItsOwnPageOfAppearance() {
+    fun settingsSearchFindsItAndOpensTheTransitionsPageOfAppearance() {
         for (query in listOf("sheet", "dialog", "bottom sheet", "popup", "linux", "desktop")) {
             val hit = SettingsCatalog.search(query).single { it.title == "Sheet & dialog transitions" }
             assertEquals(SettingsPage.Appearance, hit.group, query)
-            assertEquals(AppearanceSection.SheetTransitions, hit.appearance, query)
-            assertEquals("Appearance > Sheet & dialog transitions", hit.location, query)
+            assertEquals(AppearanceSection.Transitions, hit.appearance, query)
+            assertEquals("Appearance > Transitions", hit.location, query)
         }
-        // The page transitions are their own entry, which a search for "page" or "slide" still reaches.
+        // The page transitions are their own entry, on the same page, which a search for "page" or "slide" still reaches.
         val pages = SettingsCatalog.search("shared axis").single { it.title == "Page transitions" }
-        assertEquals(AppearanceSection.PageTransitions, pages.appearance)
+        assertEquals(AppearanceSection.Transitions, pages.appearance)
     }
 }

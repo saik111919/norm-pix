@@ -1,10 +1,7 @@
 package com.example.normpix.wallet
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +15,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.example.normpix.settings.BankIconStyle
 import com.example.normpix.ui.components.DeckCarousel
 import com.example.normpix.ui.components.DeckDetail
+import com.example.normpix.ui.components.DeckFact
+import com.example.normpix.ui.components.DeckFacts
 import com.example.normpix.ui.components.DeckDivider
 import com.example.normpix.ui.components.DeckMarkerInset
 import com.example.normpix.ui.theme.AppSpacing
@@ -119,12 +118,14 @@ private fun CardDetails(card: StoredCard, revealed: Boolean) {
     Spacer(Modifier.height(AppSpacing.md))
     DeckDetail("Card number", if (revealed) groupDigits(card.cardNumber) else maskedNumber(card), large = true)
     DeckDivider()
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)) {
-        DeckDetail("Cardholder", card.cardholderName, Modifier.weight(if (card.hasCvv) 1.5f else 2f))
-        DeckDetail("Expires", "${card.expiryMonth}/${card.expiryYear}", Modifier.weight(1f))
-        // As on the card's sheet: a card kept without a CVV has none to show (Save CVV off keeps none on any card).
-        if (card.hasCvv) DeckDetail("CVV", if (revealed) card.cvv else "•".repeat(card.cvv.length), Modifier.weight(1f))
-    }
+    DeckFacts(
+        buildList {
+            add(DeckFact("Cardholder", card.cardholderName, if (card.hasCvv) 1.5f else 2f))
+            add(DeckFact("Expires", "${card.expiryMonth}/${card.expiryYear}"))
+            // As on the card's sheet: a card kept without a CVV has none to show (Save CVV off keeps none on any card).
+            if (card.hasCvv) add(DeckFact("CVV", if (revealed) card.cvv else "•".repeat(card.cvv.length)))
+        },
+    )
 }
 
 /** The number with everything but the last four digits as dots, in the groups of four the card prints it in. */

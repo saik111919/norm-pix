@@ -26,7 +26,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Settings > Appearance > Sheet & dialog transitions: every style, the Linux window one among them (a desktop window's opening
+ * Settings > Appearance > Transitions, under Sheets & dialogs: every style, the Linux window one among them (a desktop window's opening
  * and closing, as the pages can have), one chosen and taking effect at once - and the samples under "Try it" still open and
  * close a sheet and a question in it.
  */
@@ -42,7 +42,7 @@ class SheetTransitionsSettingsTest {
     fun setUp() {
         Locale.setDefault(Locale.US)
         env = TestEnvironment("sheet_transitions_settings")
-        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.SheetTransitions) } }
+        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.Transitions) } }
         compose.waitForIdle()
     }
 
@@ -50,7 +50,8 @@ class SheetTransitionsSettingsTest {
     fun tearDown() = env.close()
 
     private val radio = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)
-    private fun style(label: String) = compose.onNode(hasText(label) and radio)
+    // The pages' styles share the page, and two names ("Slide", "Linux window"): a sheet style is known by what it says it does.
+    private fun style(label: String) = compose.onNode(hasText(SheetAnimationType.entries.single { it.label == label }.description) and radio)
 
     @Test
     fun theLinuxWindowIsOneOfTheStyles_withItsDescription() {

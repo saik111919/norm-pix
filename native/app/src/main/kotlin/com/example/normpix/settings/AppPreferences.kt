@@ -327,14 +327,14 @@ data class AppPrefsState(
     /** Back button style and placement on sub-pages. */
     val backButtonStyle: BackButtonStyle = BackButtonStyle.TopFloatingCircle,
     /**
-     * Settings > Appearance > Bottom controls. On a phone the controls a page has at its top - the way back, its actions, its
+     * Settings > Appearance > Navigation & controls. On a phone the controls a page has at its top - the way back, its actions, its
      * search and filters - sit at the bottom instead, within a thumb's reach, beside the dock. The pages follow the bottom dock
      * style while it is on, whichever [backButtonStyle] is picked; a wider window keeps its rail and its layout.
      */
     val bottomControls: Boolean = false,
     /** How progress bars and loaders look, wherever the app shows progress. */
     val progressStyle: ProgressStyle = ProgressStyle.Wavy,
-    /** Settings > Appearance > Top spending: Home's biggest categories as a stack or a carousel. */
+    /** Settings > Appearance > Layouts: Home's biggest categories as a stack or a carousel. */
     val topSpendingLayout: TopSpendingLayout = TopSpendingLayout.Stack,
     /** How the month a page shows is switched: one tonal track, or the earlier separate buttons. */
     val monthControlStyle: MonthControlStyle = MonthControlStyle.Track,

@@ -293,7 +293,7 @@ fun UpdatesSettingsPage() {
                 if (!prefs.notificationsEnabled || !notificationsShown) {
                     ListSection(
                         title = "Notifications are off",
-                        footer = "Updates are still found, and offered when you open NormPix.",
+                        footer = "Updates are still found, and shown on Home when you open NormPix.",
                     ) {
                         item {
                             ListRow(

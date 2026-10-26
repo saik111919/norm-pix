@@ -858,7 +858,7 @@ class UpdateUiTest {
     // ------------------------------------------------------------ at launch
 
     @Test
-    fun `a newer release is offered at launch once unlocked, and Later puts it off`() {
+    fun `a newer release is found at launch once unlocked, and no sheet comes up over the screen`() {
         Releases.publish(network)
         val updater = updater()
         val environment = environment(updater)
@@ -868,22 +868,24 @@ class UpdateUiTest {
         assertEquals(emptyList(), network.asked, "nothing is asked while the app is locked")
 
         locked = false
-        waitFor("Update available")
-        tap("Later")
-        assertEquals(10003L, records.dismissedVersionCode)
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Update available").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(10_000) {
+            compose.waitForIdle()
+            updater.state.value is UpdateState.Available
+        }
+        // It is Home's update banner that says so; the user updates when they choose to.
+        compose.waitForIdle()
+        absent("Update available")
+        absent("Later")
     }
 
     @Test
-    fun `a download finished with the sheet closed brings it back once unlocked, and only Install installs it`() {
+    fun `a download finished while the user is elsewhere waits for them, with no sheet, and nothing is installed`() {
         Releases.publish(network)
         val installer = FakeInstaller()
         val updater = updater(installer = installer)
         val environment = environment(updater)
-        // No offer at launch: only the finished download brings the sheet up.
         environment.preferences.setUpdateChecksEnabled(false)
-        var locked by mutableStateOf(true)
-        compose.setContent { environment.Content { OfferAppUpdates(updater, appLocked = locked) } }
+        compose.setContent { environment.Content { OfferAppUpdates(updater, appLocked = false) } }
         compose.waitForIdle()
         scope.launch { updater.check() }
         compose.waitForIdle()
@@ -893,15 +895,7 @@ class UpdateUiTest {
         compose.waitForIdle()
         assertIs<UpdateState.Ready>(updater.state.value)
         absent("Ready to install")
-
-        locked = false
-        compose.waitUntil(10_000) {
-            compose.waitForIdle()
-            compose.onAllNodesWithText("Ready to install").fetchSemanticsNodes().isNotEmpty()
-        }
         assertEquals(emptyList(), installer.installs, "nothing is installed until the user says so")
-        tap("Install")
-        assertEquals(1, installer.installs.size)
     }
 
     @Test
@@ -939,7 +933,10 @@ class UpdateUiTest {
         records.lastCheckAt = System.currentTimeMillis() - 13L * 60 * 60 * 1000
         environment.preferences.setUpdateCheckEvery(UpdateCheckEvery.TwiceADay)
         compose.setContent { environment.Content { OfferAppUpdates(updater, appLocked = false) } }
-        waitFor("Update available")
+        compose.waitUntil(10_000) {
+            compose.waitForIdle()
+            updater.state.value is UpdateState.Available
+        }
         assertTrue(network.asked.any { "releases/latest" in it })
     }
 

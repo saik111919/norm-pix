@@ -35,10 +35,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
 import com.example.normpix.finance.domain.AccountKind
+import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.DateRange
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.ui.ALL_TIME_CAPTION
 import com.example.normpix.finance.ui.AllTimeSwitcher
+import com.example.normpix.finance.ui.CategoryCarousel
+import com.example.normpix.finance.ui.CategorySpend
 import com.example.normpix.finance.ui.DateRangeSwitcher
 import com.example.normpix.finance.ui.MonthScopeButton
 import com.example.normpix.finance.ui.MonthSwitcher
@@ -54,6 +57,7 @@ import java.time.LocalDateTime
 import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -292,5 +296,23 @@ class LargeTextTest {
         assertEquals(credit.top.value, used.top.value, 1f, "one row")
         assertEquals(credit.top.value, bill.top.value, 1f, "one row")
         assertTrue(used.left > credit.left && bill.left > used.left)
+    }
+
+    // ------------------------------------------------------------ the top spending panel
+
+    @Test
+    fun atTwiceTheTextTheTopSpendingPanelsFactsStandOneUnderAnother_eachWhole() {
+        val spend = runBlocking {
+            env.container.finance.load()
+            val food = env.container.finance.state.value.categories.first { it.type == CategoryType.Expense && it.parentId == null }
+            CategorySpend(food.id!!, food, MonthKey.of(LocalDateTime.now()), amount = 2_002_00, count = 12, share = 0.65, previous = 1_000_00, budget = null)
+        }
+        show(2.0f) { CategoryCarousel(listOf(spend), onOpen = {}, onSeeAll = {}) }
+
+        val share = compose.onNodeWithText("OF SPENDING").getUnclippedBoundsInRoot()
+        val budget = compose.onNodeWithText("BUDGET LEFT").getUnclippedBoundsInRoot()
+        assertEquals(share.left.value, budget.left.value, 1f, "in one column")
+        assertTrue(budget.top > share.top, "one under the other: $share, $budget")
+        for (text in listOf("OF SPENDING", "65%", "BUDGET LEFT", "None set")) compose.onNodeWithText(text).assertNotCutShort(text)
     }
 }

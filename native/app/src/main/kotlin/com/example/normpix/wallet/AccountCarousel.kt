@@ -1,11 +1,8 @@
 package com.example.normpix.wallet
 
 import com.example.normpix.finance.domain.percentLabel
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
@@ -20,13 +17,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.ui.label
 import com.example.normpix.settings.BankIconStyle
 import com.example.normpix.ui.components.DeckCarousel
-import com.example.normpix.ui.components.DeckDetail
+import com.example.normpix.ui.components.DeckFact
+import com.example.normpix.ui.components.DeckFacts
 import com.example.normpix.ui.components.DeckDivider
 import com.example.normpix.ui.components.DeckHero
 import com.example.normpix.ui.theme.AppSpacing
@@ -89,8 +86,8 @@ fun AccountCarousel(
  * says what is left, how much is used and when its bill is due; any other account says how much of what you hold is in it, and
  * how many cards are saved for its bank.
  *
- * With large text the facts stand one under another, each the panel's whole width, rather than three narrow columns in which
- * "Credit left" is "Credit" and "₹32,712.03" is "₹32,7…".
+ * When their labels would not fit side by side (large text, a narrow phone) the facts stand one under another, each the
+ * panel's whole width, rather than three narrow columns in which "Credit left" is "Credit" and "₹32,712.03" is "₹32,7…".
  */
 @Composable
 private fun AccountDetails(account: AccountCardData) {
@@ -107,49 +104,29 @@ private fun AccountDetails(account: AccountCardData) {
 
     val used = account.creditUsed
     // Each fact with the share of the row it takes when they sit side by side.
-    val facts: List<Pair<Float, @Composable (Modifier) -> Unit>> = if (account.credit != null && used != null) {
+    val facts = if (account.credit != null && used != null) {
         listOf(
-            1.4f to { m: Modifier ->
-                DeckDetail("Credit left", account.credit.removeSuffix(" left"), m, valueColor = if (account.overLimit) scheme.error else Color.Unspecified)
-            },
-            0.8f to { m: Modifier -> DeckDetail("Used", percentLabel(used.toDouble()), m) },
-            1.2f to { m: Modifier ->
-                DeckDetail(
-                    "Bill",
-                    account.due?.removePrefix("Due ")?.replaceFirstChar(Char::uppercase) ?: "None due",
-                    m,
-                    valueColor = if (account.dueSoon) scheme.error else Color.Unspecified,
-                )
-            },
+            DeckFact("Credit left", account.credit.removeSuffix(" left"), 1.4f, valueColor = if (account.overLimit) scheme.error else Color.Unspecified),
+            DeckFact("Used", percentLabel(used.toDouble()), 0.8f),
+            DeckFact(
+                "Bill",
+                account.due?.removePrefix("Due ")?.replaceFirstChar(Char::uppercase) ?: "None due",
+                1.2f,
+                valueColor = if (account.dueSoon) scheme.error else Color.Unspecified,
+            ),
         )
     } else {
         buildList {
+            // Nothing to say as a figure for an account that is owed, or while amounts are hidden: said in words, not as a dash.
             add(
-                1f to { m: Modifier ->
-                    // Nothing to say as a figure for an account that is owed, or while amounts are hidden: said in words, not as a dash.
-                    DeckDetail(
-                        "Of your money",
-                        account.share ?: "—",
-                        m,
-                        valueDescription = if (account.share != null) null else if (account.hidden) "hidden" else "not applicable",
-                    )
-                },
+                DeckFact(
+                    "Of your money",
+                    account.share ?: "—",
+                    valueDescription = if (account.share != null) null else if (account.hidden) "hidden" else "not applicable",
+                ),
             )
-            if (account.bankName != null) {
-                add(1f to { m: Modifier -> DeckDetail("Saved cards", if (account.cards > 0) account.cards.toString() else "None", m) })
-            }
+            if (account.bankName != null) add(DeckFact("Saved cards", if (account.cards > 0) account.cards.toString() else "None"))
         }
     }
-    if (LocalDensity.current.fontScale >= STACK_FACTS_AT_FONT_SCALE) {
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(AppSpacing.md)) {
-            for ((_, fact) in facts) fact(Modifier.fillMaxWidth())
-        }
-    } else {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)) {
-            for ((share, fact) in facts) fact(Modifier.weight(share))
-        }
-    }
+    DeckFacts(facts)
 }
-
-/** From this font scale up the panel's facts stand one under another (as the Wallet's overview figures do), not side by side. */
-internal const val STACK_FACTS_AT_FONT_SCALE = 1.4f

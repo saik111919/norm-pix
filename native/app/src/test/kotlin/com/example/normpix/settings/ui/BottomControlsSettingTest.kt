@@ -1,9 +1,11 @@
 package com.example.normpix.settings.ui
 
 import android.content.Context
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -26,8 +28,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Settings > Appearance > Bottom controls: a row that opens a page with the one switch, off until the user turns it on, and
- * found by the words a user would look for it by.
+ * Settings > Appearance > Navigation & controls > Bottom controls: one switch, beside the back button and the month control
+ * rather than a page of its own, off until the user turns it on, and found by the words a user would look for it by.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h900dp")
@@ -52,24 +54,25 @@ class BottomControlsSettingTest {
     }
 
     @Test
-    fun theAppearanceRowSaysWhetherItIsOn_andOpensItsPage() {
+    fun itSitsWithTheOtherControls_whoseRowSaysWhenItIsOn_andOpensTheirPage() {
         compose.setContent { env.Content { AppearanceSettingsPage() } }
         compose.waitForIdle()
-        compose.onNodeWithText("Bottom controls").assertExists()
-        compose.onNodeWithText("Off").assertExists()
-
-        compose.onNodeWithText("Bottom controls").performScrollTo().performClick()
-        compose.waitForIdle()
-        assertEquals(listOf(AppearanceSection.BottomControls), env.navigator.appearanceSections)
+        // Not a row of its own: with the back button and the month control, on one page.
+        compose.onAllNodesWithText("Bottom controls").assertCountEquals(0)
+        compose.onNodeWithText("Navigation & controls").performScrollTo().assertExists()
 
         env.preferences.setBottomControls(true)
         compose.waitForIdle()
-        compose.onNodeWithText("On").assertExists()
+        compose.onNodeWithText("Bottom controls ·", substring = true).assertExists()
+
+        compose.onNodeWithText("Navigation & controls").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(AppearanceSection.Controls), env.navigator.appearanceSections)
     }
 
     @Test
-    fun thePageHasOneSwitchThatTurnsItOnAndOff() {
-        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.BottomControls) } }
+    fun theControlsPageHasOneSwitch_thatTurnsItOnAndOff() {
+        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.Controls) } }
         compose.waitForIdle()
         val switch = compose.onNode(isToggleable())
         switch.assertIsOff()
@@ -106,6 +109,6 @@ class BottomControlsSettingTest {
             assertTrue("Bottom controls" in found, "\"$word\" finds it: $found")
         }
         val entry = SettingsCatalog.search("bottom controls", cardsEnabled = true).first { it.title == "Bottom controls" }
-        assertEquals(AppearanceSection.BottomControls, entry.appearance)
+        assertEquals(AppearanceSection.Controls, entry.appearance)
     }
 }

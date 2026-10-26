@@ -1,14 +1,20 @@
 package com.example.normpix.settings
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import com.example.normpix.navigation.AppearanceSection
+import com.example.normpix.settings.ui.AppearanceSectionPage
 import com.example.normpix.settings.ui.SettingsCatalog
-import com.example.normpix.settings.ui.WalletSettingsPage
 import com.example.normpix.testing.TestEnvironment
 import java.util.Locale
 import kotlin.test.assertEquals
@@ -22,7 +28,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Settings > Wallet & Cards > Cards layout lists the carousel with the other layouts; the choice is kept, and search finds it. */
+/**
+ * Settings > Appearance > Layouts: Home's top spending, the Wallet's accounts and its cards, each with the carousel among its
+ * layouts, on one page. Each choice is its own and is kept, and search finds them.
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h2400dp")
 class CardsLayoutSettingTest {
@@ -40,34 +49,58 @@ class CardsLayoutSettingTest {
     @After
     fun tearDown() = env.close()
 
+    private val radio = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)
+
+    // The three lists share names ("Stacked cards", "Carousel"): a choice is known by what it says it does.
+    private fun choice(description: String) = compose.onNode(hasText(description) and radio)
+
+    private fun show() {
+        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.Layouts) } }
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun theLayoutsOfHomeAndTheWalletAreOnOnePage() {
+        show()
+        compose.onNodeWithText("Top spending on Home").assertExists()
+        compose.onNodeWithText("Accounts in the Wallet").assertExists()
+        compose.onNodeWithText("Cards in the Wallet").assertExists()
+        for (layout in TopSpendingLayout.entries) choice(layout.description).performScrollTo().assertIsDisplayed()
+        for (layout in AccountsLayout.entries) choice(layout.description).performScrollTo().assertIsDisplayed()
+        for (layout in CardsLayout.entries) choice(layout.description).performScrollTo().assertIsDisplayed()
+    }
+
     @Test
     fun theCarouselIsOneOfTheCardsLayouts_andIsKept() {
-        compose.setContent { env.Content { WalletSettingsPage() } }
-        compose.waitForIdle()
-
-        // The accounts' layouts and the cards' have the same names: each is on the page twice, the accounts' first.
-        for (layout in CardsLayout.entries) compose.onAllNodesWithText(layout.label).assertCountEquals(2)
-        compose.onAllNodesWithText("Carousel")[1].performScrollTo().assertIsDisplayed().performClick()
+        show()
+        choice(CardsLayout.Carousel.description).performScrollTo().performClick()
         compose.waitForIdle()
 
         assertEquals(CardsLayout.Carousel, env.preferences.state.value.cardsLayout)
         assertEquals(AccountsLayout.Stack, env.preferences.state.value.accountsLayout, "the accounts' choice is its own")
+        assertEquals(TopSpendingLayout.Stack, env.preferences.state.value.topSpendingLayout, "and Home's")
         assertEquals(CardsLayout.Carousel, AppPreferences(env.prefsStore).state.value.cardsLayout, "kept across a restart")
-        compose.onAllNodesWithText("Carousel")[1].assertIsSelected()
+        choice(CardsLayout.Carousel.description).assertIsSelected()
     }
 
     @Test
     fun theCarouselIsOneOfTheAccountsLayoutsToo_andIsKept() {
-        compose.setContent { env.Content { WalletSettingsPage() } }
-        compose.waitForIdle()
-
-        compose.onAllNodesWithText("Carousel")[0].performScrollTo().assertIsDisplayed().performClick()
+        show()
+        choice(AccountsLayout.Carousel.description).performScrollTo().performClick()
         compose.waitForIdle()
 
         assertEquals(AccountsLayout.Carousel, env.preferences.state.value.accountsLayout)
         assertEquals(CardsLayout.Cards, env.preferences.state.value.cardsLayout, "the cards' choice is its own")
         assertEquals(AccountsLayout.Carousel, AppPreferences(env.prefsStore).state.value.accountsLayout, "kept across a restart")
-        compose.onAllNodesWithText("Carousel")[0].assertIsSelected()
+        choice(AccountsLayout.Carousel.description).assertIsSelected()
+    }
+
+    @Test
+    fun withStoreCardsOffThereAreNoCardsToLayOut() {
+        env.preferences.setWalletCardsEnabled(false)
+        show()
+        compose.onAllNodesWithText("Cards in the Wallet").assertCountEquals(0)
+        compose.onNodeWithText("Accounts in the Wallet").assertExists()
     }
 
     @Test

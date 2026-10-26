@@ -3,6 +3,7 @@ package com.example.normpix.settings
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.normpix.navigation.SettingsPage
+import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.settings.ui.SettingsCatalog
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -54,10 +55,11 @@ class AccountsLayoutPreferenceTest {
     }
 
     @Test
-    fun settingsSearchFindsItInWalletAndCards() {
-        for (query in listOf("accounts layout", "stacked", "rows", "compact")) {
+    fun settingsSearchFindsItInAppearanceLayouts() {
+        for (query in listOf("accounts layout", "stacked", "rows", "compact", "wallet")) {
             val hit = SettingsCatalog.search(query).single { it.title == "Accounts layout" }
-            assertEquals(SettingsPage.Wallet, hit.group, query)
+            assertEquals(SettingsPage.Appearance, hit.group, query)
+            assertEquals(AppearanceSection.Layouts, hit.appearance, query)
         }
         assertTrue(SettingsCatalog.search("dark").none { it.title == "Accounts layout" })
     }

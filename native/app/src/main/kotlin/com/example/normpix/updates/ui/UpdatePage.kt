@@ -23,7 +23,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -89,10 +88,6 @@ private const val PAGE_TITLE = "App update"
 @Composable
 private fun UpdatePageFor(updater: AppUpdater, onClose: () -> Unit) {
     val state by updater.state.collectAsStateWithLifecycle()
-    DisposableEffect(updater) {
-        markUpdateShowing(updater, true)
-        onDispose { markUpdateShowing(updater, false) }
-    }
     // Opened to check: GitHub is asked, unless there is an update in hand already (or a check under way).
     LaunchedEffect(updater) {
         val current = updater.state.value

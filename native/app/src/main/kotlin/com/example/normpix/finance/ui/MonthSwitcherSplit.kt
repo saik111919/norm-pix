@@ -56,7 +56,7 @@ import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppSpacing
 
 /*
- * The earlier look of the month control, kept as a choice (Settings > Appearance > Month control > Split buttons): the steps
+ * The earlier look of the month control, kept as a choice (Settings > Appearance > Navigation & controls > Split buttons): the steps
  * and the month as separate tonal buttons in the app's split-button family, a hair apart, fully round at the outer ends, the
  * corners where they meet opening up under a finger. Everything a screen reader or a test finds is the same as in the track
  * style: the steps are "Previous month" and "Next month", the pill says its month and how far back, and so on.

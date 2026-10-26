@@ -261,6 +261,13 @@ class CustomFontTest {
     @Test
     fun anAppearanceSectionIsFoundByItsRouteName() {
         for (section in AppearanceSection.entries) assertEquals(section, AppearanceSection.named(section.name))
+        // A page folded into another keeps its name, and a link to it opens the page it is part of now.
+        assertEquals(AppearanceSection.Controls, AppearanceSection.named("BottomControls"))
+        assertEquals(AppearanceSection.Controls, AppearanceSection.named("BackButton"))
+        assertEquals(AppearanceSection.Controls, AppearanceSection.named("MonthControl"))
+        assertEquals(AppearanceSection.Layouts, AppearanceSection.named("TopSpending"))
+        assertEquals(AppearanceSection.Transitions, AppearanceSection.named("PageTransitions"))
+        assertEquals(AppearanceSection.Transitions, AppearanceSection.named("SheetTransitions"))
         assertNull(AppearanceSection.named("NoSuchPage"))
         assertNull(AppearanceSection.named(null))
     }

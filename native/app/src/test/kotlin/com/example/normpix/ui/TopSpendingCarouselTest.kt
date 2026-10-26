@@ -1,9 +1,16 @@
 package com.example.normpix.ui
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.ui.CategorySpend
@@ -23,7 +30,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Settings > Appearance > Top spending: Home's biggest categories as a carousel, its panel saying what each came to. */
+/** Settings > Appearance > Layouts > Top spending: Home's biggest categories as a carousel, its panel saying what each came to. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h2400dp")
 class TopSpendingCarouselTest {
@@ -52,17 +59,41 @@ class TopSpendingCarouselTest {
     }
 
     @Test
-    fun `the carousel is the stack's other look, and its Transactions button opens the category's month`() {
+    fun `the carousel is the stack's other look, and its transactions button opens the category's month`() {
         val spends = spends()
         env.preferences.setTopSpendingLayout(TopSpendingLayout.Carousel)
         compose.setContent { env.Content { TopSpendingStack(spends, onSeeAll = {}) } }
         compose.waitForIdle()
 
-        assertTrue(compose.onAllNodesWithText("Transactions").fetchSemanticsNodes().isNotEmpty(), "the panel's button")
+        assertTrue(compose.onAllNodesWithText("2 transactions").fetchSemanticsNodes().isNotEmpty(), "the panel's button, with the count")
         assertTrue(compose.onAllNodesWithText("100% more", substring = true).fetchSemanticsNodes().isNotEmpty(), "against last month")
-        compose.onNodeWithText("Transactions").performClick()
+        // Short labels, kept whole: "Vs this time last month", not "Compared with this time / last month".
+        assertTrue(compose.onAllNodesWithText("VS THIS TIME LAST MONTH").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(compose.onAllNodesWithText("OF SPENDING").fetchSemanticsNodes().isNotEmpty())
+        compose.onNodeWithText("2 transactions").performClick()
         compose.waitForIdle()
         assertEquals(listOf(spends[0].categoryId to month), env.navigator.categoryHistories)
+    }
+
+    private fun lines(text: String): Int {
+        val results = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText(text).fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+        return results.single().lineCount
+    }
+
+    @Test
+    fun `the panel's labels are whole, each on one line, and its two facts share a row`() {
+        val spends = spends()
+        env.preferences.setTopSpendingLayout(TopSpendingLayout.Carousel)
+        // As wide as it is on Home, inside the page's margins.
+        compose.setContent { env.Content { Column(Modifier.padding(horizontal = 16.dp)) { TopSpendingStack(spends, onSeeAll = {}) } } }
+        compose.waitForIdle()
+
+        for (label in listOf("VS THIS TIME LAST MONTH", "OF SPENDING", "BUDGET LEFT")) assertEquals(1, lines(label), "$label on one line")
+        val share = compose.onNodeWithText("OF SPENDING").getUnclippedBoundsInRoot()
+        val budget = compose.onNodeWithText("BUDGET LEFT").getUnclippedBoundsInRoot()
+        assertEquals(share.top.value, budget.top.value, 1f, "one row")
+        assertTrue(budget.left > share.left)
     }
 
     @Test
@@ -70,7 +101,7 @@ class TopSpendingCarouselTest {
         val spends = spends()
         compose.setContent { env.Content { TopSpendingStack(spends, onSeeAll = {}) } }
         compose.waitForIdle()
-        assertTrue(compose.onAllNodesWithText("Transactions").fetchSemanticsNodes().isEmpty(), "no carousel panel")
+        assertTrue(compose.onAllNodesWithText("2 transactions").fetchSemanticsNodes().isEmpty(), "no carousel panel")
         assertEquals(TopSpendingLayout.Stack, env.preferences.state.value.topSpendingLayout)
     }
 }

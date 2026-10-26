@@ -3,10 +3,10 @@ package com.example.normpix.finance.ui
 import com.example.normpix.finance.domain.settledCutoff
 import com.example.normpix.finance.domain.settledBy
 import androidx.compose.foundation.background
-import com.example.normpix.ui.components.DeckMarkerInset
 import com.example.normpix.ui.components.DeckHero
 import com.example.normpix.ui.components.DeckDivider
-import com.example.normpix.ui.components.DeckDetail
+import com.example.normpix.ui.components.DeckFact
+import com.example.normpix.ui.components.DeckFacts
 import com.example.normpix.ui.components.DeckCarousel
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.onClick
@@ -15,7 +15,6 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -192,7 +191,7 @@ fun CategoryCarousel(
                 FilledTonalButton(onClick = { onSeeAll(front) }, modifier = Modifier.weight(1f)) {
                     Icon(Icons.AutoMirrored.Outlined.ReceiptLong, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(AppSpacing.sm))
-                    Text("Transactions", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(transactionCount(front.count), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Spacer(Modifier.width(AppSpacing.sm))
                 FilledTonalIconButton(onClick = { onOpen(front) }) {
@@ -239,53 +238,44 @@ private fun SpendCarouselFace(spend: CategorySpend) {
 
 /**
  * What one category's month is, in the carousel's panel, in the same rows for every category so the panel keeps its size as
- * it moves: how it compares with last month as the large figure, then its share of the month, how many transactions it was and
- * where its budget stands (or that it has none).
+ * it moves: how it compares with last month as the large figure, then its share of the month and where its budget stands (or
+ * that it has none). How many transactions it was is said on the button that opens them.
  */
 @Composable
 private fun SpendDetails(spend: CategorySpend, money: MoneyFormatter) {
     val scheme = MaterialTheme.colorScheme
     val change = spend.change
+    // The hero keeps clear of the page marker itself: "Vs this time last month", not "Compared with this time / last month".
     DeckHero(
-        label = "Compared with ${spend.basis}",
+        label = "Vs ${spend.basis}",
         value = when {
             change == null -> "Nothing to compare"
             (abs(change) * 100).roundToInt() == 0 -> "About the same"
             else -> "${(abs(change) * 100).roundToInt()}% ${if (change < 0) "less" else "more"}"
         },
-        modifier = Modifier.padding(end = DeckMarkerInset),
     )
     DeckDivider()
     val budget = spend.budget
-    val facts: List<Pair<Float, @Composable (Modifier) -> Unit>> = listOf(
-        1f to { m: Modifier -> DeckDetail("Of spending", percentLabel(spend.share), m) },
-        1f to { m: Modifier -> DeckDetail("Transactions", spend.count.toString(), m) },
-        1.3f to { m: Modifier ->
-            DeckDetail(
-                label = if (budget != null && budget.health == BudgetHealth.Exceeded) "Over budget" else "Budget left",
+    val over = budget != null && budget.health == BudgetHealth.Exceeded
+    DeckFacts(
+        listOf(
+            DeckFact("Of spending", percentLabel(spend.share)),
+            DeckFact(
+                label = if (over) "Over budget" else "Budget left",
                 value = when {
                     budget == null -> "None set"
-                    budget.health == BudgetHealth.Exceeded -> money.format(-budget.remaining, trimZeroFraction = true)
+                    over -> money.format(-budget.remaining, trimZeroFraction = true)
                     else -> money.format(budget.remaining, trimZeroFraction = true)
                 },
-                modifier = m,
-                valueColor = if (budget != null && budget.health == BudgetHealth.Exceeded) scheme.error else Color.Unspecified,
-            )
-        },
+                valueColor = if (over) scheme.error else Color.Unspecified,
+                labels = listOf("Budget left", "Over budget"),
+            ),
+        ),
     )
-    if (LocalDensity.current.fontScale >= DETAIL_STACK_FONT_SCALE) {
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(AppSpacing.md)) {
-            for ((_, fact) in facts) fact(Modifier.fillMaxWidth())
-        }
-    } else {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)) {
-            for ((share, fact) in facts) fact(Modifier.weight(share))
-        }
-    }
 }
 
-/** From this font scale up the panel's facts stand one under another, as the account carousel's do. */
-private const val DETAIL_STACK_FONT_SCALE = 1.4f
+/** "2 transactions": what the panel's button opens. */
+internal fun transactionCount(count: Int): String = if (count == 1) "1 transaction" else "$count transactions"
 
 private fun CategorySpend.spoken(money: MoneyFormatter, index: Int, count: Int): String = buildString {
     append("$name, ${money.format(amount)} spent in ${monthLabel(month)}, ${percentLabel(share)} of spending")

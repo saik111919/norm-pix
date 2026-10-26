@@ -6,18 +6,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Autorenew
 import androidx.compose.material.icons.outlined.BrightnessAuto
-import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.ColorLens
 import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material.icons.outlined.VerticalAlignBottom
 import androidx.compose.material.icons.outlined.ViewCarousel
 import androidx.compose.material.icons.outlined.Widgets
-import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,8 +45,8 @@ import com.example.normpix.ui.theme.AppTheme
 
 /*
  * Settings > Appearance is an overview: the theme, which is a quick switch and stays on the page, then one row for each part
- * of how NormPix looks and moves, grouped as Look, Motion and Layout. A row shows what is chosen now and opens a screen of its
- * own for that part ([AppearanceSectionPage]).
+ * of how NormPix looks and moves, grouped as Look, Motion & effects and Layout. A row shows what is chosen now and opens a
+ * screen of its own for that part ([AppearanceSectionPage]), where the choices that belong together sit together.
  */
 
 /** What the switch on the Colors row is called, for a screen reader (the Colors page's own switch row says the same). */
@@ -58,14 +55,14 @@ internal const val USE_WALLPAPER_COLORS = "Use wallpaper colors"
 /** The groups of the Appearance overview. */
 internal enum class AppearanceGroup(val title: String) {
     Look("Look"),
-    Motion("Motion"),
+    Motion("Motion & effects"),
     Layout("Layout"),
 }
 
 /**
  * The colour of a section's icon on the Appearance overview (see [SettingsGlyph]): one of its own, so a row is known by its
  * colour at a glance rather than by reading, and no two rows of a group - or neighbouring ones - share one. An index into the
- * category palette, which has eight hues for eleven rows: Back button style repeats Colors', six rows and a group away.
+ * category palette, which has eight hues for nine rows: Layouts repeats App icon's, a group and more away.
  * (0 coral, 1 green, 2 blue, 3 purple, 4 amber, 5 teal, 6 pink, 7 indigo.)
  */
 internal val AppearanceSection.hue: Int
@@ -75,13 +72,10 @@ internal val AppearanceSection.hue: Int
         AppearanceSection.InterfaceFont -> 4
         AppearanceSection.CategoryIcons -> 3
         AppearanceSection.ProgressIndicators -> 5
+        AppearanceSection.Transitions -> 7
         AppearanceSection.Effects -> 0
-        AppearanceSection.PageTransitions -> 7
-        AppearanceSection.SheetTransitions -> 1
-        AppearanceSection.BackButton -> 6
-        AppearanceSection.BottomControls -> 3
-        AppearanceSection.MonthControl -> 2
-        AppearanceSection.TopSpending -> 5
+        AppearanceSection.Controls -> 1
+        AppearanceSection.Layouts -> 2
     }
 
 /** The group a section sits in on the Appearance overview. Every section must be placed: the build stops at one that is not. */
@@ -92,15 +86,12 @@ internal val AppearanceSection.group: AppearanceGroup
         AppearanceSection.InterfaceFont,
         AppearanceSection.CategoryIcons,
         AppearanceSection.ProgressIndicators,
-        AppearanceSection.Effects,
         -> AppearanceGroup.Look
-        AppearanceSection.PageTransitions,
-        AppearanceSection.SheetTransitions,
+        AppearanceSection.Transitions,
+        AppearanceSection.Effects,
         -> AppearanceGroup.Motion
-        AppearanceSection.BackButton,
-        AppearanceSection.BottomControls,
-        AppearanceSection.MonthControl,
-        AppearanceSection.TopSpending,
+        AppearanceSection.Controls,
+        AppearanceSection.Layouts,
         -> AppearanceGroup.Layout
     }
 
@@ -112,13 +103,10 @@ internal val AppearanceSection.icon: ImageVector
         AppearanceSection.InterfaceFont -> Icons.Outlined.TextFields
         AppearanceSection.CategoryIcons -> Icons.Outlined.Category
         AppearanceSection.ProgressIndicators -> Icons.Outlined.Autorenew
+        AppearanceSection.Transitions -> Icons.Outlined.SwapHoriz
         AppearanceSection.Effects -> Icons.Outlined.AutoAwesome
-        AppearanceSection.PageTransitions -> Icons.Outlined.SwapHoriz
-        AppearanceSection.SheetTransitions -> Icons.Outlined.Layers
-        AppearanceSection.BackButton -> Icons.Rounded.ChevronLeft
-        AppearanceSection.BottomControls -> Icons.Outlined.VerticalAlignBottom
-        AppearanceSection.MonthControl -> Icons.Outlined.CalendarMonth
-        AppearanceSection.TopSpending -> Icons.Outlined.ViewCarousel
+        AppearanceSection.Controls -> Icons.Outlined.VerticalAlignBottom
+        AppearanceSection.Layouts -> Icons.Outlined.ViewCarousel
     }
 
 /** What a section's row says under its name: the choice made now. [appIcon] is the launcher icon in use (Android holds that one). */
@@ -133,13 +121,14 @@ internal fun AppearanceSection.summary(prefs: AppPrefsState, appIcon: AppIcon): 
     }
     AppearanceSection.CategoryIcons -> "${prefs.categoryIconStyle.label} · ${prefs.categoryIconShape.label}"
     AppearanceSection.ProgressIndicators -> prefs.progressStyle.label
-    AppearanceSection.Effects -> if (prefs.sheetBlurEnabled) "Background blur on" else "Background blur off"
-    AppearanceSection.PageTransitions -> prefs.pageAnimation.label
-    AppearanceSection.SheetTransitions -> prefs.sheetAnimation.label
-    AppearanceSection.BackButton -> prefs.backButtonStyle.label
-    AppearanceSection.BottomControls -> if (prefs.bottomControls) "On" else "Off"
-    AppearanceSection.MonthControl -> prefs.monthControlStyle.label
-    AppearanceSection.TopSpending -> prefs.topSpendingLayout.label
+    AppearanceSection.Transitions -> "Pages: ${prefs.pageAnimation.label} · Sheets: ${prefs.sheetAnimation.label}"
+    AppearanceSection.Effects -> buildString {
+        append(if (prefs.sheetBlurEnabled) "Background blur on" else "Background blur off")
+        if (prefs.walletCardsEnabled) append(if (prefs.cardTiltEnabled) " · Card tilt on" else " · Card tilt off")
+    }
+    AppearanceSection.Controls ->
+        if (prefs.bottomControls) "Bottom controls · ${prefs.monthControlStyle.label}" else "${prefs.backButtonStyle.label} · ${prefs.monthControlStyle.label}"
+    AppearanceSection.Layouts -> "Top spending: ${prefs.topSpendingLayout.label} · Accounts: ${prefs.accountsLayout.label}"
 }
 
 private val themeOptions = listOf(

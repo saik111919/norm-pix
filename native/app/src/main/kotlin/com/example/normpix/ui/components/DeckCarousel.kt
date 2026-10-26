@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -62,7 +63,9 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -388,7 +391,7 @@ fun DeckDetail(
         // The label may take a second line, and the value too: at large text neither is cut short, nor becomes dots.
         Text(
             label.uppercase(),
-            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.8.sp),
+            style = deckLabelStyle(),
             color = scheme.onSurfaceVariant,
             maxLines = 2,
         )
@@ -425,7 +428,7 @@ fun DeckHero(
     Column(modifier) {
         Text(
             label.uppercase(),
-            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.8.sp),
+            style = deckLabelStyle(),
             color = scheme.onSurfaceVariant,
             // Room for a second line: "Balance · Owed" beside the page marker, at large text, wraps rather than being cut to "Balance ·".
             maxLines = 2,
@@ -444,6 +447,64 @@ fun DeckHero(
         )
     }
 }
+
+/** The small caps a deck's labels are set in. */
+@Composable
+private fun deckLabelStyle(): TextStyle = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.8.sp)
+
+/** One of a deck's facts: [label] in small caps over [value], taking [weight] of the row when the facts sit side by side. */
+@Immutable
+class DeckFact(
+    val label: String,
+    val value: String,
+    val weight: Float = 1f,
+    val valueColor: Color = Color.Unspecified,
+    /** What a screen reader says for [value] when the value itself would not say it (a dash, or dots for a hidden amount). */
+    val valueDescription: String? = null,
+    /** Every label this fact has on any card ("Budget left" on one, "Over budget" on another), so every card is laid out alike. */
+    val labels: List<String> = listOf(label),
+)
+
+/**
+ * A deck's facts, side by side with each its [DeckFact.weight] of the row - or one under another, each the panel's whole
+ * width, when a label would not fit its column on one line (large text, a narrow phone) or the text is large enough that the
+ * values would not either. So a label is never broken mid-word ("TRANSACTIO / NS") or put on two lines beside one that is
+ * on one. The choice rests on the labels, which are the same on every card, so the panel keeps its size as the deck moves.
+ */
+@Composable
+fun DeckFacts(facts: List<DeckFact>, modifier: Modifier = Modifier) {
+    if (facts.isEmpty()) return
+    val measurer = rememberTextMeasurer()
+    val style = deckLabelStyle()
+    val density = LocalDensity.current
+    val gap = AppSpacing.md
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val width = maxWidth
+        val sideBySide = remember(facts.map { it.labels }, facts.map { it.weight }, width, style, density) {
+            if (density.fontScale >= DECK_STACK_FONT_SCALE) return@remember false
+            val total = facts.sumOf { it.weight.toDouble() }.toFloat()
+            val room = with(density) { (width - gap * (facts.size - 1)).toPx() }
+            facts.all { fact ->
+                val column = room * fact.weight / total
+                fact.labels.all { label ->
+                    measurer.measure(label.uppercase(), style, softWrap = false, maxLines = 1, density = density).size.width <= column
+                }
+            }
+        }
+        if (sideBySide) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                for (fact in facts) DeckDetail(fact.label, fact.value, Modifier.weight(fact.weight), valueColor = fact.valueColor, valueDescription = fact.valueDescription)
+            }
+        } else {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(gap)) {
+                for (fact in facts) DeckDetail(fact.label, fact.value, Modifier.fillMaxWidth(), valueColor = fact.valueColor, valueDescription = fact.valueDescription)
+            }
+        }
+    }
+}
+
+/** From this font scale up a deck's facts stand one under another whatever their labels: the values would not fit beside each other. */
+const val DECK_STACK_FONT_SCALE = 1.4f
 
 /** A hairline between two rows of a deck's details. */
 @Composable

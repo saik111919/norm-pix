@@ -37,10 +37,11 @@ class WalletCardsOffTest {
         env?.close()
     }
 
-    private fun showWallet(storeCards: Boolean, vararg cards: StoredCard): TestEnvironment {
+    private fun showWallet(storeCards: Boolean, vararg cards: StoredCard, nfc: NfcAvailability = NfcAvailability.Available): TestEnvironment {
         Locale.setDefault(Locale.US)
         val environment = TestEnvironment("wallet_cards_off_test", InMemoryVault(cards.toList()))
         env = environment
+        environment.nfc.state = nfc
         environment.preferences.setWalletCardsEnabled(storeCards)
         // The default stack draws only the front account (Cash), as a card read out by its description; the compact list prints every name.
         environment.preferences.setAccountsLayout(AccountsLayout.Rows)
@@ -71,5 +72,32 @@ class WalletCardsOffTest {
 
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Add card").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Add card").assertIsDisplayed()
+    }
+
+    // ------------------------------------------------------------ NFC
+
+    private val exchange = "NFC Card Exchange (Inlet / Outlet)"
+
+    @Test
+    fun `with NFC on the Wallet offers the card exchange at the top and among the ways to add a first card`() {
+        showWallet(storeCards = true)
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Add your first card").fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodesWithContentDescription(exchange).assertCountEquals(1)
+        compose.onAllNodesWithText("Tap to add (NFC)").assertCountEquals(1)
+    }
+
+    @Test
+    fun `with NFC switched off nothing offers the card exchange`() {
+        showWallet(storeCards = true, nfc = NfcAvailability.Disabled)
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Add your first card").fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodesWithContentDescription(exchange).assertCountEquals(0)
+        compose.onAllNodesWithText("Tap to add (NFC)").assertCountEquals(0)
+    }
+
+    @Test
+    fun `a phone without NFC is never offered the card exchange`() {
+        showWallet(storeCards = true, nfc = NfcAvailability.Unsupported)
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Add your first card").fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodesWithContentDescription(exchange).assertCountEquals(0)
     }
 }
