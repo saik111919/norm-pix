@@ -35,6 +35,7 @@ enum class AppearanceSection(val title: String) {
             "SheetTransitions" to Transitions,
             "BackButton" to Controls,
             "BottomControls" to Controls,
+            "FooterLabels" to Controls,
             "MonthControl" to Controls,
             "TopSpending" to Layouts,
         )

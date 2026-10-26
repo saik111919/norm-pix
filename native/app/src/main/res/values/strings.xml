@@ -2,8 +2,14 @@
 <resources>
     <string name="nfc_outlet_service_desc">NormPix Card Share</string>
     <!-- Home-screen widgets: their names and what the widget picker says about them. -->
-    <string name="widget_clock_label">Clock</string>
+    <string name="widget_clock_label">Clock: watch dial</string>
     <string name="widget_clock_description">The time on a face of turning rings: the hour in the middle, the minute in its pill</string>
+    <string name="widget_cookie_analog_label">Clock: cookie analog</string>
+    <string name="widget_cookie_analog_description">An analog clock in a cookie shape, hands and ticks without numbers</string>
+    <string name="widget_cookie_numbers_label">Clock: cookie numbers</string>
+    <string name="widget_cookie_numbers_description">An analog clock in a cookie shape, with the hours numbered</string>
+    <string name="widget_cookie_digital_label">Clock: cookie digital</string>
+    <string name="widget_cookie_digital_description">The time in big digits on a cookie shape, with the date under it</string>
     <string name="widget_recent_label">Recent transactions</string>
     <string name="widget_recent_description">Your latest transactions at a glance, and a button to add one</string>
     <string name="widget_add_label">Add transaction</string>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The second hand of the cookie clock with numerals (Android 12 and later).
+     Drawn by design/cookie-clock/CookieFace.java: change it there, not here. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="VectorRaster"
+    android:width="280dp"
+    android:height="280dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <path
+        android:strokeColor="@color/widget_clock_accent"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M100,117 L100,30" />
+    <path
+        android:fillColor="@color/widget_clock_accent"
+        android:pathData="M103.8,100 C103.8,102.1 102.1,103.8 100,103.8 C97.9,103.8 96.2,102.1 96.2,100 C96.2,97.9 97.9,96.2 100,96.2 C102.1,96.2 103.8,97.9 103.8,100 Z" />
+    <path
+        android:fillColor="@color/widget_clock_face"
+        android:pathData="M101.3,100 C101.3,100.72 100.72,101.3 100,101.3 C99.28,101.3 98.7,100.72 98.7,100 C98.7,99.28 99.28,98.7 100,98.7 C100.72,98.7 101.3,99.28 101.3,100 Z" />
+</vector>

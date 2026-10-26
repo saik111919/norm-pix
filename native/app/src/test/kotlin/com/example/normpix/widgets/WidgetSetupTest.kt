@@ -17,7 +17,7 @@ import org.robolectric.annotation.Config
 import org.xmlpull.v1.XmlPullParser
 
 /**
- * The three widgets keep Android's rules for widgets: each is a provider only the system's widget service reaches, with a
+ * Every widget keeps Android's rules for widgets: each is a provider only the system's widget service reaches, with a
  * name and a description for the picker, a preview, a starting size in cells, room to be resized - and none asks to be woken
  * on a timer.
  */
@@ -25,6 +25,17 @@ import org.xmlpull.v1.XmlPullParser
 @Config(sdk = [34])
 class WidgetSetupTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
+
+    /** Every widget's receiver, with its provider info. */
+    private val providers = listOf(
+        "ClockWidget" to R.xml.widget_clock_info,
+        "CookieAnalogWidget" to R.xml.widget_cookie_analog_info,
+        "CookieNumbersWidget" to R.xml.widget_cookie_numbers_info,
+        "CookieDigitalWidget" to R.xml.widget_cookie_digital_info,
+        "RecentWidget" to R.xml.widget_recent_info,
+        "AddWidget" to R.xml.widget_add_info,
+    )
+
     private fun info(xml: Int): Map<String, String> {
         val parser = context.resources.getXml(xml)
         while (parser.next() != XmlPullParser.START_TAG) Unit
@@ -37,7 +48,7 @@ class WidgetSetupTest {
 
     @Test
     fun `each widget is declared for the widget service alone, with its provider info`() {
-        for ((name, xml) in listOf("ClockWidget" to R.xml.widget_clock_info, "RecentWidget" to R.xml.widget_recent_info, "AddWidget" to R.xml.widget_add_info)) {
+        for ((name, xml) in providers) {
             val info = receiver(name)
             assertFalse(info.exported, "$name is reached by the system only")
             assertEquals(xml, info.metaData.getInt("android.appwidget.provider"), name)
@@ -47,7 +58,7 @@ class WidgetSetupTest {
 
     @Test
     fun `each has a description, a preview, a size in cells and room to be resized, and none is woken on a timer`() {
-        for (xml in listOf(R.xml.widget_clock_info, R.xml.widget_recent_info, R.xml.widget_add_info)) {
+        for (xml in providers.map { it.second }) {
             val info = info(xml)
             assertNotNull(info["description"], "$info")
             assertTrue(info["previewLayout"] != null || info["previewImage"] != null, "a preview: $info")

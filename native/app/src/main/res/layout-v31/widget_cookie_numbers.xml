@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The cookie clock with numerals, Android 12 and later: AnalogClock turns a second hand too. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_cookie_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <AnalogClock
+        android:id="@+id/widget_cookie_clock"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:dial="@drawable/widget_cookie_dial_numbers"
+        android:hand_hour="@drawable/widget_cookie_hour_numbers"
+        android:hand_minute="@drawable/widget_cookie_minute_numbers"
+        android:hand_second="@drawable/widget_cookie_second_numbers" />
+</FrameLayout>

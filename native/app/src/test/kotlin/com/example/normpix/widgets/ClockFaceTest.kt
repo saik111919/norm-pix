@@ -4,10 +4,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** The clock widget's text goes where the face drawables put the hour and the pill, at every size. */
+/** The watch dial widget's text goes where the face puts the hour and the pill, at every size. */
 class ClockFaceTest {
     @Test
-    fun `the face is the largest circle that fits, and never larger than its drawing`() {
+    fun `the face is the largest circle that fits, and never larger than the picture is drawn for`() {
         assertEquals(110f, ClockFace(110f, 180f).sizeDp)
         assertEquals(150f, ClockFace(240f, 150f).sizeDp)
         assertEquals(ClockFace.MAX_FACE_DP, ClockFace(400f, 320f).sizeDp)
@@ -27,7 +27,7 @@ class ClockFaceTest {
     @Test
     fun `the minute sits in the pill, right of the middle, whatever the widget's shape`() {
         val face = ClockFace(200f, 200f)
-        assertEquals(53f, face.minuteOffsetDp, 0.01f)
+        assertEquals(51f, face.minuteOffsetDp, 0.01f)
         // Padding a centred box on its left by twice the offset moves its middle by the offset.
         assertEquals(2 * face.minuteOffsetDp, face.minuteBoxPaddingDp)
         assertEquals(ClockFace(200f, 200f).minuteOffsetDp, ClockFace(300f, 200f).minuteOffsetDp)

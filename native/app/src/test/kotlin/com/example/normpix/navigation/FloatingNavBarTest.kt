@@ -12,6 +12,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
@@ -258,5 +259,24 @@ class FloatingNavBarTest {
         // Clicking the action invokes callback
         actionPill.performClick()
         assertTrue(actionInvoked)
+    }
+
+    @Test
+    fun testFloatingNavBarHidesLabelWhenDisabled() {
+        composeTestRule.setContent {
+            NormPixTheme {
+                FloatingNavBar(
+                    destinations = AppDestination.entries,
+                    current = AppDestination.Home,
+                    overdueCount = 0,
+                    onDestinationSelected = {},
+                    showLabels = false,
+                )
+            }
+        }
+
+        // Active destination is selected, but does NOT show text
+        composeTestRule.onAllNodesWithText("Home").assertCountEquals(0)
+        composeTestRule.onNodeWithContentDescription("Home").assertIsSelected()
     }
 }

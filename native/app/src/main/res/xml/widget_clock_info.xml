@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The clock widget: 2 x 2 to start, resizable. It never asks to be updated (updatePeriodMillis 0): the platform keeps the
-     time, and NormPix only lays it out again when the widget is resized. -->
+<!-- The watch dial widget: 2 x 2 to start, resizable. It never asks to be updated (updatePeriodMillis 0): the platform keeps the
+     hour and the minute, and NormPix draws the rings again every minute (ClockWidget, WatchDialTicker) and when it is resized. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_clock_description"
     android:initialLayout="@layout/widget_clock"

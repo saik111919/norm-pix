@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The cookie digital clock: 2 x 2 to start, resizable; never updated on a timer (see widget_cookie_analog_info). Its text is
+     sized for the widget when it is placed and when it is resized. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="UnusedAttribute"
+    android:description="@string/widget_cookie_digital_description"
+    android:initialLayout="@layout/widget_cookie_digital"
+    android:maxResizeHeight="320dp"
+    android:maxResizeWidth="320dp"
+    android:minHeight="110dp"
+    android:minResizeHeight="80dp"
+    android:minResizeWidth="80dp"
+    android:minWidth="110dp"
+    android:previewImage="@drawable/widget_cookie_digital_preview"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="2"
+    android:targetCellWidth="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

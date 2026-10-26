@@ -531,8 +531,10 @@ fun AppShell(
                                 selected = d == current,
                                 onClick = { shell.selected = d.ordinal },
                                 icon = { DestinationIcon(d, selected = d == current, overdue = overdue) },
-                                label = { Text(d.label, textAlign = TextAlign.Center, maxLines = 2, modifier = railLabel) },
-                                alwaysShowLabel = true,
+                                label = if (prefs.showFooterLabels) {
+                                    { Text(d.label, textAlign = TextAlign.Center, maxLines = 2, modifier = railLabel) }
+                                } else null,
+                                alwaysShowLabel = prefs.showFooterLabels,
                             )
                         }
                     }
@@ -540,8 +542,10 @@ fun AppShell(
                         selected = false,
                         onClick = { navigator.openSettings() },
                         icon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
-                        label = { Text("Settings", textAlign = TextAlign.Center, maxLines = 1, modifier = railLabel) },
-                        alwaysShowLabel = true,
+                        label = if (prefs.showFooterLabels) {
+                            { Text("Settings", textAlign = TextAlign.Center, maxLines = 1, modifier = railLabel) }
+                        } else null,
+                        alwaysShowLabel = prefs.showFooterLabels,
                         modifier = Modifier.padding(bottom = AppSpacing.lg),
                     )
                 }
@@ -582,6 +586,7 @@ fun AppShell(
                     isMoreOpen = isMoreOpen,
                     onMoreToggle = { isMoreOpen = !isMoreOpen },
                     currentLabel = if (current == AppDestination.PlansAndTransactions) shell.tab.label else current.label,
+                    showLabels = prefs.showFooterLabels,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .onSizeChanged { barHeightPx = it.height }

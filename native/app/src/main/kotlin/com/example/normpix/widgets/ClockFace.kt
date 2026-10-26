@@ -1,12 +1,12 @@
 package com.example.normpix.widgets
 
 /**
- * Where the clock widget's text goes in a widget [widthDp] x [heightDp]. The face is the largest circle that fits, up to
- * [MAX_FACE_DP] (AnalogClock never draws its face larger than its drawable), in the middle; the hour sits in the face's
+ * Where the watch dial widget's text goes in a widget [widthDp] x [heightDp]. The face is the largest circle that fits, up to
+ * [MAX_FACE_DP] (the picture of the rings is drawn at a fixed size and scaled), in the middle; the hour sits in the face's
  * middle and the minute in the pill at three o'clock, both sized with the face.
  *
- * The numbers are the face drawables' (design/clock-widget/clock_face.py): a face of 200 units, the hour's digits 30 units
- * tall and the minute's 11, the pill's middle 153 units from the face's left edge.
+ * The numbers are the face's ([WatchDialFace]): a face of 200 units, the hour's digits 30 units tall and the minute's 11, the
+ * pill's middle 151 units from the face's left edge.
  */
 class ClockFace(widthDp: Float, heightDp: Float) {
     /** How wide the face is drawn. */
@@ -36,11 +36,11 @@ class ClockFace(widthDp: Float, heightDp: Float) {
     fun digitsPaddingDp(textDp: Float): Float = DIGIT_DROP_EM * textDp
 
     companion object {
-        const val MAX_FACE_DP = 200f
+        const val MAX_FACE_DP = 300f
         const val FACE_UNITS = 200f
         const val HOUR_DIGIT_UNITS = 30f
         const val MINUTE_DIGIT_UNITS = 11f
-        const val PILL_MIDDLE_UNITS = 153f
+        const val PILL_MIDDLE_UNITS = 151f
 
         /** A digit's height in GS Flex, as a share of the text size. */
         const val DIGIT_HEIGHT_EM = 0.7326f

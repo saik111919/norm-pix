@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Update
+import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
@@ -76,6 +77,7 @@ object SettingsCatalog {
         SettingsEntry("Your font", SettingsPage.Appearance, listOf("custom font", "upload font", "ttf", "otf", "font file", "import font", "own font", "my font", "typeface", "text"), appearance = AppearanceSection.InterfaceFont),
         SettingsEntry("Back button style", SettingsPage.Appearance, listOf("back", "button", "floating", "circle", "header", "dock", "top bar"), appearance = AppearanceSection.Controls),
         SettingsEntry("Bottom controls", SettingsPage.Appearance, listOf("bottom", "thumb", "reach", "one hand", "search bar", "filter", "filters", "back", "actions", "footer", "controls", "layout"), appearance = AppearanceSection.Controls),
+        SettingsEntry("Footer labels", SettingsPage.Appearance, listOf("footer", "labels", "dock", "bottom bar", "navigation", "tabs", "icons", "show labels", "hide labels"), appearance = AppearanceSection.Controls),
         SettingsEntry("Page transitions", SettingsPage.Appearance, listOf("animation", "motion", "shared axis", "slide", "fade"), appearance = AppearanceSection.Transitions),
         SettingsEntry("Sheet & dialog transitions", SettingsPage.Appearance, listOf("sheet", "dialog", "bottom sheet", "decision", "popup", "overlay", "animation", "motion", "transition", "window", "linux", "desktop", "gnome", "slide", "fade", "scale"), appearance = AppearanceSection.Transitions),
         SettingsEntry("Top spending", SettingsPage.Appearance, listOf("top spending", "categories", "carousel", "stack", "home", "biggest", "spending cards", "layout"), appearance = AppearanceSection.Layouts),
@@ -84,6 +86,11 @@ object SettingsCatalog {
         SettingsEntry("Cards layout", SettingsPage.Appearance, listOf("cards", "stack", "stacked", "list", "rows", "compact", "carousel", "swipe", "layout", "wallet"), appearance = AppearanceSection.Layouts, cardsOnly = true),
         SettingsEntry("Bank logo style", SettingsPage.Appearance, listOf("logo", "brand", "icon", "compact", "full", "bank", "wallet"), appearance = AppearanceSection.CategoryIcons),
         SettingsEntry("Card tilt", SettingsPage.Appearance, listOf("tilt", "motion", "gyroscope", "sensor", "parallax", "animation"), appearance = AppearanceSection.Effects, cardsOnly = true),
+
+        // Widgets
+        SettingsEntry("Home-screen widgets", SettingsPage.Widgets, listOf("widget", "widgets", "home screen", "launcher", "preview", "pill", "pills", "clock", "recent", "quick add")),
+        SettingsEntry("Add a widget to the home screen", SettingsPage.Widgets, listOf("add widget", "add to home screen", "put on home screen", "install widget")),
+        SettingsEntry("Cookie clock widgets", SettingsPage.Widgets, listOf("cookie", "clock", "analog", "analogue", "digital", "numerals", "watch dial")),
 
         // Finance
         SettingsEntry("Categories", null, listOf("categories", "labels", "tags"), special = SettingsSpecial.Categories),
@@ -153,6 +160,7 @@ object SettingsCatalog {
 
     fun iconFor(page: SettingsPage?): ImageVector = when (page) {
         SettingsPage.Appearance -> Icons.Outlined.Palette
+        SettingsPage.Widgets -> Icons.Outlined.Widgets
         SettingsPage.Finance -> Icons.Outlined.Payments
         SettingsPage.Data -> Icons.Outlined.Storage
         SettingsPage.Wallet -> AppIcons.Wallet

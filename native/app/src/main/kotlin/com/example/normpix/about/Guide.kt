@@ -14,6 +14,7 @@ enum class GuideLink(val label: String) {
     DataBackup("Open Data & Backup"),
     Security("Open Security & Lock"),
     Availability("Open Availability & Schedules"),
+    Widgets("Open Widgets"),
 }
 
 /**
@@ -162,18 +163,21 @@ enum class GuideTopic(
     ),
     Widgets(
         title = "Home-screen widgets",
-        summary = "Three widgets for your home screen: a clock, your recent transactions and a quick add.",
+        summary = "Six widgets for your home screen: four clocks, your recent transactions and a quick add.",
         hue = 2,
         steps = listOf(
-            "Press and hold an empty spot on your home screen, choose Widgets and find NormPix.",
-            "Clock: the time on a face of turning rings, the hour in the middle.",
+            "Open Settings > Widgets, tap a pill to see that widget, then Add to home screen. Or press and hold an empty spot on your home screen, choose Widgets and find NormPix.",
+            "Cookie clock: a clock in a cookie shape, in three styles - analog, analog with numbers, or digital with the date.",
+            "Watch dial: the time on a face of turning rings, the hour in the middle.",
             "Recent transactions: your latest entries, with a button to add one.",
             "Add transaction: one tap to start an expense, an income or a transfer.",
         ),
         tips = listOf(
-            "On Android 12 and later the widgets wear your wallpaper's colors.",
+            "The clocks keep time on their own and open your phone's clock app when tapped.",
+            "On Android 12 and later the widgets wear your wallpaper's colors, and the analog clocks have a second hand.",
             "While NormPix is locked, the widgets show nothing of your ledger.",
         ),
+        link = GuideLink.Widgets,
     ),
     LookAndFeel(
         title = "Colors and themes",

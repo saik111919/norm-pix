@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The hour hand of the cookie clock with numerals: shorter, to stay off the numbers.
+     Drawn by design/cookie-clock/CookieFace.java: change it there, not here. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="VectorRaster"
+    android:width="280dp"
+    android:height="280dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <path
+        android:strokeColor="@color/widget_clock_face"
+        android:strokeWidth="10.4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M100,109 L100,68" />
+    <path
+        android:strokeColor="@color/widget_clock_ink"
+        android:strokeWidth="6.4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M100,109 L100,68" />
+</vector>

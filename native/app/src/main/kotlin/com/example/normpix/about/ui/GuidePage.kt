@@ -104,5 +104,6 @@ internal fun GuideLink.open(navigator: AppNavigator) {
         GuideLink.DataBackup -> navigator.openSettings(SettingsPage.Data)
         GuideLink.Security -> navigator.openSettings(SettingsPage.Security)
         GuideLink.Availability -> navigator.openSettings(SettingsPage.Availability)
+        GuideLink.Widgets -> navigator.openSettings(SettingsPage.Widgets)
     }
 }

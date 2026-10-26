@@ -185,6 +185,7 @@ fun FloatingNavigationRow(
     onMoreToggle: () -> Unit = {},
     colors: DockColors = rememberDockColors(),
     currentLabel: String = current.label,
+    showLabels: Boolean = true,
 ) {
     val backdrop = LocalFrostedBackdrop.current
     val screenWidth = rememberWindowWidthDp()
@@ -265,6 +266,7 @@ fun FloatingNavigationRow(
                     isNarrow = isNarrow,
                     currentLabel = currentLabel,
                     maxLabelWidth = maxLabelWidth,
+                    showLabels = showLabels,
                 )
                 FloatingNavCompanionItem(
                     icon = if (actions.isEmpty()) {
@@ -494,6 +496,7 @@ fun FloatingNavBar(
     backdrop: FrostedBackdrop? = LocalFrostedBackdrop.current,
     isNarrow: Boolean = false,
     currentLabel: String = current.label,
+    showLabels: Boolean = true,
     /** The most the selected label may take, so the dock never outgrows its row; [Dp.Unspecified] for no limit. */
     maxLabelWidth: Dp = Dp.Unspecified,
 ) {
@@ -527,6 +530,7 @@ fun FloatingNavBar(
                     isNarrow = isNarrow,
                     onClick = { onDestinationSelected(destination) },
                     maxLabelWidth = maxLabelWidth,
+                    showLabel = showLabels,
                 )
             }
         }
@@ -635,6 +639,7 @@ private fun FloatingNavItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     maxLabelWidth: Dp = Dp.Unspecified,
+    showLabel: Boolean = true,
 ) {
     val haptics = rememberAppHaptics()
     val animDuration = AppMotion.duration(AppMotion.MEDIUM_MS)
@@ -652,7 +657,7 @@ private fun FloatingNavItem(
 
     val shape = CircleShape
     val horizontalPadding by animateDpAsState(
-        targetValue = if (selected) {
+        targetValue = if (selected && showLabel) {
             if (isNarrow) 10.dp else 14.dp
         } else {
             12.dp
@@ -667,7 +672,7 @@ private fun FloatingNavItem(
         positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
         tooltip = { PlainTooltip { Text(destination.label) } },
         state = rememberTooltipState(),
-        enableUserInput = !selected,
+        enableUserInput = !selected || !showLabel,
     ) {
     Box(
         modifier = modifier
@@ -691,7 +696,7 @@ private fun FloatingNavItem(
                 contentDescription = destination.label
                 // "Plans & Transactions, selected, showing Plans": the pill's label is the view that is open.
                 if (selected && label != destination.label) stateDescription = "Showing $label"
-                this[SemanticsProperties.Text] = listOf(AnnotatedString(destination.label))
+                if (showLabel) this[SemanticsProperties.Text] = listOf(AnnotatedString(destination.label))
             },
         contentAlignment = Alignment.Center,
     ) {
@@ -737,7 +742,7 @@ private fun FloatingNavItem(
             // icon as the pill fills in, and folds back into it as the pill empties, so a tab change moves every item smoothly
             // instead of swapping labels in one frame.
             AnimatedVisibility(
-                visible = selected && (maxLabelWidth == Dp.Unspecified || maxLabelWidth >= MinLabelWidth),
+                visible = selected && showLabel && (maxLabelWidth == Dp.Unspecified || maxLabelWidth >= MinLabelWidth),
                 enter = expandHorizontally(tween(animDuration, easing = AppMotion.standard), expandFrom = Alignment.Start) +
                     fadeIn(tween(animDuration / 2, delayMillis = animDuration / 3)),
                 exit = shrinkHorizontally(tween(animDuration, easing = AppMotion.standard), shrinkTowards = Alignment.Start) +

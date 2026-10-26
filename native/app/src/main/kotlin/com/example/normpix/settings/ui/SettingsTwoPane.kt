@@ -136,6 +136,7 @@ private val SettingsDetailSaver = Saver<SettingsDetail, String>(save = { it.key 
 fun SettingsPageContent(page: SettingsPage) {
     when (page) {
         SettingsPage.Appearance -> AppearanceSettingsPage()
+        SettingsPage.Widgets -> WidgetsSettingsPage()
         SettingsPage.Finance -> FinanceSettingsPage()
         SettingsPage.Data -> DataSettingsPage()
         SettingsPage.Security -> SecuritySettingsPage()

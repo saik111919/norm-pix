@@ -203,7 +203,7 @@ fun NormPixRoot(container: AppContainer, showSplash: Boolean = false, onDarkChan
     val finance by data.finance.state.collectAsStateWithLifecycle()
     // The user's own font file (Settings > Appearance > Interface font), made ready off the main thread; null for any other font.
     val customFontFile = rememberCustomFontFile(prefs.interfaceFont, prefs.customFontRevision)
-    NormPixTheme(Appearance(prefs.mode, prefs.colorSource, prefs.accent, AppFont(prefs.interfaceFont, prefs.fontShape, customFontFile))) {
+    NormPixTheme(Appearance(prefs.mode, prefs.colorSource, prefs.accent, AppFont(prefs.interfaceFont, prefs.fontShape, customFontFile), prefs.wallpaperPalette)) {
         val dark = MaterialTheme.colorScheme.isDark
         LaunchedEffect(dark) { onDarkChanged(dark) }
         Box(Modifier.fillMaxSize()) {

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The cookie analog clock: the platform's AnalogClock turns the hands over a cookie-shaped face, so the widget keeps time
+     without NormPix. The face and hands are drawn by design/cookie-clock/CookieFace.java. Before Android 12 AnalogClock has
+     no second hand (layout-v31 has it). Left to announce the time itself: AnalogClock says it to a screen reader. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_cookie_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <AnalogClock
+        android:id="@+id/widget_cookie_clock"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:dial="@drawable/widget_cookie_dial"
+        android:hand_hour="@drawable/widget_cookie_hour"
+        android:hand_minute="@drawable/widget_cookie_minute" />
+</FrameLayout>

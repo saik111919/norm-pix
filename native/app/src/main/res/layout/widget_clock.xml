@@ -1,30 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The clock widget: a face of turning rings, the hour in the middle and the minute in the pill at three o'clock.
-     The platform keeps it on time - AnalogClock turns the rings (its hands, drawn by design/clock-widget/clock_face.py) and
-     the TextClocks follow the minute - so NormPix never wakes up to redraw it. ClockWidget sizes the text and puts the
-     minute in its pill for the widget's size. Before Android 12 AnalogClock has no second hand, so the face has the minute ring alone. -->
+<!-- The watch dial widget: two rings of five-minute numbers, the hour in the middle and the minute in the pill at three o'clock.
+     The rings are a picture (WatchDialRenderer) that ClockWidget draws again every minute, so the numbers can stay upright as the
+     inner ring steps; the hour and the minute are TextClocks, which the platform keeps on time between those minutes.
+     ClockWidget sizes the text and puts the minute in its pill for the widget's size. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_clock_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <AnalogClock
+    <!-- The picture is square and drawn at a fixed size, which fitCenter scales to the face. It says nothing to a screen reader:
+         the TextClocks do. -->
+    <ImageView
         android:id="@+id/widget_clock_rings"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:dial="@drawable/widget_clock_dial"
-        android:hand_hour="@drawable/widget_clock_hand_none"
-        android:hand_minute="@drawable/widget_clock_minutes"
-        android:importantForAccessibility="no" />
-
-    <!-- The pill, drawn the face's size and scaled with it (never larger, as AnalogClock never draws larger). -->
-    <ImageView
-        android:id="@+id/widget_clock_pill"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
         android:importantForAccessibility="no"
-        android:scaleType="centerInside"
-        android:src="@drawable/widget_clock_pill" />
+        android:scaleType="fitCenter" />
 
     <TextClock
         android:id="@+id/widget_clock_hour"
