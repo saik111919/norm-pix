@@ -24,12 +24,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CameraAlt
-import androidx.compose.material.icons.automirrored.outlined.Chat
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material.icons.outlined.Wallpaper
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.ColorScheme
@@ -52,7 +47,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -62,6 +56,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.normpix.finance.ui.ChoiceOption
 import com.example.normpix.finance.ui.ConnectedChoiceRow
 import com.example.normpix.settings.AccentColor
@@ -91,7 +86,7 @@ private val sourceOptions = listOf(
 
 /**
  * Settings > Appearance > Colors, after Pixel's Wallpaper & style picker:
- * - A phone preview at the top reflecting the wallpaper/theme colors in real time.
+ * - An app mockup preview at the top reflecting the theme and colors in real time.
  * - A card with the wallpaper or custom palette swatches and an in-card "Dark theme" switch.
  * - A segmented toggle pill at the bottom switching between "Wallpaper colors" and "Other colors".
  */
@@ -106,8 +101,8 @@ internal fun ColorsSection(prefs: AppPrefsState, preferences: AppPreferences, ha
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Phone mockup preview at the top
-        PhoneMockupPreview(
+        // App mockup preview at the top representing NormPix UI
+        AppMockupPreview(
             dark = dark,
             activeScheme = MaterialTheme.colorScheme,
             modifier = Modifier.padding(bottom = AppSpacing.lg),
@@ -286,11 +281,15 @@ private fun CircularSwatchTile(
 }
 
 /**
- * Pixel-style phone preview mockup displaying the wallpaper background, live status clock,
- * themed home screen app icons, dock icons, and search pill.
+ * Miniature preview mockup representing the NormPix app UI:
+ * - App bar with title "NormPix" and profile indicator
+ * - Balance / Featured card in primaryContainer
+ * - Quick action buttons (Add, Send, Cards)
+ * - Recent transaction row
+ * - Floating navigation dock at the bottom
  */
 @Composable
-private fun PhoneMockupPreview(
+private fun AppMockupPreview(
     dark: Boolean,
     activeScheme: ColorScheme,
     modifier: Modifier = Modifier,
@@ -307,129 +306,183 @@ private fun PhoneMockupPreview(
                 brush = Brush.verticalGradient(
                     colors = if (dark) {
                         listOf(
-                            activeScheme.primaryContainer.copy(alpha = 0.65f),
                             activeScheme.surfaceContainerHighest,
                             activeScheme.surface,
                         )
                     } else {
                         listOf(
-                            activeScheme.primaryContainer.copy(alpha = 0.45f),
                             activeScheme.surfaceContainerLow,
                             activeScheme.surface,
                         )
                     },
                 ),
             )
-            .padding(horizontal = AppSpacing.sm, vertical = AppSpacing.md),
+            .padding(horizontal = AppSpacing.sm, vertical = AppSpacing.sm),
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            // Top: Date & Clock
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(top = AppSpacing.xs),
-            ) {
-                Text(
-                    text = "Sun, Oct 26",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = activeScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                )
-                Text(
-                    text = "10:40",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                    color = activeScheme.onSurface,
-                )
-            }
-
-            // Middle: App icon grid (4 mini apps)
+            // Top: App bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = AppSpacing.xs),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                    .padding(horizontal = AppSpacing.xs, vertical = AppSpacing.xs),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                MiniAppIcon(color = activeScheme.primary, symbol = "▶")
-                MiniAppIcon(color = activeScheme.secondary, symbol = "✉")
-                MiniAppIcon(color = activeScheme.tertiary, symbol = "✿")
-                MiniAppIcon(color = activeScheme.error, symbol = "●")
-            }
-
-            // Bottom: Dock icons + Google search pill
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(AppSpacing.xs),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = AppSpacing.xs),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                ) {
-                    MiniDockIcon(
-                        container = activeScheme.primaryContainer,
-                        iconTint = activeScheme.onPrimaryContainer,
-                        icon = Icons.Outlined.Phone,
-                    )
-                    MiniDockIcon(
-                        container = activeScheme.secondaryContainer,
-                        iconTint = activeScheme.onSecondaryContainer,
-                        icon = Icons.AutoMirrored.Outlined.Chat,
-                    )
-                    MiniDockIcon(
-                        container = activeScheme.tertiaryContainer,
-                        iconTint = activeScheme.onTertiaryContainer,
-                        icon = Icons.Outlined.Language,
-                    )
-                    MiniDockIcon(
-                        container = activeScheme.surfaceContainerHighest,
-                        iconTint = activeScheme.onSurface,
-                        icon = Icons.Outlined.CameraAlt,
-                    )
-                }
-
-                // Google search bar pill
+                Text(
+                    text = "NormPix",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp),
+                    color = activeScheme.onSurface,
+                )
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(26.dp)
+                        .size(18.dp)
                         .clip(CircleShape)
-                        .background(activeScheme.surfaceContainerHighest.copy(alpha = 0.85f))
-                        .border(1.dp, activeScheme.outlineVariant.copy(alpha = 0.35f), CircleShape)
-                        .padding(horizontal = AppSpacing.sm),
-                    contentAlignment = Alignment.CenterStart,
+                        .background(activeScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(activeScheme.primary),
+                    )
+                }
+            }
+
+            // Featured Card: Balance / Overview
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(activeScheme.primaryContainer)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "Total Balance",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        color = activeScheme.onPrimaryContainer.copy(alpha = 0.75f),
+                    )
+                    Text(
+                        text = "$2,450.00",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp),
+                        color = activeScheme.onPrimaryContainer,
+                    )
+                }
+            }
+
+            // Quick action chips
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                MiniChip(
+                    text = "Add",
+                    container = activeScheme.secondaryContainer,
+                    contentColor = activeScheme.onSecondaryContainer,
+                    modifier = Modifier.weight(1f),
+                )
+                MiniChip(
+                    text = "Send",
+                    container = activeScheme.tertiaryContainer,
+                    contentColor = activeScheme.onTertiaryContainer,
+                    modifier = Modifier.weight(1f),
+                )
+                MiniChip(
+                    text = "Cards",
+                    container = activeScheme.surfaceContainerHighest,
+                    contentColor = activeScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            // Recent activity row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(activeScheme.surfaceContainer)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(CircleShape)
+                            .background(activeScheme.primary.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            text = "G",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = activeScheme.primary,
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(activeScheme.primary),
                         )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(AppSpacing.xs),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                Icons.Outlined.Mic,
-                                contentDescription = null,
-                                modifier = Modifier.size(12.dp),
-                                tint = activeScheme.onSurfaceVariant,
-                            )
-                            Icon(
-                                Icons.Outlined.CameraAlt,
-                                contentDescription = null,
-                                modifier = Modifier.size(12.dp),
-                                tint = activeScheme.onSurfaceVariant,
-                            )
-                        }
                     }
+                    Text(
+                        text = "Groceries",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = activeScheme.onSurface,
+                    )
+                }
+                Text(
+                    text = "-$32.50",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium, fontSize = 10.sp),
+                    color = activeScheme.onSurfaceVariant,
+                )
+            }
+
+            // Floating Navigation Dock
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(28.dp)
+                    .clip(CircleShape)
+                    .background(activeScheme.surfaceContainerHighest)
+                    .border(1.dp, activeScheme.outlineVariant.copy(alpha = 0.3f), CircleShape)
+                    .padding(horizontal = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Active item
+                    Box(
+                        modifier = Modifier
+                            .width(22.dp)
+                            .height(14.dp)
+                            .clip(CircleShape)
+                            .background(activeScheme.primary),
+                    )
+                    // Inactive items
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(activeScheme.onSurfaceVariant.copy(alpha = 0.4f)),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(activeScheme.onSurfaceVariant.copy(alpha = 0.4f)),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(activeScheme.onSurfaceVariant.copy(alpha = 0.4f)),
+                    )
                 }
             }
         }
@@ -437,36 +490,23 @@ private fun PhoneMockupPreview(
 }
 
 @Composable
-private fun MiniAppIcon(color: Color, symbol: String) {
+private fun MiniChip(
+    text: String,
+    container: Color,
+    contentColor: Color,
+    modifier: Modifier = Modifier,
+) {
     Box(
-        modifier = Modifier
-            .size(24.dp)
-            .clip(CircleShape)
-            .background(color.copy(alpha = 0.85f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = symbol,
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-            color = Color.White,
-        )
-    }
-}
-
-@Composable
-private fun MiniDockIcon(container: Color, iconTint: Color, icon: ImageVector) {
-    Box(
-        modifier = Modifier
-            .size(26.dp)
+        modifier = modifier
+            .height(22.dp)
             .clip(CircleShape)
             .background(container),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = iconTint,
-            modifier = Modifier.size(14.dp),
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+            color = contentColor,
         )
     }
 }

@@ -22,4 +22,10 @@
     <color name="widget_category_5">#275B53</color>
     <color name="widget_category_6">#74454E</color>
     <color name="widget_category_7">#4B5074</color>
+    <!-- Clock dial design tokens (Dark theme) -->
+    <color name="widget_clock_face">#08090D</color>
+    <color name="widget_clock_ink">#F5F5FA</color>
+    <color name="widget_clock_secondary">#B9B9F2</color>
+    <color name="widget_clock_tick">#484B5D</color>
+    <color name="widget_clock_accent">#FF8A24</color>
 </resources>

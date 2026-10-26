@@ -22,9 +22,10 @@
     <color name="widget_category_5">#A9F0E3</color>
     <color name="widget_category_6">#F9ACBA</color>
     <color name="widget_category_7">#BFC6FD</color>
-    <!-- The clock face is a watch face: dark in light mode too. -->
-    <color name="widget_clock_face">#000000</color>
-    <color name="widget_clock_ink">#F2F2F2</color>
-    <color name="widget_clock_tick">#8A8A8A</color>
-    <color name="widget_clock_accent">#FF6B2C</color>
+    <!-- Clock dial design tokens (Light theme) -->
+    <color name="widget_clock_face">#F7F8FC</color>
+    <color name="widget_clock_ink">#171923</color>
+    <color name="widget_clock_secondary">#646B7A</color>
+    <color name="widget_clock_tick">#D5D9E3</color>
+    <color name="widget_clock_accent">#FF8A24</color>
 </resources>
