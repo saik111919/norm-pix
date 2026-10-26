@@ -16,6 +16,7 @@ import com.example.normpix.about.GuideLink
 import com.example.normpix.about.GuideTopic
 import com.example.normpix.navigation.AppDestination
 import com.example.normpix.navigation.AppearanceSection
+import com.example.normpix.navigation.PlanSection
 import com.example.normpix.navigation.SettingsPage
 import com.example.normpix.settings.AccentColor
 import com.example.normpix.settings.ui.SettingsCatalog
@@ -185,7 +186,7 @@ class AboutPageTest {
 
         show(GuideTopic.Plans)
         compose.onNodeWithText(GuideLink.Plans.label).performScrollTo().performClick()
-        assertEquals(listOf(null), env.navigator.plansSections)
+        assertEquals(listOf<PlanSection?>(null), env.navigator.plansSections)
     }
 
     @Test
