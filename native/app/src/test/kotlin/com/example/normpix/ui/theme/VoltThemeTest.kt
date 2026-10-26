@@ -169,18 +169,26 @@ class VoltThemeTest {
     }
 
     @Test
-    fun theSwatchShowsTheInkWithTheLimeInsideIt_andOtherAccentsStayOneColour() {
+    fun theSwatchShowsTheInkAndTheLime_andEveryAccentsOwnThree() {
         for (dark in modes) {
-            assertEquals(listOf(ink, lime), AppTheme.accentSwatch(AccentColor.Volt, dark))
-            for (accent in AccentColor.entries - AccentColor.Volt) {
-                assertEquals(listOf(AppTheme.accentScheme(accent, dark).primary), AppTheme.accentSwatch(accent, dark), accent.name)
+            val volt = AppTheme.paletteSwatch(AppTheme.accentScheme(AccentColor.Volt, dark))
+            // Light is ink controls on lime fills; dark the lime itself on dark green fills: the pair is in the swatch either way.
+            assertEquals(if (dark) lime else ink, volt.primary, "${if (dark) "dark" else "light"} Volt primary")
+            assertEquals(if (dark) Color(0xFF1C4A30) else lime, volt.container, "${if (dark) "dark" else "light"} Volt container")
+            for (accent in AccentColor.entries) {
+                val scheme = AppTheme.accentScheme(accent, dark)
+                val swatch = AppTheme.paletteSwatch(scheme)
+                assertEquals(scheme.primary, swatch.primary, accent.name)
+                assertEquals(scheme.primaryContainer, swatch.container, accent.name)
+                assertEquals(scheme.tertiary, swatch.tertiary, accent.name)
+                assertNotEquals(swatch.primary, swatch.container, "${accent.name} shows its primary and its container as two colors")
             }
         }
     }
 
     @Test
     fun theOtherAccentsAreStillGeneratedFromTheirSeeds() {
-        for (accent in AccentColor.entries - AccentColor.Volt) {
+        for (accent in AccentColor.entries - AccentColor.Volt - AccentColor.Pure) {
             for (dark in modes) {
                 val expected = dynamicColorScheme(seedColor = accent.seed, isDark = dark, style = PaletteStyle.Fidelity)
                 assertEquals(expected.primary, AppTheme.accentScheme(accent, dark).primary, "${accent.name} ${if (dark) "dark" else "light"}")

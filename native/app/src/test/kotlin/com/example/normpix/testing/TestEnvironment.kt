@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.test.core.app.ApplicationProvider
 import com.example.normpix.finance.ui.ReceiptSharer
 import com.example.normpix.AppContainer
+import com.example.normpix.about.GuideTopic
 import com.example.normpix.finance.data.FinanceDatabase
 import com.example.normpix.finance.data.FinanceRepository
 import com.example.normpix.finance.data.TransactionPictures
@@ -95,7 +96,22 @@ class RecordingNavigator : AppNavigator {
     override fun openChangelog() {
         changelogOpened++
     }
-    override fun go(destination: AppDestination) {}
+
+    var aboutOpened = 0
+    val guides = mutableListOf<GuideTopic>()
+
+    override fun openAbout() {
+        aboutOpened++
+    }
+
+    override fun openGuide(topic: GuideTopic) {
+        guides += topic
+    }
+    val destinations = mutableListOf<AppDestination>()
+
+    override fun go(destination: AppDestination) {
+        destinations += destination
+    }
     var transactionsOpened = 0
 
     override fun openTransactions() {

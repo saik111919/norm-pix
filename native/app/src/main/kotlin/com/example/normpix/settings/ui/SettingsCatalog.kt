@@ -21,7 +21,6 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import com.example.normpix.BuildConfig
 import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
@@ -66,7 +65,8 @@ object SettingsCatalog {
         // Appearance
         SettingsEntry("Theme", SettingsPage.Appearance, listOf("dark", "light", "system", "theme", "mode")),
         SettingsEntry("Color source & palette", SettingsPage.Appearance, listOf("color", "dynamic", "material", "wallpaper", "monochrome"), appearance = AppearanceSection.Colors),
-        SettingsEntry("Accent color", SettingsPage.Appearance, listOf("accent", "emerald", "ocean", "amber", "rose", "violet", "tint"), appearance = AppearanceSection.Colors),
+        SettingsEntry("Accent color", SettingsPage.Appearance, listOf("accent", "emerald", "ocean", "amber", "rose", "violet", "tint", "volt", "other colors", "preview", "palette"), appearance = AppearanceSection.Colors),
+        SettingsEntry("Pure black and white", SettingsPage.Appearance, listOf("pure", "black", "white", "amoled", "oled", "true black", "monochrome", "greyscale", "grayscale", "high contrast", "dark"), appearance = AppearanceSection.Colors),
         SettingsEntry("App icon", SettingsPage.Appearance, listOf("app icon", "launcher", "home screen", "logo", "glossy", "comic", "minimal", "flat", "glass", "clay", "pixel", "paper", "neon"), appearance = AppearanceSection.AppIcon),
         SettingsEntry("Progress indicators", SettingsPage.Appearance, listOf("progress", "loading", "wavy", "flat", "bar", "spinner", "loader", "indicator", "expressive"), appearance = AppearanceSection.ProgressIndicators),
         SettingsEntry("Background blur", SettingsPage.Appearance, listOf("sheet", "dialog", "blur", "frosted", "glass", "background", "overlay", "dock", "footer"), appearance = AppearanceSection.Effects),
@@ -129,7 +129,12 @@ object SettingsCatalog {
         SettingsEntry("How often to check for updates", SettingsPage.Updates, listOf("how often", "frequency", "interval", "update schedule", "daily", "weekly", "twice a day", "once a day", "every 3 days", "once a week")),
         SettingsEntry("Update check time", SettingsPage.Updates, listOf("check time", "set time", "at a set time", "time of day", "when to check", "any time", "update time")),
         SettingsEntry("Check when NormPix opens", SettingsPage.Updates, listOf("check when opened", "check on open", "check at launch", "when i open", "open the app", "launch", "startup")),
-        SettingsEntry("About NormPix", null, listOf("licenses", "version", "privacy"), special = SettingsSpecial.About),
+        SettingsEntry(
+            "About NormPix",
+            null,
+            listOf("about", "guide", "help", "how to", "how it works", "tips", "tutorial", "features", "licenses", "licences", "credits", "version", "privacy"),
+            special = SettingsSpecial.About,
+        ),
     )
 
     /** The settings matching [query]; with [cardsEnabled] false (Store cards off) the ones about saved cards are left out. */
@@ -189,18 +194,17 @@ fun rememberSettingsActivator(): SettingsActivator {
                 entry.special == SettingsSpecial.People -> navigator.openPeople()
                 entry.special == SettingsSpecial.Reset -> system.resetSettings()
                 entry.special == SettingsSpecial.Updates -> system.checkForUpdates()
-                entry.special == SettingsSpecial.About -> system.showAbout()
+                entry.special == SettingsSpecial.About -> navigator.openAbout()
                 else -> navigator.openSettings()
             }
         }
     }
 }
 
-/** \"Reset settings\", \"Check for updates\" and \"About\", shared by the Settings page and search. */
+/** \"Reset settings\" and \"Check for updates\", shared by the Settings page and search. */
 class SettingsSystemActions(
     val resetSettings: () -> Unit,
     val checkForUpdates: () -> Unit,
-    val showAbout: () -> Unit,
 )
 
 @Composable
@@ -236,20 +240,7 @@ fun rememberSettingsSystemActions(): SettingsSystemActions {
         navigator.openUpdates()
     }
 
-    fun showAbout() {
-        scope.launch {
-            overlays.alert(
-                title = "About NormPix",
-                message = "NormPix ${BuildConfig.VERSION_NAME}\nModern finance, cards & reminders on Android.\n" +
-                    "Your data stays on this phone, encrypted. NormPix connects only to GitHub, to check for updates and download them.\n\n" +
-                    "3D category pictures: Microsoft Fluent Emoji (MIT licence). GS Flex font: Google Sans Flex, under the SIL Open " +
-                    "Font License 1.1; Google Sans Flex is a trademark of Google LLC, and NormPix is not affiliated with Google.",
-                okLabel = "OK",
-            )
-        }
-    }
-
     return remember(container, navigator, overlays, snackbars, scope, appContext) {
-        SettingsSystemActions(::resetSettings, ::checkForUpdates, ::showAbout)
+        SettingsSystemActions(::resetSettings, ::checkForUpdates)
     }
 }

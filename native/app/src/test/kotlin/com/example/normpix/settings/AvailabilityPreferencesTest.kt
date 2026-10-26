@@ -26,10 +26,10 @@ class AvailabilityPreferencesTest {
     private val feature = ScheduledFeature.NfcExchange
 
     @Test
-    fun newUsersGetEverythingOnAndSwipingEnabled() {
+    fun newUsersGetTheNfcExchangeOffAndSwipingEnabled() {
         val state = AppPreferences(store()).state.value
-        assertEquals(AvailabilityRule(), state.availabilityOf(feature))
-        assertEquals(AvailabilityMode.Always, state.availabilityOf(feature).mode)
+        assertEquals(AvailabilityRule(mode = AvailabilityMode.Off), state.availabilityOf(feature))
+        assertEquals(AvailabilityMode.Off, state.availabilityOf(feature).mode)
         assertTrue(state.swipeActionsEnabled)
         assertEquals(TransactionSwipeActions.EditAndDelete, state.transactionSwipeActions)
     }
@@ -49,8 +49,15 @@ class AvailabilityPreferencesTest {
     @Test
     fun theEditIsVisibleToObserversImmediately() {
         val preferences = AppPreferences(store())
-        preferences.setAvailability(feature, AvailabilityRule(AvailabilityMode.Off))
-        assertEquals(AvailabilityMode.Off, preferences.state.value.availabilityOf(feature).mode)
+        preferences.setAvailability(feature, AvailabilityRule(AvailabilityMode.Always))
+        assertEquals(AvailabilityMode.Always, preferences.state.value.availabilityOf(feature).mode)
+    }
+
+    @Test
+    fun aChoiceToTurnItOnSurvivesRestarts() {
+        val store = store()
+        AppPreferences(store).setAvailability(feature, AvailabilityRule(AvailabilityMode.Always))
+        assertEquals(AvailabilityMode.Always, AppPreferences(store).state.value.availabilityOf(feature).mode)
     }
 
     @Test
@@ -66,15 +73,15 @@ class AvailabilityPreferencesTest {
     }
 
     @Test
-    fun resetBringsBackAlwaysOnAndSwiping() {
+    fun resetBringsBackTheNfcExchangeOffAndSwiping() {
         val store = store()
         val preferences = AppPreferences(store)
-        preferences.setAvailability(feature, AvailabilityRule(AvailabilityMode.Off))
+        preferences.setAvailability(feature, AvailabilityRule(AvailabilityMode.Always))
         preferences.setSwipeActionsEnabled(false)
 
         preferences.resetToDefaults()
 
-        assertEquals(AvailabilityMode.Always, AppPreferences(store).state.value.availabilityOf(feature).mode)
+        assertEquals(AvailabilityMode.Off, AppPreferences(store).state.value.availabilityOf(feature).mode)
         assertTrue(AppPreferences(store).state.value.swipeActionsEnabled)
     }
 

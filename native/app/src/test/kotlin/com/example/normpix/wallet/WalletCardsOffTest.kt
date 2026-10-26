@@ -6,6 +6,9 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import com.example.normpix.availability.AvailabilityMode
+import com.example.normpix.availability.AvailabilityRule
+import com.example.normpix.availability.ScheduledFeature
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.screens.WalletScreen
@@ -37,11 +40,21 @@ class WalletCardsOffTest {
         env?.close()
     }
 
-    private fun showWallet(storeCards: Boolean, vararg cards: StoredCard, nfc: NfcAvailability = NfcAvailability.Available): TestEnvironment {
+    /**
+     * [appSwitch] is the app's own switch for the card exchange (Settings > Availability & Schedules): on unless a test says otherwise
+     * (null leaves what a fresh install has, which is off).
+     */
+    private fun showWallet(
+        storeCards: Boolean,
+        vararg cards: StoredCard,
+        nfc: NfcAvailability = NfcAvailability.Available,
+        appSwitch: AvailabilityMode? = AvailabilityMode.Always,
+    ): TestEnvironment {
         Locale.setDefault(Locale.US)
         val environment = TestEnvironment("wallet_cards_off_test", InMemoryVault(cards.toList()))
         env = environment
         environment.nfc.state = nfc
+        appSwitch?.let { environment.preferences.setAvailability(ScheduledFeature.NfcExchange, AvailabilityRule(it)) }
         environment.preferences.setWalletCardsEnabled(storeCards)
         // The default stack draws only the front account (Cash), as a card read out by its description; the compact list prints every name.
         environment.preferences.setAccountsLayout(AccountsLayout.Rows)
@@ -99,5 +112,48 @@ class WalletCardsOffTest {
         showWallet(storeCards = true, nfc = NfcAvailability.Unsupported)
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Add your first card").fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodesWithContentDescription(exchange).assertCountEquals(0)
+    }
+
+    @Test
+    fun `with the app's own NFC switch off nothing offers the card exchange even though the phone's NFC is on`() {
+        showWallet(storeCards = true, appSwitch = AvailabilityMode.Off)
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Add your first card").fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodesWithContentDescription(exchange).assertCountEquals(0)
+        compose.onAllNodesWithText("Tap to add (NFC)").assertCountEquals(0)
+    }
+
+    @Test
+    fun `a fresh install has the card exchange off`() {
+        showWallet(storeCards = true, appSwitch = null)
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Add your first card").fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodesWithContentDescription(exchange).assertCountEquals(0)
+        compose.onAllNodesWithText("Tap to add (NFC)").assertCountEquals(0)
+    }
+
+    @Test
+    fun `a saved card has Share while the card exchange is on`() {
+        showWallet(storeCards = true, saved)
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Edit card").fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodesWithContentDescription("Share via NFC").assertCountEquals(1)
+    }
+
+    @Test
+    fun `a saved card has no Share while the app's NFC switch is off`() {
+        showWallet(storeCards = true, saved, appSwitch = AvailabilityMode.Off)
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Edit card").fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodesWithContentDescription("Share via NFC").assertCountEquals(0)
+    }
+
+    @Test
+    fun `switching the app's NFC switch on or off shows or hides the button without leaving the Wallet`() {
+        val environment = showWallet(storeCards = true, appSwitch = AvailabilityMode.Off)
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Add your first card").fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodesWithContentDescription(exchange).assertCountEquals(0)
+
+        environment.preferences.setAvailability(ScheduledFeature.NfcExchange, AvailabilityRule(AvailabilityMode.Always))
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription(exchange).fetchSemanticsNodes().isNotEmpty() }
+
+        environment.preferences.setAvailability(ScheduledFeature.NfcExchange, AvailabilityRule(AvailabilityMode.Off))
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription(exchange).fetchSemanticsNodes().isEmpty() }
     }
 }

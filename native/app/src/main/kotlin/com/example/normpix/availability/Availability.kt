@@ -13,8 +13,13 @@ import java.util.Locale
  * Adding a feature here is all it takes for it to be configurable: the Settings page lists every entry
  * and [AvailabilityRule] is stored per entry.
  */
-enum class ScheduledFeature(val label: String, val shortLabel: String) {
-    NfcExchange("NFC card exchange", "NFC"),
+enum class ScheduledFeature(val label: String, val shortLabel: String, val defaultMode: AvailabilityMode) {
+    /** Off until the user turns it on: nothing in the app offers a card exchange before then (see `rememberNfcExchangeOffered`). */
+    NfcExchange("NFC card exchange", "NFC", AvailabilityMode.Off),
+    ;
+
+    /** The rule in force until the user edits it. */
+    fun defaultRule(): AvailabilityRule = AvailabilityRule(mode = defaultMode)
 }
 
 enum class AvailabilityMode(val label: String) {

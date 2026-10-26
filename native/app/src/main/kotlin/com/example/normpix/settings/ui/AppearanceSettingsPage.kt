@@ -30,6 +30,7 @@ import com.example.normpix.finance.ui.ConnectedChoiceRow
 import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
+import com.example.normpix.settings.AccentColor
 import com.example.normpix.settings.AppIcon
 import com.example.normpix.settings.AppIcons
 import com.example.normpix.settings.AppPrefsState
@@ -111,8 +112,11 @@ internal val AppearanceSection.icon: ImageVector
 
 /** What a section's row says under its name: the choice made now. [appIcon] is the launcher icon in use (Android holds that one). */
 internal fun AppearanceSection.summary(prefs: AppPrefsState, appIcon: AppIcon): String = when (this) {
-    AppearanceSection.Colors ->
-        if (prefs.colorSource == ColorSource.System && AppTheme.dynamicColorSupported) "Wallpaper colors" else "${prefs.accent.label} accent"
+    AppearanceSection.Colors -> when {
+        prefs.colorSource == ColorSource.System && AppTheme.dynamicColorSupported -> "Wallpaper colors"
+        prefs.accent == AccentColor.Pure -> "Pure black and white"
+        else -> "${prefs.accent.label} accent"
+    }
     AppearanceSection.AppIcon -> appIcon.label
     AppearanceSection.InterfaceFont -> when (prefs.interfaceFont) {
         InterfaceFont.GsFlex -> if (prefs.customFont) "GS Flex · Set by hand" else "GS Flex · ${prefs.fontPreset.label}"

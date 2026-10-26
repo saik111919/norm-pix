@@ -48,16 +48,16 @@ class IconBackgroundSettingsTest {
     private fun shape(label: String) = compose.onNode(hasText(label) and radio)
 
     @Test
-    fun appearanceOffersEveryShape_withTheCircleChosen() {
+    fun appearanceOffersEveryShape_withNoBackgroundChosen() {
         compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.CategoryIcons) } }
         compose.waitForIdle()
 
         compose.onNodeWithText("Icon background").assertExists()
         for (shape in CategoryIconShape.entries) shape(shape.label).assertExists()
-        shape("Circle").assertIsSelected()
+        shape("No background").assertIsSelected()
+        shape("Circle").assertIsNotSelected()
         shape("Rounded").assertIsNotSelected()
         shape("Square").assertIsNotSelected()
-        shape("No background").assertIsNotSelected()
     }
 
     @Test

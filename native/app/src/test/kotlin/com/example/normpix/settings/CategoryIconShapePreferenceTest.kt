@@ -20,9 +20,9 @@ class CategoryIconShapePreferenceTest {
         .also { it.edit().clear().commit() }
 
     @Test
-    fun isACircleUntilTheUserPicksAnother_andIsRemembered() {
+    fun hasNoBackgroundUntilTheUserPicksOne_andIsRemembered() {
         val store = store()
-        assertEquals(CategoryIconShape.Circle, AppPreferences(store).state.value.categoryIconShape)
+        assertEquals(CategoryIconShape.None, AppPreferences(store).state.value.categoryIconShape)
 
         AppPreferences(store).setCategoryIconShape(CategoryIconShape.Square)
         assertEquals(CategoryIconShape.Square, AppPreferences(store).state.value.categoryIconShape, "read back by the next launch")
@@ -30,18 +30,25 @@ class CategoryIconShapePreferenceTest {
     }
 
     @Test
-    fun anUnknownStoredValueFallsBackToTheCircle() {
+    fun anUnknownStoredValueFallsBackToNoBackground() {
         val store = store()
         store.edit().putString("category_icon_shape", "Hexagon").commit()
-        assertEquals(CategoryIconShape.Circle, AppPreferences(store).state.value.categoryIconShape)
+        assertEquals(CategoryIconShape.None, AppPreferences(store).state.value.categoryIconShape)
     }
 
     @Test
-    fun resettingSettingsBringsTheCircleBack() {
+    fun aCircleChosenBeforeStaysAChoice() {
+        val store = store()
+        AppPreferences(store).setCategoryIconShape(CategoryIconShape.Circle)
+        assertEquals(CategoryIconShape.Circle, AppPreferences(store).state.value.categoryIconShape, "the default changing does not move it")
+    }
+
+    @Test
+    fun resettingSettingsBringsNoBackgroundBack() {
         val preferences = AppPreferences(store())
-        preferences.setCategoryIconShape(CategoryIconShape.None)
+        preferences.setCategoryIconShape(CategoryIconShape.Circle)
         preferences.resetToDefaults()
-        assertEquals(CategoryIconShape.Circle, preferences.state.value.categoryIconShape)
+        assertEquals(CategoryIconShape.None, preferences.state.value.categoryIconShape)
     }
 
     @Test
