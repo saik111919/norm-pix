@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- One transaction in the Recent widget: its category's disc, what and where, and the amount. -->
+<!-- tools:ignore="UseAppTint": a widget is drawn by the launcher with the platform's own ImageView, where app:tint (AppCompat's)
+     means nothing; android:tint is the one that works. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/widget_row"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -12,7 +15,8 @@
     android:paddingStart="8dp"
     android:paddingTop="6dp"
     android:paddingEnd="12dp"
-    android:paddingBottom="6dp">
+    android:paddingBottom="6dp"
+    tools:ignore="UseAppTint">
 
     <FrameLayout
         android:layout_width="36dp"

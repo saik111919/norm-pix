@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The Add widget in one cell: a single button, like the app's own add button, that adds an expense. -->
+<!-- tools:ignore="UseAppTint": a widget is drawn by the launcher with the platform's own ImageView, where app:tint (AppCompat's)
+     means nothing; android:tint is the one that works. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@android:id/background"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_button_fab"
     android:clipToOutline="true"
-    android:contentDescription="@string/widget_add_expense">
+    android:contentDescription="@string/widget_add_expense"
+    tools:ignore="UseAppTint">
 
     <ImageView
         android:layout_width="28dp"
