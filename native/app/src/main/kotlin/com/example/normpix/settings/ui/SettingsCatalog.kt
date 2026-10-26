@@ -66,7 +66,7 @@ object SettingsCatalog {
         SettingsEntry("Theme", SettingsPage.Appearance, listOf("dark", "light", "system", "theme", "mode")),
         SettingsEntry("Color source & palette", SettingsPage.Appearance, listOf("color", "dynamic", "material", "wallpaper", "monochrome"), appearance = AppearanceSection.Colors),
         SettingsEntry("Accent color", SettingsPage.Appearance, listOf("accent", "emerald", "ocean", "amber", "rose", "violet", "tint", "volt", "other colors", "preview", "palette"), appearance = AppearanceSection.Colors),
-        SettingsEntry("Pure black and white", SettingsPage.Appearance, listOf("pure", "black", "white", "amoled", "oled", "true black", "monochrome", "greyscale", "grayscale", "high contrast", "dark"), appearance = AppearanceSection.Colors),
+        SettingsEntry("Pure black and white", SettingsPage.Appearance, listOf("pure", "black", "white", "amoled", "oled", "true black", "monochrome", "greyscale", "grayscale", "high contrast"), appearance = AppearanceSection.Colors),
         SettingsEntry("App icon", SettingsPage.Appearance, listOf("app icon", "launcher", "home screen", "logo", "glossy", "comic", "minimal", "flat", "glass", "clay", "pixel", "paper", "neon"), appearance = AppearanceSection.AppIcon),
         SettingsEntry("Progress indicators", SettingsPage.Appearance, listOf("progress", "loading", "wavy", "flat", "bar", "spinner", "loader", "indicator", "expressive"), appearance = AppearanceSection.ProgressIndicators),
         SettingsEntry("Background blur", SettingsPage.Appearance, listOf("sheet", "dialog", "blur", "frosted", "glass", "background", "overlay", "dock", "footer"), appearance = AppearanceSection.Effects),
