@@ -76,8 +76,8 @@ class MonthControlStylePreferenceTest {
         for (query in listOf("month", "month control", "split", "classic", "earlier", "steps")) {
             val hit = SettingsCatalog.search(query).single { it.title == "Month control" }
             assertEquals(SettingsPage.Appearance, hit.group, query)
-            assertEquals(AppearanceSection.MonthControl, hit.appearance, query)
-            assertEquals("Appearance > Month control", hit.location, query)
+            assertEquals(AppearanceSection.Controls, hit.appearance, query)
+            assertEquals("Appearance > Navigation & controls", hit.location, query)
         }
     }
 }

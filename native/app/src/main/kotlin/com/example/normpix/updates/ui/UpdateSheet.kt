@@ -52,9 +52,7 @@ import com.example.normpix.navigation.LocalAppPreferences
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.ui.components.AppLinearProgress
 import com.example.normpix.ui.components.AppLoadingIndicator
-import com.example.normpix.ui.components.AppOverlays
 import com.example.normpix.ui.components.LeadingIcon
-import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.politeLiveRegion
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
@@ -69,38 +67,14 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
-import java.util.WeakHashMap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 
-/** How many update sheets and pages are on screen, for each updater (only ever touched on the main thread). */
-private val showing = WeakHashMap<AppUpdater, Int>()
-
-/** True while an update sheet or the update page for [updater] is on screen: no other comes up over it. */
-fun isUpdateShowing(updater: AppUpdater): Boolean = (showing[updater] ?: 0) > 0
-
-/** Counts [updater]'s update shown ([shown] true) or gone again. */
-internal fun markUpdateShowing(updater: AppUpdater, shown: Boolean) {
-    val count = (showing[updater] ?: 0) + if (shown) 1 else -1
-    if (count > 0) showing[updater] = count else showing.remove(updater)
-}
-
-/** Opens the update sheet over whatever is on screen; it follows [updater] until the user closes it. */
-suspend fun showUpdateSheet(overlays: AppOverlays, updater: AppUpdater) {
-    markUpdateShowing(updater, true)
-    try {
-        overlays.sheet<Unit>(expandable = true) { dismiss -> UpdateSheet(updater, onClose = { dismiss(null) }) }
-    } finally {
-        markUpdateShowing(updater, false)
-    }
-}
-
 /**
- * At launch, once the app is unlocked: a newer release found by the check at launch is offered in the update sheet (see
- * [AppUpdater.launchOffer]), at most once per the wait the user chose in Settings > Automatic updates; nothing is asked while
- * they have automatic checks, or checking when NormPix opens, off. Whenever a download the user
- * started finishes with no update sheet or page on screen (it was left to carry on), the sheet comes back, once the app is
- * unlocked, ready to install: nothing is installed until the user taps Install. And a tapped update notification
+ * At launch, once the app is unlocked: the quiet check (see [AppUpdater.launchOffer]), at most once per the wait the user chose
+ * in Settings > Automatic updates, and none while they have automatic checks, or checking when NormPix opens, off. What it
+ * finds - and a download that finishes while the user is elsewhere - is shown as Home's update banner, never in a sheet put
+ * over what they are doing: they update when they choose to, from the banner or Settings. And a tapped update notification
  * ([requests]) opens the update page, once unlocked - installing what is ready when it was the notification's Install
  * ([installRequests]), which Android then asks the user to confirm as always.
  */
@@ -112,7 +86,6 @@ fun OfferAppUpdates(
     installRequests: MutableStateFlow<Boolean>? = null,
 ) {
     if (updater == null) return
-    val overlays = LocalOverlays.current
     val navigator = LocalNavigator.current
     val preferences = LocalAppPreferences.current
     val locked by rememberUpdatedState(appLocked)
@@ -120,8 +93,8 @@ fun OfferAppUpdates(
         if (appLocked) return@LaunchedEffect
         val prefs = preferences?.state?.value
         val allowed = prefs != null && prefs.updateChecksEnabled && prefs.updateCheckOnOpen
-        updater.launchOffer(allowed, prefs?.updateCheckEvery?.intervalMs ?: AppUpdater.CHECK_INTERVAL_MS) ?: return@LaunchedEffect
-        if (!isUpdateShowing(updater)) showUpdateSheet(overlays, updater)
+        // Found, it shows on Home as a banner; nothing opens over the screen.
+        updater.launchOffer(allowed, prefs?.updateCheckEvery?.intervalMs ?: AppUpdater.CHECK_INTERVAL_MS)
     }
     if (requests != null) {
         LaunchedEffect(updater, requests) {
@@ -138,12 +111,6 @@ fun OfferAppUpdates(
                     updater.install()
                 }
             }
-        }
-    }
-    LaunchedEffect(updater) {
-        updater.downloaded.collect {
-            snapshotFlow { locked }.first { !it }
-            if (updater.state.value is UpdateState.Ready && !isUpdateShowing(updater)) showUpdateSheet(overlays, updater)
         }
     }
 }

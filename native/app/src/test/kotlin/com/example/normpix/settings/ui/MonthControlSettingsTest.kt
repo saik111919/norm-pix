@@ -27,8 +27,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Settings > Appearance > Month control: the two looks of the month switcher, each with a sample of itself, the one in use
- * chosen, a choice taking effect at once - and a row for it on the Appearance overview that says which is in use.
+ * Settings > Appearance > Navigation & controls > Month control: the two looks of the month switcher, each with a sample of
+ * itself, the one in use chosen, a choice taking effect at once - and the overview's row for the controls says which is in use.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h2400dp")
@@ -52,7 +52,7 @@ class MonthControlSettingsTest {
 
     @Test
     fun theTrackIsChosenAtFirst_andTheEarlierButtonsAreOneTouchAway() {
-        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.MonthControl) } }
+        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.Controls) } }
         compose.waitForIdle()
 
         style("Track").assertIsSelected()
@@ -63,7 +63,7 @@ class MonthControlSettingsTest {
 
     @Test
     fun choosingTheEarlierButtonsAppliesAtOnce_andMovesTheSelection() {
-        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.MonthControl) } }
+        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.Controls) } }
         compose.waitForIdle()
 
         style("Split buttons").performScrollTo().performClick()
@@ -80,7 +80,7 @@ class MonthControlSettingsTest {
 
     @Test
     fun eachLookHasASampleOfItself_whichChoosesItWhenTouched() {
-        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.MonthControl) } }
+        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.Controls) } }
         compose.waitForIdle()
 
         // A real month control under each choice (in the unmerged tree: a screen reader skips them, the row above says what they are).
@@ -94,26 +94,26 @@ class MonthControlSettingsTest {
     }
 
     @Test
-    fun theAppearanceOverviewHasARowForIt_saidInTheLook() {
+    fun theAppearanceOverviewSaysTheLook_onTheRowOfTheControls() {
         compose.setContent { env.Content { AppearanceSettingsPage() } }
         compose.waitForIdle()
 
-        compose.onNodeWithText("Month control").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Track").assertIsDisplayed()
+        compose.onNodeWithText("Navigation & controls").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Track", substring = true).assertIsDisplayed()
 
         env.preferences.setMonthControlStyle(MonthControlStyle.Split)
         compose.waitForIdle()
-        compose.onNodeWithText("Split buttons").assertIsDisplayed()
+        compose.onNodeWithText("Split buttons", substring = true).assertIsDisplayed()
     }
 
     @Test
-    fun theOverviewRowOpensItsPage() {
+    fun theOverviewRowOpensThePageItIsOn() {
         compose.setContent { env.Content { AppearanceSettingsPage() } }
         compose.waitForIdle()
 
-        compose.onNodeWithText("Month control").performScrollTo().performClick()
+        compose.onNodeWithText("Navigation & controls").performScrollTo().performClick()
         compose.waitForIdle()
 
-        assertEquals(listOf(AppearanceSection.MonthControl), env.navigator.appearanceSections)
+        assertEquals(listOf(AppearanceSection.Controls), env.navigator.appearanceSections)
     }
 }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.FileOpen
+import androidx.compose.material.icons.outlined.ViewCarousel
 import androidx.compose.material.icons.rounded.SaveAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -19,11 +20,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
-import com.example.normpix.settings.AccountsLayout
-import com.example.normpix.settings.BankIconStyle
-import com.example.normpix.settings.CardsLayout
 import com.example.normpix.settings.ClipboardTimeout
 import com.example.normpix.settings.WalletCardActionStyle
 import com.example.normpix.ui.components.AppLoadingIndicator
@@ -43,8 +42,9 @@ import kotlinx.coroutines.launch
 
 /**
  * Settings > Wallet & Cards: whether NormPix keeps cards at all and whether it keeps their CVVs (both delete what they cover,
- * after asking - see [CardsSettingsFlows]), and how saved cards look and behave in Wallet. With Store cards off, everything
- * about saved cards leaves the page, and the accounts' own settings stay.
+ * after asking - see [CardsSettingsFlows]), and how saved cards behave in Wallet. With Store cards off, everything about saved
+ * cards leaves the page. How the Wallet looks - the layouts of accounts and cards, bank logos, the cards' tilt - is with the
+ * rest of how NormPix looks, in Appearance (Layouts, Icons and Effects).
  */
 @Composable
 fun WalletSettingsPage() {
@@ -198,59 +198,15 @@ fun WalletSettingsPage() {
                         }
                     }
                 }
-                ListSection(
-                    title = "Accounts layout",
-                    footer = "How the Wallet shows your accounts. The Wallet has a switch for it too.",
-                    modifier = Modifier.selectableGroup(),
-                ) {
-                    for (layout in AccountsLayout.entries) {
-                        item {
-                            RadioRow(
-                                headline = layout.label,
-                                supporting = layout.description,
-                                selected = prefs.accountsLayout == layout,
-                                onClick = {
-                                    haptics.selection()
-                                    preferences.setAccountsLayout(layout)
-                                },
-                            )
-                        }
-                    }
-                }
-                if (cardsOn) {
-                    ListSection(
-                        title = "Cards layout",
-                        footer = "How the Wallet shows your saved cards. The Wallet has a switch for it too.",
-                        modifier = Modifier.selectableGroup(),
-                    ) {
-                        for (layout in CardsLayout.entries) {
-                            item {
-                                RadioRow(
-                                    headline = layout.label,
-                                    supporting = layout.description,
-                                    selected = prefs.cardsLayout == layout,
-                                    onClick = {
-                                        haptics.selection()
-                                        preferences.setCardsLayout(layout)
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-                ListSection(title = "Bank logos", modifier = Modifier.selectableGroup()) {
-                    for (style in BankIconStyle.entries) {
-                        item {
-                            RadioRow(
-                                headline = style.label,
-                                supporting = style.description,
-                                selected = prefs.bankIconStyle == style,
-                                onClick = {
-                                    haptics.selection()
-                                    preferences.setBankIconStyle(style)
-                                },
-                            )
-                        }
+                // How the Wallet looks is with the rest of how NormPix looks; one row leads there rather than the choices sitting twice.
+                ListSection(title = "Look") {
+                    item {
+                        ListRow(
+                            headline = "Accounts and cards layout",
+                            supporting = "In Appearance > Layouts, beside Home's. Bank logos and card tilt are in Appearance too",
+                            leading = { Icon(Icons.Outlined.ViewCarousel, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            onClick = { navigator.openAppearance(AppearanceSection.Layouts) },
+                        )
                     }
                 }
                 ListSection(title = "Card numbers on accounts") {
@@ -266,19 +222,6 @@ fun WalletSettingsPage() {
                     }
                 }
                 if (cardsOn) {
-                    ListSection(title = "Motion") {
-                        item {
-                            SwitchRow(
-                                headline = "Card tilt",
-                                supporting = "Cards lean a few degrees as you move your phone. Stays flat when animations are turned off in system settings.",
-                                checked = prefs.cardTiltEnabled,
-                                onCheckedChange = { on ->
-                                    haptics.selection()
-                                    preferences.setCardTiltEnabled(on)
-                                },
-                            )
-                        }
-                    }
                     ListSection(
                         title = "Clear copied card details after",
                         footer = "Applies to the number, cardholder name, expiry and CVV you copy from a card. Copied details are marked sensitive, so keyboards and clipboard previews hide them.",

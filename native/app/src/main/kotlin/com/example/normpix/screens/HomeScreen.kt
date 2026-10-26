@@ -466,7 +466,7 @@ private fun TopSpending(data: HomeData, onSeeAll: () -> Unit) {
 }
 
 /**
- * The stack (or, as Settings > Appearance > Top spending has it, the carousel) itself, from what the month came to per category;
+ * The stack (or, as Settings > Appearance > Layouts has it, the carousel) itself, from what the month came to per category;
  * nothing at all when there was no spending.
  */
 @Composable

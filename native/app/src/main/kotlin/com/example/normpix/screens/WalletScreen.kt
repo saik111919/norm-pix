@@ -4,6 +4,8 @@ import com.example.normpix.finance.ui.FinanceState
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import com.example.normpix.wallet.SectionAddButton
+import com.example.normpix.wallet.NfcAvailability
+import com.example.normpix.wallet.rememberNfcAvailability
 import com.example.normpix.wallet.WalletSectionHeader
 import com.example.normpix.wallet.WalletOverview
 import com.example.normpix.wallet.AccountCarousel
@@ -29,13 +31,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ViewList
 import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.AddCard
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Nfc
 import androidx.compose.material.icons.outlined.ViewAgenda
 import androidx.compose.material.icons.outlined.ViewCarousel
-import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Nfc
@@ -119,7 +121,6 @@ import com.example.normpix.wallet.AccountCardData
 import com.example.normpix.wallet.AccountCardView
 import com.example.normpix.wallet.AccountStack
 import com.example.normpix.wallet.CardKind
-import com.example.normpix.wallet.AddTile
 import com.example.normpix.wallet.CardCarousel
 import com.example.normpix.wallet.CardStack
 import com.example.normpix.wallet.CardsState
@@ -227,12 +228,14 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
 
     // Two columns - the accounts, the cards - when the tab has the room for them; otherwise one list, the accounts then the cards.
     val wide = isTwoColumn(minOf(rememberTabRoom(), AppLayout.maxWideContentWidth) - AppSpacing.lg * 2)
+    // The card exchange needs NFC: with it switched off (or no NFC in the phone) nothing offers it.
+    val nfcOn = rememberNfcAvailability() == NfcAvailability.Available
 
     AppPage(
         title = "Wallet",
         actions = {
             AmountsVisibilityButton()
-            if (cardsOn) {
+            if (cardsOn && nfcOn) {
                 IconButton(onClick = { flows.openNfcExchange(ExchangeTab.Inlet) }) {
                     Icon(Icons.Outlined.Nfc, contentDescription = "NFC Card Exchange (Inlet / Outlet)")
                 }
@@ -304,13 +307,15 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                             onClick = flows::addCard,
                                         )
                                     }
-                                    item {
-                                        ListRow(
-                                            headline = "Tap to add (NFC)",
-                                            supporting = "Tap a phone sharing a card from NormPix, or your contactless card.",
-                                            leading = { LeadingIcon(Icons.Outlined.Nfc) },
-                                            onClick = { flows.openNfcExchange(ExchangeTab.Inlet) },
-                                        )
+                                    if (nfcOn) {
+                                        item {
+                                            ListRow(
+                                                headline = "Tap to add (NFC)",
+                                                supporting = "Tap a phone sharing a card from NormPix, or your contactless card.",
+                                                leading = { LeadingIcon(Icons.Outlined.Nfc) },
+                                                onClick = { flows.openNfcExchange(ExchangeTab.Inlet) },
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -322,7 +327,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                         val activeFilter = bankFilter?.takeIf { key -> banks.any { it.key == key } }
                         val visible = if (activeFilter == null) cards else cards.filter { it.bankKey == activeFilter }
                         block("cards-layout") {
-                            // The same cards four ways, as the accounts above; the choice is the Wallet's own (Settings has it too).
+                            // The same cards four ways, as the accounts above; the choice is the Wallet's own (Settings > Appearance > Layouts has it too).
                             Box(Modifier.padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.md)) {
                                 LayoutChoice(
                                     options = cardsLayoutOptions,
@@ -378,9 +383,6 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                 block("cards-stack") {
                                     Column(Modifier.padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg)) {
                                         CardStack(cards = visible, onOpen = flows::showCard, state = cardsDeck, bankIconStyle = prefs.bankIconStyle)
-                                        // The next card goes where this stack ends: a slim tile, as the cards behind the front one are slim.
-                                        Spacer(Modifier.height(AppSpacing.lg))
-                                        AddTile(title = "Add card", supporting = "Encrypted, and kept on this device", onClick = flows::addCard, compact = true)
                                     }
                                 }
                             } else if (prefs.cardsLayout == CardsLayout.Carousel) {
@@ -401,11 +403,6 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                             },
                                             onCopy = { card, field -> reveal.copy(card, field) },
                                         )
-                                        // The next card goes after the last, as under the stack: a slim tile.
-                                        Spacer(Modifier.height(AppSpacing.lg))
-                                        Box(Modifier.padding(horizontal = AppSpacing.lg)) {
-                                            AddTile(title = "Add card", supporting = "Encrypted, and kept on this device", onClick = flows::addCard, compact = true)
-                                        }
                                     }
                                 }
                             } else {
@@ -421,13 +418,6 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                                         onClick = { flows.showCard(card) },
                                                     )
                                                 }
-                                            }
-                                            item {
-                                                ListRow(
-                                                    headline = "Add card",
-                                                    leading = { LeadingIcon(Icons.Rounded.Add) },
-                                                    onClick = flows::addCard,
-                                                )
                                             }
                                         }
                                     }
@@ -481,14 +471,6 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                     }
                                 }
                             }
-                          }
-                          // The next card is one more of them, drawn empty, where it would go.
-                          block("cards-add") { itemModifier ->
-                              Box(itemModifier.fillMaxWidth().padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg), contentAlignment = Alignment.Center) {
-                                  Box(Modifier.widthIn(max = 440.dp)) {
-                                      AddTile(title = "Add card", supporting = "Encrypted, and kept on this device", onClick = flows::addCard)
-                                  }
-                              }
                           }
                         }
                     }
@@ -647,15 +629,17 @@ private fun AccountsSection(
     Column {
         if (overview) WalletTotals(amountsHidden)
         Spacer(Modifier.height(AppSpacing.xxl))
+        // The way to add one more is beside the heading, as for the cards - in every layout, and not a tile after the last.
         WalletSectionHeader(
             title = "Accounts",
             summary = buildString {
                 append(active.size).append(if (active.size == 1) " account" else " accounts")
                 if (archived.isNotEmpty()) append(" · ").append(archived.size).append(" archived")
             },
+            action = { SectionAddButton("Add account", actions::addAccount) },
         )
         Spacer(Modifier.height(AppSpacing.sm))
-        // The same accounts four ways; the choice is the Wallet's own (Settings > Wallet & Cards has it too).
+        // The same accounts four ways; the choice is the Wallet's own (Settings > Appearance > Layouts has it too).
         LayoutChoice(
             options = accountsLayoutOptions,
             // Spread out, the accounts are no longer the stack: none is chosen, and "Stack" puts them back.
@@ -671,22 +655,22 @@ private fun AccountsSection(
             description = "How the accounts are shown",
         )
         Spacer(Modifier.height(AppSpacing.md))
-        if (layout == AccountsLayout.Rows) {
+        if (active.isEmpty()) {
+            // Nothing to lay out yet: what to do first, as the cards say when there are none.
             ListSection {
-                for (a in active) item { AccountTile(a, cardsPerBank) }
-                item { AddAccountRow(actions::addAccount) }
+                item {
+                    ListRow(
+                        headline = "Add your first account",
+                        supporting = "Cash, a bank, a card or a wallet",
+                        leading = { LeadingIcon(Icons.Outlined.AccountBalanceWallet) },
+                        onClick = actions::addAccount,
+                    )
+                }
             }
+        } else if (layout == AccountsLayout.Rows) {
+            ListSection { for (a in active) item { AccountTile(a, cardsPerBank) } }
         } else {
-            // The place for the next account is a card-shaped tile at the end of them, not a row under them.
-            if (active.isNotEmpty()) {
-                AccountCards(active, layout, cardsPerBank, bankIconStyle, accountsDeck, onAdd = actions::addAccount)
-            } else {
-                AddTile(
-                    title = "Add your first account",
-                    supporting = "Cash, a bank, a card or a wallet",
-                    onClick = actions::addAccount,
-                )
-            }
+            AccountCards(active, layout, cardsPerBank, bankIconStyle, accountsDeck)
         }
         if (archived.isNotEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -715,15 +699,6 @@ private fun AccountsSection(
     }
 }
 
-@Composable
-private fun AddAccountRow(onClick: () -> Unit) {
-    ListRow(
-        headline = "Add account",
-        leading = { LeadingIcon(Icons.Rounded.Add) },
-        onClick = onClick,
-    )
-}
-
 /** When a card's bill falls due, or null: it has no due day, or nothing is owed on it (a bill that is paid is not due). */
 private fun billDueOf(account: Account, balance: Long, today: LocalDate): BillDue? =
     if (account.kind == AccountKind.Card && balance < 0) nextBillDue(account.dueDay, today) else null
@@ -745,8 +720,6 @@ private fun AccountCards(
     bankIconStyle: BankIconStyle,
     /** Whether the stack is spread out; unused when the accounts are laid out as cards. */
     deck: DeckStackState,
-    /** When given, a tile to add one more ends the stack or the list. */
-    onAdd: (() -> Unit)? = null,
 ) {
     val finance = rememberFinanceState()
     val actions = rememberFinanceActions()
@@ -783,34 +756,20 @@ private fun AccountCards(
     }
     fun accountOf(card: AccountCardData) = accounts.first { it.id == card.id }
     if (layout == AccountsLayout.Stack) {
-        Column {
-            AccountStack(
-                accounts = cards,
-                onOpen = { navigator.openAccountHistory(it.id) },
-                onManage = { actions.manageAccount(accountOf(it)) },
-                state = deck,
-                bankIconStyle = bankIconStyle,
-            )
-            // The stack's cards are a hair of colour behind the front one: the add tile under it is a slim one.
-            if (onAdd != null) {
-                Spacer(Modifier.height(AppSpacing.lg))
-                AddTile(title = "Add account", supporting = "Cash, a bank, a card or a wallet", onClick = onAdd, compact = true)
-            }
-        }
+        AccountStack(
+            accounts = cards,
+            onOpen = { navigator.openAccountHistory(it.id) },
+            onManage = { actions.manageAccount(accountOf(it)) },
+            state = deck,
+            bankIconStyle = bankIconStyle,
+        )
     } else if (layout == AccountsLayout.Carousel) {
-        Column {
-            AccountCarousel(
-                accounts = cards,
-                onOpen = { navigator.openAccountHistory(it.id) },
-                onManage = { actions.manageAccount(accountOf(it)) },
-                bankIconStyle = bankIconStyle,
-            )
-            // As under the stack: the next account is a slim tile after the last.
-            if (onAdd != null) {
-                Spacer(Modifier.height(AppSpacing.lg))
-                AddTile(title = "Add account", supporting = "Cash, a bank, a card or a wallet", onClick = onAdd, compact = true)
-            }
-        }
+        AccountCarousel(
+            accounts = cards,
+            onOpen = { navigator.openAccountHistory(it.id) },
+            onManage = { actions.manageAccount(accountOf(it)) },
+            bankIconStyle = bankIconStyle,
+        )
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.lg)) {
             cards.forEachIndexed { index, card ->
@@ -827,14 +786,6 @@ private fun AccountCards(
                                 )
                             }
                         }
-                    }
-                }
-            }
-            // The next account is a card too: one more of them, drawn empty, where it would go.
-            if (onAdd != null) {
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Box(Modifier.widthIn(max = 440.dp)) {
-                        AddTile(title = "Add account", supporting = "Cash, a bank, a card or a wallet", onClick = onAdd)
                     }
                 }
             }

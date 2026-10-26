@@ -15,6 +15,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
@@ -207,35 +208,36 @@ class CardsLayoutTest {
 
     // --- the place for the next card ------------------------------------------------------------------------------
 
+    /** What the add tile used to say under "Add card", after the last card. */
     private val tileNote = "Encrypted, and kept on this device"
 
-    @Test
-    fun theCardsEndWithAnAddCardTile_thatOpensTheCardForm() {
-        showWallet(CardsLayout.Cards)
-
-        compose.onNodeWithText(tileNote).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText(tileNote).performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("Save card").fetchSemanticsNodes().isNotEmpty() }
-    }
-
-    @Test
-    fun theStackIsFollowedByASlimAddCardTile() {
-        showWallet(CardsLayout.Stack)
-
-        compose.onNodeWithText(tileNote).performScrollTo().assertIsDisplayed()
-        // Slim: a card wide, nowhere near a card tall.
-        val tile = compose.onNode(hasText(tileNote)).getUnclippedBoundsInRoot()
-        assertTrue((tile.bottom - tile.top).value < 120f, "a slim tile under the stack, not a full card: ${tile.bottom - tile.top}")
-    }
-
-    @Test
-    fun theRowsKeepAnAddCardRowInsteadOfATile() {
-        showWallet(CardsLayout.Rows)
-
+    /** In every layout the one way to add a card is the button beside the "Cards" heading: nothing comes after the last card. */
+    private fun assertAddCardIsBesideTheHeading() {
         compose.onAllNodesWithText(tileNote).assertCountEquals(0)
-        compose.onAllNodesWithText("Add card").onLast().performScrollTo()
-        compose.onAllNodesWithText("Add card").onLast().performClick()
+        compose.onAllNodesWithText("Add card").assertCountEquals(1)
+        val heading = compose.onNode(hasText("Cards") and isHeading()).getUnclippedBoundsInRoot()
+        val button = compose.onNodeWithText("Add card").getUnclippedBoundsInRoot()
+        assertTrue(button.top < heading.bottom + 24.dp && button.left > heading.right, "beside the heading: $heading, $button")
+        compose.onNodeWithText("Add card").performScrollTo().performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Save card").fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
+    fun theCardsInFull_addFromTheHeading() {
+        showWallet(CardsLayout.Cards)
+        assertAddCardIsBesideTheHeading()
+    }
+
+    @Test
+    fun theStack_addsFromTheHeading() {
+        showWallet(CardsLayout.Stack)
+        assertAddCardIsBesideTheHeading()
+    }
+
+    @Test
+    fun theRows_addFromTheHeading_withNoAddRow() {
+        showWallet(CardsLayout.Rows)
+        assertAddCardIsBesideTheHeading()
     }
 
     // --- the carousel ---------------------------------------------------------------------------------------------
@@ -390,13 +392,8 @@ class CardsLayoutTest {
     }
 
     @Test
-    fun theCarouselEndsWithTheSlimAddCardTile() {
+    fun theCarousel_addsFromTheHeading() {
         showWallet(CardsLayout.Carousel)
-
-        compose.onNodeWithText(tileNote).performScrollTo().assertIsDisplayed()
-        val tile = compose.onNode(hasText(tileNote)).getUnclippedBoundsInRoot()
-        assertTrue((tile.bottom - tile.top).value < 120f, "a slim tile under the carousel, not a full card: ${tile.bottom - tile.top}")
-        compose.onNodeWithText(tileNote).performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("Save card").fetchSemanticsNodes().isNotEmpty() }
+        assertAddCardIsBesideTheHeading()
     }
 }

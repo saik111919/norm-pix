@@ -12,6 +12,8 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
@@ -262,38 +264,42 @@ class AccountCardsTest {
 
     // ------------------------------------------------------------ the place for the next account
 
+    /** What the add tile used to say under "Add account", after the last account. */
     private val accountTileNote = "Cash, a bank, a card or a wallet"
 
-    @Test
-    fun theStackIsFollowedByASlimAddAccountTile_thatOpensTheNewAccountForm() {
-        showWallet(AccountsLayout.Stack)
-
-        compose.onNodeWithText(accountTileNote).assertIsDisplayed()
-        val tile = compose.onNode(hasText(accountTileNote)).getUnclippedBoundsInRoot()
-        assertTrue((tile.bottom - tile.top).value < 120f, "slim, under the stack: ${tile.bottom - tile.top}")
+    /** In every layout the one way to add an account is the button beside the "Accounts" heading, as for the cards. */
+    private fun assertAddAccountIsBesideTheHeading() {
+        assertTrue(compose.onAllNodesWithText(accountTileNote).fetchSemanticsNodes().isEmpty(), "no tile after the last account")
+        assertEquals(1, compose.onAllNodesWithText("Add account").fetchSemanticsNodes().size, "one way to add")
+        val heading = compose.onNode(hasText("Accounts") and isHeading()).getUnclippedBoundsInRoot()
+        val button = compose.onNodeWithText("Add account").getUnclippedBoundsInRoot()
+        assertTrue(button.top < heading.bottom + 24.dp && button.left > heading.right, "beside the heading: $heading, $button")
         compose.onNodeWithText("Add account").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Save account").fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test
-    fun theCardListEndsWithAFullSizeAddAccountTile_shapedLikeTheCardsAboveIt() {
-        showWallet(AccountsLayout.Cards)
-
-        val tile = compose.onNode(hasText(accountTileNote)).getUnclippedBoundsInRoot()
-        val width = (tile.right - tile.left).value
-        val height = (tile.bottom - tile.top).value
-        assertEquals(1.586f, width / height, 0.05f, "a card's proportions: ${width}x$height")
-        // And it comes after the last account, not before.
-        val last = accountCards().size
-        assertEquals(3, last, "all three accounts are printed above it")
+    fun theStack_addsFromTheHeading() {
+        showWallet(AccountsLayout.Stack)
+        assertAddAccountIsBesideTheHeading()
     }
 
     @Test
-    fun theRowsKeepTheirAddAccountRow() {
-        showWallet(AccountsLayout.Rows)
+    fun theCarousel_addsFromTheHeading() {
+        showWallet(AccountsLayout.Carousel)
+        assertAddAccountIsBesideTheHeading()
+    }
 
-        assertTrue(compose.onAllNodesWithText(accountTileNote).fetchSemanticsNodes().isEmpty(), "no tile in the compact list")
-        compose.onNodeWithText("Add account").assertIsDisplayed()
+    @Test
+    fun theCardList_addsFromTheHeading() {
+        showWallet(AccountsLayout.Cards)
+        assertAddAccountIsBesideTheHeading()
+    }
+
+    @Test
+    fun theRows_addFromTheHeading_withNoAddRow() {
+        showWallet(AccountsLayout.Rows)
+        assertAddAccountIsBesideTheHeading()
     }
 
     // ------------------------------------------------------------ the choice

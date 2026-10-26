@@ -64,7 +64,7 @@ fun NotificationsSettingsPage() {
                             "you hear when an update is out or ready."
                     } else {
                         "Nothing alerts while this is off. Reminders still come due in Plans, card expiry still shows in Wallet, " +
-                            "and updates are offered when you open NormPix."
+                            "and updates show on Home when you open NormPix."
                     },
                 ) {
                     item {

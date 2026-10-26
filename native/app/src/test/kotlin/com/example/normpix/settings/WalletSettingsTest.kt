@@ -3,16 +3,19 @@ package com.example.normpix.settings
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import com.example.normpix.navigation.AppearanceSection
+import com.example.normpix.settings.ui.AppearanceSectionPage
 import com.example.normpix.settings.ui.SettingsCatalog
 import com.example.normpix.settings.ui.WalletSettingsPage
 import com.example.normpix.testing.TestEnvironment
 import java.util.Locale
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.junit.After
 import org.junit.Before
@@ -54,6 +57,15 @@ class WalletSettingsTest {
     }
 
     @Test
+    fun theWalletsLookIsNotRepeatedHere_oneRowLeadsToIt() {
+        show()
+        for (gone in listOf("Accounts layout", "Cards layout", "Bank logos", "Card tilt")) compose.onAllNodesWithText(gone).assertCountEquals(0)
+        compose.onNodeWithText("Accounts and cards layout").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(AppearanceSection.Layouts), env.navigator.appearanceSections)
+    }
+
+    @Test
     fun pickingATimeoutIsRememberedAndShown() {
         show()
         compose.onNodeWithText("1 minute").performScrollTo().performClick()
@@ -66,8 +78,11 @@ class WalletSettingsTest {
     }
 
     @Test
-    fun cardTiltIsOnByDefaultAndTheSwitchTurnsItOff() {
-        show()
+    fun cardTiltIsOnByDefault_andItsSwitchIsWithTheOtherEffects() {
+        // How the cards look is with the rest of how NormPix looks: Appearance > Effects, beside the background blur.
+        compose.setContent { env.Content { AppearanceSectionPage(AppearanceSection.Effects) } }
+        compose.waitForIdle()
+        compose.onNodeWithText("Background blur").assertExists()
         compose.onNodeWithText("Card tilt").performScrollTo().assertIsOn()
         compose.onNodeWithText("Card tilt").performClick()
         compose.waitForIdle()
@@ -91,6 +106,6 @@ class WalletPreferencesTest {
         assertTrue("Card tilt" in tilt, "$tilt")
         val clipboard = SettingsCatalog.search("clipboard").map { it.title }
         assertTrue("Clear copied card details after" in clipboard, "$clipboard")
-        assertNotNull(SettingsCatalog.entries.single { it.title == "Card tilt" }.page)
+        assertEquals(AppearanceSection.Effects, SettingsCatalog.entries.single { it.title == "Card tilt" }.appearance)
     }
 }
