@@ -99,6 +99,8 @@ class DummyData private constructor(
         sharedPictures = real.sharedPictures,
         // Updates are the app's, not the data's: the same updater whichever set is showing.
         updates = real.updates,
+        // So are the widgets: a tap on one reaches the app whichever set is showing (and the UI offers the way back).
+        widgetRequests = real.widgetRequests,
     )
 
     /** Drops the sample set and frees its stores, its pictures too. */

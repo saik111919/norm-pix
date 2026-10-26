@@ -1,5 +1,10 @@
 package com.example.normpix
 
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
+import com.example.normpix.widgets.WidgetRequest
+import com.example.normpix.widgets.RecentWidget
 import android.app.Application
 import android.content.Context
 import com.example.normpix.availability.ScheduledFeature
@@ -94,6 +99,11 @@ class AppContainer(
      * null where nothing is updated (tests).
      */
     val updates: AppUpdater? = null,
+    /**
+     * What a home-screen widget asked for (add a transaction, show one, open Activity), done by the UI once the app is
+     * unlocked, then cleared. Shared with the sample set, as the widgets are the app's, whichever data is showing.
+     */
+    val widgetRequests: MutableStateFlow<WidgetRequest?> = MutableStateFlow(null),
 ) {
     /** A reminder whose alert screen should open (notification tapped), consumed by the UI. */
     val reminderAlerts = MutableStateFlow<Long?>(null)
@@ -130,6 +140,26 @@ class NormPixApplication : Application() {
         followCardsForBanks()
         container.updates?.start()
         followUpdateSettings()
+        followLedgerForWidgets()
+    }
+
+    /**
+     * The Recent widget shows the ledger as the app does, so it is drawn again whenever the ledger changes or how it is
+     * shown does (amounts hidden, the app lock) - half a second after the last of a burst of changes.
+     */
+    private fun followLedgerForWidgets() {
+        val container = container
+        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            combine(container.finance.state, container.preferences.state) { finance, prefs ->
+                listOf(finance.revision, prefs.amountsHidden, prefs.walletLockEnabled, prefs.appLockScope)
+            }
+                .distinctUntilChanged()
+                .drop(1)
+                .collectLatest {
+                    delay(500)
+                    RecentWidget.refreshAll(this@NormPixApplication)
+                }
+        }
     }
 
     /**

@@ -59,6 +59,7 @@ NormPix is a personal finance tracker and card wallet for Android, built nativel
 - **Plans that keep up.** Monthly budgets per category, repeating payments that record themselves, and reminders with snooze, all on the Plans & Activity tab.
 - **Insights that answer questions.** Where the money went, what changed from last month, spending per person, and any range of days you pick.
 - **A wallet you can trust.** Card numbers are encrypted, hidden until you unlock (fingerprint, face or screen lock, or a tap on your own NFC tag), and cleared from the clipboard after copying. Screenshots of the app are blocked.
+- **On your home screen.** Three widgets: your recent transactions at a glance, one tap to add an expense, income or a transfer, and a clock with turning rings after a watch face. They follow your wallpaper's colours on Android 12 and later, and show nothing of your ledger while NormPix is locked.
 - **Made to feel native.** Material 3 Expressive throughout, your choice of accent and font, ten app icons, and six page-transition styles, including a Linux-like window open and close.
 
 <details>

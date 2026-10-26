@@ -1,5 +1,6 @@
 package com.example.normpix.navigation
 
+import com.example.normpix.widgets.ReceiveWidgetRequests
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
@@ -445,6 +446,8 @@ private fun AppNavigation(
      CompositionLocalProvider(LocalReminderLauncher provides rememberReminderFlows()) {
       // Text shared from another app (ShareTransactionActivity) opens as a new-transaction draft, once unlocked.
       ReceiveSharedTransactions(container.sharedText, container.sharedPictures, appLocked = held, sampleData = sampleData)
+      // A home-screen widget's tap: a new transaction, one transaction's details or Activity, once unlocked.
+      ReceiveWidgetRequests(container.widgetRequests, held = held, sampleData = sampleData)
       // Once a day at launch, once unlocked: a newer release on GitHub is offered (Settings > Check for updates).
       OfferAppUpdates(
           container.updates,

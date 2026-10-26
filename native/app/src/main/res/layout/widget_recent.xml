@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Recent widget: a heading that opens Activity, the add button, and the latest transactions as tonal rows
+     (RecentWidget adds as many as fit, each a widget_recent_row) - or, in their place, a message: nothing yet, or locked. -->
+<!-- tools:ignore="UseAppTint": a widget is drawn by the launcher with the platform's own ImageView, where app:tint (AppCompat's)
+     means nothing; android:tint is the one that works. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:clipToOutline="true"
+    android:orientation="vertical"
+    android:padding="@dimen/widget_padding"
+    tools:ignore="UseAppTint">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/widget_recent_open"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/widget_press"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="2dp"
+            android:paddingEnd="8dp">
+
+            <ImageView
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:importantForAccessibility="no"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_launcher_monochrome"
+                android:tint="@color/widget_primary" />
+
+            <TextView
+                android:id="@+id/widget_recent_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
+                android:text="@string/widget_recent_title"
+                android:textColor="@color/widget_on_surface"
+                android:textSize="16sp" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/widget_recent_add"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/widget_fab_background"
+            android:contentDescription="@string/widget_add_expense"
+            android:scaleType="center"
+            android:src="@drawable/widget_ic_add"
+            android:tint="@color/widget_on_primary_container" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_recent_rows"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical" />
+
+    <LinearLayout
+        android:id="@+id/widget_recent_message"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="@drawable/widget_press"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/widget_recent_message_icon"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/widget_ic_lock"
+            android:tint="@color/widget_on_surface_variant" />
+
+        <TextView
+            android:id="@+id/widget_recent_message_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:maxLines="2"
+            android:textColor="@color/widget_on_surface"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/widget_recent_message_body"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="2"
+            android:textColor="@color/widget_on_surface_variant"
+            android:textSize="12sp" />
+    </LinearLayout>
+</LinearLayout>

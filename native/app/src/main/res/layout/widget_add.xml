@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Add widget, two cells wide or more: Material 3's filled button for the main thing (an expense), tonal icon buttons
+     for income and a transfer - the order the app's own add buttons have. Each opens the new-transaction sheet. -->
+<!-- tools:ignore="UseAppTint": a widget is drawn by the launcher with the platform's own ImageView, where app:tint (AppCompat's)
+     means nothing; android:tint is the one that works. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:clipToOutline="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="@dimen/widget_padding"
+    android:paddingEnd="@dimen/widget_padding"
+    tools:ignore="UseAppTint">
+
+    <LinearLayout
+        android:id="@+id/widget_add_expense"
+        android:layout_width="0dp"
+        android:layout_height="48dp"
+        android:layout_weight="1"
+        android:background="@drawable/widget_button_primary"
+        android:contentDescription="@string/widget_add_expense"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="20dp">
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/widget_ic_add"
+            android:tint="@color/widget_on_primary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:importantForAccessibility="no"
+            android:maxLines="1"
+            android:text="@string/widget_expense"
+            android:textColor="@color/widget_on_primary"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <ImageButton
+        android:id="@+id/widget_add_income"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/widget_button_tonal"
+        android:contentDescription="@string/widget_add_income"
+        android:scaleType="center"
+        android:src="@drawable/widget_ic_income"
+        android:tint="@color/widget_on_secondary_container" />
+
+    <ImageButton
+        android:id="@+id/widget_add_transfer"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/widget_button_tonal"
+        android:contentDescription="@string/widget_add_transfer"
+        android:scaleType="center"
+        android:src="@drawable/widget_ic_transfer"
+        android:tint="@color/widget_on_secondary_container" />
+</LinearLayout>

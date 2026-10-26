@@ -96,7 +96,11 @@ class RecordingNavigator : AppNavigator {
         changelogOpened++
     }
     override fun go(destination: AppDestination) {}
-    override fun openTransactions() {}
+    var transactionsOpened = 0
+
+    override fun openTransactions() {
+        transactionsOpened++
+    }
     override fun openPlans(section: PlanSection?) {
         plansSections += section
     }

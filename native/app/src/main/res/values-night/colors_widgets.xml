@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widgets' colours in dark mode, before Android 12. -->
+<resources>
+    <color name="widget_surface">#111410</color>
+    <color name="widget_container">#1D211C</color>
+    <color name="widget_on_surface">#E0E4DB</color>
+    <color name="widget_on_surface_variant">#C2C9BE</color>
+    <color name="widget_primary">#A2D3A4</color>
+    <color name="widget_on_primary">#0A3916</color>
+    <color name="widget_primary_container">#255130</color>
+    <color name="widget_on_primary_container">#BDEFBF</color>
+    <color name="widget_secondary_container">#384B39</color>
+    <color name="widget_on_secondary_container">#D4E8D1</color>
+    <color name="widget_ripple">#1FE0E4DB</color>
+    <color name="widget_income">#9AD5A0</color>
+    <color name="widget_outline">#424940</color>
+    <color name="widget_category_0">#764638</color>
+    <color name="widget_category_1">#3C5A39</color>
+    <color name="widget_category_2">#3C5472</color>
+    <color name="widget_category_3">#65486A</color>
+    <color name="widget_category_4">#6C4C21</color>
+    <color name="widget_category_5">#275B53</color>
+    <color name="widget_category_6">#74454E</color>
+    <color name="widget_category_7">#4B5074</color>
+</resources>

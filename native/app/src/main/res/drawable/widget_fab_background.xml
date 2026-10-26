@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Recent widget's add button: a 40dp primary-container disc in its 48dp touch target. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="@color/widget_ripple">
+    <item android:bottom="4dp" android:left="4dp" android:right="4dp" android:top="4dp">
+        <shape android:shape="oval">
+            <solid android:color="@color/widget_primary_container" />
+        </shape>
+    </item>
+</ripple>

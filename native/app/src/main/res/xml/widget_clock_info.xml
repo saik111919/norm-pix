@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The clock widget: 2 x 2 to start, resizable. It never asks to be updated (updatePeriodMillis 0): the platform keeps the
+     time, and NormPix only lays it out again when the widget is resized. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_clock_description"
+    android:initialLayout="@layout/widget_clock"
+    android:maxResizeHeight="280dp"
+    android:maxResizeWidth="280dp"
+    android:minHeight="110dp"
+    android:minResizeHeight="80dp"
+    android:minResizeWidth="80dp"
+    android:minWidth="110dp"
+    android:previewImage="@drawable/widget_clock_preview"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="2"
+    android:targetCellWidth="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

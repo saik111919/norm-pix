@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The home-screen widgets' colours before Android 12: the app's own green, in Material 3's roles. From Android 12 on they follow the wallpaper (values-v31). -->
+<resources>
+    <color name="widget_surface">#F2F5EE</color>
+    <color name="widget_container">#E4EAE0</color>
+    <color name="widget_on_surface">#191D18</color>
+    <color name="widget_on_surface_variant">#424940</color>
+    <color name="widget_primary">#3D6943</color>
+    <color name="widget_on_primary">#FFFFFF</color>
+    <color name="widget_primary_container">#BDEFBF</color>
+    <color name="widget_on_primary_container">#002109</color>
+    <color name="widget_secondary_container">#D4E8D1</color>
+    <color name="widget_on_secondary_container">#0F1F11</color>
+    <color name="widget_ripple">#1F191D18</color>
+    <color name="widget_income">#2E6B36</color>
+    <color name="widget_outline">#C2C9BE</color>
+    <color name="widget_category_0">#FAAB95</color>
+    <color name="widget_category_1">#C2EEB9</color>
+    <color name="widget_category_2">#A6C6F4</color>
+    <color name="widget_category_3">#F3C5F8</color>
+    <color name="widget_category_4">#FAC681</color>
+    <color name="widget_category_5">#A9F0E3</color>
+    <color name="widget_category_6">#F9ACBA</color>
+    <color name="widget_category_7">#BFC6FD</color>
+    <!-- The clock face is a watch face: dark in light mode too. -->
+    <color name="widget_clock_face">#000000</color>
+    <color name="widget_clock_ink">#F2F2F2</color>
+    <color name="widget_clock_tick">#8A8A8A</color>
+    <color name="widget_clock_accent">#FF6B2C</color>
+</resources>

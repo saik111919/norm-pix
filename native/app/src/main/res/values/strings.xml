@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="nfc_outlet_service_desc">NormPix Card Share</string>
+    <!-- Home-screen widgets: their names and what the widget picker says about them. -->
+    <string name="widget_clock_label">Clock</string>
+    <string name="widget_clock_description">The time on a face of turning rings: the hour in the middle, the minute in its pill</string>
+    <string name="widget_recent_label">Recent transactions</string>
+    <string name="widget_recent_description">Your latest transactions at a glance, and a button to add one</string>
+    <string name="widget_add_label">Add transaction</string>
+    <string name="widget_add_description">Add an expense, income or a transfer in one tap</string>
+    <string name="widget_recent_title">Recent</string>
+    <string name="widget_add_expense">Add expense</string>
+    <string name="widget_add_income">Add income</string>
+    <string name="widget_add_transfer">Add transfer</string>
+    <string name="widget_expense">Expense</string>
 </resources>

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The clock widget: a face of turning rings, the hour in the middle and the minute in the pill at three o'clock.
+     The platform keeps it on time - AnalogClock turns the rings (its hands, drawn by design/clock-widget/clock_face.py) and
+     the TextClocks follow the minute - so NormPix never wakes up to redraw it. ClockWidget sizes the text and puts the
+     minute in its pill for the widget's size. Android 12 and later: the seconds ring turns too (AnalogClock's second hand). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_clock_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <AnalogClock
+        android:id="@+id/widget_clock_rings"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:dial="@drawable/widget_clock_dial"
+        android:hand_hour="@drawable/widget_clock_hand_none"
+        android:hand_minute="@drawable/widget_clock_minutes"
+        android:hand_second="@drawable/widget_clock_seconds"
+        android:importantForAccessibility="no" />
+
+    <!-- The pill, drawn the face's size and scaled with it (never larger, as AnalogClock never draws larger). -->
+    <ImageView
+        android:id="@+id/widget_clock_pill"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="centerInside"
+        android:src="@drawable/widget_clock_pill" />
+
+    <TextClock
+        android:id="@+id/widget_clock_hour"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:fontFamily="@font/gs_flex"
+        android:format12Hour="hh"
+        android:format24Hour="HH"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:textColor="@color/widget_clock_ink"
+        android:textFontWeight="560"
+        android:textSize="40dp" />
+
+    <!-- Its left padding moves the minute from the middle to the pill (ClockWidget sets it for the size). -->
+    <FrameLayout
+        android:id="@+id/widget_clock_minute_box"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <TextClock
+            android:id="@+id/widget_clock_minute"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:fontFamily="@font/gs_flex"
+            android:format12Hour="mm"
+            android:format24Hour="mm"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="@color/widget_clock_ink"
+            android:textFontWeight="560"
+            android:textSize="15dp" />
+    </FrameLayout>
+</FrameLayout>

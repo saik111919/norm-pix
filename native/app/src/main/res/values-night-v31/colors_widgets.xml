@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widgets' dynamic colours in dark mode. -->
+<resources>
+    <color name="widget_surface">@android:color/system_neutral1_900</color>
+    <color name="widget_container">@android:color/system_neutral2_800</color>
+    <color name="widget_on_surface">@android:color/system_neutral1_100</color>
+    <color name="widget_on_surface_variant">@android:color/system_neutral2_200</color>
+    <color name="widget_primary">@android:color/system_accent1_200</color>
+    <color name="widget_on_primary">@android:color/system_accent1_800</color>
+    <color name="widget_primary_container">@android:color/system_accent1_700</color>
+    <color name="widget_on_primary_container">@android:color/system_accent1_100</color>
+    <color name="widget_secondary_container">@android:color/system_accent2_700</color>
+    <color name="widget_on_secondary_container">@android:color/system_accent2_100</color>
+    <color name="widget_outline">@android:color/system_neutral2_700</color>
+    <color name="widget_ripple">#1FE0E4DB</color>
+    <color name="widget_income">#9AD5A0</color>
+</resources>
