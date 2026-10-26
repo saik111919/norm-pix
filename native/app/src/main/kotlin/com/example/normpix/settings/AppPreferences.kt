@@ -3,6 +3,7 @@ package com.example.normpix.settings
 import androidx.core.content.edit
 import android.content.SharedPreferences
 import androidx.compose.ui.graphics.Color
+import com.materialkolor.PaletteStyle
 import com.example.normpix.availability.AvailabilityRule
 import com.example.normpix.availability.ScheduledFeature
 import com.example.normpix.availability.WeeklySchedule
@@ -53,6 +54,17 @@ enum class ThemeMode(val label: String) {
 
 /** Source of the color palette: the device's wallpaper-derived colors, or a curated [AccentColor]. */
 enum class ColorSource { System, Custom }
+
+/**
+ * Dynamic Monet palette style derived from the device's wallpaper (Android 12+).
+ */
+enum class WallpaperPalette(val label: String, val style: PaletteStyle) {
+    TonalSpot("Wallpaper", PaletteStyle.TonalSpot),
+    Neutral("Neutral", PaletteStyle.Neutral),
+    Vibrant("Vibrant", PaletteStyle.Vibrant),
+    Expressive("Expressive", PaletteStyle.Expressive),
+    FruitSalad("Fruit salad", PaletteStyle.FruitSalad),
+}
 
 /**
  * How the app moves between places: pushed pages, tabs, a screen's sections, and the back gesture's preview all follow
@@ -294,6 +306,7 @@ data class AppPrefsState(
     val mode: ThemeMode = ThemeMode.System,
     val colorSource: ColorSource = ColorSource.System,
     val accent: AccentColor = AccentColor.Volt,
+    val wallpaperPalette: WallpaperPalette = WallpaperPalette.TonalSpot,
     val pageAnimation: PageAnimationType = PageAnimationType.LinuxWindow,
     /** How sheets and decisions open and close. Never picked, it is what the page style made it before (see [SheetAnimationType.defaultFor]). */
     val sheetAnimation: SheetAnimationType = SheetAnimationType.defaultFor(PageAnimationType.LinuxWindow),
@@ -435,6 +448,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
             mode = prefs.enum(K_MODE, defaults.mode),
             colorSource = prefs.enum(K_COLOR_SOURCE, defaults.colorSource),
             accent = prefs.enum(K_ACCENT, defaults.accent),
+            wallpaperPalette = prefs.enum(K_WALLPAPER_PALETTE, defaults.wallpaperPalette),
             pageAnimation = pages,
             // Sheets used to follow the page style: until one is picked they keep doing what they did.
             sheetAnimation = prefs.enum(K_SHEET_ANIMATION, SheetAnimationType.defaultFor(pages)),
@@ -505,6 +519,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
     fun setMode(mode: ThemeMode) = change({ copy(mode = mode) }) { putString(K_MODE, mode.name) }
 
     fun setColorSource(source: ColorSource) = change({ copy(colorSource = source) }) { putString(K_COLOR_SOURCE, source.name) }
+
+    fun setWallpaperPalette(palette: WallpaperPalette) =
+        change({ copy(wallpaperPalette = palette) }) { putString(K_WALLPAPER_PALETTE, palette.name) }
 
     /**
      * Picking an accent implies the user wants curated colors, so this also
@@ -811,6 +828,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_MODE = "theme_mode"
         const val K_COLOR_SOURCE = "color_source"
         const val K_ACCENT = "accent_color"
+        const val K_WALLPAPER_PALETTE = "wallpaper_palette"
         const val K_PAGE_ANIMATION = "page_animation"
         const val K_SHEET_ANIMATION = "sheet_animation"
         const val K_WALLET_ACTION_STYLE = "wallet_card_action_style"

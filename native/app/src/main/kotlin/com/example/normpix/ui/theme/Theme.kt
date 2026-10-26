@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.example.normpix.settings.AccentColor
 import com.example.normpix.settings.ColorSource
 import com.example.normpix.settings.ThemeMode
+import com.example.normpix.settings.WallpaperPalette
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamicColorScheme
 
@@ -242,22 +243,30 @@ object AppTheme {
      * `surface` identical to `surfaceContainerLow`, flattening every card
      * into the background).
      */
-    fun normalizeDynamic(system: ColorScheme, isDark: Boolean): ColorScheme {
-        val seeded = dynamicColorScheme(seedColor = system.primary, isDark = isDark, style = PaletteStyle.TonalSpot)
-        return seeded.copy(
-            primary = system.primary,
-            onPrimary = system.onPrimary,
-            primaryContainer = system.primaryContainer,
-            onPrimaryContainer = system.onPrimaryContainer,
-            secondary = system.secondary,
-            onSecondary = system.onSecondary,
-            secondaryContainer = system.secondaryContainer,
-            onSecondaryContainer = system.onSecondaryContainer,
-            tertiary = system.tertiary,
-            onTertiary = system.onTertiary,
-            tertiaryContainer = system.tertiaryContainer,
-            onTertiaryContainer = system.onTertiaryContainer,
-        )
+    fun normalizeDynamic(
+        system: ColorScheme,
+        isDark: Boolean,
+        style: PaletteStyle = PaletteStyle.TonalSpot,
+    ): ColorScheme {
+        val seeded = dynamicColorScheme(seedColor = system.primary, isDark = isDark, style = style)
+        return if (style == PaletteStyle.TonalSpot) {
+            seeded.copy(
+                primary = system.primary,
+                onPrimary = system.onPrimary,
+                primaryContainer = system.primaryContainer,
+                onPrimaryContainer = system.onPrimaryContainer,
+                secondary = system.secondary,
+                onSecondary = system.onSecondary,
+                secondaryContainer = system.secondaryContainer,
+                onSecondaryContainer = system.onSecondaryContainer,
+                tertiary = system.tertiary,
+                onTertiary = system.onTertiary,
+                tertiaryContainer = system.tertiaryContainer,
+                onTertiaryContainer = system.onTertiaryContainer,
+            )
+        } else {
+            seeded
+        }
     }
 
     fun scheme(
@@ -265,10 +274,18 @@ object AppTheme {
         source: ColorSource,
         accent: AccentColor,
         isDark: Boolean,
+    ): ColorScheme = scheme(context, source, accent, WallpaperPalette.TonalSpot, isDark)
+
+    fun scheme(
+        context: Context,
+        source: ColorSource,
+        accent: AccentColor,
+        wallpaperPalette: WallpaperPalette,
+        isDark: Boolean,
     ): ColorScheme =
         if (source == ColorSource.System && dynamicColorSupported) {
             val system = if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-            normalizeDynamic(system, isDark)
+            normalizeDynamic(system, isDark, wallpaperPalette.style)
         } else {
             accentScheme(accent, isDark)
         }
@@ -298,6 +315,7 @@ data class Appearance(
     val accent: AccentColor = AccentColor.Volt,
     /** The interface's typeface (Settings > Appearance > Interface font). */
     val font: AppFont = AppFont(),
+    val wallpaperPalette: WallpaperPalette = WallpaperPalette.TonalSpot,
 )
 
 @Composable
@@ -314,8 +332,8 @@ fun NormPixTheme(
 ) {
     val dark = appearance.resolveDark()
     val context = LocalContext.current
-    val scheme = remember(appearance.colorSource, appearance.accent, dark) {
-        AppTheme.scheme(context, appearance.colorSource, appearance.accent, dark)
+    val scheme = remember(appearance.colorSource, appearance.accent, appearance.wallpaperPalette, dark) {
+        AppTheme.scheme(context, appearance.colorSource, appearance.accent, appearance.wallpaperPalette, dark)
     }
     val status = remember(scheme, dark) { AppStatusColors.fromScheme(scheme, dark) }
     val typography = remember(appearance.font) { appTypography(appearance.font) }

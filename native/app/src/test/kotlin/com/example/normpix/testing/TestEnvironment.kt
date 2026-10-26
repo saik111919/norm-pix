@@ -240,7 +240,7 @@ class TestEnvironment(
     @Composable
     fun Content(content: @Composable () -> Unit) {
         val prefs by container.preferences.state.collectAsState()
-        NormPixTheme(Appearance(prefs.mode, prefs.colorSource, prefs.accent)) {
+        NormPixTheme(Appearance(prefs.mode, prefs.colorSource, prefs.accent, wallpaperPalette = prefs.wallpaperPalette)) {
             ProvideAppEnvironment(container) {
                 CompositionLocalProvider(LocalNavigator provides navigator, LocalShellState provides shell) {
                     content()

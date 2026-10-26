@@ -18,6 +18,7 @@ import com.example.normpix.settings.AccentColor
 import com.example.normpix.settings.AppPreferences
 import com.example.normpix.settings.ColorSource
 import com.example.normpix.settings.ThemeMode
+import com.example.normpix.settings.WallpaperPalette
 import com.example.normpix.testing.TestEnvironment
 import java.util.Locale
 import kotlin.test.assertEquals
@@ -150,5 +151,44 @@ class ColorsPageTest {
 
         tile("Coral").assertIsSelected()
         compose.onAllNodesWithText("Icons, text and more match the colors in your wallpaper").assertCountEquals(0)
+    }
+@Test
+    fun allFiveWallpaperPalettesAreAvailable_andCanBeSelected() {
+        show()
+
+        for (palette in WallpaperPalette.entries) {
+            tile(palette.label).assertExists()
+        }
+        tile(WallpaperPalette.TonalSpot.label).assertIsSelected()
+
+        tile(WallpaperPalette.Vibrant.label).performClick()
+        compose.waitForIdle()
+
+        assertEquals(WallpaperPalette.Vibrant, prefs.wallpaperPalette)
+        tile(WallpaperPalette.Vibrant.label).assertIsSelected()
+        tile(WallpaperPalette.TonalSpot.label).assertIsNotSelected()
+        assertEquals(
+            WallpaperPalette.Vibrant,
+            AppPreferences(env.prefsStore).state.value.wallpaperPalette,
+            "kept across a restart",
+        )
+    }
+
+    @Test
+    fun darkThemeSwitchInsideCardTogglesTheme() {
+        env.preferences.setMode(ThemeMode.Light)
+        show()
+
+        val switchNode = compose.onNodeWithText("Dark theme")
+        switchNode.assertExists()
+        switchNode.performClick()
+        compose.waitForIdle()
+
+        assertEquals(ThemeMode.Dark, prefs.mode)
+
+        switchNode.performClick()
+        compose.waitForIdle()
+
+        assertEquals(ThemeMode.Light, prefs.mode)
     }
 }
