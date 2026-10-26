@@ -42,7 +42,8 @@ fun CardCarousel(
     bankIconStyle: BankIconStyle,
     tilt: CardTiltState?,
     onToggleReveal: (StoredCard) -> Unit,
-    onShareNfc: (StoredCard) -> Unit,
+    /** Null while the NFC card exchange isn't offered (see `rememberNfcExchangeOffered`): the card has no Share then. */
+    onShareNfc: ((StoredCard) -> Unit)?,
     onEdit: (StoredCard) -> Unit,
     onDelete: (StoredCard) -> Unit,
     onCopy: (StoredCard, CardField?) -> Unit,
@@ -66,7 +67,7 @@ fun CardCarousel(
                 nfcGated = nfcGated,
                 bankIconStyle = bankIconStyle,
                 onToggleReveal = { onToggleReveal(card) },
-                onShareNfc = { onShareNfc(card) },
+                onShareNfc = onShareNfc?.let { share -> { share(card) } },
                 onEdit = { onEdit(card) },
                 onDelete = { onDelete(card) },
                 tilt = tilt.takeIf { inFront },
@@ -82,7 +83,7 @@ fun CardCarousel(
                 onToggleReveal = { onToggleReveal(front) },
                 onEdit = { onEdit(front) },
                 onDelete = { onDelete(front) },
-                onShareNfc = { onShareNfc(front) },
+                onShareNfc = onShareNfc?.let { share -> { share(front) } },
                 onCopy = { onCopy(front, null) },
                 compact = true,
             )

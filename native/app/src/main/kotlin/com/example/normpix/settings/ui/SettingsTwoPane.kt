@@ -20,6 +20,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.example.normpix.about.GuideTopic
+import com.example.normpix.about.ui.AboutPage
+import com.example.normpix.about.ui.GuidePage
 import com.example.normpix.navigation.AppNavigator
 import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.navigation.FloatingBackRow
@@ -80,12 +83,26 @@ sealed interface SettingsDetail {
         override val key = "changelog"
     }
 
+    /** The About page: what NormPix is, and the guide to how each of its features works. */
+    data object About : SettingsDetail {
+        override val parent: SettingsDetail? = null
+        override val key = "about"
+    }
+
+    /** One topic of the guide on the About page, a step inside About. */
+    data class Guide(val topic: GuideTopic) : SettingsDetail {
+        override val parent: SettingsDetail get() = About
+        override val key get() = "guide:${topic.name}"
+    }
+
     companion object {
         /** The detail a [key] stands for, or null for one that is none (a stale saved state). */
         fun fromKey(key: String): SettingsDetail? = when {
             key == Profile.key -> Profile
             key == Update.key -> Update
             key == Changelog.key -> Changelog
+            key == About.key -> About
+            key.startsWith("guide:") -> GuideTopic.named(key.removePrefix("guide:"))?.let(::Guide)
             key.startsWith("page:") -> SettingsPage.entries.firstOrNull { it.name == key.removePrefix("page:") }?.let(::Page)
             key.startsWith("appearance:") -> AppearanceSection.named(key.removePrefix("appearance:"))?.let(::Appearance)
             else -> null
@@ -107,6 +124,10 @@ internal val SettingsDetail.group: SettingsPage?
 /** Whether this detail is the one the "Updates & changelog" row stands for: the update page, the changelog, and Automatic updates under it. */
 internal val SettingsDetail.isUpdates: Boolean
     get() = this == SettingsDetail.Update || this == SettingsDetail.Changelog || this == SettingsDetail.Page(SettingsPage.Updates)
+
+/** Whether this detail is the one the "About NormPix" row stands for: the About page, and a topic of its guide. */
+internal val SettingsDetail.isAbout: Boolean
+    get() = this == SettingsDetail.About || this is SettingsDetail.Guide
 
 private val SettingsDetailSaver = Saver<SettingsDetail, String>(save = { it.key }, restore = { SettingsDetail.fromKey(it) })
 
@@ -143,6 +164,8 @@ fun SettingsRoute(opens: SettingsDetail? = null) {
         is SettingsDetail.Appearance -> AppearanceSectionPage(opens.section)
         SettingsDetail.Update -> UpdatePage()
         SettingsDetail.Changelog -> ChangelogPage()
+        SettingsDetail.About -> AboutPage()
+        is SettingsDetail.Guide -> GuidePage(opens.topic)
     }
 }
 
@@ -215,6 +238,8 @@ private fun SettingsDetailPage(detail: SettingsDetail) {
         is SettingsDetail.Appearance -> AppearanceSectionPage(detail.section)
         SettingsDetail.Update -> UpdatePage()
         SettingsDetail.Changelog -> ChangelogPage()
+        SettingsDetail.About -> AboutPage()
+        is SettingsDetail.Guide -> GuidePage(detail.topic)
     }
 }
 
@@ -241,4 +266,8 @@ private class PaneNavigator(
     override fun openUpdates() = show(SettingsDetail.Update)
 
     override fun openChangelog() = show(SettingsDetail.Changelog)
+
+    override fun openAbout() = show(SettingsDetail.About)
+
+    override fun openGuide(topic: GuideTopic) = show(SettingsDetail.Guide(topic))
 }

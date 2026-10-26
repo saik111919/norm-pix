@@ -265,9 +265,11 @@ internal fun SettingsListContent(
                 item {
                     SettingsRow(
                         headline = "About NormPix",
+                        supporting = "How each feature works",
                         icon = Icons.Outlined.Info,
                         hue = null,
-                        onClick = { system.showAbout() },
+                        onClick = navigator::openAbout,
+                        selected = selected?.isAbout,
                     )
                 }
             }

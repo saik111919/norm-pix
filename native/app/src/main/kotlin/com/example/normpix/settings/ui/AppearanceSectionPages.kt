@@ -1,32 +1,23 @@
 package com.example.normpix.settings.ui
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.Layers
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
@@ -36,15 +27,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
 import com.example.normpix.banks.ui.BankBadge
@@ -60,7 +45,6 @@ import com.example.normpix.finance.ui.paletteColor
 import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
-import com.example.normpix.settings.AccentColor
 import com.example.normpix.settings.AccountsLayout
 import com.example.normpix.settings.AppIcon
 import com.example.normpix.settings.AppIcons
@@ -71,7 +55,6 @@ import com.example.normpix.settings.BankIconStyle
 import com.example.normpix.settings.CardsLayout
 import com.example.normpix.settings.CategoryIconShape
 import com.example.normpix.settings.CategoryIconStyle
-import com.example.normpix.settings.ColorSource
 import com.example.normpix.settings.InterfaceFont
 import com.example.normpix.settings.MonthControlStyle
 import com.example.normpix.settings.TopSpendingLayout
@@ -93,8 +76,6 @@ import com.example.normpix.ui.components.SwitchRow
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
-import com.example.normpix.ui.theme.AppTheme
-import com.example.normpix.ui.theme.isDark
 import java.time.LocalDateTime
 import kotlinx.coroutines.launch
 
@@ -130,44 +111,6 @@ fun AppearanceSectionPage(section: AppearanceSection) {
                         WalletLayoutSections(prefs, preferences, haptics)
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ColorsSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
-    val wallpaperColors = AppTheme.dynamicColorSupported
-    val usingWallpaper = prefs.colorSource == ColorSource.System && wallpaperColors
-    ListSection(
-        footer = if (!wallpaperColors) {
-            "This device doesn't provide wallpaper colors, so NormPix uses the color you pick."
-        } else {
-            null
-        },
-    ) {
-        item {
-            SwitchRow(
-                headline = USE_WALLPAPER_COLORS,
-                supporting = "Match the colors of your wallpaper and system",
-                checked = usingWallpaper,
-                enabled = wallpaperColors,
-                onCheckedChange = { on ->
-                    haptics.selection()
-                    preferences.setColorSource(if (on) ColorSource.System else ColorSource.Custom)
-                },
-            )
-        }
-        if (!usingWallpaper) {
-            item {
-                AccentPicker(
-                    selected = prefs.accent,
-                    onSelected = { accent ->
-                        haptics.selection()
-                        preferences.setAccent(accent)
-                    },
-                    modifier = Modifier.padding(AppSpacing.lg),
-                )
             }
         }
     }
@@ -672,62 +615,5 @@ private fun ProgressPreview(style: ProgressStyle) {
         AppLinearProgress(Modifier.width(56.dp), progress = { 0.6f }, style = style)
         Spacer(Modifier.width(AppSpacing.sm))
         AppLoadingIndicator(Modifier.size(32.dp), style = style, strokeWidth = 3.dp)
-    }
-}
-
-/**
- * Accent swatches, three to a row so six sit as two even rows rather than five and one left over. Each shows the primary
- * color actually generated from its seed for the current brightness (Volt: its ink with the lime inside), with its name
- * underneath.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun AccentPicker(selected: AccentColor, onSelected: (AccentColor) -> Unit, modifier: Modifier = Modifier) {
-    val dark = MaterialTheme.colorScheme.isDark
-    val onSurface = MaterialTheme.colorScheme.onSurface
-    FlowRow(
-        modifier.fillMaxWidth().selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(AppSpacing.md),
-        verticalArrangement = Arrangement.spacedBy(AppSpacing.md),
-        maxItemsInEachRow = 3,
-    ) {
-        for (accent in AccentColor.entries) {
-            val scheme = remember(accent, dark) { AppTheme.accentScheme(accent, dark) }
-            val swatch = remember(accent, dark) { AppTheme.accentSwatch(accent, dark) }
-            val isSelected = accent == selected
-            val ring by animateColorAsState(if (isSelected) onSurface else Color.Transparent, label = "accentRing")
-            Column(
-                Modifier
-                    .weight(1f)
-                    .clip(AppRadius.rMd)
-                    .selectable(selected = isSelected, role = Role.RadioButton, onClick = { onSelected(accent) })
-                    .clearAndSetSemantics {
-                        contentDescription = "${accent.label} color"
-                        role = Role.RadioButton
-                        this.selected = isSelected
-                    }
-                    .padding(AppSpacing.xs),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                // One colour, or a pair (the outer one with the other inside it).
-                val middle = swatch.last()
-                val tick = if (swatch.size == 1) scheme.onPrimary else if (middle.luminance() > 0.5f) Color.Black else Color.White
-                Box(
-                    Modifier
-                        .size(48.dp)
-                        .border(2.dp, ring, CircleShape)
-                        .padding(3.dp)
-                        .background(swatch.first(), CircleShape)
-                        .then(if (swatch.size > 1) Modifier.border(1.dp, onSurface.copy(alpha = 0.24f), CircleShape) else Modifier)
-                        .padding(if (swatch.size > 1) 9.dp else 0.dp)
-                        .background(middle, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (isSelected) Icon(Icons.Rounded.Check, contentDescription = null, tint = tick)
-                }
-                Spacer(Modifier.height(AppSpacing.xs))
-                Text(accent.label, style = MaterialTheme.typography.labelMedium)
-            }
-        }
     }
 }

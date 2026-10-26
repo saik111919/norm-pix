@@ -15,6 +15,7 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
@@ -46,19 +47,105 @@ object AppTheme {
      * primary recognizably close to the chosen hue while still producing
      * proper tonal container pairs.
      */
-    fun accentScheme(accent: AccentColor, isDark: Boolean): ColorScheme =
-        if (accent == AccentColor.Volt) {
-            voltScheme(isDark)
-        } else {
-            dynamicColorScheme(seedColor = accent.seed, isDark = isDark, style = PaletteStyle.Fidelity)
-        }
+    fun accentScheme(accent: AccentColor, isDark: Boolean): ColorScheme = when (accent) {
+        AccentColor.Volt -> voltScheme(isDark)
+        AccentColor.Pure -> pureScheme(isDark)
+        else -> dynamicColorScheme(seedColor = accent.seed, isDark = isDark, style = PaletteStyle.Fidelity)
+    }
 
     /**
-     * The colors a picker swatch for [accent] is drawn with: the one primary color generated from its seed, or - for
-     * [AccentColor.Volt], whose identity is the pairing - its ink with the lime inside it.
+     * What a palette looks like in the color picker, drawn from the [scheme] it makes: its primary color (the controls), the
+     * container the primary's fills are made of, and its tertiary (the accent beside them).
      */
-    fun accentSwatch(accent: AccentColor, isDark: Boolean): List<Color> =
-        if (accent == AccentColor.Volt) listOf(VoltInk, VoltLime) else listOf(accentScheme(accent, isDark).primary)
+    fun paletteSwatch(scheme: ColorScheme): PaletteSwatch =
+        PaletteSwatch(primary = scheme.primary, container = scheme.primaryContainer, tertiary = scheme.tertiary)
+
+    /**
+     * Pure: black and white, and greys between. Light is a white page with black ink, dark a black page (the screen's pixels
+     * off) with white ink; the surfaces step through greys from the page, so a card still stands off it. There is no hue anywhere
+     * but in what means something - the error red - and the status colors drawn from the primary (success, warning, info), which
+     * keep theirs so a paid bill and an overdue one still look different. Every text pair is checked for contrast in `PureThemeTest`.
+     */
+    fun pureScheme(isDark: Boolean): ColorScheme =
+        if (isDark) {
+            darkColorScheme(
+                primary = Color(0xFFFFFFFF),
+                onPrimary = Color(0xFF000000),
+                primaryContainer = Color(0xFF3A3A3A),
+                onPrimaryContainer = Color(0xFFFFFFFF),
+                inversePrimary = Color(0xFF000000),
+                secondary = Color(0xFFC4C4C4),
+                onSecondary = Color(0xFF000000),
+                secondaryContainer = Color(0xFF2E2E2E),
+                onSecondaryContainer = Color(0xFFF2F2F2),
+                tertiary = Color(0xFFA0A0A0),
+                onTertiary = Color(0xFF000000),
+                tertiaryContainer = Color(0xFF383838),
+                onTertiaryContainer = Color(0xFFEDEDED),
+                background = Color(0xFF000000),
+                onBackground = Color(0xFFFFFFFF),
+                surface = Color(0xFF000000),
+                onSurface = Color(0xFFFFFFFF),
+                surfaceVariant = Color(0xFF1F1F1F),
+                onSurfaceVariant = Color(0xFFBDBDBD),
+                surfaceTint = Color(0xFFFFFFFF),
+                inverseSurface = Color(0xFFEDEDED),
+                inverseOnSurface = Color(0xFF000000),
+                error = Color(0xFFFFB4AB),
+                onError = Color(0xFF690005),
+                errorContainer = Color(0xFF93000A),
+                onErrorContainer = Color(0xFFFFDAD6),
+                outline = Color(0xFF8A8A8A),
+                outlineVariant = Color(0xFF2E2E2E),
+                scrim = Color.Black,
+                surfaceBright = Color(0xFF2B2B2B),
+                surfaceDim = Color(0xFF000000),
+                surfaceContainerLowest = Color(0xFF000000),
+                surfaceContainerLow = Color(0xFF0A0A0A),
+                surfaceContainer = Color(0xFF121212),
+                surfaceContainerHigh = Color(0xFF1A1A1A),
+                surfaceContainerHighest = Color(0xFF232323),
+            )
+        } else {
+            lightColorScheme(
+                primary = Color(0xFF000000),
+                onPrimary = Color(0xFFFFFFFF),
+                primaryContainer = Color(0xFFCCCCCC),
+                onPrimaryContainer = Color(0xFF000000),
+                inversePrimary = Color(0xFFFFFFFF),
+                secondary = Color(0xFF404040),
+                onSecondary = Color(0xFFFFFFFF),
+                secondaryContainer = Color(0xFFDADADA),
+                onSecondaryContainer = Color(0xFF000000),
+                tertiary = Color(0xFF666666),
+                onTertiary = Color(0xFFFFFFFF),
+                tertiaryContainer = Color(0xFFD2D2D2),
+                onTertiaryContainer = Color(0xFF000000),
+                background = Color(0xFFFFFFFF),
+                onBackground = Color(0xFF000000),
+                surface = Color(0xFFFFFFFF),
+                onSurface = Color(0xFF000000),
+                surfaceVariant = Color(0xFFE6E6E6),
+                onSurfaceVariant = Color(0xFF404040),
+                surfaceTint = Color(0xFF000000),
+                inverseSurface = Color(0xFF141414),
+                inverseOnSurface = Color(0xFFFFFFFF),
+                error = Color(0xFFBA1A1A),
+                onError = Color(0xFFFFFFFF),
+                errorContainer = Color(0xFFFFDAD6),
+                onErrorContainer = Color(0xFF410002),
+                outline = Color(0xFF6E6E6E),
+                outlineVariant = Color(0xFFC8C8C8),
+                scrim = Color.Black,
+                surfaceBright = Color(0xFFFFFFFF),
+                surfaceDim = Color(0xFFD9D9D9),
+                surfaceContainerLowest = Color(0xFFFFFFFF),
+                surfaceContainerLow = Color(0xFFF6F6F6),
+                surfaceContainer = Color(0xFFF0F0F0),
+                surfaceContainerHigh = Color(0xFFE9E9E9),
+                surfaceContainerHighest = Color(0xFFE2E2E2),
+            )
+        }
 
     /**
      * Volt: lime and near-black green. Drawn by hand rather than generated from the lime, because a generated palette
@@ -195,6 +282,10 @@ object AppTheme {
         extraLarge = AppRadius.rXxl,
     )
 }
+
+/** The colors a picker tile draws for one palette (see [AppTheme.paletteSwatch]): the controls', their container's, and the accent. */
+@Immutable
+data class PaletteSwatch(val primary: Color, val container: Color, val tertiary: Color)
 
 /** Volt's two colours: the near-black green and the lime. */
 internal val VoltInk = Color(0xFF0A2C1B)

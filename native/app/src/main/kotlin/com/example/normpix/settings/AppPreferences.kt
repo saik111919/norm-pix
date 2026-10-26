@@ -169,7 +169,7 @@ enum class ClipboardTimeout(val seconds: Int, val label: String, val description
  * Curated seed colors used when [ColorSource.Custom] is selected. The final
  * palette is generated from the seed (see `AppTheme`), so these are starting
  * hues, not literal UI colors. [Volt] is the default: what the app wears with
- * wallpaper colors off (or unavailable) until the user picks another.
+ * wallpaper colors off (or unavailable) until the user picks another. [Volt] and [Pure] are drawn by hand.
  */
 enum class AccentColor(val seed: Color, val label: String) {
     Green(Color(0xFF16A34A), "Emerald"),
@@ -180,6 +180,13 @@ enum class AccentColor(val seed: Color, val label: String) {
 
     /** Lime on near-black green. Its palette is drawn by hand (see `AppTheme.voltScheme`), not generated from the seed. */
     Volt(Color(0xFFAFE22D), "Volt"),
+
+    /**
+     * Black and white and nothing between but greys: pure white pages with black ink in light, pure black pages with white ink in
+     * dark. Drawn by hand like [Volt] (see `AppTheme.pureScheme`); it follows the Theme choice (light, dark, or the system's) like
+     * every other color does.
+     */
+    Pure(Color(0xFF000000), "Pure"),
 }
 
 /** How Home shows the month's biggest spending categories. */
@@ -338,12 +345,13 @@ data class AppPrefsState(
     val topSpendingLayout: TopSpendingLayout = TopSpendingLayout.Stack,
     /** How the month a page shows is switched: one tonal track, or the earlier separate buttons. */
     val monthControlStyle: MonthControlStyle = MonthControlStyle.Track,
-    /** The window each [ScheduledFeature] may be used in; a feature missing here is always available. */
+    /** The window each [ScheduledFeature] may be used in; a feature missing here has its default rule ([ScheduledFeature.defaultRule]). */
     val availability: Map<ScheduledFeature, AvailabilityRule> = emptyMap(),
     /** How the built-in category icons are drawn, wherever a category shows. */
     val categoryIconStyle: CategoryIconStyle = CategoryIconStyle.ThreeD,
     /** The shape behind those icons (and the people's avatars): a circle, as they have always been, unless the user picks another. */
-    val categoryIconShape: CategoryIconShape = CategoryIconShape.Circle,
+    /** The shape behind icons: none until the user picks one - the icon on its own, drawn larger. */
+    val categoryIconShape: CategoryIconShape = CategoryIconShape.None,
     /** What the user likes to be called. Stays on this device; empty until they say. */
     val profileName: String = "",
     /** One emoji for the profile picture, or empty for the name's initials. */
@@ -401,7 +409,7 @@ data class AppPrefsState(
             FontShape(fontPreset.weightShift, fontPreset.width, fontPreset.roundness)
         }
 
-    fun availabilityOf(feature: ScheduledFeature): AvailabilityRule = availability[feature] ?: AvailabilityRule()
+    fun availabilityOf(feature: ScheduledFeature): AvailabilityRule = availability[feature] ?: feature.defaultRule()
 
     /** The time of day a check at a set time is made around (see [updateCheckWhen]). */
     val updateCheckTime: LocalTime
@@ -475,13 +483,13 @@ class AppPreferences(private val prefs: SharedPreferences) {
             fontWidth = prefs.getInt(K_FONT_WIDTH, defaults.fontWidth).coerceIn(FontAxes.WIDTH),
             fontRoundness = prefs.getInt(K_FONT_ROUNDNESS, defaults.fontRoundness).coerceIn(FontAxes.ROUNDNESS),
             customFontName = prefs.getString(K_CUSTOM_FONT_NAME, defaults.customFontName).orEmpty(),
-            // Only features the user has configured; the rest read as the default (always on) through availabilityOf.
+            // Only features the user has configured; the rest read as the feature's own default (NFC card exchange: off) through availabilityOf.
             availability = ScheduledFeature.entries.filter { prefs.contains(it.key("mode")) }.associateWith { prefs.readRule(it) },
         )
     }
 
     private fun SharedPreferences.readRule(feature: ScheduledFeature): AvailabilityRule {
-        val defaults = AvailabilityRule()
+        val defaults = feature.defaultRule()
         val days = getString(feature.key("days"), null)
             ?.split(',')?.mapNotNull { it.toIntOrNull()?.takeIf { d -> d in 1..7 }?.let(DayOfWeek::of) }?.toSet()
         return AvailabilityRule(

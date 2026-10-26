@@ -4,8 +4,7 @@ import com.example.normpix.finance.ui.FinanceState
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import com.example.normpix.wallet.SectionAddButton
-import com.example.normpix.wallet.NfcAvailability
-import com.example.normpix.wallet.rememberNfcAvailability
+import com.example.normpix.wallet.rememberNfcExchangeOffered
 import com.example.normpix.wallet.WalletSectionHeader
 import com.example.normpix.wallet.WalletOverview
 import com.example.normpix.wallet.AccountCarousel
@@ -228,8 +227,9 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
 
     // Two columns - the accounts, the cards - when the tab has the room for them; otherwise one list, the accounts then the cards.
     val wide = isTwoColumn(minOf(rememberTabRoom(), AppLayout.maxWideContentWidth) - AppSpacing.lg * 2)
-    // The card exchange needs NFC: with it switched off (or no NFC in the phone) nothing offers it.
-    val nfcOn = rememberNfcAvailability() == NfcAvailability.Available
+    // The card exchange needs the phone's NFC and the app's own switch for it (Availability & Schedules, off until turned on):
+    // with either off, or no NFC in the phone, nothing offers it - not the button, not the "Tap to add" row, not a card's Share.
+    val nfcOn = rememberNfcExchangeOffered()
 
     AppPage(
         title = "Wallet",
@@ -395,7 +395,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                             bankIconStyle = prefs.bankIconStyle,
                                             tilt = tilt,
                                             onToggleReveal = { reveal.toggle(it.id) },
-                                            onShareNfc = { flows.openNfcExchange(ExchangeTab.Outlet, it) },
+                                            onShareNfc = if (nfcOn) { { flows.openNfcExchange(ExchangeTab.Outlet, it) } } else null,
                                             onEdit = { flows.editCard(it) },
                                             onDelete = {
                                                 revealed.remove(it.id)
@@ -457,7 +457,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                                     nfcGated = prefs.nfcTagRevealEnabled,
                                                     bankIconStyle = prefs.bankIconStyle,
                                                     onToggleReveal = { reveal.toggle(card.id) },
-                                                    onShareNfc = { flows.openNfcExchange(ExchangeTab.Outlet, card) },
+                                                    onShareNfc = if (nfcOn) { { flows.openNfcExchange(ExchangeTab.Outlet, card) } } else null,
                                                     onEdit = { flows.editCard(card) },
                                                     onDelete = {
                                                         revealed.remove(card.id)

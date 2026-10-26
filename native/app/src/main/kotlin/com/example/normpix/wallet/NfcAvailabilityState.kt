@@ -14,7 +14,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.example.normpix.availability.AvailabilityRule
+import com.example.normpix.availability.ScheduledFeature
+import com.example.normpix.availability.availabilityAt
+import com.example.normpix.availability.rememberAvailability
 import com.example.normpix.navigation.LocalAppContainer
+import java.time.LocalDateTime
 
 /**
  * Whether NFC can be used right now: read again whenever the screen comes back (NFC switched on in system settings) and
@@ -48,4 +53,20 @@ fun rememberNfcAvailability(): NfcAvailability {
         onDispose { runCatching { context.unregisterReceiver(receiver) } }
     }
     return availability
+}
+
+/**
+ * Whether anything in the app offers the NFC card exchange: the phone's NFC has to be on, and so does the app's own switch for
+ * it (Settings > Availability & Schedules, off until the user turns it on - and, on a schedule, only inside its hours). Either one
+ * off and the Wallet's NFC button, its "Tap to add" rows and every card's Share button are gone, not greyed out.
+ */
+fun nfcExchangeOffered(phone: NfcAvailability, rule: AvailabilityRule, now: LocalDateTime): Boolean =
+    phone == NfcAvailability.Available && rule.availabilityAt(now).isOpen
+
+/** [nfcExchangeOffered], kept current: it follows the phone's NFC switch, the rule being edited, and a schedule opening or closing. */
+@Composable
+fun rememberNfcExchangeOffered(): Boolean {
+    val phoneOn = rememberNfcAvailability() == NfcAvailability.Available
+    val appOn = rememberAvailability(ScheduledFeature.NfcExchange).isOpen
+    return phoneOn && appOn
 }

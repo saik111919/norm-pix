@@ -16,6 +16,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
+import com.example.normpix.about.GuideTopic
 import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.navigation.NormPixRoot
 import com.example.normpix.navigation.SettingsPage
@@ -200,11 +201,13 @@ class SettingsTwoPaneTest {
 
     @Test
     fun aDetailKeyComesBackAsTheSameDetail() {
-        val all = listOf(SettingsDetail.Profile, SettingsDetail.Update, SettingsDetail.Changelog) +
+        val all = listOf(SettingsDetail.Profile, SettingsDetail.Update, SettingsDetail.Changelog, SettingsDetail.About) +
             SettingsPage.entries.map { SettingsDetail.Page(it) } +
-            AppearanceSection.entries.map { SettingsDetail.Appearance(it) }
+            AppearanceSection.entries.map { SettingsDetail.Appearance(it) } +
+            GuideTopic.entries.map { SettingsDetail.Guide(it) }
         for (detail in all) assertEquals(detail, SettingsDetail.fromKey(detail.key))
         assertNull(SettingsDetail.fromKey("page:NoSuchPage"))
+        assertNull(SettingsDetail.fromKey("guide:NoSuchTopic"))
         assertNull(SettingsDetail.fromKey("nonsense"))
     }
 
@@ -222,6 +225,38 @@ class SettingsTwoPaneTest {
         assertTrue(SettingsDetail.Changelog.isUpdates)
         assertTrue(SettingsDetail.Page(SettingsPage.Updates).isUpdates)
         assertFalse(SettingsDetail.Page(SettingsPage.Finance).isUpdates)
+        // A topic of the guide is a step inside About, and both are the About row's.
+        assertEquals(SettingsDetail.About, SettingsDetail.Guide(GuideTopic.Wallet).parent)
+        assertNull(SettingsDetail.About.parent)
+        assertTrue(SettingsDetail.About.isAbout)
+        assertTrue(SettingsDetail.Guide(GuideTopic.Wallet).isAbout)
+        assertFalse(SettingsDetail.Update.isAbout)
         assertEquals(360.dp, AppLayout.listPaneWidth)
+    }
+
+    @Test
+    fun aboutOpensBesideTheList_andATopicOpensInsideIt() {
+        openSettings()
+        tapRow("About NormPix")
+        // About's page is on the right, its row the filled one, with the guide's heading and the topics' cards in it.
+        assertTrue(last("How NormPix works").left >= AppLayout.listPaneWidth, "About is on the right")
+        assertTrue(isSelectedRow("About NormPix"))
+        assertFalse(isSelectedRow("Appearance"))
+        assertTrue(first("Search settings").right <= AppLayout.listPaneWidth, "the list is still there")
+
+        // A card opens its topic in the same place, and the About row stays the filled one: the topic is a step inside About.
+        compose.onAllNodes(hasText(GuideTopic.AddTransaction.title)).onFirst().performScrollTo().performClick()
+        compose.waitForIdle()
+        assertTrue(last("Steps").left >= AppLayout.listPaneWidth, "the topic's steps are on the right")
+        assertEquals(0, count("How NormPix works"), "About has made way for the topic")
+        assertTrue(isSelectedRow("About NormPix"))
+        compose.onAllNodesWithContentDescription("Back").assertCountEquals(2)
+
+        // The topic's Back goes up to About; the list stays where it is.
+        compose.onAllNodesWithContentDescription("Back").onLast().performClick()
+        compose.waitForIdle()
+        assertEquals(1, count("How NormPix works"))
+        compose.onAllNodesWithContentDescription("Back").assertCountEquals(1)
+        assertTrue(isSelectedRow("About NormPix"))
     }
 }

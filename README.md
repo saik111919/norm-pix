@@ -60,7 +60,8 @@ NormPix is a personal finance tracker and card wallet for Android, built nativel
 - **Insights that answer questions.** Where the money went, what changed from last month, spending per person, and any range of days you pick.
 - **A wallet you can trust.** Card numbers are encrypted, hidden until you unlock (fingerprint, face or screen lock, or a tap on your own NFC tag), and cleared from the clipboard after copying. Screenshots of the app are blocked.
 - **On your home screen.** Three widgets: your recent transactions at a glance, one tap to add an expense, income or a transfer, and a clock with turning rings after a watch face. They follow your wallpaper's colours on Android 12 and later, and show nothing of your ledger while NormPix is locked.
-- **Made to feel native.** Material 3 Expressive throughout, your choice of accent and font, ten app icons, and six page-transition styles, including a Linux-like window open and close.
+- **Made to feel native.** Material 3 Expressive throughout, your choice of accent and font (or a Pure black-and-white theme), ten app icons, and six page-transition styles, including a Linux-like window open and close.
+- **A guide inside the app.** Settings → About NormPix explains how each feature works, step by step, with pictures drawn in your own theme.
 
 <details>
 <summary><b>All features</b></summary>
@@ -82,7 +83,7 @@ NormPix is a personal finance tracker and card wallet for Android, built nativel
 - Scan a card's number with the camera, on the device
 - Reveal and copy details only after unlocking; the clipboard is cleared after a set time
 - Card expiry reminders
-- Send a card to another phone running NormPix over NFC, on a schedule you choose
+- Send a card to another phone running NormPix over NFC: off until you turn it on in Settings → Availability & Schedules, then always or on a schedule you choose
 
 **Reminders**
 - One-off or repeating, with exact alarms, snooze and complete from the notification
@@ -94,7 +95,7 @@ NormPix is a personal finance tracker and card wallet for Android, built nativel
 - Sample data to try everything without entering your own
 
 **Look and feel**
-- Light, dark or the system's theme; wallpaper colours or a chosen accent
+- Light, dark or the system's theme; wallpaper colours or a chosen accent, each shown as a preview of the colours it gives the app; a Pure black-and-white theme
 - Interface fonts, icon shapes and backgrounds, the frosted blur behind sheets
 - Six page-transition styles, ten launcher icons, and an animated splash screen
 

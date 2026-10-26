@@ -57,6 +57,8 @@ fun CardDetailsSheet(cardId: String, flows: CardFlows, onDismiss: () -> Unit) {
 
     val reveal = rememberCardReveal(flows)
     val revealed = card.id in reveal.revealed
+    // Share is the NFC card exchange: offered only while it is (phone NFC on, and the app's switch for it).
+    val nfcOffered = rememberNfcExchangeOffered()
     val tilt = rememberCardTilt(enabled = prefs.cardTiltEnabled)
     // A snackbar would sit under this sheet, so what a copy says, it says here.
     var notice by remember { mutableStateOf("") }
@@ -81,7 +83,7 @@ fun CardDetailsSheet(cardId: String, flows: CardFlows, onDismiss: () -> Unit) {
             nfcGated = prefs.nfcTagRevealEnabled,
             bankIconStyle = prefs.bankIconStyle,
             onToggleReveal = { reveal.toggle(card.id) },
-            onShareNfc = { flows.openNfcExchange(ExchangeTab.Outlet, card) },
+            onShareNfc = if (nfcOffered) { { flows.openNfcExchange(ExchangeTab.Outlet, card) } } else null,
             onEdit = { flows.editCard(card) },
             onDelete = {
                 reveal.revealed.remove(card.id)

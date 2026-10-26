@@ -1,6 +1,7 @@
 package com.example.normpix.navigation
 
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.example.normpix.about.GuideTopic
 import com.example.normpix.finance.domain.DateRange
 import com.example.normpix.finance.domain.MonthKey
 
@@ -71,6 +72,12 @@ interface AppNavigator {
 
     /** The changelog page: what changed across NormPix releases (a navigator without it does nothing). */
     fun openChangelog() = Unit
+
+    /** The About page: what NormPix is and a guide to how each of its features works (a navigator without it does nothing). */
+    fun openAbout() = Unit
+
+    /** One topic of the About guide, step by step; a navigator without the route shows the About page. */
+    fun openGuide(topic: GuideTopic) = openAbout()
 
     /** Switches the shell to [destination]. */
     fun go(destination: AppDestination)

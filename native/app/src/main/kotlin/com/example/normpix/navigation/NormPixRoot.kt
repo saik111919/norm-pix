@@ -51,6 +51,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.normpix.AppContainer
+import com.example.normpix.about.GuideTopic
 import com.example.normpix.DummyData
 import com.example.normpix.finance.domain.DateRange
 import com.example.normpix.finance.domain.MonthKey
@@ -121,6 +122,10 @@ object Routes {
     const val REMINDER_ALERT = "reminder/{reminderId}"
     const val UPDATE = "update"
     const val CHANGELOG = "changelog"
+    const val ABOUT = "about"
+
+    /** One topic of the About guide, named by a [GuideTopic]. */
+    const val GUIDE = "about/{topic}"
 
     fun categoryHistory(categoryId: Long, month: MonthKey) = "category/$categoryId/${month.toInt()}"
     fun categoryHistory(categoryId: Long, range: DateRange) =
@@ -131,6 +136,7 @@ object Routes {
     fun settingsPage(page: SettingsPage) = "settings/${page.name}"
     fun appearanceSection(section: AppearanceSection) = "appearance/${section.name}"
     fun reminderAlert(reminderId: Long) = "reminder/$reminderId"
+    fun guide(topic: GuideTopic) = "about/${topic.name}"
 }
 
 /**
@@ -533,6 +539,15 @@ private fun AppNavigation(
             page(Routes.PROFILE) { SettingsRoute(SettingsDetail.Profile) }
             page(Routes.UPDATE) { SettingsRoute(SettingsDetail.Update) }
             page(Routes.CHANGELOG) { SettingsRoute(SettingsDetail.Changelog) }
+            page(Routes.ABOUT) { SettingsRoute(SettingsDetail.About) }
+            page(
+                Routes.GUIDE,
+                arguments = listOf(navArgument("topic") { type = NavType.StringType }),
+            ) { entry ->
+                // A stale link (a name that is no topic any more) lands on the About page itself.
+                val topic = GuideTopic.named(entry.arguments?.getString("topic"))
+                SettingsRoute(if (topic == null) SettingsDetail.About else SettingsDetail.Guide(topic))
+            }
             page(Routes.SEARCH) { AppSearchPage() }
             page(
                 Routes.REMINDER_ALERT,
@@ -639,6 +654,14 @@ class NavControllerNavigator(private val nav: NavHostController, private val she
 
     override fun openChangelog() {
         nav.navigate(Routes.CHANGELOG) { launchSingleTop = true }
+    }
+
+    override fun openAbout() {
+        nav.navigate(Routes.ABOUT) { launchSingleTop = true }
+    }
+
+    override fun openGuide(topic: GuideTopic) {
+        nav.navigate(Routes.guide(topic))
     }
 
     override fun openReminderAlert(reminderId: Long) {

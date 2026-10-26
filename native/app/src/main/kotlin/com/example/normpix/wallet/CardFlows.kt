@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.example.normpix.AppContainer
+import com.example.normpix.availability.ScheduledFeature
 import com.example.normpix.finance.ui.FinanceActions
 import com.example.normpix.finance.ui.rememberFinanceActions
 import com.example.normpix.navigation.AppNavigator
@@ -54,6 +55,7 @@ import com.example.normpix.wallet.nfc.NfcExchangeSheet
 import com.example.normpix.wallet.nfc.PaymentCardInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
 
 /**
  * Wallet flows (sheet/dialog -> shared card list -> feedback), used by the
@@ -76,6 +78,14 @@ class CardFlows(
 
     /** Whether cards are being stored at all (Settings > Wallet & Cards > Store cards); no way to add one is offered otherwise. */
     private val storing get() = container.preferences.state.value.walletCardsEnabled
+
+    /** Whether the NFC card exchange is offered right now: the phone's NFC is on, and so is the app's own switch for it. */
+    private val exchangeOffered
+        get() = nfcExchangeOffered(
+            container.nfc.availability(),
+            container.preferences.state.value.availabilityOf(ScheduledFeature.NfcExchange),
+            LocalDateTime.now(),
+        )
 
     private fun saySettingsKeepNoCards() {
         snackbars.show("NormPix isn't storing cards. Turn on Store cards in Settings > Wallet & Cards to add one.", SnackbarKind.Warning)
@@ -239,6 +249,7 @@ class CardFlows(
      * have to switch tabs just to add a bank account. Also supports NFC Inlet.
      */
     fun openAddMenu() {
+        val offerExchange = exchangeOffered
         scope.launch {
             val choice = overlays.sheet<String> { dismiss ->
                 Column(Modifier.padding(AppSpacing.page).padding(bottom = AppSpacing.lg)) {
@@ -260,7 +271,7 @@ class CardFlows(
                         headlineContent = { Text("Bank account or cash") },
                         supportingContent = { Text("Track a bank balance or cash on hand") },
                     )
-                    if (storing) {
+                    if (storing && offerExchange) {
                         ListItem(
                             modifier = Modifier.clickable { dismiss("nfc_inlet") },
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
