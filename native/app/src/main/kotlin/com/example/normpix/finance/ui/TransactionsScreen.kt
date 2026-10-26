@@ -261,9 +261,15 @@ fun TransactionHistory(
             before = cutoff,
         )
     }
-    // The same search and filters over what is dated after today; nothing to look for in days that are all over by then.
-    val upcomingQuery = remember(query, cutoff) {
-        query.copy(before = null, notBefore = cutoff).takeIf { q -> q.range?.end?.isAfter(cutoff) ?: true }
+    // The same search and filters over what is dated after today. Days that are all over by then have none; this month has
+    // whatever is still to come, in later months too, as no month after this one can be shown; dates picked keep their bounds.
+    val upcomingQuery = remember(query, cutoff, filters.range) {
+        val range = query.range
+        when {
+            range == null || filters.range != null && range.end.isAfter(cutoff) -> query.copy(before = null, notBefore = cutoff)
+            !range.end.isAfter(cutoff) -> null
+            else -> query.copy(range = null, before = null, notBefore = cutoff)
+        }
     }
     val hasUserFilters = filters.hasFilters || filters.range != null || searching
 
