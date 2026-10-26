@@ -123,6 +123,7 @@ fun dayHeading(day: LocalDateTime, now: LocalDateTime = LocalDateTime.now()): St
     return when {
         diff == 0L -> "Today"
         diff == 1L -> "Yesterday"
+        diff == -1L -> "Tomorrow"
         diff in 2..6 -> fmt("EEEE").format(day)
         target.year == today.year -> fmt("EEE, d MMM").format(day)
         else -> fmt("EEE, d MMM yyyy").format(day)

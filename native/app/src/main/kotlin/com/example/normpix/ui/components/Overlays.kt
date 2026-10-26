@@ -65,6 +65,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 /** The least time a [AppOverlays.loading] sheet stays up, so a quick job doesn't flash it up and down. */
 internal const val LOADING_MIN_MS = 600L
@@ -168,19 +170,30 @@ class AppOverlays {
      * whatever the work left behind (a picture it copied) is all there for the caller to keep or clean up - even when
      * the work finished in the moment between Cancel and the sheet going.
      */
-    suspend fun <T : Any> loading(title: String, message: String? = null, work: suspend () -> T): T? = coroutineScope {
+    suspend fun <T : Any> loading(
+        title: String,
+        message: String? = null,
+        /**
+         * False for work that changes data and must finish once it has begun (checking and repairing the ledger, restoring a
+         * backup): the sheet has no Cancel and can't be swiped or tapped away, and if the app closes it all the same (locking
+         * closes every sheet) the work still runs to its end and its result is given back.
+         */
+        cancellable: Boolean = true,
+        work: suspend () -> T,
+    ): T? = coroutineScope {
         val running = async {
             try {
-                Outcome(work())
+                Outcome(if (cancellable) work() else withContext(NonCancellable) { work() })
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Outcome(failure = e)
             }
         }
-        val outcome = try {
+        val shownOutcome = try {
             sheet<Outcome<T>> { done ->
-                LoadingSheetContent(title, message, onCancel = { done(null) })
+                if (!cancellable) SheetDismissConfirmation(needed = true) { false }
+                LoadingSheetContent(title, message, onCancel = if (cancellable) ({ done(null) }) else null)
                 LaunchedEffect(Unit) {
                     val result = coroutineScope {
                         val shown = launch { delay(LOADING_MIN_MS) }
@@ -193,8 +206,10 @@ class AppOverlays {
             }
         } finally {
             // Closed by Cancel, a swipe, the scrim or back: stop the work. This scope waits for it to end either way.
-            running.cancel()
+            if (cancellable) running.cancel()
         }
+        // Work that can't be stopped is waited for, however the sheet went.
+        val outcome = shownOutcome ?: if (cancellable) null else running.await()
         outcome?.failure?.let { throw it }
         outcome?.value
     }

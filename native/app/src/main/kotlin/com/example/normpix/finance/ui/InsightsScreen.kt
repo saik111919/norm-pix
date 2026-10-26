@@ -62,6 +62,7 @@ import com.example.normpix.finance.domain.isInProgress
 import com.example.normpix.finance.domain.largestDecrease
 import com.example.normpix.finance.domain.largestIncrease
 import com.example.normpix.finance.domain.relativeChange
+import com.example.normpix.finance.domain.settledBy
 import com.example.normpix.finance.domain.shareOf
 import com.example.normpix.navigation.AmountsVisibilityButton
 import com.example.normpix.navigation.AppNavigator
@@ -169,7 +170,9 @@ private class InsightsData(
     companion object {
         suspend fun load(repo: FinanceRepository, period: InsightsPeriod): InsightsData {
             val today = LocalDate.now()
-            val range = period.range
+            // As of today: what is dated ahead in the period is upcoming, and counts on its own day (see settledCutoff).
+            val asOf = today.plusDays(1).atStartOfDay()
+            val range = period.range.settledBy(asOf)
             val compare = period.comparison(today)
             // Spending is shown per top-level category: a sub-category's counts toward its parent (its own detail is a tap away).
             val parents = repo.categories().parentMap()
@@ -184,7 +187,7 @@ private class InsightsData(
             daily = repo.dailyTotals(range, TransactionType.Expense),
             previousDaily = repo.dailyTotals(period.before, TransactionType.Expense),
             // Spending by month is about months: it is left out while days that were picked are shown.
-            trend = if (period is InsightsPeriod.Month) repo.monthlyTotals(period.month.addMonths(-5), period.month) else emptyList(),
+            trend = if (period is InsightsPeriod.Month) repo.monthlyTotals(period.month.addMonths(-5), period.month, asOf = asOf) else emptyList(),
             hasAnyData = repo.firstActiveMonth() != null,
             people = repo.peopleSpending(range),
             )
@@ -413,7 +416,7 @@ private fun SpendingPace(data: InsightsData, money: MoneyFormatter) {
     val period = data.period
     val start = data.start
     val beforeStart = period.before.start
-    // Up to today in a period still going (or to the latest day anything is dated, if later); all of a finished one.
+    // Up to today in a period still going - what is dated later is upcoming, in no total yet - and all of a finished one.
     val shown = maxOf(elapsedDays(start, period.days), data.daily.maxOfOrNull { dayNumber(start, it.day) } ?: 0)
     val current = remember(data) { runningTotalsFrom(data.daily, start, shown) }
     val previous = remember(data) {
@@ -779,9 +782,9 @@ private fun DailySpending(data: InsightsData) {
         if (i in 0 until days) values[i] = d.amount
     }
     val elapsed = elapsedDays(start, days)
-    // A day dated later in the period than today is drawn too: it is part of the period's total, so the average and the
-    // count of days are taken over the same days the total is - otherwise a payment dated ahead would raise the average
-    // with no day to spread it over ("spent on 6 of 4 days").
+    // The average and the count of days are taken over the same days the total is: those up to today (an entry dated later
+    // is upcoming and in no total yet), all of them once the period is over. The later of the two is kept should a day ever
+    // be in the totals past today, so the average is never spread over fewer days than it was spent on ("6 of 4 days").
     val drawn = maxOf(elapsed, data.daily.maxOf { dayNumber(start, it.day) })
     val average = average(data.summary.expense, drawn)
     val peak = data.daily.maxBy { it.amount }

@@ -1,5 +1,6 @@
 package com.example.normpix.finance.ui
 
+import com.example.normpix.finance.domain.settledCutoff
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -111,7 +112,8 @@ fun PeoplePage() {
         Period.Custom -> custom?.let { "${shortDate(it.start)} – ${shortDate(it.end.minusDays(1))}" } ?: "Pick a range"
     }
 
-    val spending by rememberFinanceQuery(range) { peopleSpending(range) }
+    // As of today: an expense dated ahead counts on its own day (see settledCutoff).
+    val spending by rememberFinanceQuery(range) { peopleSpending(range, asOf = settledCutoff(LocalDateTime.now())) }
     val totals = (spending as? AsyncValue.Data)?.value ?: PeopleSpending.Empty
     val loaded = spending is AsyncValue.Data
 

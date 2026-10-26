@@ -78,6 +78,7 @@ object SettingsCatalog {
         SettingsEntry("Bottom controls", SettingsPage.Appearance, listOf("bottom", "thumb", "reach", "one hand", "search bar", "filter", "filters", "back", "actions", "footer", "controls", "layout"), appearance = AppearanceSection.BottomControls),
         SettingsEntry("Page transitions", SettingsPage.Appearance, listOf("animation", "motion", "shared axis", "slide", "fade"), appearance = AppearanceSection.PageTransitions),
         SettingsEntry("Sheet & dialog transitions", SettingsPage.Appearance, listOf("sheet", "dialog", "bottom sheet", "decision", "popup", "overlay", "animation", "motion", "transition", "window", "linux", "desktop", "gnome", "slide", "fade", "scale"), appearance = AppearanceSection.SheetTransitions),
+        SettingsEntry("Top spending", SettingsPage.Appearance, listOf("top spending", "categories", "carousel", "stack", "home", "biggest", "spending cards", "layout"), appearance = AppearanceSection.TopSpending),
         SettingsEntry("Month control", SettingsPage.Appearance, listOf("month", "switcher", "picker", "steps", "track", "split", "buttons", "classic", "earlier", "previous", "old", "date", "dates", "all time", "by month", "style"), appearance = AppearanceSection.MonthControl),
 
         // Finance

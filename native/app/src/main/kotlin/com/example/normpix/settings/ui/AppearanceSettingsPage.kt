@@ -15,6 +15,7 @@ import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material.icons.outlined.VerticalAlignBottom
+import androidx.compose.material.icons.outlined.ViewCarousel
 import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -80,6 +81,7 @@ internal val AppearanceSection.hue: Int
         AppearanceSection.BackButton -> 6
         AppearanceSection.BottomControls -> 3
         AppearanceSection.MonthControl -> 2
+        AppearanceSection.TopSpending -> 5
     }
 
 /** The group a section sits in on the Appearance overview. Every section must be placed: the build stops at one that is not. */
@@ -98,6 +100,7 @@ internal val AppearanceSection.group: AppearanceGroup
         AppearanceSection.BackButton,
         AppearanceSection.BottomControls,
         AppearanceSection.MonthControl,
+        AppearanceSection.TopSpending,
         -> AppearanceGroup.Layout
     }
 
@@ -115,6 +118,7 @@ internal val AppearanceSection.icon: ImageVector
         AppearanceSection.BackButton -> Icons.Rounded.ChevronLeft
         AppearanceSection.BottomControls -> Icons.Outlined.VerticalAlignBottom
         AppearanceSection.MonthControl -> Icons.Outlined.CalendarMonth
+        AppearanceSection.TopSpending -> Icons.Outlined.ViewCarousel
     }
 
 /** What a section's row says under its name: the choice made now. [appIcon] is the launcher icon in use (Android holds that one). */
@@ -135,6 +139,7 @@ internal fun AppearanceSection.summary(prefs: AppPrefsState, appIcon: AppIcon): 
     AppearanceSection.BackButton -> prefs.backButtonStyle.label
     AppearanceSection.BottomControls -> if (prefs.bottomControls) "On" else "Off"
     AppearanceSection.MonthControl -> prefs.monthControlStyle.label
+    AppearanceSection.TopSpending -> prefs.topSpendingLayout.label
 }
 
 private val themeOptions = listOf(

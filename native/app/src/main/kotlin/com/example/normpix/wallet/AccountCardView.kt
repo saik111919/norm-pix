@@ -1,5 +1,6 @@
 package com.example.normpix.wallet
 
+import com.example.normpix.finance.domain.percentLabel
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -321,7 +322,8 @@ private fun CreditMeter(used: Float, over: Boolean, caption: String?) {
                 modifier = Modifier.weight(1f, fill = false),
             )
             Text(
-                "${(used.coerceIn(0f, 1f) * 100).toInt()}% used",
+                // The one percent rule every screen keeps: a sliver owed is "<1%", nearly all of the limit ">99%" (see percentLabel).
+                "${percentLabel(used.toDouble())} used",
                 style = TextStyle(color = CardCaptionColor, fontWeight = FontWeight.Medium, fontSize = 10.sp, shadow = embossShadow),
                 maxLines = 1,
             )

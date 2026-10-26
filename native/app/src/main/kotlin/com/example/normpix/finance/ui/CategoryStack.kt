@@ -1,6 +1,22 @@
 package com.example.normpix.finance.ui
 
+import com.example.normpix.finance.domain.settledCutoff
+import com.example.normpix.finance.domain.settledBy
 import androidx.compose.foundation.background
+import com.example.normpix.ui.components.DeckMarkerInset
+import com.example.normpix.ui.components.DeckHero
+import com.example.normpix.ui.components.DeckDivider
+import com.example.normpix.ui.components.DeckDetail
+import com.example.normpix.ui.components.DeckCarousel
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.Role
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -68,6 +84,7 @@ import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.resolve
 import java.time.LocalDate
+import java.time.LocalDateTime
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -125,6 +142,150 @@ fun CategoryStack(spends: List<CategorySpend>, onOpen: (CategorySpend) -> Unit, 
         face = { spend -> CompositionLocalProvider(LocalDensity provides capped) { SpendFace(spend) } },
     )
 }
+
+/**
+ * The month's biggest spending categories as a 3D carousel - the one the saved cards and the accounts use ([DeckCarousel]): the
+ * biggest in front, facing you, the next ones turned away either side, each in its own colour. The card says which category and
+ * what it came to; the panel it stands in says what that is - its share of the month, how it compares with last month, its budget
+ * - so nothing is said twice. Tapping the card in front, or "Details", opens its month in the sheet the stack opens ([onOpen]);
+ * "Transactions" goes straight to them ([onSeeAll]).
+ */
+@Composable
+fun CategoryCarousel(
+    spends: List<CategorySpend>,
+    onOpen: (CategorySpend) -> Unit,
+    onSeeAll: (CategorySpend) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val money = rememberFinanceState().money
+    val palette = categoryPalette()
+    val density = LocalDensity.current
+    val capped = remember(density) { Density(density.density, fontScale = minOf(density.fontScale, MAX_FONT_SCALE)) }
+    DeckCarousel(
+        items = spends,
+        itemKey = { it.categoryId },
+        tint = { spend -> spend.category?.let { palette[Math.floorMod(it.color, palette.size)].accent } },
+        sideDescription = { spend, index, count -> spend.spoken(money, index, count) },
+        bringForwardLabel = "Show this category",
+        modifier = modifier,
+        card = { spend, inFront, _ ->
+            CompositionLocalProvider(LocalDensity provides capped) {
+                if (inFront) {
+                    Box(
+                        Modifier
+                            .clip(AppRadius.rLg)
+                            .clickable(onClickLabel = "Opens the details") { onOpen(spend) }
+                            .clearAndSetSemantics {
+                                contentDescription = spend.spoken(money, spends.indexOf(spend), spends.size)
+                                role = Role.Button
+                                onClick(label = "Opens the details") { onOpen(spend); true }
+                            },
+                    ) { SpendCarouselFace(spend) }
+                } else {
+                    SpendCarouselFace(spend)
+                }
+            }
+        },
+        details = { spend -> SpendDetails(spend, money) },
+        footer = { front ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                FilledTonalButton(onClick = { onSeeAll(front) }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.AutoMirrored.Outlined.ReceiptLong, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(AppSpacing.sm))
+                    Text("Transactions", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Spacer(Modifier.width(AppSpacing.sm))
+                FilledTonalIconButton(onClick = { onOpen(front) }) {
+                    Icon(Icons.Outlined.Info, contentDescription = "Details of ${front.name}")
+                }
+            }
+        },
+    )
+}
+
+/** A category's card in the carousel: who it is at the top, what it came to at the foot, on the category's own colour. */
+@Composable
+private fun SpendCarouselFace(spend: CategorySpend) {
+    val money = rememberFinanceState().money
+    val tone = spendTone(spend.category)
+    val type = MaterialTheme.typography
+    val ink = tone.onContainer
+    SpendSurface(tone) {
+        Column(Modifier.fillMaxSize()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SpendAvatar(spend.category, tone)
+                Spacer(Modifier.width(12.dp))
+                Text(spend.name, style = type.titleMedium, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            }
+            Spacer(Modifier.weight(1f))
+            Text(
+                "SPENT IN ${monthLabel(spend.month).uppercase()}",
+                style = type.labelMedium,
+                color = ink.copy(alpha = 0.78f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                money.format(spend.amount),
+                style = type.headlineLarge.copy(fontFeatureSettings = TABULAR_FIGURES, fontWeight = FontWeight.SemiBold),
+                color = ink,
+                maxLines = 1,
+                softWrap = false,
+                autoSize = TextAutoSize.StepBased(minFontSize = 20.sp, maxFontSize = type.headlineLarge.fontSize),
+            )
+        }
+    }
+}
+
+/**
+ * What one category's month is, in the carousel's panel, in the same rows for every category so the panel keeps its size as
+ * it moves: how it compares with last month as the large figure, then its share of the month, how many transactions it was and
+ * where its budget stands (or that it has none).
+ */
+@Composable
+private fun SpendDetails(spend: CategorySpend, money: MoneyFormatter) {
+    val scheme = MaterialTheme.colorScheme
+    val change = spend.change
+    DeckHero(
+        label = "Compared with ${spend.basis}",
+        value = when {
+            change == null -> "Nothing to compare"
+            (abs(change) * 100).roundToInt() == 0 -> "About the same"
+            else -> "${(abs(change) * 100).roundToInt()}% ${if (change < 0) "less" else "more"}"
+        },
+        modifier = Modifier.padding(end = DeckMarkerInset),
+    )
+    DeckDivider()
+    val budget = spend.budget
+    val facts: List<Pair<Float, @Composable (Modifier) -> Unit>> = listOf(
+        1f to { m: Modifier -> DeckDetail("Of spending", percentLabel(spend.share), m) },
+        1f to { m: Modifier -> DeckDetail("Transactions", spend.count.toString(), m) },
+        1.3f to { m: Modifier ->
+            DeckDetail(
+                label = if (budget != null && budget.health == BudgetHealth.Exceeded) "Over budget" else "Budget left",
+                value = when {
+                    budget == null -> "None set"
+                    budget.health == BudgetHealth.Exceeded -> money.format(-budget.remaining, trimZeroFraction = true)
+                    else -> money.format(budget.remaining, trimZeroFraction = true)
+                },
+                modifier = m,
+                valueColor = if (budget != null && budget.health == BudgetHealth.Exceeded) scheme.error else Color.Unspecified,
+            )
+        },
+    )
+    if (LocalDensity.current.fontScale >= DETAIL_STACK_FONT_SCALE) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(AppSpacing.md)) {
+            for ((_, fact) in facts) fact(Modifier.fillMaxWidth())
+        }
+    } else {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)) {
+            for ((share, fact) in facts) fact(Modifier.weight(share))
+        }
+    }
+}
+
+/** From this font scale up the panel's facts stand one under another, as the account carousel's do. */
+private const val DETAIL_STACK_FONT_SCALE = 1.4f
 
 private fun CategorySpend.spoken(money: MoneyFormatter, index: Int, count: Int): String = buildString {
     append("$name, ${money.format(amount)} spent in ${monthLabel(month)}, ${percentLabel(share)} of spending")
@@ -278,6 +439,8 @@ fun CategorySpendSheet(spend: CategorySpend, onSeeAll: () -> Unit) {
                 range = spend.month.range,
                 types = setOf(TransactionType.Expense),
                 categoryIds = setOf(spend.categoryId),
+                // What the card's total is made of: up to today, not an entry dated ahead (see settledCutoff).
+                before = settledCutoff(LocalDateTime.now()),
             ),
             limit = LATEST,
         ).items
@@ -285,7 +448,11 @@ fun CategorySpendSheet(spend: CategorySpend, onSeeAll: () -> Unit) {
     // A category with sub-categories shows where its total went: straight to it, or on to which sub-category.
     val subCategories = finance.categories.filter { it.parentId == spend.categoryId }
     val monthTotals by rememberFinanceQuery(spend.categoryId to spend.month) {
-        if (subCategories.isEmpty()) emptyList() else categoryTotals(spend.month.range, TransactionType.Expense)
+        if (subCategories.isEmpty()) {
+            emptyList()
+        } else {
+            categoryTotals(spend.month.range.settledBy(settledCutoff(LocalDateTime.now())), TransactionType.Expense)
+        }
     }
     val comparison = spend.comparison
 

@@ -39,9 +39,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -122,7 +124,7 @@ internal fun switcherHeight(): Dp = SwitcherHeight * LocalDensity.current.fontSc
  * the way a primary tab is. Callers give it the width.
  */
 @Composable
-private fun SwitcherTrack(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
+internal fun SwitcherTrack(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
     Row(
         modifier
             .height(switcherHeight())
@@ -145,7 +147,8 @@ internal fun rememberMonthControlStyle(): MonthControlStyle =
  * place, so the control keeps its shape; or, in [MonthControlStyle.Split], the earlier separate buttons of the split-button
  * family (see [SplitMonthControl]). Either way the month slides in from the side it came from, tapping it opens a sheet to pick
  * any month, and the steps and the pill are named the same for a screen reader. [latest] caps forward navigation (it is "this
- * month"). [trailing] sits after the control (the history's way out of the month into everything).
+ * month"). [trailing] sits after the control (the history's way out of the month into everything). With [onPickDay] the month
+ * sheet also offers one day of the month, which it leaves to the caller to show (the history's day by day, see [DaySwitcher]).
  */
 @Composable
 fun MonthSwitcher(
@@ -155,6 +158,7 @@ fun MonthSwitcher(
     modifier: Modifier = Modifier,
     trailing: (@Composable () -> Unit)? = null,
     style: MonthControlStyle = rememberMonthControlStyle(),
+    onPickDay: (() -> Unit)? = null,
 ) {
     val haptics = rememberAppHaptics()
     val overlays = LocalOverlays.current
@@ -170,8 +174,21 @@ fun MonthSwitcher(
         picking = true
         scope.launch {
             try {
-                val picked = overlays.sheet<MonthKey> { dismiss -> MonthPickerSheet(month, latest, onPick = dismiss) }
-                if (picked != null && picked != month) go(picked)
+                var wantsDay = false
+                val picked = overlays.sheet<MonthKey> { dismiss ->
+                    MonthPickerSheet(
+                        month,
+                        latest,
+                        onPick = dismiss,
+                        onPickDay = onPickDay?.let {
+                            {
+                                wantsDay = true
+                                dismiss(null)
+                            }
+                        },
+                    )
+                }
+                if (wantsDay) onPickDay?.invoke() else if (picked != null && picked != month) go(picked)
             } finally {
                 picking = false
             }
@@ -248,7 +265,7 @@ internal fun pressedCorner(press: MutableInteractionSource): Dp {
 
 /** A step either side of the month: a round, plain button on the track (a filled one would be a second thing to look at). */
 @Composable
-private fun StepButton(icon: ImageVector, description: String, enabled: Boolean, onClick: () -> Unit) {
+internal fun StepButton(icon: ImageVector, description: String, enabled: Boolean, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Box(
         Modifier
@@ -362,7 +379,7 @@ private fun RowScope.MonthSegment(month: MonthKey, latest: MonthKey, open: Boole
  * filled and fully round, this month ringed, months still to come not offered. Calls [onPick] with the month, or null.
  */
 @Composable
-fun MonthPickerSheet(initial: MonthKey, latest: MonthKey, onPick: (MonthKey?) -> Unit) {
+fun MonthPickerSheet(initial: MonthKey, latest: MonthKey, onPick: (MonthKey?) -> Unit, onPickDay: (() -> Unit)? = null) {
     val haptics = rememberAppHaptics()
     val scheme = MaterialTheme.colorScheme
     var year by remember { mutableIntStateOf(initial.year) }
@@ -440,6 +457,20 @@ fun MonthPickerSheet(initial: MonthKey, latest: MonthKey, onPick: (MonthKey?) ->
                 Icon(Icons.Rounded.Today, contentDescription = null, modifier = Modifier.size(AppIconSizes.sm))
                 Spacer(Modifier.width(AppSpacing.sm))
                 Text("Go to this month")
+            }
+        }
+        if (onPickDay != null) {
+            Spacer(Modifier.height(if (initial != latest) AppSpacing.sm else AppSpacing.lg))
+            OutlinedButton(
+                onClick = {
+                    haptics.selection()
+                    onPickDay()
+                },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+            ) {
+                Icon(Icons.Rounded.Event, contentDescription = null, modifier = Modifier.size(AppIconSizes.sm))
+                Spacer(Modifier.width(AppSpacing.sm))
+                Text("Show one day")
             }
         }
     }
@@ -552,7 +583,7 @@ private fun ByMonthButton(onClick: () -> Unit) {
 
 /** The same way back, standing on its own under the pill (see [ScopeSwitcher]): a pill of the track's tone. */
 @Composable
-private fun ByMonthPill(onClick: () -> Unit) {
+internal fun ByMonthPill(onClick: () -> Unit) {
     val haptics = rememberAppHaptics()
     Surface(
         onClick = {
@@ -575,7 +606,7 @@ internal const val STACK_SCOPE_AT_FONT_SCALE = 1.4f
  * "3 Oct – 15 Oct" was "3 Oct …": the dates themselves were what was cut.
  */
 @Composable
-private fun ScopeSwitcher(modifier: Modifier, onByMonth: () -> Unit, pill: @Composable RowScope.() -> Unit) {
+internal fun ScopeSwitcher(modifier: Modifier, onByMonth: () -> Unit, pill: @Composable RowScope.() -> Unit) {
     if (LocalDensity.current.fontScale >= STACK_SCOPE_AT_FONT_SCALE) {
         Column(modifier.fillMaxWidth()) {
             SwitcherTrack(Modifier.fillMaxWidth(), pill)

@@ -1,5 +1,6 @@
 package com.example.normpix.finance.ui
 
+import com.example.normpix.finance.domain.settledCutoff
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -76,7 +77,8 @@ fun BudgetsView() {
     val current = MonthKey.of(LocalDateTime.now())
     var month by remember { mutableStateOf(current) }
     val editable = month == current
-    val overview by rememberFinanceQuery(month) { budgetOverview(month) }
+    // As of today: an expense dated ahead counts against the budget on its own day (see settledCutoff).
+    val overview by rememberFinanceQuery(month) { budgetOverview(month, asOf = settledCutoff(LocalDateTime.now())) }
 
     Column(Modifier.padding(AppSpacing.page)) {
         // Clear of whatever is above it - the section tabs, or the overdue notice under them - by the same gap either way.
@@ -374,7 +376,7 @@ fun BudgetHistoryPage() {
     val finance = rememberFinanceState()
     val navigator = LocalNavigator.current
     val until = remember { MonthKey.of(LocalDateTime.now()) }
-    val history by rememberFinanceQuery(until) { budgetHistory(until) }
+    val history by rememberFinanceQuery(until) { budgetHistory(until, asOf = settledCutoff(LocalDateTime.now())) }
     AppSubPage(title = "Budget history", onBack = navigator::back, maxWidth = AppLayout.maxListWidth) {
         item {
             Column(Modifier.padding(AppSpacing.page)) {

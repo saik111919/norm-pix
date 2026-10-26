@@ -182,6 +182,12 @@ enum class AccentColor(val seed: Color, val label: String) {
     Volt(Color(0xFFAFE22D), "Volt"),
 }
 
+/** How Home shows the month's biggest spending categories. */
+enum class TopSpendingLayout(val label: String, val description: String) {
+    Stack("Stacked cards", "The biggest in front, the others tucked behind it. Swipe to bring the next one forward, hold to spread them out"),
+    Carousel("Carousel", "The biggest in the middle, the next ones turned away either side. Swipe across to change category; what it came to is underneath"),
+}
+
 /** How the Wallet lays out the accounts. */
 enum class AccountsLayout(val label: String, val description: String) {
     Stack("Stacked cards", "One account in front as a card, the others tucked behind it. Swipe to bring the next one forward, hold to spread them out"),
@@ -328,6 +334,8 @@ data class AppPrefsState(
     val bottomControls: Boolean = false,
     /** How progress bars and loaders look, wherever the app shows progress. */
     val progressStyle: ProgressStyle = ProgressStyle.Wavy,
+    /** Settings > Appearance > Top spending: Home's biggest categories as a stack or a carousel. */
+    val topSpendingLayout: TopSpendingLayout = TopSpendingLayout.Stack,
     /** How the month a page shows is switched: one tonal track, or the earlier separate buttons. */
     val monthControlStyle: MonthControlStyle = MonthControlStyle.Track,
     /** The window each [ScheduledFeature] may be used in; a feature missing here is always available. */
@@ -443,6 +451,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
             backButtonStyle = prefs.enum(K_BACK_STYLE, defaults.backButtonStyle),
             bottomControls = prefs.getBoolean(K_BOTTOM_CONTROLS, defaults.bottomControls),
             progressStyle = prefs.enum(K_PROGRESS_STYLE, defaults.progressStyle),
+            topSpendingLayout = prefs.enum(K_TOP_SPENDING_LAYOUT, defaults.topSpendingLayout),
             monthControlStyle = prefs.enum(K_MONTH_CONTROL, defaults.monthControlStyle),
             categoryIconStyle = prefs.enum(K_CATEGORY_ICON_STYLE, defaults.categoryIconStyle),
             categoryIconShape = prefs.enum(K_CATEGORY_ICON_SHAPE, defaults.categoryIconShape),
@@ -572,6 +581,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
 
     fun setProgressStyle(style: ProgressStyle) =
         change({ copy(progressStyle = style) }) { putString(K_PROGRESS_STYLE, style.name) }
+
+    fun setTopSpendingLayout(layout: TopSpendingLayout) =
+        change({ copy(topSpendingLayout = layout) }) { putString(K_TOP_SPENDING_LAYOUT, layout.name) }
 
     fun setMonthControlStyle(style: MonthControlStyle) =
         change({ copy(monthControlStyle = style) }) { putString(K_MONTH_CONTROL, style.name) }
@@ -815,6 +827,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_BACK_STYLE = "back_button_style"
         const val K_BOTTOM_CONTROLS = "bottom_controls"
         const val K_PROGRESS_STYLE = "progress_style"
+        const val K_TOP_SPENDING_LAYOUT = "top_spending_layout"
         const val K_MONTH_CONTROL = "month_control_style"
         const val K_CATEGORY_ICON_STYLE = "category_icon_style"
         const val K_CATEGORY_ICON_SHAPE = "category_icon_shape"

@@ -71,6 +71,7 @@ import com.example.normpix.settings.CategoryIconStyle
 import com.example.normpix.settings.ColorSource
 import com.example.normpix.settings.InterfaceFont
 import com.example.normpix.settings.MonthControlStyle
+import com.example.normpix.settings.TopSpendingLayout
 import com.example.normpix.settings.PageAnimationType
 import com.example.normpix.settings.ProgressStyle
 import com.example.normpix.settings.SheetAnimationType
@@ -117,6 +118,7 @@ fun AppearanceSectionPage(section: AppearanceSection) {
                     AppearanceSection.BackButton -> BackButtonSection(prefs, preferences, haptics)
                     AppearanceSection.BottomControls -> BottomControlsSection(prefs, preferences, haptics)
                     AppearanceSection.MonthControl -> MonthControlSection(prefs, preferences, haptics)
+                    AppearanceSection.TopSpending -> TopSpendingSection(prefs, preferences, haptics)
                 }
             }
         }
@@ -436,6 +438,30 @@ private fun BottomControlsSection(prefs: AppPrefsState, preferences: AppPreferen
                     preferences.setBottomControls(on)
                 },
             )
+        }
+    }
+}
+
+/** Home's biggest spending categories: a stack, as the cards are, or a carousel, as the accounts can be. */
+@Composable
+private fun TopSpendingSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
+    ListSection(
+        footer = "How Home shows the month's biggest spending categories. Either way a tap opens the category's month, and " +
+            "Insights has every category.",
+        modifier = Modifier.selectableGroup(),
+    ) {
+        for (layout in TopSpendingLayout.entries) {
+            item {
+                RadioRow(
+                    headline = layout.label,
+                    supporting = layout.description,
+                    selected = prefs.topSpendingLayout == layout,
+                    onClick = {
+                        haptics.selection()
+                        preferences.setTopSpendingLayout(layout)
+                    },
+                )
+            }
         }
     }
 }

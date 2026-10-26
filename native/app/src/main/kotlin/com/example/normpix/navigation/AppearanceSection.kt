@@ -19,6 +19,7 @@ enum class AppearanceSection(val title: String) {
     BackButton("Back button style"),
     BottomControls("Bottom controls"),
     MonthControl("Month control"),
+    TopSpending("Top spending"),
     ;
 
     companion object {
