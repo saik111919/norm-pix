@@ -133,6 +133,11 @@ object BankCardDesign {
             has("chase") -> chaseTheme
             has("citi", "citibank") -> citiTheme
             has("bank of america", "boa", "bofa") -> boaTheme
+            has("sbm", "sbm bank") -> sbmTheme
+            has("onecard", "one card") -> oneCardTheme
+            has("jupiter") -> jupiterTheme
+            has("fi money", "epifi") -> fiTheme
+            has("slice") -> sliceTheme
             has("hsbc") -> hsbcTheme
             has("capital one") -> capitalOneTheme
             has("wells fargo") -> wellsFargoTheme
@@ -201,13 +206,13 @@ object BankCardDesign {
     private val sbiTheme = BankBrandTheme(
         id = "sbi",
         displayName = "State Bank of India",
-        gradientColors = listOf(Color(0xFF28559A), Color(0xFF163765), Color(0xFF0C1E38)),
-        gradient = GradientSpec.Radial(center = Anchor(0.6f, -0.4f), radius = 1.3f, colors = listOf(Color(0xFF2B5B9E), Color(0xFF183B6D), Color(0xFF0E2240))),
+        gradientColors = listOf(Color(0xFF008080), Color(0xFF005A70), Color(0xFF0A2540)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF009999), Color(0xFF004D61), Color(0xFF051726)), stops = null),
         patternType = BankPatternType.SbiConcentricRings,
         chipFinish = EmvChipFinish.Gold,
-        tierName = "SIMPLYCLICK",
-        badgeColor = Color(0x2E00B4D8),
-        badgeBorderColor = Color(0x5500B4D8),
+        tierName = "AURUM",
+        badgeColor = Color(0x3300B4D8),
+        badgeBorderColor = Color(0x6600B4D8),
         accentColor = Color(0xFF00B4D8),
         logo = BankLogo.Sbi,
     )
@@ -215,12 +220,12 @@ object BankCardDesign {
     private val iciciTheme = BankBrandTheme(
         id = "icici",
         displayName = "ICICI Bank",
-        gradientColors = listOf(Color(0xFF9E1F35), Color(0xFF6B1123), Color(0xFF380812)),
-        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFFB8283B), Color(0xFF7A1327), Color(0xFF450A15)), stops = listOf(0.0f, 0.6f, 1.0f)),
+        gradientColors = listOf(Color(0xFF8B2500), Color(0xFF5A1400), Color(0xFF2E0A00)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFFF37021), Color(0xFF9E2A00), Color(0xFF330900)), stops = listOf(0.0f, 0.45f, 1.0f)),
         patternType = BankPatternType.IciciWaves,
         chipFinish = EmvChipFinish.Gold,
         tierName = "SAPPHIRO",
-        badgeColor = Color(0x3DF37021),
+        badgeColor = Color(0x33F37021),
         badgeBorderColor = Color(0x66F37021),
         accentColor = Color(0xFFF37021),
         logo = BankLogo.Icici,
@@ -229,92 +234,162 @@ object BankCardDesign {
     private val axisTheme = BankBrandTheme(
         id = "axis",
         displayName = "AXIS BANK",
-        gradientColors = listOf(Color(0xFF97144D), Color(0xFF610D33), Color(0xFF33051A)),
-        gradient = GradientSpec.Linear(begin = Anchor(-0.8f, -1.0f), end = Anchor(0.8f, 1.0f), colors = listOf(Color(0xFFA61856), Color(0xFF700F3A), Color(0xFF3A061E)), stops = listOf(0.0f, 0.5f, 1.0f)),
+        gradientColors = listOf(Color(0xFF6B0F2B), Color(0xFF450A1C), Color(0xFF1F040C)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF800020), Color(0xFF4A0516), Color(0xFF140206)), stops = null),
         patternType = BankPatternType.AxisAngularFacets,
         chipFinish = EmvChipFinish.Gold,
         tierName = "MAGNUS",
         badgeColor = Color(0x3397144D),
-        badgeBorderColor = Color(0x66D42A75),
-        accentColor = Color(0xFFE84284),
+        badgeBorderColor = Color(0x6697144D),
+        accentColor = Color(0xFFFF4081),
         logo = BankLogo.Axis,
     )
 
     private val kotakTheme = BankBrandTheme(
         id = "kotak",
         displayName = "kotak",
-        gradientColors = listOf(Color(0xFFBE151C), Color(0xFF990E14), Color(0xFF4A0508)),
-        gradient = GradientSpec.Linear(begin = Anchor(1f, -1f), end = Anchor(-1f, 1f), colors = listOf(Color(0xFFBE151C), Color(0xFF9E1016), Color(0xFF470609)), stops = listOf(0.0f, 0.55f, 1.0f)),
+        gradientColors = listOf(Color(0xFF7A1B1B), Color(0xFF4A0E0E), Color(0xFF1A0505)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF9E2323), Color(0xFF591111), Color(0xFF1F0606)), stops = null),
         patternType = BankPatternType.KotakInfinity,
         chipFinish = EmvChipFinish.Gold,
-        tierName = "PRIVY LEAGUE",
-        badgeColor = Color(0x33FFFFFF),
-        badgeBorderColor = Color(0x55FFFFFF),
-        accentColor = Color(0xFFFF4D55),
+        tierName = "WHITE",
+        badgeColor = Color(0x33ED1C24),
+        badgeBorderColor = Color(0x66ED1C24),
+        accentColor = Color(0xFFFF5252),
         logo = BankLogo.Kotak,
     )
 
     private val amexTheme = BankBrandTheme(
         id = "amex",
         displayName = "AMERICAN EXPRESS",
-        gradientColors = listOf(Color(0xFF3A4750), Color(0xFF263038), Color(0xFF14191E)),
-        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF4B5D69), Color(0xFF2C3740), Color(0xFF171E24)), stops = null),
+        gradientColors = listOf(Color(0xFF2E3D48), Color(0xFF1C2730), Color(0xFF0F151A)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF4A5D6B), Color(0xFF24303B), Color(0xFF0D1217)), stops = null),
         patternType = BankPatternType.AmexCenturionKey,
         chipFinish = EmvChipFinish.Silver,
-        tierName = "PLATINUM",
-        badgeColor = Color(0x330070D2),
-        badgeBorderColor = Color(0x660070D2),
-        accentColor = Color(0xFF0070D2),
+        tierName = "CENTURION",
+        badgeColor = Color(0x33D4AF37),
+        badgeBorderColor = Color(0x66D4AF37),
+        accentColor = Color(0xFFD4AF37),
         logo = BankLogo.Amex,
     )
 
     private val chaseTheme = BankBrandTheme(
         id = "chase",
         displayName = "CHASE",
-        gradientColors = listOf(Color(0xFF0C4A9E), Color(0xFF08336E), Color(0xFF041B3B)),
-        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF1156B5), Color(0xFF0C3D82), Color(0xFF051D40)), stops = null),
+        gradientColors = listOf(Color(0xFF0A2540), Color(0xFF061526), Color(0xFF02070D)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF0F355C), Color(0xFF081D33), Color(0xFF030A12)), stops = null),
         patternType = BankPatternType.ChaseOctagonRays,
         chipFinish = EmvChipFinish.Silver,
-        tierName = "SAPPHIRE",
-        badgeColor = Color(0x331156B5),
-        badgeBorderColor = Color(0x661156B5),
-        accentColor = Color(0xFF4BA3E3),
+        tierName = "SAPPHIRE RESERVE",
+        badgeColor = Color(0x33117ACA),
+        badgeBorderColor = Color(0x66117ACA),
+        accentColor = Color(0xFF117ACA),
         logo = BankLogo.Chase,
     )
 
     private val citiTheme = BankBrandTheme(
         id = "citi",
         displayName = "citi",
-        gradientColors = listOf(Color(0xFF003B70), Color(0xFF002244), Color(0xFF001428)),
-        gradient = GradientSpec.Linear(begin = Anchor(0f, -1f), end = Anchor(0f, 1f), colors = listOf(Color(0xFF004482), Color(0xFF002D57), Color(0xFF001933)), stops = null),
+        gradientColors = listOf(Color(0xFF002D62), Color(0xFF001B3D), Color(0xFF000D1F)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF003E85), Color(0xFF00224A), Color(0xFF000E1F)), stops = null),
         patternType = BankPatternType.CitiArcWaves,
-        chipFinish = EmvChipFinish.Gold,
-        tierName = "PREMIER",
-        badgeColor = Color(0x33ED232A),
-        badgeBorderColor = Color(0x55ED232A),
-        accentColor = Color(0xFFED232A),
+        chipFinish = EmvChipFinish.Silver,
+        tierName = "PRESTIGE",
+        badgeColor = Color(0x33003B70),
+        badgeBorderColor = Color(0x66003B70),
+        accentColor = Color(0xFFFF0000),
         logo = BankLogo.Citi,
     )
 
     private val boaTheme = BankBrandTheme(
         id = "boa",
         displayName = "Bank of America",
-        gradientColors = listOf(Color(0xFF012169), Color(0xFFB3131E), Color(0xFF001030)),
-        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF0C2B6A), Color(0xFF051638), Color(0xFF6B0E14)), stops = listOf(0.0f, 0.6f, 1.0f)),
+        gradientColors = listOf(Color(0xFF012169), Color(0xFF011440), Color(0xFF00081C)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF02329E), Color(0xFF011A54), Color(0xFF000A24)), stops = null),
+        patternType = BankPatternType.MinimalGeometric,
+        chipFinish = EmvChipFinish.Silver,
+        tierName = "PREMIUM REWARDS",
+        badgeColor = Color(0x33E31837),
+        badgeBorderColor = Color(0x66E31837),
+        accentColor = Color(0xFFE31837),
+        logo = BankLogo.Boa,
+    )
+
+    private val sbmTheme = BankBrandTheme(
+        id = "sbm",
+        displayName = "SBM Bank India",
+        gradientColors = listOf(Color(0xFF002B49), Color(0xFF001F35), Color(0xFF001220)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF003860), Color(0xFF00233B), Color(0xFF001220)), stops = null),
         patternType = BankPatternType.MinimalGeometric,
         chipFinish = EmvChipFinish.Gold,
-        tierName = "CUSTOMIZED CASH",
-        badgeColor = Color(0x33B3131E),
-        badgeBorderColor = Color(0x66B3131E),
-        accentColor = Color(0xFFE31B23),
-        logo = BankLogo.Boa,
+        tierName = "SIGNATURE",
+        badgeColor = Color(0x33F39C12),
+        badgeBorderColor = Color(0x66F39C12),
+        accentColor = Color(0xFFF39C12),
+        logo = BankLogo.Text("SBM BANK"),
+    )
+
+    private val oneCardTheme = BankBrandTheme(
+        id = "onecard",
+        displayName = "OneCard",
+        gradientColors = listOf(Color(0xFF1E1E1E), Color(0xFF141414), Color(0xFF0A0A0A)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF2B2B2B), Color(0xFF171717), Color(0xFF0D0D0D)), stops = null),
+        patternType = BankPatternType.MetallicBrushed,
+        chipFinish = EmvChipFinish.Silver,
+        tierName = "METAL",
+        badgeColor = Color(0x33FFFFFF),
+        badgeBorderColor = Color(0x55FFFFFF),
+        accentColor = Color(0xFF00E5FF),
+        logo = BankLogo.Text("ONECARD"),
+    )
+
+    private val jupiterTheme = BankBrandTheme(
+        id = "jupiter",
+        displayName = "Jupiter",
+        gradientColors = listOf(Color(0xFF281E32), Color(0xFF191122), Color(0xFF0C0712)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF3B2A4C), Color(0xFF1E1428), Color(0xFF0E0814)), stops = null),
+        patternType = BankPatternType.MinimalGeometric,
+        chipFinish = EmvChipFinish.Silver,
+        tierName = "PRO",
+        badgeColor = Color(0x33FF715B),
+        badgeBorderColor = Color(0x66FF715B),
+        accentColor = Color(0xFFFF715B),
+        logo = BankLogo.Text("JUPITER"),
+    )
+
+    private val fiTheme = BankBrandTheme(
+        id = "fi",
+        displayName = "Fi Money",
+        gradientColors = listOf(Color(0xFF082623), Color(0xFF051B19), Color(0xFF020E0D)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF0D3632), Color(0xFF061F1D), Color(0xFF03100E)), stops = null),
+        patternType = BankPatternType.MinimalGeometric,
+        chipFinish = EmvChipFinish.Silver,
+        tierName = "INFINITE",
+        badgeColor = Color(0x3300C9A7),
+        badgeBorderColor = Color(0x6600C9A7),
+        accentColor = Color(0xFF00C9A7),
+        logo = BankLogo.Text("fi"),
+    )
+
+    private val sliceTheme = BankBrandTheme(
+        id = "slice",
+        displayName = "Slice",
+        gradientColors = listOf(Color(0xFF26123D), Color(0xFF170928), Color(0xFF0B0314)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF391A5C), Color(0xFF1E0C33), Color(0xFF0E0417)), stops = null),
+        patternType = BankPatternType.MinimalGeometric,
+        chipFinish = EmvChipFinish.Silver,
+        tierName = "SPARK",
+        badgeColor = Color(0x339E47FF),
+        badgeBorderColor = Color(0x669E47FF),
+        accentColor = Color(0xFF9E47FF),
+        logo = BankLogo.Text("slice"),
     )
 
     private val hsbcTheme = BankBrandTheme(
         id = "hsbc",
         displayName = "HSBC",
-        gradientColors = listOf(Color(0xFF2B2B2B), Color(0xFF141414), Color(0xFF0A0A0A)),
-        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF333333), Color(0xFF1A1A1A), Color(0xFF0D0D0D)), stops = null),
+        gradientColors = listOf(Color(0xFF1F2421), Color(0xFF141816), Color(0xFF0A0D0B)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF2E3632), Color(0xFF1A1F1C), Color(0xFF0D100E)), stops = null),
         patternType = BankPatternType.HsbcHexagonGrid,
         chipFinish = EmvChipFinish.Silver,
         tierName = "PREMIER",
@@ -327,8 +402,8 @@ object BankCardDesign {
     private val capitalOneTheme = BankBrandTheme(
         id = "capital_one",
         displayName = "Capital One",
-        gradientColors = listOf(Color(0xFF004977), Color(0xFF0B2238), Color(0xFF040E17)),
-        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF005387), Color(0xFF0A2945), Color(0xFF061421)), stops = null),
+        gradientColors = listOf(Color(0xFF0B2545), Color(0xFF061830), Color(0xFF020B17)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF103666), Color(0xFF082040), Color(0xFF030D1A)), stops = null),
         patternType = BankPatternType.MinimalGeometric,
         chipFinish = EmvChipFinish.Silver,
         tierName = "VENTURE X",
@@ -341,25 +416,25 @@ object BankCardDesign {
     private val wellsFargoTheme = BankBrandTheme(
         id = "wells_fargo",
         displayName = "WELLS FARGO",
-        gradientColors = listOf(Color(0xFFC3181F), Color(0xFF8F1017), Color(0xFF47070B)),
-        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFFB5171F), Color(0xFF7A0E14), Color(0xFF3D0609)), stops = null),
+        gradientColors = listOf(Color(0xFF6B1A1A), Color(0xFF420F0F), Color(0xFF1F0606)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF8A2222), Color(0xFF521313), Color(0xFF260808)), stops = null),
         patternType = BankPatternType.MinimalGeometric,
         chipFinish = EmvChipFinish.Gold,
-        tierName = "ACTIVE CASH",
-        badgeColor = Color(0x33FFCD41),
-        badgeBorderColor = Color(0x66FFCD41),
-        accentColor = Color(0xFFFFCD41),
+        tierName = "AUTOGRAPH JOURNEY",
+        badgeColor = Color(0x33CD1409),
+        badgeBorderColor = Color(0x66CD1409),
+        accentColor = Color(0xFFFFD700),
         logo = BankLogo.WellsFargo,
     )
 
     private val barclaysTheme = BankBrandTheme(
         id = "barclays",
         displayName = "BARCLAYS",
-        gradientColors = listOf(Color(0xFF00395D), Color(0xFF002238), Color(0xFF001320)),
-        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF005285), Color(0xFF003050), Color(0xFF00192A)), stops = null),
+        gradientColors = listOf(Color(0xFF00395D), Color(0xFF00243B), Color(0xFF00121F)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF004D7D), Color(0xFF002B47), Color(0xFF001421)), stops = null),
         patternType = BankPatternType.MinimalGeometric,
         chipFinish = EmvChipFinish.Silver,
-        tierName = "VIEW",
+        tierName = "ARRIVAL PLUS",
         badgeColor = Color(0x3300AEEF),
         badgeBorderColor = Color(0x6600AEEF),
         accentColor = Color(0xFF00AEEF),
@@ -369,14 +444,14 @@ object BankCardDesign {
     private val discoverTheme = BankBrandTheme(
         id = "discover",
         displayName = "DISCOVER",
-        gradientColors = listOf(Color(0xFF2C3238), Color(0xFF191D21), Color(0xFF0C0E10)),
-        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF343B42), Color(0xFF1E2328), Color(0xFF101316)), stops = null),
+        gradientColors = listOf(Color(0xFF5A2E0E), Color(0xFF381B07), Color(0xFF1C0C02)),
+        gradient = GradientSpec.Linear(begin = Anchor(-1f, -1f), end = Anchor(1f, 1f), colors = listOf(Color(0xFF733C14), Color(0xFF45220B), Color(0xFF210E03)), stops = null),
         patternType = BankPatternType.MinimalGeometric,
-        chipFinish = EmvChipFinish.Gold,
-        tierName = "IT CASH BACK",
-        badgeColor = Color(0x33E87722),
-        badgeBorderColor = Color(0x66E87722),
-        accentColor = Color(0xFFE87722),
+        chipFinish = EmvChipFinish.Silver,
+        tierName = "it CASH BACK",
+        badgeColor = Color(0x33FF6600),
+        badgeBorderColor = Color(0x66FF6600),
+        accentColor = Color(0xFFFF6600),
         logo = BankLogo.Discover,
     )
 

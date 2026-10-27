@@ -71,11 +71,21 @@ class BankLogoResolverTest {
     }
 
     @Test
+    fun foreignBanksAndNeobanksResolveToTheirArtwork() {
+        assertEquals("banks/boa.svg", BankLogoResolver.logoFor("Bank of America")?.pick(compact = false, onDark = true)?.path)
+        assertEquals("banks/boa_symbol.svg", BankLogoResolver.logoFor("Bank of America")?.pick(compact = true, onDark = true)?.path)
+        assertEquals("banks/sbm.svg", BankLogoResolver.logoFor("SBM Bank India")?.pick(compact = false, onDark = true)?.path)
+        assertEquals("banks/sbm_symbol.svg", BankLogoResolver.logoFor("SBM Bank India")?.pick(compact = true, onDark = true)?.path)
+        assertEquals("brandlogos/onecard.webp", BankLogoResolver.logoFor("OneCard")?.pick(compact = true, onDark = false)?.path)
+        assertEquals("brandlogos/jupiterbank.webp", BankLogoResolver.logoFor("Jupiter")?.pick(compact = true, onDark = false)?.path)
+    }
+
+    @Test
     fun knownBanksWithoutArtworkFallBack() {
         assertEquals("capital", bank("Capital Small Finance Bank"))
         assertNull(BankLogoResolver.logoFor("Capital Small Finance Bank"))
         assertNull(BankLogoResolver.logoFor("Cosmos Co-operative Bank"))
-        assertNull(BankLogoResolver.logoFor("Deutsche Bank"))
+        assertNull(BankLogoResolver.logoFor("Bank of Ceylon"))
     }
 
     @Test
@@ -100,6 +110,7 @@ class BankLogoResolverTest {
             "Syndicate Bank" to "syndicate", "Allahabad Bank" to "allahabad", "Oriental Bank of Commerce" to "obc",
             "State Bank of Hyderabad" to "sbhyderabad", "JPMorgan Chase" to "jpmorgan", "Emirates NBD" to "emiratesnbd",
             "Saraswat Bank" to "saraswat", "SBM Bank" to "sbmindia", "Mashreq" to "mashreq",
+            "OneCard" to "onecard", "Jupiter" to "jupiter", "Slice" to "slice", "LazyPay" to "lazypay",
         )
         for ((name, id) in expected) assertEquals(name, id, bank(name))
         // A bank that merged into another stays itself: "State Bank of Hyderabad" is not SBI.

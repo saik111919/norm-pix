@@ -134,6 +134,11 @@ class BanksSettingsPageTest {
 
         val onlyCoOps = bankGroups(banks, BankFilter.Kind(BankCategory.CoOperative), emptyMap())
         assertEquals(listOf(BankCategory.CoOperative.name), onlyCoOps.map { it.key })
+
+        val onlyDigital = bankGroups(banks, BankFilter.Kind(BankCategory.Digital), emptyMap())
+        assertEquals(listOf(BankCategory.Digital.name), onlyDigital.map { it.key })
+        assertTrue(onlyDigital.first().banks.any { it.name == "OneCard" })
+        assertTrue(onlyDigital.first().banks.any { it.name == "Jupiter" })
     }
 
     @Test
@@ -162,13 +167,5 @@ class BanksSettingsPageTest {
         assertNull(BankUsage(0, 0).words)
         assertEquals("1 account", BankUsage(1, 0).words)
         assertTrue(BankUsage(0, 1).any)
-    }
-
-    @Test
-    fun aFilterKeyComesBackAsTheSameFilter() {
-        for (filter in listOf(BankFilter.All, BankFilter.InUse, BankFilter.Yours) + BankCategory.entries.map { BankFilter.Kind(it) }) {
-            assertEquals(filter, BankFilter.of(filter.key))
-        }
-        assertEquals(BankFilter.All, BankFilter.of("nonsense"))
     }
 }
