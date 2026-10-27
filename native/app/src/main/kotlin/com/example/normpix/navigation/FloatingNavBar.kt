@@ -1,5 +1,3 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
-
 package com.example.normpix.navigation
 
 import androidx.compose.animation.AnimatedVisibility
@@ -13,8 +11,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -44,8 +40,6 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,9 +48,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -75,8 +69,8 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -84,7 +78,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.runtime.collectAsState
 import com.example.normpix.ui.components.FrostedBackdrop
 import com.example.normpix.ui.components.LocalFrostedBackdrop
 import com.example.normpix.ui.components.frostedGlass
@@ -641,16 +634,17 @@ fun FloatingNavBar(
             .selectableGroup(),
     ) {
         // No animateContentSize here: each item grows and shrinks its own label (see FloatingNavItem), so the dock's width
-        // follows them frame by frame.
+        // follows them frame by frame. Animating the row's bounds as well made the items jump into place while only the
+        // outline moved.
         Row(
             modifier = Modifier.padding(DockPadding),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            for (destination in destinations) {
+            destinations.forEach { destination ->
                 FloatingNavItem(
                     destination = destination,
-                    label = if (destination == current) currentLabel else destination.label,
+                    label = if (destination == AppDestination.PlansAndTransactions) currentLabel else destination.label,
                     selected = destination == current,
                     overdueCount = overdueCount,
                     colors = colors,
@@ -665,8 +659,7 @@ fun FloatingNavBar(
 }
 
 /**
- * The pill holding a page's actions in the back row: as tall as the dock and made as the companion tile is - one action is a
- * tile, more make it wider - so the row reads as one set.
+ * Pill carrying a sub-page's own actions beside the floating back pill.
  */
 @Composable
 private fun FloatingActionsPill(
@@ -674,16 +667,16 @@ private fun FloatingActionsPill(
     backdrop: FrostedBackdrop?,
     content: @Composable RowScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(CompanionCorner)
+    val shape = CircleShape
     Surface(
         shape = shape,
-        color = colors.companionContainer,
-        contentColor = colors.companionContent,
+        color = colors.container,
+        contentColor = colors.content,
         shadowElevation = 6.dp,
         border = BorderStroke(1.dp, colors.border),
         modifier = Modifier
             .height(DockHeight)
-            .defaultMinSize(minWidth = DockHeight)
+            .wrapContentWidth()
             .frostedGlass(backdrop, shape),
     ) {
         Row(
@@ -700,6 +693,7 @@ private fun FloatingActionsPill(
  * When [isActionMenu] is true, renders a circular "+" button that rotates into "×" when open.
  * Otherwise renders a squircle companion tile with [icon].
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FloatingNavCompanionItem(
     colors: DockColors,
@@ -792,6 +786,7 @@ fun FloatingNavCompanionItem(
  * - Selected: pure white high-contrast pill capsule with dark icon + label.
  * - Inactive: recognizable clean icon with 48dp touch target.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FloatingNavItem(
     destination: AppDestination,
@@ -824,58 +819,72 @@ private fun FloatingNavItem(
         targetValue = if (selected && showLabel) {
             if (isNarrow) 10.dp else 14.dp
         } else {
-            0.dp
+            12.dp
         },
-        animationSpec = AppMotion.spatial(),
+        animationSpec = tween(animDuration, easing = AppMotion.standard),
         label = "nav_item_padding",
     )
 
-    Surface(
-        onClick = {
-            haptics.selection()
-            onClick()
-        },
-        shape = shape,
-        color = containerColor,
-        contentColor = contentColor,
+    // Icon-only items name themselves on long press. The wrapper stays in place when the item is selected (its
+    // label is already showing) so the container/content color animations are never restarted.
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+        tooltip = { PlainTooltip { Text(destination.label) } },
+        state = rememberTooltipState(),
+        enableUserInput = !selected || !showLabel,
+    ) {
+    Box(
         modifier = modifier
             .height(ItemHeight)
-            .defaultMinSize(minWidth = ItemHeight)
+            .widthIn(min = ItemHeight)
+            .background(color = containerColor, shape = shape)
+            .clip(shape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(bounded = true, color = if (selected) colors.activePillContent else colors.content),
+                onClick = {
+                    if (!selected) {
+                        haptics.selection()
+                        onClick()
+                    }
+                },
+            )
             .semantics {
-                role = Role.Tab
                 this.selected = selected
-                this.contentDescription = destination.label
-                if (selected && destination == AppDestination.PlansAndTransactions) {
-                    this.stateDescription = "Showing $label"
-                }
+                role = Role.Tab
+                contentDescription = destination.label
+                // "Plans & Transactions, selected, showing Plans": the pill's label is the view that is open.
+                if (selected && label != destination.label) stateDescription = "Showing $label"
+                if (showLabel) this[SemanticsProperties.Text] = listOf(AnnotatedString(destination.label))
             },
+        contentAlignment = Alignment.Center,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = horizontalPadding),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
-            val icon = if (selected) destination.selectedIcon else destination.unselectedIcon
+            val icon = if (selected) destination.selectedIcon else destination.icon
+            val showBadge = destination == AppDestination.PlansAndTransactions && overdueCount > 0
 
-            if (destination == AppDestination.PlansAndTransactions && overdueCount > 0) {
+            if (showBadge) {
                 BadgedBox(
                     badge = {
                         Badge(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError,
+                            containerColor = if (selected) colors.container else colors.activePill,
+                            contentColor = if (selected) colors.content else colors.activePillContent,
+                            modifier = Modifier.semantics {
+                                contentDescription = "$overdueCount overdue"
+                            },
                         ) {
-                            Text(
-                                text = overdueCount.toString(),
-                                modifier = Modifier.semantics {
-                                    contentDescription = "$overdueCount overdue"
-                                },
-                            )
+                            Text(if (overdueCount > 99) "99+" else overdueCount.toString())
                         }
                     },
                 ) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
+                        tint = contentColor,
                         modifier = Modifier.size(22.dp),
                     )
                 }
@@ -883,29 +892,36 @@ private fun FloatingNavItem(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
+                    tint = contentColor,
                     modifier = Modifier.size(22.dp),
                 )
             }
 
+            // Too little room for even a few letters: the pill alone says which item is selected. The label opens out of the
+            // icon as the pill fills in, and folds back into it as the pill empties, so a tab change moves every item smoothly
+            // instead of swapping labels in one frame.
             AnimatedVisibility(
-                visible = selected && showLabel,
-                enter = fadeIn(animationSpec = tween(animDuration, easing = AppMotion.enter)) +
-                        expandHorizontally(animationSpec = AppMotion.spatial()),
-                exit = fadeOut(animationSpec = tween(animDuration, easing = AppMotion.exit)) +
-                       shrinkHorizontally(animationSpec = AppMotion.spatial()),
+                visible = selected && showLabel && (maxLabelWidth == Dp.Unspecified || maxLabelWidth >= MinLabelWidth),
+                enter = expandHorizontally(tween(animDuration, easing = AppMotion.standard), expandFrom = Alignment.Start) +
+                    fadeIn(tween(animDuration / 2, delayMillis = animDuration / 3)),
+                exit = shrinkHorizontally(tween(animDuration, easing = AppMotion.standard), shrinkTowards = Alignment.Start) +
+                    fadeOut(tween(animDuration / 3)),
             ) {
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
                     color = contentColor,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    // No softWrap = false: that lays the text out unbounded and never ellipsizes, which is how a
+                    // large font used to push the last icon out of the dock.
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
-                        .padding(start = 6.dp)
+                        .padding(start = 8.dp)
                         .then(if (maxLabelWidth != Dp.Unspecified) Modifier.widthIn(max = maxLabelWidth) else Modifier),
                 )
             }
         }
+    }
     }
 }
