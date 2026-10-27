@@ -31,6 +31,7 @@ class WidgetSetupTest {
         "ClockWidget" to R.xml.widget_clock_info,
         "CookieAnalogWidget" to R.xml.widget_cookie_analog_info,
         "CookieNumbersWidget" to R.xml.widget_cookie_numbers_info,
+        "CookiePlainWidget" to R.xml.widget_cookie_plain_info,
         "CookieDigitalWidget" to R.xml.widget_cookie_digital_info,
         "RecentWidget" to R.xml.widget_recent_info,
         "AddWidget" to R.xml.widget_add_info,

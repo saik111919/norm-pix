@@ -287,9 +287,11 @@ class CardSwitchesSettingsTest {
             .toSet()
         assertTrue("Store cards" in offered)
         assertTrue("Card number on account" in offered)
-        for (hidden in listOf("Save CVV", "Card tilt", "Export and import cards", "Clear copied card details after", "NFC tag reveal gate", "Card actions style")) {
+        for (hidden in listOf("Save CVV", "Export and import cards", "Clear copied card details after", "NFC tag reveal gate", "Card actions style")) {
             assertFalse(hidden in offered, hidden)
         }
+        // Card tilt stays: the accounts lean too, whether or not saved cards are kept.
+        assertTrue("Card tilt" in offered)
         // And with it on, they are all there.
         val all = listOf("cvv", "tilt", "export cards", "clipboard", "nfc", "buttons").flatMap { SettingsCatalog.search(it) }.map { it.title }.toSet()
         for (shown in listOf("Save CVV", "Card tilt", "Export and import cards", "Clear copied card details after", "NFC tag reveal gate", "Card actions style")) {

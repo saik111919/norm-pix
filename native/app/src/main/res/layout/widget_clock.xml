@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The watch dial widget: two rings of five-minute numbers, the hour in the middle and the minute in the pill at three o'clock.
-     The rings are a picture (WatchDialRenderer) that ClockWidget draws again every minute, so the numbers can stay upright as the
-     inner ring steps; the hour and the minute are TextClocks, which the platform keeps on time between those minutes.
+     The face and the inner ring are a picture (WatchDialRenderer) that ClockWidget draws again every few seconds, so the numbers can
+     stay upright as the inner ring steps; the outer (seconds) ring turns by itself, as an animation over the picture; the hour and
+     the minute are TextClocks, which the platform keeps on time between those draws.
      ClockWidget sizes the text and puts the minute in its pill for the widget's size. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_clock_root"
@@ -16,6 +17,14 @@
         android:layout_height="match_parent"
         android:importantForAccessibility="no"
         android:scaleType="fitCenter" />
+
+    <!-- The seconds ring, over the picture: ClockWidget adds the view that turns it (widget_dial_seconds_NN, a progress bar that
+         runs the ring's animation), started at the second it is. It is empty until then. -->
+    <FrameLayout
+        android:id="@+id/widget_clock_seconds"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no" />
 
     <TextClock
         android:id="@+id/widget_clock_hour"

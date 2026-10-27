@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The plain digital clock's background: the face colour on a rounded rectangle. A transparent clock widget drops it. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/widget_clock_face" />
+    <corners android:radius="@dimen/widget_clock_simple_radius" />
+</shape>

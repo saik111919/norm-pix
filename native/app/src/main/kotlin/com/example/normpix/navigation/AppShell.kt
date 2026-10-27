@@ -109,6 +109,7 @@ import com.example.normpix.ui.components.LocalDockGone
 import com.example.normpix.ui.components.LocalFloatingDock
 import com.example.normpix.ui.components.LocalFrostedBackdrop
 import com.example.normpix.ui.components.LocalSnackbars
+import com.example.normpix.ui.components.FooterBlur
 import com.example.normpix.ui.components.frostedSource
 import com.example.normpix.ui.components.rememberFrostedBackdrop
 import com.example.normpix.ui.theme.AppIcons
@@ -562,6 +563,9 @@ fun AppShell(
             CompositionLocalProvider(LocalDockGone provides dockGone) {
                 tabs(Modifier.frostedSource(backdrop))
             }
+
+            // What scrolls under the dock is blurred and faded into the page, more towards the edge; it goes down with the dock.
+            FooterBlur(backdrop, Modifier.align(Alignment.BottomCenter), visible = { 1f - goneState.value })
 
             // Outside click dismissal scrim when More is open
             if (isMoreOpen) {

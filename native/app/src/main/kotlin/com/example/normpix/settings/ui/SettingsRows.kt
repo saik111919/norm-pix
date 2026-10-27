@@ -45,6 +45,7 @@ val SettingsPage.hue: Int
         SettingsPage.Appearance -> 3
         SettingsPage.Widgets -> 6
         SettingsPage.Finance -> 1
+        SettingsPage.Banks -> 5
         SettingsPage.Data -> 2
         SettingsPage.Wallet -> 7
         SettingsPage.Availability -> 4

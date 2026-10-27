@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The plain cookie clock (no ticks, no numbers) in the widget picker, at 10:09.
+     Drawn by design/cookie-clock/CookieFace.java: change it there, not here. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <path
+        android:fillColor="@color/widget_clock_face"
+        android:pathData="M184.76,184.66 C170.86,198.59 149.27,204.84 127.81,195.58 C124.7,194.24 121.58,192.89 118.46,191.54 C106.68,186.46 93.32,186.46 81.54,191.54 C78.42,192.89 75.3,194.24 72.18,195.58 C29.28,214.1 -14.17,170.58 4.41,127.7 C5.74,124.64 7.06,121.58 8.39,118.53 C13.51,106.71 13.51,93.29 8.39,81.47 C7.06,78.41 5.74,75.36 4.41,72.3 C-14.17,29.42 29.28,-14.1 72.18,4.42 C75.3,5.76 78.42,7.11 81.54,8.46 C93.32,13.54 106.68,13.54 118.46,8.46 C121.58,7.11 124.7,5.76 127.81,4.42 C170.72,-14.1 214.17,29.42 195.59,72.3 C194.26,75.36 192.94,78.41 191.61,81.47 C186.49,93.29 186.49,106.71 191.61,118.53 C192.94,121.58 194.26,124.64 195.59,127.7 C204.88,149.14 198.66,170.74 184.76,184.66 Z" />
+    <path
+        android:strokeColor="@color/widget_clock_face"
+        android:strokeWidth="10.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M107.42,105.1 L63.74,75.08" />
+    <path
+        android:strokeColor="@color/widget_clock_ink"
+        android:strokeWidth="6.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M107.42,105.1 L63.74,75.08" />
+    <path
+        android:strokeColor="@color/widget_clock_face"
+        android:strokeWidth="8.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M92.4,104.82 L155.73,64.64" />
+    <path
+        android:strokeColor="@color/widget_clock_ink"
+        android:strokeWidth="4.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M92.4,104.82 L155.73,64.64" />
+    <path
+        android:fillColor="@color/widget_clock_ink"
+        android:pathData="M103,104.73 C100.39,106.39 96.93,105.61 95.27,103 C93.61,100.39 94.39,96.93 97,95.27 C99.61,93.61 103.07,94.39 104.73,97 C106.39,99.61 105.61,103.07 103,104.73 Z" />
+    <path
+        android:fillColor="@color/widget_clock_accent"
+        android:pathData="M101.18,101.86 C100.15,102.51 98.79,102.2 98.14,101.18 C97.49,100.15 97.8,98.79 98.82,98.14 C99.85,97.49 101.21,97.8 101.86,98.82 C102.51,99.85 102.2,101.21 101.18,101.86 Z" />
+    <path
+        android:strokeColor="@color/widget_clock_accent"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M109.99,86.25 L56.5,159.87" />
+    <path
+        android:fillColor="@color/widget_clock_accent"
+        android:pathData="M96.93,97.77 C98.16,96.07 100.54,95.69 102.23,96.93 C103.93,98.16 104.31,100.54 103.07,102.23 C101.84,103.93 99.46,104.31 97.77,103.07 C96.07,101.84 95.69,99.46 96.93,97.77 Z" />
+    <path
+        android:fillColor="@color/widget_clock_face"
+        android:pathData="M98.95,99.24 C99.37,98.66 100.18,98.53 100.76,98.95 C101.34,99.37 101.47,100.18 101.05,100.76 C100.63,101.34 99.82,101.47 99.24,101.05 C98.66,100.63 98.53,99.82 98.95,99.24 Z" />
+</vector>

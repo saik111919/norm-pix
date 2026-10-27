@@ -135,12 +135,13 @@ enum class GuideTopic(
         hue = 7,
         steps = listOf(
             "Open Wallet to see your accounts and your saved cards.",
-            "Add account for cash, a bank, a card, a wallet or savings. Add card to save a card.",
+            "Add account for cash, a bank, a card, a wallet or savings. Add card to save a card. Settings > Banks lists every bank NormPix knows, with its logo.",
             "A card's number and CVV stay hidden until you unlock with your fingerprint, face or screen lock, or tap your own NFC tag.",
             "Tap a detail to copy it. The clipboard is cleared after the time you set.",
         ),
         tips = listOf(
             "Scan the card number with the camera. It is read on the phone.",
+            "Accounts and saved cards lean a little as you move your phone (Settings > Appearance > Effects > Card tilt).",
             "Don't want cards in NormPix? Turn off Store cards in Settings > Wallet & Cards and the Wallet shows accounts only.",
         ),
         link = GuideLink.Wallet,
@@ -163,18 +164,19 @@ enum class GuideTopic(
     ),
     Widgets(
         title = "Home-screen widgets",
-        summary = "Six widgets for your home screen: four clocks, your recent transactions and a quick add.",
+        summary = "Seven widgets for your home screen: five clocks, your recent transactions and a quick add.",
         hue = 2,
         steps = listOf(
             "Open Settings > Widgets, tap a pill to see that widget, then Add to home screen. Or press and hold an empty spot on your home screen, choose Widgets and find NormPix.",
-            "Cookie clock: a clock in a cookie shape, in three styles - analog, analog with numbers, or digital with the date.",
-            "Watch dial: the time on a face of turning rings, the hour in the middle.",
+            "Cookie clock: a clock in a cookie shape, in four styles - analog, analog with numbers, plain (only the hands), or digital with the date.",
+            "Watch dial: the time on a face of two rings, the hour in the middle. The outer ring turns with the seconds and the inner one steps with the minute.",
             "Recent transactions: your latest entries, with a button to add one.",
             "Add transaction: one tap to start an expense, an income or a transfer.",
         ),
         tips = listOf(
             "The clocks keep time on their own and open your phone's clock app when tapped.",
             "On Android 12 and later the widgets wear your wallpaper's colors, and the analog clocks have a second hand.",
+            "Press and hold a clock on your home screen and choose Widget settings: make it transparent, or have the plain digital clock - for good, or when you make the widget small.",
             "While NormPix is locked, the widgets show nothing of your ledger.",
         ),
         link = GuideLink.Widgets,

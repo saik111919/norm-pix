@@ -1,6 +1,7 @@
 package com.example.normpix.settings.ui
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.ColorLens
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -85,12 +86,17 @@ object SettingsCatalog {
         SettingsEntry("Accounts layout", SettingsPage.Appearance, listOf("accounts", "stack", "stacked", "cards", "list", "rows", "compact", "carousel", "swipe", "layout", "wallet"), appearance = AppearanceSection.Layouts),
         SettingsEntry("Cards layout", SettingsPage.Appearance, listOf("cards", "stack", "stacked", "list", "rows", "compact", "carousel", "swipe", "layout", "wallet"), appearance = AppearanceSection.Layouts, cardsOnly = true),
         SettingsEntry("Bank logo style", SettingsPage.Appearance, listOf("logo", "brand", "icon", "compact", "full", "bank", "wallet"), appearance = AppearanceSection.CategoryIcons),
-        SettingsEntry("Card tilt", SettingsPage.Appearance, listOf("tilt", "motion", "gyroscope", "sensor", "parallax", "animation"), appearance = AppearanceSection.Effects, cardsOnly = true),
+        SettingsEntry("Card tilt", SettingsPage.Appearance, listOf("tilt", "motion", "gyroscope", "sensor", "parallax", "animation", "accounts", "cards"), appearance = AppearanceSection.Effects),
+        SettingsEntry("Footer blur", SettingsPage.Appearance, listOf("footer", "blur", "dock", "bottom bar", "fade", "frosted", "glass", "navigation", "progressive"), appearance = AppearanceSection.Effects),
 
         // Widgets
         SettingsEntry("Home-screen widgets", SettingsPage.Widgets, listOf("widget", "widgets", "home screen", "launcher", "preview", "pill", "pills", "clock", "recent", "quick add")),
         SettingsEntry("Add a widget to the home screen", SettingsPage.Widgets, listOf("add widget", "add to home screen", "put on home screen", "install widget")),
         SettingsEntry("Cookie clock widgets", SettingsPage.Widgets, listOf("cookie", "clock", "analog", "analogue", "digital", "numerals", "watch dial")),
+
+        // Banks
+        SettingsEntry("Banks and their logos", SettingsPage.Banks, listOf("bank", "banks", "logo", "logos", "icons", "directory", "list of banks", "find a bank", "sbi", "hdfc", "icici", "axis", "kotak", "gramin", "co-operative", "cooperative", "small finance", "payments bank", "foreign bank", "ifsc")),
+        SettingsEntry("Add a bank", SettingsPage.Banks, listOf("add bank", "new bank", "missing bank", "my bank", "custom bank")),
 
         // Finance
         SettingsEntry("Categories", null, listOf("categories", "labels", "tags"), special = SettingsSpecial.Categories),
@@ -162,6 +168,7 @@ object SettingsCatalog {
         SettingsPage.Appearance -> Icons.Outlined.Palette
         SettingsPage.Widgets -> Icons.Outlined.Widgets
         SettingsPage.Finance -> Icons.Outlined.Payments
+        SettingsPage.Banks -> Icons.Outlined.AccountBalance
         SettingsPage.Data -> Icons.Outlined.Storage
         SettingsPage.Wallet -> AppIcons.Wallet
         SettingsPage.Availability -> Icons.Outlined.Schedule

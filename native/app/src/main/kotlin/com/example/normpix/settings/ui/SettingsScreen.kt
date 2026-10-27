@@ -71,6 +71,7 @@ val SettingsPage.title: String
         SettingsPage.Appearance -> "Appearance"
         SettingsPage.Widgets -> "Widgets"
         SettingsPage.Finance -> "Finance"
+        SettingsPage.Banks -> "Banks"
         SettingsPage.Data -> "Data & Backup"
         SettingsPage.Wallet -> "Wallet & Cards"
         SettingsPage.Availability -> "Availability & Schedules"
@@ -317,6 +318,7 @@ private fun summary(group: SettingsPage, prefs: AppPrefsState, finance: FinanceS
         finance.defaultAccount?.let { add("Default: ${it.name}") }
         add("Categories")
     }.joinToString(" · ")
+    SettingsPage.Banks -> "${finance.catalog.all.size} banks and their logos"
     SettingsPage.Data -> if (prefs.dummyDataEnabled) "Sample data on · Export, restore, erase" else "Sample data, export, restore, erase"
     SettingsPage.Security ->
         if (prefs.walletLockEnabled) {

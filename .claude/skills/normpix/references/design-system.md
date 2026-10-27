@@ -1,6 +1,6 @@
 # NormPix design system and UI rules
 
-Verified 2026-10-27 against commit `c99a54e2`. The owner judges the app by how it looks and feels on their phone, and
+Verified 2026-10-27 against commit `763cc08f`. The owner judges the app by how it looks and feels on their phone, and
 corrects design by screenshot. Reuse what exists; a new bespoke widget needs a reason.
 
 Contents: 1 Theme and tokens · 2 The shared components · 3 Sheets, messages and menus · 4 Blur and glass ·
@@ -87,6 +87,10 @@ Use these before writing anything new:
 - Gate for all of it: Settings > Appearance > Effects > Background blur, Android 12+, **and** the system's window blur
   (`rememberWindowBlurAvailable()` follows `WindowManager.isCrossWindowBlurEnabled` and its listener: battery saver, the
   developer option, or "Reduce blur effects" turn it off; there is no public API for the last).
+- **Footer blur** (`ui/components/FooterBlur.kt`, Settings > Appearance > Effects > Footer blur, follows Background blur): behind the dock / back row
+  the page is blurred (`AppFrostedTokens.footerBlurRadius`) and washed with the page colour, fading in from nothing over `footerFade` above the bars
+  (a `DstIn` gradient on an offscreen layer), like DropSauce's `BarBlur`; it draws from the same `frostedSource` recording, takes no touches, and
+  goes down with the dock (`visible`). `AppShell` (compact) and `AppSubPage` (floating back row / search card) place it; none where blur is off.
 - Floating bars (dock, More actions, top back circle and actions pill) are real glass: the page records itself once
   (`frostedSource`) and each bar draws a blurred copy of what is behind it (`frostedGlass`); solid with a slight shadow where
   blur is off; no shadow under glass.

@@ -111,9 +111,11 @@ public class CookieFace {
         buildCookie();
         System.out.printf(Locale.ROOT, "edge: %.1f at twelve, %.1f at the corner%n", edge(0), edge(45));
 
-        // Drawables
-        write(res, "widget_cookie_dial", "The cookie analog clock's face: the cookie and the minute ticks round it.", INTRINSIC_DP, dial(false));
-        write(res, "widget_cookie_dial_numbers", "The cookie clock's face with numerals: the cookie, minute ticks and 1 to 12.", INTRINSIC_DP, dial(true));
+        // Drawables. The cookie is its own picture under the dial, so a widget can go without it (the clocks' "transparent" option).
+        write(res, "widget_cookie_fill", "The cookie clock's face colour: the cookie alone, under the dial. A transparent clock goes without it.", INTRINSIC_DP, cookieFill());
+        write(res, "widget_cookie_dial", "The cookie analog clock's marks: the minute ticks round the edge, over the cookie.", INTRINSIC_DP, dial(false));
+        write(res, "widget_cookie_dial_numbers", "The cookie clock's marks with numerals: minute ticks and 1 to 12, over the cookie.", INTRINSIC_DP, dial(true));
+        write(res, "widget_cookie_dial_plain", "The plain cookie clock's marks: none. Only the cookie and the hands.", INTRINSIC_DP, List.of());
         write(res, "widget_cookie_hour", "The cookie analog clock's hour hand, pointing at twelve.", INTRINSIC_DP, hourHand(HOUR_PLAIN));
         write(res, "widget_cookie_minute", "The cookie analog clock's minute hand, pointing at twelve; its cap is the pivot.", INTRINSIC_DP, minuteHand(MINUTE_PLAIN, false));
         write(res, "widget_cookie_second", "The cookie analog clock's second hand (Android 12 and later), pointing at twelve.", INTRINSIC_DP, secondHand(SECOND_PLAIN));
@@ -124,12 +126,16 @@ public class CookieFace {
 
         // Previews for the widget picker: 10:09 and 36 seconds.
         write(res, "widget_cookie_analog_preview", "The cookie analog clock in the widget picker, at 10:09.", 200,
-            concat(dial(false), hands(HOUR_PLAIN, MINUTE_PLAIN, SECOND_PLAIN, false)));
+            concat(cookieFill(), dial(false), hands(HOUR_PLAIN, MINUTE_PLAIN, SECOND_PLAIN, false)));
         write(res, "widget_cookie_numbers_preview", "The cookie clock with numerals in the widget picker, at 10:09.", 200,
-            concat(dial(true), hands(HOUR_NUMBERS, MINUTE_NUMBERS, SECOND_NUMBERS, true)));
+            concat(cookieFill(), dial(true), hands(HOUR_NUMBERS, MINUTE_NUMBERS, SECOND_NUMBERS, true)));
+        write(res, "widget_cookie_plain_preview", "The plain cookie clock (no ticks, no numbers) in the widget picker, at 10:09.", 200,
+            concat(cookieFill(), hands(HOUR_PLAIN, MINUTE_PLAIN, SECOND_PLAIN, false)));
         write(res, "widget_cookie_digital_preview", "The cookie digital clock in the widget picker, at 10:09.", 200, digitalPreview());
         write(res, "widget_clock_preview", "The watch dial widget in the widget picker, at 12:45 - the picture ClockWidget draws every minute.", 200,
             watchDial(45, "12", "45"));
+
+        writeSecondsRing(res);
 
         sheet(png);
         System.out.println("wrote drawables to " + res + " and " + png);
@@ -195,9 +201,14 @@ public class CookieFace {
     }
 
     // ---- the faces -------------------------------------------------------------------------------------------------
+    /** The cookie in the face's colour, alone. */
+    static List<Item> cookieFill() {
+        return List.of(fill(cookie, "face"));
+    }
+
+    /** The marks round the cookie (ticks, or numerals too); the cookie itself is [cookieFill]. */
     static List<Item> dial(boolean numerals) {
         List<Item> items = new ArrayList<>();
-        items.add(fill(cookie, "face"));
         Path2D minor = new Path2D.Double(), major = new Path2D.Double(), twelve = new Path2D.Double();
         for (int i = 0; i < 60; i++) {
             double deg = i * 6.0, outer = edge(deg) - TICK_INSET;
@@ -404,29 +415,121 @@ public class CookieFace {
         if (large) x.append("    xmlns:tools=\"http://schemas.android.com/tools\"\n    tools:ignore=\"VectorRaster\"\n");
         x.append("    android:width=\"").append(dp).append("dp\"\n    android:height=\"").append(dp).append("dp\"\n");
         x.append("    android:viewportWidth=\"200\"\n    android:viewportHeight=\"200\">\n");
-        for (Item i : items) {
-            x.append("    <path\n");
-            if (i.fill()) x.append("        android:fillColor=\"@color/widget_clock_").append(i.role()).append("\"\n");
-            if (i.fill() && i.alpha() < 1) x.append("        android:fillAlpha=\"").append(num(i.alpha())).append("\"\n");
-            if (i.strokeWidth() > 0) {
-                x.append("        android:strokeColor=\"@color/widget_clock_").append(i.role()).append("\"\n");
-                x.append("        android:strokeWidth=\"").append(num(i.strokeWidth())).append("\"\n");
-                if (i.alpha() < 1) x.append("        android:strokeAlpha=\"").append(num(i.alpha())).append("\"\n");
-                x.append("        android:strokeLineCap=\"round\"\n");
-                if (i.round()) x.append("        android:strokeLineJoin=\"round\"\n");
-            }
-            x.append("        android:pathData=\"").append(data(i.shape())).append("\" />\n");
-        }
+        for (Item i : items) x.append(pathXml(i, "    "));
+        // A vector with no path doesn't inflate ("no path defined"): a drawable that draws nothing still needs one, drawn in no colour.
+        if (items.isEmpty()) x.append("    <path\n        android:fillColor=\"#00000000\"\n        android:pathData=\"M0,0 L1,0 L1,1 Z\" />\n");
         x.append("</vector>\n");
         Files.writeString(new File(res, name + ".xml").toPath(), x.toString(), StandardCharsets.UTF_8);
+    }
+
+    /** One drawn item as a vector's `<path>`, its tag [indent]ed. */
+    static String pathXml(Item i, String indent) {
+        String a = indent + "    ";
+        StringBuilder x = new StringBuilder();
+        x.append(indent).append("<path\n");
+        if (i.fill()) x.append(a).append("android:fillColor=\"@color/widget_clock_").append(i.role()).append("\"\n");
+        if (i.fill() && i.alpha() < 1) x.append(a).append("android:fillAlpha=\"").append(num(i.alpha())).append("\"\n");
+        if (i.strokeWidth() > 0) {
+            x.append(a).append("android:strokeColor=\"@color/widget_clock_").append(i.role()).append("\"\n");
+            x.append(a).append("android:strokeWidth=\"").append(num(i.strokeWidth())).append("\"\n");
+            if (i.alpha() < 1) x.append(a).append("android:strokeAlpha=\"").append(num(i.alpha())).append("\"\n");
+            x.append(a).append("android:strokeLineCap=\"round\"\n");
+            if (i.round()) x.append(a).append("android:strokeLineJoin=\"round\"\n");
+        }
+        x.append(a).append("android:pathData=\"").append(data(i.shape())).append("\" />\n");
+        return x.toString();
+    }
+
+    // ---- the watch dial's seconds ring: it turns, upright, on its own ------------------------------------------------
+    //
+    // A widget can't be redrawn every second, but its views can be animated by the launcher. The ring is an animated vector
+    // (an indeterminate ProgressBar runs it): one group turns the whole ring round the middle once a minute, and each number's
+    // group turns the other way round its own middle at the same pace, so the numbers travel round the face and stay upright.
+    // An animation can't be told where to start, so there is one of each for every second (widget_dial_seconds_00 .. 59): the
+    // widget is drawn with the one for the second it is, and the ring then keeps time on its own until it is drawn again.
+    static String two(int n) { return String.format("%02d", n); }
+
+    static void writeSecondsRing(File res) throws IOException {
+        File root = res.getParentFile();
+        File animators = new File(root, "animator"), layouts = new File(root, "layout");
+        animators.mkdirs();
+        layouts.mkdirs();
+        String note = "<!-- Drawn by design/cookie-clock/CookieFace.java: change it there, not here. -->\n";
+        String ns = "xmlns:android=\"http://schemas.android.com/apk/res/android\"";
+
+        // The ring as it is at :00, in groups the animations turn.
+        Path2D minor = new Path2D.Double(), major = new Path2D.Double();
+        for (int i = 0; i < 60; i++) {
+            boolean big = i % 5 == 0;
+            (big ? major : minor).append(new Line2D.Double(at(wOuter(i), big ? W_OUTER_MAJOR : W_OUTER_MINOR), at(wOuter(i), W_OUTER_OUT)), false);
+        }
+        StringBuilder v = new StringBuilder("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n");
+        v.append("<!-- The watch dial's seconds ring at :00: 60 ticks and the numbers 00 to 55, each number in a group of its own so it can turn\n");
+        v.append("     against the ring and stay upright. widget_dial_seconds_NN (an animated vector of this) starts it at second NN. -->\n");
+        v.append(note);
+        v.append("<vector ").append(ns).append("\n    android:width=\"200dp\"\n    android:height=\"200dp\"\n    android:viewportWidth=\"200\"\n    android:viewportHeight=\"200\">\n");
+        v.append("    <group android:name=\"orbit\" android:pivotX=\"100\" android:pivotY=\"100\">\n");
+        v.append(pathXml(stroke(minor, "tick", 0.9), "        "));
+        v.append(pathXml(faded(stroke(major, "secondary", 1.6), 190 / 255.0), "        "));
+        for (int value = 0; value < 60; value += 5) {
+            Point2D p = at(wOuter(value), W_OUTER_R);
+            v.append("        <group android:name=\"n").append(two(value)).append("\" android:pivotX=\"").append(num(p.getX()))
+                .append("\" android:pivotY=\"").append(num(p.getY())).append("\">\n");
+            v.append(pathXml(bold(text(two(value), p.getX(), p.getY(), W_OUTER_SIZE * DIGIT_EM), "secondary", 0.3), "            "));
+            v.append("        </group>\n");
+        }
+        v.append("    </group>\n</vector>\n");
+        Files.writeString(new File(res, "widget_dial_seconds.xml").toPath(), v.toString(), StandardCharsets.UTF_8);
+
+        StringBuilder refs = new StringBuilder();
+        for (int s = 0; s < 60; s++) {
+            String n = two(s);
+            Files.writeString(new File(animators, "widget_dial_orbit_" + n + ".xml").toPath(), turning(6.0 * s, 6.0 * s + 360, note, ns), StandardCharsets.UTF_8);
+            Files.writeString(new File(animators, "widget_dial_upright_" + n + ".xml").toPath(), turning(-6.0 * s, -6.0 * s - 360, note, ns), StandardCharsets.UTF_8);
+            StringBuilder a = new StringBuilder("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n");
+            a.append("<!-- The seconds ring starting at second ").append(n).append(", then turning once a minute. -->\n").append(note);
+            a.append("<animated-vector ").append(ns).append("\n    android:drawable=\"@drawable/widget_dial_seconds\">\n");
+            a.append("    <target android:name=\"orbit\" android:animation=\"@animator/widget_dial_orbit_").append(n).append("\" />\n");
+            for (int value = 0; value < 60; value += 5) {
+                a.append("    <target android:name=\"n").append(two(value)).append("\" android:animation=\"@animator/widget_dial_upright_").append(n).append("\" />\n");
+            }
+            a.append("</animated-vector>\n");
+            Files.writeString(new File(res, "widget_dial_seconds_" + n + ".xml").toPath(), a.toString(), StandardCharsets.UTF_8);
+            // A progress bar is what runs an animated vector without being asked: it animates its indeterminate drawable while it is on screen.
+            String l = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+                + "<!-- The watch dial's seconds ring starting at second " + n + ", as a view ClockWidget adds to the face. -->\n" + note
+                + "<ProgressBar " + ns + "\n    android:layout_width=\"match_parent\"\n    android:layout_height=\"match_parent\"\n"
+                + "    android:importantForAccessibility=\"no\"\n    android:indeterminate=\"true\"\n    android:indeterminateOnly=\"true\"\n"
+                + "    android:indeterminateDrawable=\"@drawable/widget_dial_seconds_" + n + "\" />\n";
+            Files.writeString(new File(layouts, "widget_dial_seconds_" + n + ".xml").toPath(), l, StandardCharsets.UTF_8);
+            refs.append("        R.layout.widget_dial_seconds_").append(n).append(",\n");
+        }
+
+        File kotlin = new File(root.getParentFile(), "kotlin/com/example/normpix/widgets");
+        if (kotlin.isDirectory()) {
+            String k = "// Drawn by design/cookie-clock/CookieFace.java: change it there, not here.\npackage com.example.normpix.widgets\n\n"
+                + "import com.example.normpix.R\n\n"
+                + "/** The watch dial's seconds ring, started at each second of the minute: index 0 is :00. Named in code so the resource shrinker keeps them. */\n"
+                + "internal val WatchDialSecondsLayouts: IntArray = intArrayOf(\n" + refs + ")\n";
+            Files.writeString(new File(kotlin, "WatchDialSecondsLayouts.kt").toPath(), k, StandardCharsets.UTF_8);
+        }
+    }
+
+    /** An animation turning a group's rotation from [from] to [to] degrees over a minute, evenly, for ever. */
+    static String turning(double from, double to, String note, String ns) {
+        return "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" + note
+            + "<objectAnimator " + ns + "\n    android:duration=\"60000\"\n    android:interpolator=\"@android:interpolator/linear\"\n"
+            + "    android:propertyName=\"rotation\"\n    android:repeatCount=\"-1\"\n    android:repeatMode=\"restart\"\n"
+            + "    android:valueFrom=\"" + num(from) + "\"\n    android:valueTo=\"" + num(to) + "\"\n    android:valueType=\"floatType\" />\n";
     }
 
     // ---- the sheet -------------------------------------------------------------------------------------------------
     static void sheet(File png) throws IOException {
         int cell = 360, pad = 24;
         List<List<Item>> faces = List.of(
-            concat(dial(false), hands(HOUR_PLAIN, MINUTE_PLAIN, SECOND_PLAIN, false)),
-            concat(dial(true), hands(HOUR_NUMBERS, MINUTE_NUMBERS, SECOND_NUMBERS, true)),
+            concat(cookieFill(), dial(false), hands(HOUR_PLAIN, MINUTE_PLAIN, SECOND_PLAIN, false)),
+            concat(cookieFill(), dial(true), hands(HOUR_NUMBERS, MINUTE_NUMBERS, SECOND_NUMBERS, true)),
+            concat(cookieFill(), hands(HOUR_PLAIN, MINUTE_PLAIN, SECOND_PLAIN, false)),
             digitalPreview(),
             watchDial(45, "12", "45"));
         int[][][] themes = {DARK, LIGHT};

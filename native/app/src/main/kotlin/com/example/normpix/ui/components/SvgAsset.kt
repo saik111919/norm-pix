@@ -27,6 +27,7 @@ import com.caverock.androidsvg.RenderOptions
 import com.caverock.androidsvg.SVG
 import com.example.normpix.banks.Bank
 import com.example.normpix.wallet.BankLogoArt
+import com.example.normpix.wallet.BankLogoFile
 import com.example.normpix.wallet.BankLogoResolver
 import java.util.concurrent.ConcurrentHashMap
 
@@ -122,10 +123,21 @@ fun BankGlyph(bankName: String, tint: Color, modifier: Modifier = Modifier, size
 private fun BankLogoGlyph(logo: BankLogoArt?, tint: Color, modifier: Modifier, size: Dp) {
     val onDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val icon = remember(logo, onDark) { logo?.pick(compact = true, onDark = onDark) }
-    val loads = icon?.let { rememberSvgAspectRatio(it.path) } != null
+    val loads = icon?.let { rememberBankArtAspectRatio(it) } != null
     if (icon == null || !loads) {
         Icon(Icons.Rounded.AccountBalance, contentDescription = null, tint = tint, modifier = modifier.size(size))
     } else {
-        SvgAsset(icon.path, modifier.size(size))
+        BankArtwork(icon, modifier.size(size))
     }
+}
+
+/** The width-to-height ratio of a bank's logo file: a round picture is square, an SVG has its own; null when an SVG can't be loaded. */
+@Composable
+fun rememberBankArtAspectRatio(file: BankLogoFile): Float? =
+    if (file.isPicture) 1f else rememberSvgAspectRatio(file.path)
+
+/** A bank's logo file drawn whole in its box, whether it is an SVG or a round picture. */
+@Composable
+fun BankArtwork(file: BankLogoFile, modifier: Modifier = Modifier) {
+    if (file.isPicture) AssetImage(file.path, modifier) else SvgAsset(file.path, modifier)
 }

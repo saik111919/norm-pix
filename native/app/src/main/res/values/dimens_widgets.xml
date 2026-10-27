@@ -4,4 +4,6 @@
     <dimen name="widget_radius">24dp</dimen>
     <dimen name="widget_inner_radius">16dp</dimen>
     <dimen name="widget_padding">12dp</dimen>
+    <!-- The plain digital clock widget's corners: its own background is a rounded rectangle. -->
+    <dimen name="widget_clock_simple_radius">24dp</dimen>
 </resources>

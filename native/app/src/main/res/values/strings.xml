@@ -8,8 +8,11 @@
     <string name="widget_cookie_analog_description">An analog clock in a cookie shape, hands and ticks without numbers</string>
     <string name="widget_cookie_numbers_label">Clock: cookie numbers</string>
     <string name="widget_cookie_numbers_description">An analog clock in a cookie shape, with the hours numbered</string>
+    <string name="widget_cookie_plain_label">Clock: cookie plain</string>
+    <string name="widget_cookie_plain_description">An analog clock in a cookie shape with only the hands: no ticks, no numbers</string>
     <string name="widget_cookie_digital_label">Clock: cookie digital</string>
     <string name="widget_cookie_digital_description">The time in big digits on a cookie shape, with the date under it</string>
+    <string name="widget_settings_title">Clock settings</string>
     <string name="widget_recent_label">Recent transactions</string>
     <string name="widget_recent_description">Your latest transactions at a glance, and a button to add one</string>
     <string name="widget_add_label">Add transaction</string>

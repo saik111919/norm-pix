@@ -60,9 +60,9 @@ class HomeWidgetTest {
     }
 
     @Test
-    fun `the cookie clock comes in three styles, beside the watch dial`() {
+    fun `the cookie clock comes in four styles, beside the watch dial`() {
         assertEquals(
-            listOf(HomeWidget.CookieAnalog, HomeWidget.CookieNumbers, HomeWidget.CookieDigital, HomeWidget.WatchDial),
+            listOf(HomeWidget.CookieAnalog, HomeWidget.CookieNumbers, HomeWidget.CookiePlain, HomeWidget.CookieDigital, HomeWidget.WatchDial),
             HomeWidget.inGroup(HomeWidgetGroup.Clocks),
         )
         assertEquals(listOf(HomeWidget.Recent, HomeWidget.Add), HomeWidget.inGroup(HomeWidgetGroup.Transactions))

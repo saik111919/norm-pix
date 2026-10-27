@@ -125,6 +125,7 @@ import com.example.normpix.wallet.CardStack
 import com.example.normpix.wallet.CardsState
 import com.example.normpix.wallet.WalletCardView
 import com.example.normpix.wallet.expiry.CardExpiryNotice
+import com.example.normpix.wallet.motion.CardTiltState
 import com.example.normpix.wallet.motion.rememberCardTilt
 import com.example.normpix.wallet.nfc.ExchangeTab
 import com.example.normpix.wallet.rememberCardFlows
@@ -182,8 +183,9 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
     lockVersion // re-evaluate the lock whenever it may have changed
     val locked = container.lock.isWalletLocked(prefs)
 
-    // Cards lean with the phone only while they can be seen: this tab in front, unlocked, and the setting on.
-    val tilt = rememberCardTilt(enabled = cardsOn && prefs.cardTiltEnabled && LocalTabVisible.current && !locked)
+    // Cards - the saved ones and the accounts drawn as cards - lean with the phone only while they can be seen: this tab in front,
+    // unlocked, and the setting on. One sensor feeds them all, and the accounts lean even where the saved cards are switched off.
+    val tilt = rememberCardTilt(enabled = prefs.cardTiltEnabled && LocalTabVisible.current && !locked)
     // Whether the cards are spread out of their stack; the layout selector's "Stack" segment gathers them again.
     val cardsDeck = rememberDeckStackState()
 
@@ -261,6 +263,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                 layout = prefs.accountsLayout,
                 onLayout = container.preferences::setAccountsLayout,
                 bankIconStyle = prefs.bankIconStyle,
+                tilt = tilt,
                 overview = overview,
             )
         }
@@ -597,6 +600,7 @@ private fun AccountsSection(
     layout: AccountsLayout,
     onLayout: (AccountsLayout) -> Unit,
     bankIconStyle: BankIconStyle,
+    tilt: CardTiltState?,
     overview: Boolean = true,
 ) {
     val controller = LocalFinance.current
@@ -670,7 +674,7 @@ private fun AccountsSection(
         } else if (layout == AccountsLayout.Rows) {
             ListSection { for (a in active) item { AccountTile(a, cardsPerBank) } }
         } else {
-            AccountCards(active, layout, cardsPerBank, bankIconStyle, accountsDeck)
+            AccountCards(active, layout, cardsPerBank, bankIconStyle, accountsDeck, tilt)
         }
         if (archived.isNotEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -692,7 +696,7 @@ private fun AccountsSection(
                 if (layout == AccountsLayout.Rows) {
                     ListSection { for (a in archived) item { AccountTile(a, cardsPerBank) } }
                 } else {
-                    AccountCards(archived, layout, cardsPerBank, bankIconStyle, archivedDeck)
+                    AccountCards(archived, layout, cardsPerBank, bankIconStyle, archivedDeck, tilt)
                 }
             }
         }
@@ -720,6 +724,8 @@ private fun AccountCards(
     bankIconStyle: BankIconStyle,
     /** Whether the stack is spread out; unused when the accounts are laid out as cards. */
     deck: DeckStackState,
+    /** The phone's motion as a lean for the cards you can see whole (the carousel's front card, the list's cards). */
+    tilt: CardTiltState?,
 ) {
     val finance = rememberFinanceState()
     val actions = rememberFinanceActions()
@@ -769,6 +775,7 @@ private fun AccountCards(
             onOpen = { navigator.openAccountHistory(it.id) },
             onManage = { actions.manageAccount(accountOf(it)) },
             bankIconStyle = bankIconStyle,
+            tilt = tilt,
         )
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.lg)) {
@@ -783,6 +790,7 @@ private fun AccountCards(
                                     onOpen = { navigator.openAccountHistory(card.id) },
                                     onManage = { actions.manageAccount(accountOf(card)) },
                                     bankIconStyle = bankIconStyle,
+                                    tilt = tilt,
                                 )
                             }
                         }

@@ -138,6 +138,7 @@ fun SettingsPageContent(page: SettingsPage) {
         SettingsPage.Appearance -> AppearanceSettingsPage()
         SettingsPage.Widgets -> WidgetsSettingsPage()
         SettingsPage.Finance -> FinanceSettingsPage()
+        SettingsPage.Banks -> BanksSettingsPage()
         SettingsPage.Data -> DataSettingsPage()
         SettingsPage.Security -> SecuritySettingsPage()
         SettingsPage.Wallet -> WalletSettingsPage()

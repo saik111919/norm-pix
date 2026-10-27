@@ -358,7 +358,7 @@ private fun DrawScope.drawCardShadow() {
 }
 
 /** A soft highlight that slides across the card as it leans, like light moving over a glossy surface. */
-private fun DrawScope.drawSheen(tilt: CardTiltState) {
+internal fun DrawScope.drawSheen(tilt: CardTiltState) {
     val x = (tilt.roll / MAX_CARD_TILT_DEGREES).coerceIn(-1f, 1f)
     val y = (tilt.pitch / MAX_CARD_TILT_DEGREES).coerceIn(-1f, 1f)
     if (x == 0f && y == 0f) return

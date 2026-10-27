@@ -27,6 +27,7 @@ import com.example.normpix.ui.components.DeckFacts
 import com.example.normpix.ui.components.DeckDivider
 import com.example.normpix.ui.components.DeckHero
 import com.example.normpix.ui.theme.AppSpacing
+import com.example.normpix.wallet.motion.CardTiltState
 
 /**
  * The accounts as a 3D carousel ([DeckCarousel]), as the saved cards are: the account in front facing you, the others turned
@@ -44,6 +45,8 @@ fun AccountCarousel(
     onManage: (AccountCardData) -> Unit,
     modifier: Modifier = Modifier,
     bankIconStyle: BankIconStyle = BankIconStyle.Full,
+    /** The phone's motion as a lean for the card in front, as the saved cards have it; null keeps it flat. */
+    tilt: CardTiltState? = null,
 ) {
     DeckCarousel(
         items = accounts,
@@ -56,7 +59,7 @@ fun AccountCarousel(
         modifier = modifier,
         card = { account, inFront, _ ->
             if (inFront) {
-                AccountCardView(account, onOpen = { onOpen(account) }, onManage = { onManage(account) }, bankIconStyle = bankIconStyle, compact = true)
+                AccountCardView(account, onOpen = { onOpen(account) }, onManage = { onManage(account) }, bankIconStyle = bankIconStyle, compact = true, tilt = tilt)
             } else {
                 AccountCardFacePreview(account, bankIconStyle = bankIconStyle, compact = true)
             }

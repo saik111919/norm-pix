@@ -72,9 +72,58 @@ class BankLogoResolverTest {
 
     @Test
     fun knownBanksWithoutArtworkFallBack() {
+        assertEquals("capital", bank("Capital Small Finance Bank"))
+        assertNull(BankLogoResolver.logoFor("Capital Small Finance Bank"))
+        assertNull(BankLogoResolver.logoFor("Cosmos Co-operative Bank"))
+        assertNull(BankLogoResolver.logoFor("Deutsche Bank"))
+    }
+
+    @Test
+    fun banksThatHaveOnlyARoundPictureShowItInBothSlots() {
         assertEquals("hsbc", bank("HSBC"))
-        assertNull(BankLogoResolver.logoFor("HSBC"))
-        assertNull(BankLogoResolver.logoFor("Equitas Small Finance Bank"))
+        for (name in listOf("HSBC", "Equitas Small Finance Bank", "Saraswat Co-operative Bank", "Kerala Gramin Bank")) {
+            val logo = BankLogoResolver.logoFor(name)!!
+            val compact = logo.pick(compact = true, onDark = false)!!
+            assertTrue(name, compact.isPicture && compact.path.startsWith("brandlogos/"))
+            assertEquals(name, compact.path, logo.pick(compact = false, onDark = false)!!.path)
+            // Full-colour artwork on a dark surface goes on a light backing, as the SVG ones do.
+            assertTrue(name, logo.pick(compact = true, onDark = true)!!.needsLightBacking)
+        }
+        assertTrue(BankLogoResolver.logoFor("HDFC Bank")!!.pick(compact = true, onDark = false)!!.isPicture.not())
+    }
+
+    @Test
+    fun moreOfIndiasBanksAreInTheDirectory() {
+        val expected = mapOf(
+            "Jana Small Finance Bank" to "jana", "Capital SFB" to "capital", "Cosmos Bank" to "cosmos",
+            "Kerala Gramin Bank" to "keralagramin", "APGVB" to "apgvb", "Baroda UP Bank" to "barodaup",
+            "Syndicate Bank" to "syndicate", "Allahabad Bank" to "allahabad", "Oriental Bank of Commerce" to "obc",
+            "State Bank of Hyderabad" to "sbhyderabad", "JPMorgan Chase" to "jpmorgan", "Emirates NBD" to "emiratesnbd",
+            "Saraswat Bank" to "saraswat", "SBM Bank" to "sbmindia", "Mashreq" to "mashreq",
+        )
+        for ((name, id) in expected) assertEquals(name, id, bank(name))
+        // A bank that merged into another stays itself: "State Bank of Hyderabad" is not SBI.
+        assertEquals("sbi", bank("State Bank of India"))
+    }
+
+    @Test
+    fun everyBankHasItsOwnIdAndNoTwoBanksShareAName() {
+        assertEquals(BankDirectory.entries.size, BankDirectory.entries.map { it.id }.toSet().size)
+        val written = BankDirectory.entries.flatMap { entry ->
+            (listOf(entry.name) + entry.aliases).map(BankLogoResolver::normalize).distinct().map { it to entry.id }
+        }
+        val shared = written.groupBy({ it.first }, { it.second }).filterValues { it.distinct().size > 1 }
+        assertTrue("names two banks share: $shared", shared.isEmpty())
+    }
+
+    @Test
+    fun everyKindOfBankIsRepresentedAndEarlierNamesSayWhatTheyBecame() {
+        for (category in BankCategory.entries) assertTrue(category.name, BankDirectory.entries.any { it.category == category })
+        assertTrue(BankDirectory.entries.size >= 150)
+        for (entry in BankDirectory.entries.filter { it.category == BankCategory.Earlier }) {
+            assertTrue(entry.name, entry.note!!.startsWith("Now part of "))
+        }
+        assertTrue(BankDirectory.entries.filter { it.category != BankCategory.Earlier }.all { it.note == null })
     }
 
     @Test
@@ -97,8 +146,12 @@ class BankLogoResolverTest {
     fun directoryAndBundledArtworkAgree() {
         val bundled = File("src/main/assets/banks").list()!!.toSet()
         val referenced = BankDirectory.entries.flatMap { listOfNotNull(it.logo?.wordmark, it.logo?.symbol, it.logo?.wordmarkOnDark, it.logo?.symbolOnDark) }
-        for (path in referenced) assertTrue("missing asset $path", path.removePrefix("banks/") in bundled)
-        val unused = bundled - referenced.map { it.removePrefix("banks/") }.toSet()
+        // The SVG set is the bank logos' own folder; the round pictures are the brand set's, shared with merchants and payees.
+        val (pictures, svgs) = referenced.partition { it.startsWith("brandlogos/") }
+        for (path in svgs) assertTrue("missing asset $path", path.removePrefix("banks/") in bundled)
+        val brands = File("src/main/assets/brandlogos").list()!!.toSet()
+        for (path in pictures) assertTrue("missing picture $path", path.removePrefix("brandlogos/") in brands)
+        val unused = bundled - svgs.map { it.removePrefix("banks/") }.toSet()
         assertTrue("assets no bank uses: $unused", unused.isEmpty())
     }
 

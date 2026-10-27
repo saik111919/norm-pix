@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The cookie analog clock's face: the cookie and the minute ticks round it.
+<!-- The cookie analog clock's marks: the minute ticks round the edge, over the cookie.
      Drawn by design/cookie-clock/CookieFace.java: change it there, not here. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
@@ -8,9 +8,6 @@
     android:height="280dp"
     android:viewportWidth="200"
     android:viewportHeight="200">
-    <path
-        android:fillColor="@color/widget_clock_face"
-        android:pathData="M184.76,184.66 C170.86,198.59 149.27,204.84 127.81,195.58 C124.7,194.24 121.58,192.89 118.46,191.54 C106.68,186.46 93.32,186.46 81.54,191.54 C78.42,192.89 75.3,194.24 72.18,195.58 C29.28,214.1 -14.17,170.58 4.41,127.7 C5.74,124.64 7.06,121.58 8.39,118.53 C13.51,106.71 13.51,93.29 8.39,81.47 C7.06,78.41 5.74,75.36 4.41,72.3 C-14.17,29.42 29.28,-14.1 72.18,4.42 C75.3,5.76 78.42,7.11 81.54,8.46 C93.32,13.54 106.68,13.54 118.46,8.46 C121.58,7.11 124.7,5.76 127.81,4.42 C170.72,-14.1 214.17,29.42 195.59,72.3 C194.26,75.36 192.94,78.41 191.61,81.47 C186.49,93.29 186.49,106.71 191.61,118.53 C192.94,121.58 194.26,124.64 195.59,127.7 C204.88,149.14 198.66,170.74 184.76,184.66 Z" />
     <path
         android:strokeColor="@color/widget_clock_tick"
         android:strokeWidth="1.1"

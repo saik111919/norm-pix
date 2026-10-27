@@ -3,4 +3,5 @@
 <resources>
     <dimen name="widget_radius">@android:dimen/system_app_widget_background_radius</dimen>
     <dimen name="widget_inner_radius">@android:dimen/system_app_widget_inner_radius</dimen>
+    <dimen name="widget_clock_simple_radius">@android:dimen/system_app_widget_background_radius</dimen>
 </resources>
