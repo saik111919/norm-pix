@@ -97,13 +97,15 @@ fun FooterBlur(
                 if (visible().coerceIn(0f, 1f) <= 0.001f) return@drawWithContent
                 val behind = position - backdrop.origin
                 val radius = AppFrostedTokens.footerBlurRadius.toPx()
-                blurred.renderEffect = progressive?.effect(size.width, size.height, radius, wash, AppFrostedTokens.footerWashAlpha)
-                    ?: BlurEffect(radius, radius, TileMode.Clamp)
+                val effect = runCatching {
+                    progressive?.effect(size.width, size.height, radius, wash, AppFrostedTokens.footerWashAlpha)
+                }.getOrNull()
+                blurred.renderEffect = effect ?: BlurEffect(radius, radius, TileMode.Clamp)
                 blurred.record(size = IntSize(size.width.roundToInt(), size.height.roundToInt())) {
                     translate(-behind.x, -behind.y) { drawLayer(backdrop.layer) }
                 }
                 drawLayer(blurred)
-                if (progressive == null) FooterBlurFallback.fade(this, wash)
+                if (effect == null) FooterBlurFallback.fade(this, wash)
             },
     )
 }
@@ -137,7 +139,11 @@ private class ProgressiveBlur {
         shader.setFloatUniform("size", widthPx, heightPx)
         shader.setFloatUniform("maxRadius", maxRadiusPx)
         shader.setFloatUniform("washAlpha", washAlpha)
-        shader.setColorUniform("wash", wash.toArgb())
+        try {
+            shader.setColorUniform("wash", wash.toArgb())
+        } catch (_: Throwable) {
+            shader.setFloatUniform("wash", wash.red, wash.green, wash.blue, wash.alpha)
+        }
         key = now
         return android.graphics.RenderEffect.createRuntimeShaderEffect(shader, "content").asComposeRenderEffect().also { effect = it }
     }
@@ -148,7 +154,7 @@ private class ProgressiveBlur {
             uniform float2 size;
             uniform float maxRadius;
             uniform float washAlpha;
-            uniform half4 wash;
+            layout(color) uniform half4 wash;
 
             const int SAMPLES = 4;
 
