@@ -34,10 +34,14 @@ import androidx.compose.material.icons.automirrored.rounded.MenuOpen
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.AddAlert
+import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Insights
+import androidx.compose.material.icons.outlined.PeopleOutline
+import androidx.compose.material.icons.outlined.PieChart
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Home
@@ -334,8 +338,7 @@ fun AppShell(
                                         isPrimary = true,
                                         onClick = { expenseFlows.addRecurring() },
                                     ),
-                                )
-                            }
+                                )\n                            }
                             add(
                                 FooterAction(
                                     label = "Add reminder",
@@ -399,14 +402,116 @@ fun AppShell(
             }
         }
     }
-    // Contextual actions surfaced inside the More / Actions bottom action area; Settings are always accessible as part of it.
-    val contextualActions = remember(pageActions, navigator) {
-        pageActions + FooterAction(
-            label = "Settings",
-            icon = Icons.Outlined.Settings,
-            isPrimary = false,
-            onClick = { navigator.openSettings() },
-        )
+
+    // All 11 NormPix actions surfaced in the expandable 4-column "+" action grid menu
+    val allActions = remember(navigator, expenseFlows, reminderFlows, cardFlows, walletLocked, prefs.walletCardsEnabled) {
+        buildList {
+            add(
+                FooterAction(
+                    label = "Expense",
+                    contentDescription = "Add expense",
+                    icon = Icons.Rounded.Add,
+                    isPrimary = true,
+                    onClick = { expenseFlows.addTransaction(TransactionType.Expense) },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Income",
+                    contentDescription = "Add income",
+                    icon = Icons.AutoMirrored.Rounded.CallReceived,
+                    isPrimary = false,
+                    onClick = { expenseFlows.addTransaction(TransactionType.Income) },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Recurring",
+                    contentDescription = "Add recurring payment",
+                    icon = Icons.Outlined.EventRepeat,
+                    isPrimary = false,
+                    onClick = { expenseFlows.addRecurring() },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Reminder",
+                    contentDescription = "Add reminder",
+                    icon = Icons.Outlined.AddAlert,
+                    isPrimary = false,
+                    onClick = { reminderFlows.add() },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Card",
+                    contentDescription = "Add card",
+                    icon = Icons.Outlined.CreditCard,
+                    isPrimary = false,
+                    onClick = {
+                        if (prefs.walletCardsEnabled && !walletLocked) {
+                            cardFlows.addCard()
+                        } else {
+                            navigator.go(AppDestination.Wallet)
+                        }
+                    },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Account",
+                    contentDescription = "Add account",
+                    icon = Icons.Outlined.AccountBalanceWallet,
+                    isPrimary = false,
+                    onClick = { expenseFlows.addAccount() },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Categories",
+                    contentDescription = "Categories",
+                    icon = Icons.Outlined.Category,
+                    isPrimary = false,
+                    onClick = { navigator.openCategories() },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Budgets",
+                    contentDescription = "Budgets",
+                    icon = Icons.Outlined.PieChart,
+                    isPrimary = false,
+                    onClick = { navigator.openPlans(PlanSection.Budgets) },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "People",
+                    contentDescription = "People",
+                    icon = Icons.Outlined.PeopleOutline,
+                    isPrimary = false,
+                    onClick = { navigator.openPeople() },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Search",
+                    contentDescription = "Search",
+                    icon = Icons.Outlined.Search,
+                    isPrimary = false,
+                    onClick = { navigator.openSearch() },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Settings",
+                    contentDescription = "Settings",
+                    icon = Icons.Outlined.Settings,
+                    isPrimary = false,
+                    onClick = { navigator.openSettings() },
+                ),
+            )
+        }
     }
 
     val compact = size == WindowSize.Compact
@@ -586,7 +691,7 @@ fun AppShell(
                     overdueCount = overdue,
                     onDestinationSelected = { shell.selected = it.ordinal },
                     onOpenSettings = { navigator.openSettings() },
-                    actions = contextualActions,
+                    actions = allActions,
                     isMoreOpen = isMoreOpen,
                     onMoreToggle = { isMoreOpen = !isMoreOpen },
                     currentLabel = if (current == AppDestination.PlansAndTransactions) shell.tab.label else current.label,
@@ -620,8 +725,7 @@ private fun RailActions(actions: List<FooterAction>) {
         if (others.isNotEmpty()) {
             Box {
                 IconButton(onClick = { open = true }) { Icon(Icons.Rounded.MoreHoriz, contentDescription = "More actions") }
-                RailActionMenu(others, expanded = open, onDismiss = { open = false })
-            }
+                RailActionMenu(others, expanded = open, onDismiss = { open = false })\n            }
         }
     }
 }
@@ -748,125 +852,77 @@ val LocalTabVisible = staticCompositionLocalOf { true }
  * zero-sized and non-interactive when hidden so it costs nothing to lay out or draw.
  *
  * A tab fades and moves in when it is switched to. With [animateArrival] false it is simply there from its first
- * frame: that is for the tabs that arrive together with the shell, whose entrance belongs to the page transition.
+ * frame (used for the start tab on launch, and for returning through back).
  */
 @Composable
-internal fun TabHost(
+private fun TabHost(
     visible: Boolean,
-    enterOffset: Dp = 0.dp,
-    animateArrival: Boolean = true,
-    back: TabBackPreview? = null,
-    ordinal: Int = -1,
+    enterOffset: Dp,
+    animateArrival: Boolean,
+    back: TabBackPreview,
+    ordinal: Int,
     content: @Composable () -> Unit,
 ) {
-    val animation = LocalPageAnimation.current
-    val reduced = rememberReducedMotion()
-    // While the back gesture is taking the app to the previous tab: the tab on screen is moved as the page style closes a page,
-    // and the tab it goes back to is laid out, whole, beneath it. Reduced motion shows neither: the gesture just goes back.
-    val preview = back?.takeIf { !reduced && it.target != TabBackPreview.NO_TAB }
-    // What the tab being left is drawn on, so the tab beneath does not show through it as it fades or slides away.
-    val surface = MaterialTheme.colorScheme.surface
-    val animate = animateArrival && !reduced
-    val density = LocalDensity.current
-    val travel = remember(visible) { with(density) { enterOffset.toPx() } }
-    // Keyed on [visible], so the first frame a tab is switched to is already at the start of its arrival - not one frame
-    // at full strength before it jumps back and fades in, which read as a flicker.
-    val arrival = remember(visible) { Animatable(if (visible && animate) 0f else 1f) }
-    val departure = remember(visible) { Animatable(0f) }
-    // The tab that was in front stays drawn under the one arriving, going away in the chosen style, until that one is
-    // there: the arriving tab never fades in over an empty background.
-    var onScreen by remember { mutableStateOf(visible) }
-    val departing = !visible && onScreen && animate
+    val reducedMotion = rememberReducedMotion()
+    val motion = if (reducedMotion) PageAnimationType.Dissolve else PageAnimationType.SlideOver
+    val arrival = remember(motion) {
+        tween<Float>(
+            durationMillis = AppMotion.duration(AppMotion.MEDIUM_MS),
+            easing = AppMotion.standard,
+        )
+    }
+    val alpha = remember { Animatable(if (visible) 1f else 0f) }
+    val offset = remember { Animatable(0f) }
+
     LaunchedEffect(visible) {
         if (visible) {
-            onScreen = true
-            // Linear in time: each part of the motion applies its own easing over its own share of it (see TabMotion), as
-            // a pushed page's do - the window's quick fade over the first 60%, its growth over all of it.
-            if (animate) arrival.animateTo(1f, tween(TabMotion.openMs(animation), easing = LinearEasing))
+            if (animateArrival) {
+                alpha.snapTo(0f)
+                offset.snapTo(enterOffset.value)
+                launch { alpha.animateTo(1f, arrival) }
+                launch { offset.animateTo(0f, arrival) }
+            } else {
+                alpha.snapTo(1f)
+                offset.snapTo(0f)
+            }
         } else {
-            if (animate && onScreen) departure.animateTo(1f, tween(TabMotion.openMs(animation), easing = LinearEasing))
-            onScreen = false
+            alpha.snapTo(0f)
+            offset.snapTo(0f)
         }
     }
+
+    val isBackTarget = back.target == ordinal
+    val density = LocalDensity.current
+
     Box(
-        Modifier
+        modifier = Modifier
             .fillMaxSize()
-            // The arriving tab over the leaving one, as a page opening over the one it was opened from.
-            .zIndex(if (visible) 1f else 0f)
             .then(
-                when {
-                    visible && preview != null -> Modifier
-                        .graphicsLayer { applyBackPose(BackPreview.leaving(animation, preview.progress, preview.direction)) }
-                        .background(surface)
-                    visible -> Modifier.graphicsLayer {
-                        val t = arrival.value
-                        val p = TabMotion.ease(animation, t)
-                        alpha = TabMotion.arrivalAlpha(animation, t)
-                        // A window is not scaled: it is uncovered from the bottom edge up (see TabMotion.reveal).
-                        val scale = if (animation == PageAnimationType.LinuxWindow) 1f else TabMotion.scale(animation, p)
-                        scaleX = scale
-                        scaleY = scale
-                        transformOrigin = TabMotion.origin(animation)
-                        translationX = if (TabMotion.slides(animation)) (1f - p) * travel else 0f
-                        val reveal = TabMotion.reveal(animation, p)
-                        if (reveal < 1f) {
-                            clip = true
-                            shape = BottomRevealShape(reveal, PageCornerRadius.toPx())
-                        }
-                    }
-                    preview != null && preview.target == ordinal -> Modifier
-                        .graphicsLayer { applyBackPose(BackPreview.revealed(animation, preview.progress, preview.direction)) }
-                        .clearAndSetSemantics {}
-                    departing -> Modifier
+                if (visible) {
+                    Modifier
+                        .zIndex(1f)
                         .graphicsLayer {
-                            val t = departure.value
-                            val q = TabMotion.ease(animation, t)
-                            alpha = TabMotion.departureAlpha(animation, t)
-                            val scale = TabMotion.departureScale(animation, q)
-                            scaleX = scale
-                            scaleY = scale
-                            transformOrigin = TabMotion.origin(animation)
-                            translationX = if (TabMotion.slides(animation)) -q * travel / 2 else 0f
+                            this.alpha = alpha.value
+                            this.translationX = offset.value * density.density
+                            if (back.target != TabBackPreview.NO_TAB) {
+                                motion.tabGestured(this, back.progress, back.direction, density, BACK_LIFT)
+                            }
                         }
+                } else if (isBackTarget) {
+                    Modifier
+                        .zIndex(0f)
+                        .graphicsLayer {
+                            motion.tabRevealed(this, back.progress, density)
+                        }
+                } else {
+                    Modifier
+                        .layout { _, _ -> layout(0, 0) {} }
                         .clearAndSetSemantics {}
-                    else -> Modifier.layout { _, _ -> layout(0, 0) {} }.clearAndSetSemantics {}
                 },
             ),
-        contentAlignment = Alignment.TopStart,
-    ) { CompositionLocalProvider(LocalTabVisible provides visible) { content() } }
-}
-
-/**
- * The back gesture as the tabs draw it: how far it has gone ([progress], 0..1 - scrubbed by the finger, then finished or
- * eased back by the shell), the side it came from ([direction], see [BackPreview.directionOf]) and the tab it takes the
- * app back to ([target], an [AppDestination] ordinal, or [NO_TAB] when the gesture does not change tab). Read in the
- * tabs' draw phase, so a gesture moves layers, not compositions.
- */
-@Stable
-internal class TabBackPreview {
-    var progress by mutableFloatStateOf(0f)
-    var direction by mutableFloatStateOf(1f)
-    var target by mutableIntStateOf(NO_TAB)
-
-    companion object {
-        const val NO_TAB = -1
+    ) {
+        CompositionLocalProvider(LocalTabVisible provides visible) {
+            content()
+        }
     }
-}
-
-/** Draws a tab in [pose]: the shape, shadow and motion of the user's page style part-way through going back. */
-private fun GraphicsLayerScope.applyBackPose(pose: BackPose) {
-    scaleX = pose.scale
-    scaleY = pose.scale
-    alpha = pose.alpha
-    translationX = pose.shiftX * size.width
-    transformOrigin = pose.origin
-    if (pose.reveal < 1f) {
-        // A window sinking into its strip: what shows of it is the part along the bottom edge, its top corners as round as it is far gone.
-        clip = true
-        shape = BottomRevealShape(pose.reveal, PageCornerRadius.toPx() * pose.corners)
-    } else if (pose.corners > 0f) {
-        clip = true
-        shape = RoundedCornerShape(PageCornerRadius.toPx() * pose.corners)
-    }
-    shadowElevation = BACK_LIFT.toPx() * pose.lift
 }

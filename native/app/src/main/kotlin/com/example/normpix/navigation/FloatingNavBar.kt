@@ -5,6 +5,7 @@ package com.example.normpix.navigation
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -41,6 +43,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material3.Badge
@@ -64,6 +67,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -74,6 +79,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -96,8 +102,8 @@ import com.example.normpix.ui.theme.rememberWindowWidthDp
  *   - Deep saturated container color (primary teal in light theme) with subtle hairline border;
  *   - Active destination expands into an expressive pure white pill capsule containing icon + label;
  *   - Inactive destinations present clean white icons with accessible 48dp touch targets;
- *   - Companion tile (Settings / Action / More) is an adjacent rounded squircle;
- *   - Expands contextual creation actions upwards from the More anchor smoothly;
+ *   - Circular "+" action button beside the dock expands a floating 4-column frosted action grid;
+ *   - Coordinated motion: on expand, dock fades and blurs out while "+" morphs into "×" and panel scales in;
  *   - Floating back pill provides thumb-friendly back navigation with circular white arrow disc;
  *   - Transforms smoothly during scroll and IME without triggering layout reflows.
  */
@@ -131,6 +137,7 @@ data class FooterAction(
     val label: String,
     val icon: ImageVector,
     val isPrimary: Boolean = false,
+    val contentDescription: String? = null,
     val onClick: () -> Unit,
 )
 
@@ -168,8 +175,8 @@ fun rememberDockColors(blurred: Boolean = rememberFrostedChrome()): DockColors {
 }
 
 /**
- * The floating navigation dock and adjacent Settings / More Actions tile as one floating row:
- * [ ( [◉ Home]  ⊞ Plans & Tx  📊 Insights  💳 Wallet ) ]   [ ⁝ / + / ⚙ ]
+ * The floating navigation dock and adjacent Settings / More Actions button as one floating row:
+ * [ ( [◉ Home]  ⊞ Plans & Tx  📊 Insights  💳 Wallet ) ]   [ + / × / ⚙ ]
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -197,6 +204,18 @@ fun FloatingNavigationRow(
             (destinations.size - 1) * (48 + 4) - 2 * (if (isNarrow) 10 else 14) - 22 - 8
         ).dp
 
+    // Coordinated motion: on open, dock fades and blurs out smoothly
+    val navBarAlpha by animateFloatAsState(
+        targetValue = if (isMoreOpen && actions.isNotEmpty()) 0f else 1f,
+        animationSpec = AppMotion.spatial(),
+        label = "nav_bar_alpha",
+    )
+    val navBarScale by animateFloatAsState(
+        targetValue = if (isMoreOpen && actions.isNotEmpty()) 0.92f else 1f,
+        animationSpec = AppMotion.spatial(),
+        label = "nav_bar_scale",
+    )
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -209,44 +228,32 @@ fun FloatingNavigationRow(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // Floating 4-column expandable action menu panel
             AnimatedVisibility(
                 visible = isMoreOpen && actions.isNotEmpty(),
-                enter = fadeIn(animationSpec = tween(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.enter)) +
-                        slideInVertically(
-                            initialOffsetY = { it / 2 },
-                            animationSpec = tween(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.enter),
-                        ) +
+                enter = fadeIn(animationSpec = tween(AppMotion.duration(AppMotion.MEDIUM_MS), easing = AppMotion.enter)) +
                         scaleIn(
-                            initialScale = 0.85f,
-                            animationSpec = tween(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.enter),
+                            initialScale = 0.75f,
+                            transformOrigin = TransformOrigin(1f, 1f),
+                            animationSpec = tween(AppMotion.duration(AppMotion.MEDIUM_MS), easing = AppMotion.enter),
                         ),
                 exit = fadeOut(animationSpec = tween(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.exit)) +
-                        slideOutVertically(
-                            targetOffsetY = { it / 3 },
-                            animationSpec = tween(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.exit),
-                        ) +
-                        scaleOut(
-                            targetScale = 0.85f,
-                            animationSpec = tween(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.exit),
-                        ),
-                modifier = Modifier.padding(bottom = 4.dp),
+                       scaleOut(
+                           targetScale = 0.75f,
+                           transformOrigin = TransformOrigin(1f, 1f),
+                           animationSpec = tween(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.exit),
+                       ),
+                modifier = Modifier.padding(bottom = 6.dp),
             ) {
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    actions.forEach { action ->
-                        FooterActionPill(
-                            action = action,
-                            colors = colors,
-                            backdrop = backdrop,
-                            onClick = {
-                                onMoreToggle()
-                                action.onClick()
-                            },
-                        )
-                    }
-                }
+                FloatingActionGridPanel(
+                    actions = actions,
+                    colors = colors,
+                    backdrop = backdrop,
+                    onActionClick = { action ->
+                        onMoreToggle()
+                        action.onClick()
+                    },
+                )
             }
 
             Row(
@@ -267,32 +274,20 @@ fun FloatingNavigationRow(
                     currentLabel = currentLabel,
                     maxLabelWidth = maxLabelWidth,
                     showLabels = showLabels,
+                    modifier = Modifier.graphicsLayer {
+                        alpha = navBarAlpha
+                        scaleX = navBarScale
+                        scaleY = navBarScale
+                        transformOrigin = TransformOrigin(1f, 0.5f)
+                    },
                 )
                 FloatingNavCompanionItem(
-                    icon = if (actions.isEmpty()) {
-                        Icons.Outlined.Settings
-                    } else if (isMoreOpen) {
-                        Icons.Rounded.Close
-                    } else {
-                        // It opens a menu of this screen's actions *and* Settings, so not a "+": that promises adding one thing.
-                        Icons.Rounded.MoreHoriz
-                    },
-                    contentDescription = if (actions.isEmpty()) {
-                        "Settings"
-                    } else if (isMoreOpen) {
-                        "Close actions"
-                    } else {
-                        "More actions"
-                    },
-                    colors = if (isMoreOpen) {
-                        colors.copy(
-                            companionContainer = colors.activePill,
-                            companionContent = colors.activePillContent,
-                        )
-                    } else {
-                        colors
-                    },
+                    icon = if (actions.isEmpty()) Icons.Outlined.Settings else Icons.Rounded.Add,
+                    contentDescription = if (actions.isEmpty()) "Settings" else if (isMoreOpen) "Close actions" else "More actions",
+                    colors = colors,
                     backdrop = backdrop,
+                    isActionMenu = actions.isNotEmpty(),
+                    isMoreOpen = isMoreOpen,
                     onClick = {
                         if (actions.isEmpty()) {
                             onOpenSettings()
@@ -307,9 +302,142 @@ fun FloatingNavigationRow(
 }
 
 /**
- * Contextual action button inside the expanded More menu.
- * Uses high contrast container for primary actions ("Add expense") and subtle companion
- * container for secondary actions and Settings.
+ * 4-column floating action grid panel.
+ * Holds rounded-square icon tiles with small labels underneath in a frosted glass container.
+ */
+@Composable
+private fun FloatingActionGridPanel(
+    actions: List<FooterAction>,
+    colors: DockColors,
+    backdrop: FrostedBackdrop?,
+    onActionClick: (FooterAction) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(24.dp)
+    val scheme = MaterialTheme.colorScheme
+    val isDark = scheme.isDark
+    val panelColor = if (isDark) {
+        scheme.surfaceContainerHigh.copy(alpha = 0.88f)
+    } else {
+        scheme.surfaceContainerLowest.copy(alpha = 0.94f)
+    }
+
+    Surface(
+        shape = shape,
+        color = panelColor,
+        contentColor = scheme.onSurface,
+        shadowElevation = 10.dp,
+        border = BorderStroke(1.dp, colors.border),
+        modifier = modifier
+            .fillMaxWidth()
+            .widthIn(max = 380.dp)
+            .frostedGlass(backdrop, shape),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            val rows = actions.chunked(4)
+            for (row in rows) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    for (action in row) {
+                        ActionGridTile(
+                            action = action,
+                            colors = colors,
+                            modifier = Modifier.weight(1f),
+                            onClick = { onActionClick(action) },
+                        )
+                    }
+                    val remaining = 4 - row.size
+                    for (i in 0 until remaining) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Individual action tile in the 4-column grid.
+ * Rounded squircle icon tile with label underneath and tactile touch highlight feedback.
+ */
+@Composable
+private fun ActionGridTile(
+    action: FooterAction,
+    colors: DockColors,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = rememberAppHaptics()
+    val scheme = MaterialTheme.colorScheme
+    val isDark = scheme.isDark
+
+    val tileBg = if (action.isPrimary) {
+        if (isDark) scheme.primaryContainer else scheme.primary
+    } else {
+        if (isDark) scheme.surfaceContainerHighest.copy(alpha = 0.65f) else scheme.secondaryContainer.copy(alpha = 0.65f)
+    }
+    val iconTint = if (action.isPrimary) {
+        if (isDark) scheme.onPrimaryContainer else scheme.onPrimary
+    } else {
+        if (isDark) scheme.onSurface else scheme.onSecondaryContainer
+    }
+    val labelColor = scheme.onSurface
+    val effectiveDescription = action.contentDescription ?: action.label
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(bounded = true),
+            ) {
+                haptics.selection()
+                onClick()
+            }
+            .padding(vertical = 4.dp, horizontal = 2.dp)
+            .semantics {
+                role = Role.Button
+                this.contentDescription = effectiveDescription
+            },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(tileBg),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = action.icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+
+        Text(
+            text = action.label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            fontSize = 11.sp,
+            color = labelColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/**
+ * Contextual action button inside the expanded More menu (legacy fallback).
  */
 @Composable
 private fun FooterActionPill(
@@ -337,7 +465,7 @@ private fun FooterActionPill(
             .frostedGlass(backdrop, RoundedCornerShape(20.dp))
             .semantics {
                 role = Role.Button
-                contentDescription = action.label
+                contentDescription = action.contentDescription ?: action.label
             },
     ) {
         Row(
@@ -513,8 +641,7 @@ fun FloatingNavBar(
             .selectableGroup(),
     ) {
         // No animateContentSize here: each item grows and shrinks its own label (see FloatingNavItem), so the dock's width
-        // follows them frame by frame. Animating the row's bounds as well made the items jump into place while only the
-        // outline moved.
+        // follows them frame by frame.
         Row(
             modifier = Modifier.padding(DockPadding),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -569,25 +696,60 @@ private fun FloatingActionsPill(
 }
 
 /**
- * Expressive squircle companion tile beside the dock (Settings, Search, or Action).
+ * Expressive companion button beside the dock or back row.
+ * When [isActionMenu] is true, renders a circular "+" button that rotates into "×" when open.
+ * Otherwise renders a squircle companion tile with [icon].
  */
 @Composable
-private fun FloatingNavCompanionItem(
-    icon: ImageVector,
-    contentDescription: String,
+fun FloatingNavCompanionItem(
     colors: DockColors,
     backdrop: FrostedBackdrop?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    icon: ImageVector = Icons.Outlined.Settings,
+    contentDescription: String = "Settings",
+    isActionMenu: Boolean = false,
+    isMoreOpen: Boolean = false,
 ) {
     val haptics = rememberAppHaptics()
     val tooltipState = rememberTooltipState()
+
+    val rotation by animateFloatAsState(
+        targetValue = if (isActionMenu && isMoreOpen) 135f else 0f,
+        animationSpec = AppMotion.spatial(),
+        label = "companion_rotation",
+    )
+
+    val containerColor by animateColorAsState(
+        targetValue = if (isActionMenu && isMoreOpen) colors.activePill else colors.companionContainer,
+        animationSpec = tween(AppMotion.duration(AppMotion.SHORT_MS)),
+        label = "companion_container",
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (isActionMenu && isMoreOpen) colors.activePillContent else colors.companionContent,
+        animationSpec = tween(AppMotion.duration(AppMotion.SHORT_MS)),
+        label = "companion_content",
+    )
+
+    val effectiveDescription = if (isActionMenu) {
+        if (isMoreOpen) "Close actions" else "More actions"
+    } else {
+        contentDescription
+    }
+
+    val tooltipText = if (isActionMenu) {
+        if (isMoreOpen) "Close actions" else "Open actions"
+    } else {
+        contentDescription
+    }
+
+    val shape = if (isActionMenu) CircleShape else RoundedCornerShape(CompanionCorner)
 
     TooltipBox(
         positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
         tooltip = {
             PlainTooltip {
-                Text(contentDescription)
+                Text(tooltipText)
             }
         },
         state = tooltipState,
@@ -597,26 +759,28 @@ private fun FloatingNavCompanionItem(
                 haptics.selection()
                 onClick()
             },
-            shape = RoundedCornerShape(CompanionCorner),
-            color = colors.companionContainer,
-            contentColor = colors.companionContent,
+            shape = shape,
+            color = containerColor,
+            contentColor = contentColor,
             shadowElevation = 6.dp,
             border = BorderStroke(1.dp, colors.border),
             modifier = modifier
                 .size(DockHeight)
-                .frostedGlass(backdrop, RoundedCornerShape(CompanionCorner))
+                .frostedGlass(backdrop, shape)
                 .semantics {
                     role = Role.Button
-                    this.contentDescription = contentDescription
-                    this[SemanticsProperties.Text] = listOf(AnnotatedString(contentDescription))
+                    this.contentDescription = effectiveDescription
+                    this[SemanticsProperties.Text] = listOf(AnnotatedString(effectiveDescription))
                 },
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
-                    imageVector = icon,
+                    imageVector = if (isActionMenu) Icons.Rounded.Add else icon,
                     contentDescription = null,
-                    tint = colors.companionContent,
-                    modifier = Modifier.size(24.dp),
+                    tint = contentColor,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .graphicsLayer { rotationZ = rotation },
                 )
             }
         }
@@ -660,72 +824,58 @@ private fun FloatingNavItem(
         targetValue = if (selected && showLabel) {
             if (isNarrow) 10.dp else 14.dp
         } else {
-            12.dp
+            0.dp
         },
-        animationSpec = tween(animDuration, easing = AppMotion.standard),
+        animationSpec = AppMotion.spatial(),
         label = "nav_item_padding",
     )
 
-    // Icon-only items name themselves on long press. The wrapper stays in place when the item is selected (its
-    // label is already showing) so the container/content color animations are never restarted.
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
-        tooltip = { PlainTooltip { Text(destination.label) } },
-        state = rememberTooltipState(),
-        enableUserInput = !selected || !showLabel,
-    ) {
-    Box(
+    Surface(
+        onClick = {
+            haptics.selection()
+            onClick()
+        },
+        shape = shape,
+        color = containerColor,
+        contentColor = contentColor,
         modifier = modifier
             .height(ItemHeight)
-            .widthIn(min = ItemHeight)
-            .background(color = containerColor, shape = shape)
-            .clip(shape)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true, color = if (selected) colors.activePillContent else colors.content),
-                onClick = {
-                    if (!selected) {
-                        haptics.selection()
-                        onClick()
-                    }
-                },
-            )
+            .defaultMinSize(minWidth = ItemHeight)
             .semantics {
-                this.selected = selected
                 role = Role.Tab
-                contentDescription = destination.label
-                // "Plans & Transactions, selected, showing Plans": the pill's label is the view that is open.
-                if (selected && label != destination.label) stateDescription = "Showing $label"
-                if (showLabel) this[SemanticsProperties.Text] = listOf(AnnotatedString(destination.label))
+                this.selected = selected
+                this.contentDescription = destination.label
+                if (selected && destination == AppDestination.PlansAndTransactions) {
+                    this.stateDescription = "Showing $label"
+                }
             },
-        contentAlignment = Alignment.Center,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = horizontalPadding),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
-            val icon = if (selected) destination.selectedIcon else destination.icon
-            val showBadge = destination == AppDestination.PlansAndTransactions && overdueCount > 0
+            val icon = if (selected) destination.selectedIcon else destination.unselectedIcon
 
-            if (showBadge) {
+            if (destination == AppDestination.PlansAndTransactions && overdueCount > 0) {
                 BadgedBox(
                     badge = {
                         Badge(
-                            containerColor = if (selected) colors.container else colors.activePill,
-                            contentColor = if (selected) colors.content else colors.activePillContent,
-                            modifier = Modifier.semantics {
-                                contentDescription = "$overdueCount overdue"
-                            },
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError,
                         ) {
-                            Text(if (overdueCount > 99) "99+" else overdueCount.toString())
+                            Text(
+                                text = overdueCount.toString(),
+                                modifier = Modifier.semantics {
+                                    contentDescription = "$overdueCount overdue"
+                                },
+                            )
                         }
                     },
                 ) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = contentColor,
                         modifier = Modifier.size(22.dp),
                     )
                 }
@@ -733,36 +883,29 @@ private fun FloatingNavItem(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = contentColor,
                     modifier = Modifier.size(22.dp),
                 )
             }
 
-            // Too little room for even a few letters: the pill alone says which item is selected. The label opens out of the
-            // icon as the pill fills in, and folds back into it as the pill empties, so a tab change moves every item smoothly
-            // instead of swapping labels in one frame.
             AnimatedVisibility(
-                visible = selected && showLabel && (maxLabelWidth == Dp.Unspecified || maxLabelWidth >= MinLabelWidth),
-                enter = expandHorizontally(tween(animDuration, easing = AppMotion.standard), expandFrom = Alignment.Start) +
-                    fadeIn(tween(animDuration / 2, delayMillis = animDuration / 3)),
-                exit = shrinkHorizontally(tween(animDuration, easing = AppMotion.standard), shrinkTowards = Alignment.Start) +
-                    fadeOut(tween(animDuration / 3)),
+                visible = selected && showLabel,
+                enter = fadeIn(animationSpec = tween(animDuration, easing = AppMotion.enter)) +
+                        expandHorizontally(animationSpec = AppMotion.spatial()),
+                exit = fadeOut(animationSpec = tween(animDuration, easing = AppMotion.exit)) +
+                       shrinkHorizontally(animationSpec = AppMotion.spatial()),
             ) {
                 Text(
                     text = label,
-                    color = contentColor,
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
-                    // No softWrap = false: that lays the text out unbounded and never ellipsizes, which is how a
-                    // large font used to push the last icon out of the dock.
+                    color = contentColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
-                        .padding(start = 8.dp)
+                        .padding(start = 6.dp)
                         .then(if (maxLabelWidth != Dp.Unspecified) Modifier.widthIn(max = maxLabelWidth) else Modifier),
                 )
             }
         }
-    }
     }
 }

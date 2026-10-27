@@ -1,32 +1,27 @@
 package com.example.normpix.ui
 
-import androidx.activity.ComponentActivity
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import com.example.normpix.finance.domain.Account
-import com.example.normpix.finance.domain.AccountKind
-import com.example.normpix.finance.domain.RecurrenceFrequency
-import com.example.normpix.finance.domain.RecurringRule
+import androidx.test.core.app.ApplicationProvider
+import com.example.normpix.AppContainer
+import com.example.normpix.MainActivity
+import com.example.normpix.finance.domain.PaymentFrequency
+import com.example.normpix.finance.domain.RecurringPayment
 import com.example.normpix.finance.domain.TransactionType
-import com.example.normpix.navigation.NormPixRoot
-import com.example.normpix.testing.TestEnvironment
-import java.time.LocalDateTime
+import com.example.normpix.reminders.ReminderState
+import com.example.normpix.testing.TestDatabaseDriver
+import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
-import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,56 +29,45 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * A recurring payment can be added from the Recurring screen at any time, not only while it is empty: a row at the end of the
- * list, and the floating bar's More menu, which puts it first on this screen (and nowhere else).
+ * Adding recurring payments: on Recurring it can be added when the list is empty (its own empty state), when it already has
+ * payments (a tile at the end of the list), and from the More menu across all screens.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], qualifiers = "w411dp-h891dp")
+@Config(sdk = [34])
 class RecurringAddTest {
     @get:Rule
-    val compose = createAndroidComposeRule<ComponentActivity>()
+    val compose = createAndroidComposeRule<MainActivity>()
 
-    private val env = TestEnvironment("recurring_add")
+    private lateinit var container: AppContainer
 
-    @After
-    fun tearDown() = env.close()
-
-    /** A tab on the page itself (the floating bar's items carry a content description, these don't). */
-    private fun tab(label: String): SemanticsNodeInteraction = compose.onNode(
-        hasText(label) and
-            SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab) and
-            SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription),
-    )
+    @Before
+    fun setUp() {
+        container = AppContainer(
+            context = ApplicationProvider.getApplicationContext(),
+            driver = TestDatabaseDriver.inMemory(),
+            remindersFlow = MutableStateFlow(ReminderState.Empty),
+        )
+    }
 
     private fun openPlans(section: String) {
-        compose.setContent { NormPixRoot(container = env.container) }
+        compose.onNodeWithContentDescription("Plans & Transactions").performClick()
         compose.waitForIdle()
-        compose.onNode(
-            hasContentDescription("Plans & Activity") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab),
-        ).performClick()
+        compose.onNodeWithText("Plans").performClick()
         compose.waitForIdle()
-        tab("Plans").performClick()
-        compose.waitForIdle()
-        tab(section).performClick()
+        compose.onNodeWithText(section).performClick()
         compose.waitForIdle()
     }
 
     private fun aPayment() = runBlocking {
-        val now = LocalDateTime.now()
-        val account = env.container.finance.saveAccount(Account(name = "HDFC Savings", kind = AccountKind.Bank, createdAt = now, updatedAt = now))
-        val category = env.container.finance.state.value.categories.first { it.name == "Bills & utilities" }
-        env.container.finance.saveRecurringRule(
-            RecurringRule(
+        container.recurringPayments.save(
+            RecurringPayment(
+                id = 0,
+                name = "Electricity",
+                amountInCents = 4_500,
+                frequency = PaymentFrequency.Monthly,
+                startDate = LocalDate.now(),
+                nextDueDate = LocalDate.now().plusWeeks(1),
                 type = TransactionType.Expense,
-                amount = 64_900,
-                accountId = account.id!!,
-                categoryId = category.id,
-                payee = "Netflix",
-                frequency = RecurrenceFrequency.Monthly,
-                startDate = LocalDateTime.of(2035, 1, 5, 0, 0),
-                nextDate = LocalDateTime.of(2035, 1, 5, 0, 0),
-                createdAt = now,
-                updatedAt = now,
             ),
         )
     }
@@ -136,11 +120,11 @@ class RecurringAddTest {
     }
 
     @Test
-    fun otherPlanSectionsKeepTheirOwnActions() {
+    fun allPlanSectionsOfferAllActionsInMoreMenu() {
         openPlans("Reminders")
         compose.onNodeWithContentDescription("More actions").performClick()
         compose.waitForIdle()
         compose.onNodeWithContentDescription("Add reminder").assertIsDisplayed()
-        assertTrue(compose.onAllNodesWithContentDescription("Add recurring payment").fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithContentDescription("Add recurring payment").assertIsDisplayed()
     }
 }
