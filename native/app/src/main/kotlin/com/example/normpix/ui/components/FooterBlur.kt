@@ -97,9 +97,13 @@ fun FooterBlur(
                 if (visible().coerceIn(0f, 1f) <= 0.001f) return@drawWithContent
                 val behind = position - backdrop.origin
                 val radius = AppFrostedTokens.footerBlurRadius.toPx()
-                val effect = runCatching {
-                    progressive?.effect(size.width, size.height, radius, wash, AppFrostedTokens.footerWashAlpha)
-                }.getOrNull()
+                val effect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && progressive != null) {
+                    runCatching {
+                        progressive.effect(size.width, size.height, radius, wash, AppFrostedTokens.footerWashAlpha)
+                    }.getOrNull()
+                } else {
+                    null
+                }
                 blurred.renderEffect = effect ?: BlurEffect(radius, radius, TileMode.Clamp)
                 blurred.record(size = IntSize(size.width.roundToInt(), size.height.roundToInt())) {
                     translate(-behind.x, -behind.y) { drawLayer(backdrop.layer) }
