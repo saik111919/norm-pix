@@ -1,6 +1,6 @@
 # NormPix architecture
 
-Verified 2026-10-27 against commit `c99a54e2` (v1.4.0). Volatile numbers (versions, DB versions) are re-checked by
+Verified 2026-10-27 against commit `763cc08f` (v1.5.0 in the working tree). Volatile numbers (versions, DB versions) are re-checked by
 `scripts/verify.sh`; trust the code over this file if they ever disagree, then fix this file.
 
 Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money model · 5 UI wiring and navigation ·
@@ -201,7 +201,7 @@ resolved at read time (`SheetAnimationType.defaultFor`, `ScheduledFeature.defaul
 
 ## 7. Settings UI
 
-- `SettingsPage` = Appearance, Widgets, Finance, Data, Wallet, Notifications, Availability, Security, Updates. A new page
+- `SettingsPage` = Appearance, Widgets, Finance, Banks, Data, Wallet, Notifications, Availability, Security, Updates. A new page
   needs its title and summary (`SettingsScreen.kt`), hue (`SettingsRows.kt`), icon and search entries (`SettingsCatalog.kt`)
   and its page in `SettingsPageContent` (`SettingsTwoPane.kt`); the build says what is missing. Settings has a search
   field over `SettingsCatalog.entries`. On a wide window Settings is a list beside its page (`SettingsTwoPane`,

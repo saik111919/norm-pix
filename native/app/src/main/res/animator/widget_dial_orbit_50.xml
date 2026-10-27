@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Drawn by design/cookie-clock/CookieFace.java: change it there, not here. -->
+<objectAnimator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="60000"
+    android:interpolator="@android:interpolator/linear"
+    android:propertyName="rotation"
+    android:repeatCount="-1"
+    android:repeatMode="restart"
+    android:valueFrom="300"
+    android:valueTo="660"
+    android:valueType="floatType" />

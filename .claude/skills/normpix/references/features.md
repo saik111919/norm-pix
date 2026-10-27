@@ -1,6 +1,6 @@
 # NormPix features, rules and decisions
 
-Verified 2026-10-27 against commit `c99a54e2`. This is the *behavioural* picture: what each feature does, the rules it
+Verified 2026-10-27 against commit `763cc08f`. This is the *behavioural* picture: what each feature does, the rules it
 obeys and the decisions behind them. For the dated history of any feature, grep `native/TASKS.md` for its name (do not read
 that file whole: it is ~680 lines of phase log; the last entries are Phases 33-36, 2026-10-26).
 
@@ -114,7 +114,9 @@ transaction and read again to fill the form.
   only while the phone's NFC is on **and** the in-app switch allows it (`ScheduledFeature.NfcExchange`, default **Off**; the
   availability scheduler supports Always / Scheduled weekly windows / Off). `nfcExchangeOffered` is followed live.
 - **Card tilt** (`wallet/motion/CardTilt.kt`): gyro/accelerometer lean (6 degree limit, dead zone, one shared listener, off under
-  reduced motion). **Card shadow** is painted from the card's rounded outline, not the hardware shadow.
+  reduced motion). It leans the saved cards **and the accounts drawn as cards** (`AccountCardView(tilt)`: the carousel's front card and
+  the list's cards; the stack stays flat as the cards' stack does), with the sheen `drawSheen`; Wallet feeds one `rememberCardTilt` to both and
+  the accounts lean even where *Store cards* is off (the setting is under Effects either way). **Card shadow** is painted from the card's rounded outline, not the hardware shadow.
 - Bank card faces use shared pattern-and-colour themes (`BankCardDesign`, `AccountCardDesign.themeFor`). A per-bank redesign is
   **blocked on the owner supplying the designs - do not start it from a guess**.
 - Privacy posture to preserve: no SMS or notification access; the only network host family is GitHub; ML Kit telemetry removed;
@@ -164,10 +166,16 @@ transaction and read again to fill the form.
 
 ## 8. Widgets (`widgets/`)
 
-Six, reached only by the system (not exported): **Clock: watch dial** (`ClockWidget`: hour in the middle, minute in a pill, a
-turning minute ring and a seconds ring on Android 12+, built from `AnalogClock`/`TextClock` so it keeps time without NormPix;
-rings drawn from the app font by `design/clock-widget/clock_face.py`), the three **cookie clocks** (`CookieClockWidget`:
-`CookieAnalogWidget` ticks and hands, `CookieNumbersWidget` the same with numerals 1-12 and shorter hands,
+Seven, reached only by the system (not exported): **Clock: watch dial** (`ClockWidget`: hour and minute are `TextClock`s the launcher keeps
+on time; the face and the inner minutes ring are a picture `WatchDialRenderer` draws, upright numbers, **redrawn every 15 s** by
+`WatchDialTicker`'s non-waking alarm; the outer **seconds ring really turns**: an animated vector (`widget_dial_seconds.xml`, groups
+`orbit` + `nNN`) run by an indeterminate `ProgressBar` the launcher animates itself - the ring group turns once a minute, each number's
+group the other way, so the numbers orbit upright. An animation cannot be told where to start, so there is one AVD + layout + two
+animators **per second** (`widget_dial_seconds_00..59`, listed in the generated `WatchDialSecondsLayouts.kt`); `ClockWidget.face` does
+`removeAllViews` + `addView(RemoteViews(layout[second]))` into `widget_clock_seconds`, so a redraw resyncs it: the ring is at most
+15 s out after the launcher shows it again, and between redraws it keeps time itself. All of it from `design/cookie-clock/CookieFace.java`),
+the four **cookie clocks** (`CookieClockWidget`: `CookieAnalogWidget` ticks and hands, `CookieNumbersWidget` the same with numerals 1-12 and shorter hands,
+`CookiePlainWidget` hands only - no ticks, no numbers,
 `CookieDigitalWidget` the hour over the minute plus the date as `TextClock`s sized by `CookieFace`; the face is Material 3
 Expressive's four-sided cookie, drawn with the hands and numerals by `design/cookie-clock/CookieFace.java` - run it with
 `java CookieFace.java` in that folder, there is no Python on the PC - and `CookieFace.kt` shares its numbers; colours are the
@@ -178,7 +186,19 @@ transaction** (one cell = one add button; larger = Expense / Income / Transfer).
 size maps, `@android:id/background` with the launcher's radius, M3 colour roles from the wallpaper, 48 dp targets, TalkBack
 descriptions, immutable PendingIntents, **no update period**.
 
-**Settings > Widgets** (`SettingsPage.Widgets`, second in the list; `WidgetsSettingsPage`): `HomeWidget` lists the six (pill,
+**Widget settings (clocks only).** Every clock has Android's "Widget settings" (`android:configure` =
+`ClockWidgetConfigActivity`, `widgetFeatures` reconfigurable|configuration_optional, exported because the launcher starts it; it finishes for
+an id that is not a clock of ours and keeps the widget however it is left). `ClockWidgetSettings` (Compose) edits `ClockOptions`, kept
+per widget id in `ClockOptionsStore` (`normpix_widget_clocks`, forgotten in `onDeleted`, not in backups): **Transparent** (the cookie fill
+is its own drawable `widget_cookie_fill`, hidden; the watch dial's picture has no face and its pill clears the ring; the simple clock's
+background goes), **Clock face | Digital clock**, **Digital clock when small**, and for the digital clock 12/24 h, seconds, date.
+The **plain digital clock** (`SimpleClock`, `SimpleClockLayout`: just the time as large as fits, the date only with room) replaces a face
+when `min(width, height) < ClockOptions.SMALL_FACE_DP` (92 dp; one cell is 40-70 dp, two 110+) - each size of an Android 12 size map is
+decided on its own - or when the user chose it. The clocks may be resized down to 40 dp (one cell) for that. `ClockWidgets` is the one
+function that draws any clock for its size and options. A vector with no path does not inflate, so an empty dial still has one
+transparent path.
+
+**Settings > Widgets** (`SettingsPage.Widgets`, second in the list; `WidgetsSettingsPage`): `HomeWidget` lists the seven (pill,
 title, description, group Clocks / Transactions, provider, preview size) - `HomeWidgetTest` keeps it equal to the manifest's
 widget receivers, so a new widget is added to both. A pill previews its widget in a stage above (the very `RemoteViews` the
 home screen gets, `HomeWidget.previewViews`, applied in an `AndroidView` with its taps removed) and **Add to home screen**
@@ -191,6 +211,15 @@ The pills are `FilterChip`s with `Role.RadioButton` (one choice of several); the
 the launcher's own add dialog, and all three cookie clocks placed and running.
 `InteractiveClockWidget` / `ClockWidgetTokens` (the in-app interactive watch dial, commit `c99a54e2`) is a Compose component
 that nothing in the app shows yet.
+
+**Banks** (`banks/BankCatalog`, `wallet/BankDirectory`): 158 built-in banks, each with a `BankCategory` (public sector, private, small finance,
+payments, co-operative, regional rural, foreign, earlier names - a merged bank carries `note` "Now part of ..."). Ids are what accounts and cards
+keep: only ever add, never change or reuse one; no two banks may share a normalised name or alias (`BankLogoResolverTest` checks it) and short
+common-word aliases are avoided because the resolver matches whole words in receipt text. Logos: the `assets/banks/` SVGs (IFSC-code names) and,
+for banks that have only that, a round full-colour picture from the brand set (`BankLogoArt(symbol = "brandlogos/<key>.webp")`, drawn by
+`BankArtwork`; a bank with neither shows the generic bank glyph). **Settings > Banks** (`SettingsPage.Banks`, `BanksSettingsPage`): the whole
+list, grouped by kind, with a search that also finds a bank by its other names, chips (All / In use / Added by you / each kind), "In use"
+marks, a detail sheet, and Add a bank (`BankFormSheet`). More logos need a source that is bundled and licensed: the owner can send them.
 
 ## 9. About guide (`about/`)
 
@@ -207,7 +236,7 @@ Theme (System/Light/Dark) + Colors (Wallpaper colors on Android 12+, or Other co
 the app), App icon (ten launcher icons), Interface font (GS Flex presets Standard/Zenith/Neo/Impact/Airy or hand-set axes,
 System, or the user's own .ttf/.otf), Icons (category style 3D/Emoji/Outline, bank logo style, shape behind), Progress
 indicators (Wavy | Flat), Transitions (six page styles incl. **Linux window**, five sheet/dialog styles, "Try it"), Effects
-(background blur, card tilt), Navigation & controls (bottom controls, back button style, month control), Layouts (Top
+(background blur, footer blur, card tilt), Navigation & controls (bottom controls, back button style, month control), Layouts (Top
 spending, Accounts, Cards). Search finds each choice by its own name.
 
 ## 11. Open and parked (check `native/TASKS.md` Backlog; verify against the code first - old "[ ]" lines go stale)
@@ -218,5 +247,5 @@ spending, Accounts, Cards). Search finds each choice by its own name.
 - Not tried on a phone at the end of Phase 36: the About guide's pictures at real sizes, the Colors tiles, Pure on OLED,
   widgets on every launcher, the Top spending carousel's feel.
 - Recurring-payment rows have no swipe actions.
-- Renaming/deleting a bank the user added (no management screen).
+- Renaming/deleting a bank the user added (Settings > Banks lists and adds them, but cannot rename or delete).
 - Fixtures for self-transfer receipts are synthetic until a real one is shared.

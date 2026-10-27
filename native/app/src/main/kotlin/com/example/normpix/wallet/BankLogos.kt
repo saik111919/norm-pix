@@ -49,8 +49,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.normpix.ui.components.SvgAsset
-import com.example.normpix.ui.components.rememberSvgAspectRatio
+import com.example.normpix.ui.components.BankArtwork
+import com.example.normpix.ui.components.rememberBankArtAspectRatio
 
 private val White = Color.White
 
@@ -77,7 +77,7 @@ private fun LogoText(text: String, size: TextUnit, weight: FontWeight, spacing: 
 @Composable
 fun BankLogoView(bankName: String, theme: BankBrandTheme, compact: Boolean, modifier: Modifier = Modifier) {
     val file = remember(bankName, compact) { BankLogoResolver.logoFor(bankName)?.pick(compact, onDark = true) }
-    val aspectRatio = file?.let { rememberSvgAspectRatio(it.path) }
+    val aspectRatio = file?.let { rememberBankArtAspectRatio(it) }
     if (file == null || aspectRatio == null) {
         Box(modifier.semantics { contentDescription = theme.displayName }) { HandDrawnLogo(theme.logo) }
         return
@@ -98,7 +98,7 @@ fun BankLogoView(bankName: String, theme: BankBrandTheme, compact: Boolean, modi
                 },
             ),
     ) {
-        SvgAsset(file.path, artwork)
+        BankArtwork(file, artwork)
     }
 }
 

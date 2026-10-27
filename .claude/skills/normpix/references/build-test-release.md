@@ -1,6 +1,6 @@
 # Build, test, release and git workflow
 
-Verified 2026-10-27 against commit `c99a54e2`. The owner's machine is Windows 11 (PowerShell and Git Bash); CI is
+Verified 2026-10-27 against commit `763cc08f`. The owner's machine is Windows 11 (PowerShell and Git Bash); CI is
 `ubuntu-24.04`. The cloud sandboxes some sessions run in have no Android SDK: that is a limit of the sandbox, not of the project.
 
 Contents: 1 Local environment · 2 Commands · 3 Reading results · 4 Windows and load traps · 5 Writing tests ·
@@ -181,3 +181,4 @@ commit the tree mid-session and it would be swept in). Don't write PNGs with Pow
 Delete throwaway tests and PNG/dump files; don't leave `build` dirs in worktrees; don't commit real receipts, names, account
 numbers or UPI ids; don't leave debug logging of card data, clipboard contents, account numbers or references (nothing sensitive
 is ever logged in this app). `native/TASKS.md` gets a dated phase entry for substantial work (see `owner-working-style.md`).
+If the T3 server restarts mid-operation it can zero-fill git files being written (`.git/refs/heads/<branch>` and `ORIG_HEAD` once read as NUL bytes: "failed to resolve HEAD", every file shown as new): `git reflog` / `.git/logs/HEAD` says what the ref should be; write that hash back to the ref file, delete `ORIG_HEAD`, then `git fsck`. Also scan changed files for NULs before building.

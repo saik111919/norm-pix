@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The seconds ring starting at second 15, then turning once a minute. -->
+<!-- Drawn by design/cookie-clock/CookieFace.java: change it there, not here. -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/widget_dial_seconds">
+    <target android:name="orbit" android:animation="@animator/widget_dial_orbit_15" />
+    <target android:name="n00" android:animation="@animator/widget_dial_upright_15" />
+    <target android:name="n05" android:animation="@animator/widget_dial_upright_15" />
+    <target android:name="n10" android:animation="@animator/widget_dial_upright_15" />
+    <target android:name="n15" android:animation="@animator/widget_dial_upright_15" />
+    <target android:name="n20" android:animation="@animator/widget_dial_upright_15" />
+    <target android:name="n25" android:animation="@animator/widget_dial_upright_15" />
+    <target android:name="n30" android:animation="@animator/widget_dial_upright_15" />
+    <target android:name="n35" android:animation="@animator/widget_dial_upright_15" />
+    <target android:name="n40" android:animation="@animator/widget_dial_upright_15" />
+    <target android:name="n45" android:animation="@animator/widget_dial_upright_15" />
+    <target android:name="n50" android:animation="@animator/widget_dial_upright_15" />
+    <target android:name="n55" android:animation="@animator/widget_dial_upright_15" />
+</animated-vector>

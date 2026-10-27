@@ -71,6 +71,8 @@ Format: `claim - applies to - source - status/date`.
   `OpenableColumns.DISPLAY_NAME` returns it - Google Pay Android share - NOTES (2026-10-13).
 - UPI receipts show the receiving bank's KYC name, which for a self transfer is the user's own; no app prints a self-transfer-specific
   receipt, so the self-transfer fixtures are synthetic - NOTES (2026-10-25).
+- A `<vector>` drawable with no `<path>` does not inflate ("no path defined", `VectorDrawable.inflateChildElements`): an empty dial still needs one path drawn in no colour - Robolectric test failure on `widget_cookie_dial_plain` (2026-10-27).
+- `RemoteViews.addView` + `removeAllViews` replace a nested view on every `reapply`, so a widget's animated child restarts from its first frame each time the widget is drawn - Android source behaviour, used by the watch dial's seconds ring; **not yet seen on a launcher** (2026-10-27).
 
 ## How to add an entry
 

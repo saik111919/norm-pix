@@ -36,20 +36,35 @@ class WatchDialRendererTest {
     }
 
     @Test
-    fun `the outer ring stands still and the inner ring turns with the minute`() {
+    fun `the picture holds the minutes ring only - the seconds ring is an animation over it`() {
         val a = render(10)
         val b = render(40)
-        val outerSame = (0 until size).all { y ->
-            (0 until size).all { x ->
-                // Beyond the inner ring's numbers and ticks (which reach 0.7 of the radius): only the still ring and the pill are there.
-                hypot(x - size / 2f, y - size / 2f) < size / 2f * 0.72f || a.getPixel(x, y) == b.getPixel(x, y)
-            }
-        }
-        assertTrue(outerSame, "the outer ring is the same at :10 and :40")
+        val face = context.getColor(R.color.widget_clock_face)
+        // Out where the seconds ring is (beyond the minutes ring, away from the pill) the picture is the bare face.
+        val x = (size / 2f - size / 2f * 0.86f).toInt()
+        for (y in listOf(size / 2, size / 2 + 20, size / 2 - 20)) assertEquals(face, a.getPixel(x, y), "bare face at $y")
         val innerDiffers = (0 until size).any { y ->
-            (0 until size).any { x -> hypot(x - size / 2f, y - size / 2f) < size / 2f * 0.7f && a.getPixel(x, y) != b.getPixel(x, y) }
+            (0 until size).any { px -> hypot(px - size / 2f, y - size / 2f) < size / 2f * 0.7f && a.getPixel(px, y) != b.getPixel(px, y) }
         }
         assertTrue(innerDiffers, "the inner ring has turned")
+        val outerSame = (0 until size).all { y ->
+            (0 until size).all { px -> hypot(px - size / 2f, y - size / 2f) < size / 2f * 0.72f || a.getPixel(px, y) == b.getPixel(px, y) }
+        }
+        assertTrue(outerSame, "nothing out there changes with the minute")
+    }
+
+    @Test
+    fun `a transparent dial has no face, and its pill clears what is under it`() {
+        val bitmap = WatchDialRenderer.render(context, 45, size, transparent = true)
+        assertEquals(0, Color.alpha(bitmap.getPixel(size / 2, size / 2)), "no face in the middle")
+        assertEquals(0, Color.alpha(bitmap.getPixel(2, 2)), "nor outside it")
+        val unit = size / WatchDialFace.UNITS
+        // Inside the pill, away from its rim and the minute's tick: clear, so no ring tick shows under the minute.
+        val inPill = bitmap.getPixel(((WatchDialFace.PILL_LEFT + 25) * unit).toInt(), (WatchDialFace.MIDDLE * unit).toInt())
+        assertEquals(0, Color.alpha(inPill), "inside the pill")
+        // The ring is still there.
+        val ringed = (0 until size).any { y -> (0 until size).any { px -> hypot(px - size / 2f, y - size / 2f) < size / 2f * 0.7f && Color.alpha(bitmap.getPixel(px, y)) > 0 } }
+        assertTrue(ringed, "the minutes ring is drawn")
     }
 
     @Test

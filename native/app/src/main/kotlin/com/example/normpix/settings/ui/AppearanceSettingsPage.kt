@@ -128,7 +128,7 @@ internal fun AppearanceSection.summary(prefs: AppPrefsState, appIcon: AppIcon): 
     AppearanceSection.Transitions -> "Pages: ${prefs.pageAnimation.label} · Sheets: ${prefs.sheetAnimation.label}"
     AppearanceSection.Effects -> buildString {
         append(if (prefs.sheetBlurEnabled) "Background blur on" else "Background blur off")
-        if (prefs.walletCardsEnabled) append(if (prefs.cardTiltEnabled) " · Card tilt on" else " · Card tilt off")
+        append(if (prefs.cardTiltEnabled) " · Card tilt on" else " · Card tilt off")
     }
     AppearanceSection.Controls ->
         if (prefs.bottomControls) "Bottom controls · ${prefs.monthControlStyle.label}" else "${prefs.backButtonStyle.label} · ${prefs.monthControlStyle.label}"

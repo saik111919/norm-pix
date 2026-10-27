@@ -244,6 +244,31 @@
                 android:resource="@xml/widget_cookie_numbers_info" />
         </receiver>
         <receiver
+            android:name=".widgets.CookiePlainWidget"
+            android:exported="false"
+            android:label="@string/widget_cookie_plain_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_cookie_plain_info" />
+        </receiver>
+        <!-- Widget settings for every clock: what Android opens when a clock is added and when the user presses and holds it and
+             chooses Widget settings (Transparent, the digital clock). The launcher starts it, so it is exported; it shows no data of
+             the user's and finishes at once for an id that is not one of NormPix's clocks. -->
+        <activity
+            android:name=".widgets.ClockWidgetConfigActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="@string/widget_settings_title"
+            android:launchMode="singleTop"
+            android:taskAffinity="">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+        <receiver
             android:name=".widgets.CookieDigitalWidget"
             android:exported="false"
             android:label="@string/widget_cookie_digital_label">

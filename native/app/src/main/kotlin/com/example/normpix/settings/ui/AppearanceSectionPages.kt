@@ -274,23 +274,33 @@ private fun EffectsSection(prefs: AppPrefsState, preferences: AppPreferences, ha
                 },
             )
         }
+        item {
+            SwitchRow(
+                headline = "Footer blur",
+                supporting = "Blur and fade the page where it passes under the dock and the back button",
+                checked = prefs.footerBlurEnabled,
+                enabled = prefs.sheetBlurEnabled,
+                onCheckedChange = { on ->
+                    haptics.selection()
+                    preferences.setFooterBlurEnabled(on)
+                },
+            )
+        }
     }
-    if (prefs.walletCardsEnabled) {
-        ListSection(
-            title = "Saved cards",
-            footer = "Stays flat when animations are turned off in system settings.",
-        ) {
-            item {
-                SwitchRow(
-                    headline = "Card tilt",
-                    supporting = "Cards lean a few degrees as you move your phone",
-                    checked = prefs.cardTiltEnabled,
-                    onCheckedChange = { on ->
-                        haptics.selection()
-                        preferences.setCardTiltEnabled(on)
-                    },
-                )
-            }
+    ListSection(
+        title = "Cards",
+        footer = "Stays flat when animations are turned off in system settings.",
+    ) {
+        item {
+            SwitchRow(
+                headline = "Card tilt",
+                supporting = "Accounts and saved cards lean a few degrees as you move your phone",
+                checked = prefs.cardTiltEnabled,
+                onCheckedChange = { on ->
+                    haptics.selection()
+                    preferences.setCardTiltEnabled(on)
+                },
+            )
         }
     }
 }

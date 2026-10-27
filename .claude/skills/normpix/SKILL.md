@@ -5,7 +5,7 @@ description: "Everything about the NormPix project - a private, offline-first An
 
 # NormPix project skill
 
-Stamp: verified against commit `c99a54e2` (v1.4.0) on 2026-10-27. If `git log` shows newer commits on source paths, or
+Stamp: verified against commit `763cc08f` (v1.5.0 in the working tree; v1.4.1 is the last release) on 2026-10-27. If `git log` shows newer commits on source paths, or
 `bash .claude/skills/normpix/scripts/verify.sh` reports drift, trust the code and fix the skill (`references/maintenance.md`).
 
 ## 1. The 60-second picture
@@ -22,7 +22,7 @@ app updates itself from GitHub.
   English in Kotlin (no string resources). Currency: INR only (amounts are integer paise).
 - The rest of the repo: `.github/workflows/` (CI), `docs/` (README pictures), `lib/` (a leftover Flutter widget, ignore),
   `native/TASKS.md` (dated work log + Backlog), `README.md` (user-facing description, install, release process).
-- Version: `versionName` in `native/app/build.gradle.kts` (1.4.0 on 2026-10-26). A push to `main` publishes a release.
+- Version: `versionName` in `native/app/build.gradle.kts` (1.5.0 on 2026-10-27). A push to `main` publishes a release.
 
 ## 2. Read order: open the file for your task, not the code
 
@@ -97,15 +97,15 @@ reference rather than exploring. For the history or reasoning behind a feature, 
 | `settings/` | `AppPreferences` (`AppPrefsState`, all choice enums), app icons, notifications, custom font, profile photos |
 | `settings/ui/` | Settings pages, `SettingsCatalog` (search), `SettingsTwoPane`, Appearance sections, backup UI, ledger-check UI |
 | `ui/` | The design system, nothing app-specific - |
-| `ui/components/` | Design-system components: `Overlays` (sheets/confirm/loading/snackbars), `Sheets`, `Pages`, `Lists`, `DeckCarousel`, `SwipeReveal`, `Progress`, `SplitButton`, `BottomControls`, glass/blur |
+| `ui/components/` | Design-system components: `Overlays` (sheets/confirm/loading/snackbars), `Sheets`, `Pages`, `Lists`, `DeckCarousel`, `SwipeReveal`, `Progress`, `SplitButton`, `BottomControls`, glass/blur (`FrostedBackdrop`, `FooterBlur`) |
 | `ui/theme/` | `Theme` (palettes), `Tokens`, `Typography`, `StatusColors`, `AppIcons` |
 | `updates/` | `AppUpdater`, `ReleaseMetadata`, downloader/installer/background job/foreground service, `Changelog` |
 | `updates/ui/` | Update page, changelog page, Home update banner |
-| `banks/` | `BankCatalog` (built-in + custom banks, shared by accounts and cards) |
-| `banks/ui/` | `BankSelector`, `BankBadge` |
+| `banks/` | `BankCatalog` (built-in + custom banks, shared by accounts and cards; the directory with categories is `wallet/BankDirectory`) |
+| `banks/ui/` | `BankSelector`, `BankBadge` (the Settings > Banks page is `settings/ui/BanksSettingsPage`) |
 | `availability/` | `ScheduledFeature` + weekly schedule rules (NFC exchange), settings widgets |
 | `backup/` | App backup zip: archive, manifest, reader, restorer, settings codec |
-| `widgets/` | Watch-dial and cookie clocks, Recent, Add widgets, `HomeWidget` (the Settings > Widgets list, previews, pinning), `WidgetIntents`/`WidgetRequest` |
+| `widgets/` | Watch-dial and cookie clocks (`ClockWidgets`, `ClockOptions` + Widget settings activity, `SimpleClock`), Recent, Add widgets, `HomeWidget` (the Settings > Widgets list, previews, pinning), `WidgetIntents`/`WidgetRequest` |
 | `about/` | About page and the in-app guide (`GuideTopic`, `GuideArt` drawn in code) |
 
 Outside it: tests mirror these packages in `native/app/src/test/kotlin/...` (`testing/TestEnvironment.kt` is the harness);

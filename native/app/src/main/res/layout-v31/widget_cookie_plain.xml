@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The plain cookie clock, Android 12 and later: AnalogClock turns a second hand too.
+     The cookie is its own picture under the AnalogClock (widget_cookie_fill), so a transparent clock can leave it out; the clock
+     draws the marks and turns the hands over it. Drawn by design/cookie-clock/CookieFace.java. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_cookie_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/widget_cookie_fill"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitCenter"
+        android:src="@drawable/widget_cookie_fill" />
+
+    <AnalogClock
+        android:id="@+id/widget_cookie_clock"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:dial="@drawable/widget_cookie_dial_plain"
+        android:hand_hour="@drawable/widget_cookie_hour"
+        android:hand_minute="@drawable/widget_cookie_minute"
+        android:hand_second="@drawable/widget_cookie_second" />
+</FrameLayout>

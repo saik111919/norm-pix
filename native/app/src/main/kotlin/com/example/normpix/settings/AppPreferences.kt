@@ -339,6 +339,8 @@ data class AppPrefsState(
     val walletCardsEnabled: Boolean = true,
     /** Blurs the background behind bottom sheets on supported devices. */
     val sheetBlurEnabled: Boolean = true,
+    /** Blurs and fades the page under the floating dock and back row (the footer), where background blur is available. */
+    val footerBlurEnabled: Boolean = true,
     /**
      * The wide navigation rail of a Large window (a tablet in landscape) folded down by hand to the narrow one, with its button at
      * the top; false, the rail is as wide as the window allows. Only a window that has the wide rail one to fold.
@@ -474,6 +476,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
             cardCvvEnabled = prefs.getBoolean(K_CARD_CVV, defaults.cardCvvEnabled),
             walletCardsEnabled = prefs.getBoolean(K_WALLET_CARDS, defaults.walletCardsEnabled),
             sheetBlurEnabled = prefs.getBoolean(K_SHEET_BLUR, defaults.sheetBlurEnabled),
+            footerBlurEnabled = prefs.getBoolean(K_FOOTER_BLUR, defaults.footerBlurEnabled),
             railCollapsed = prefs.getBoolean(K_RAIL_COLLAPSED, defaults.railCollapsed),
             backButtonStyle = prefs.enum(K_BACK_STYLE, defaults.backButtonStyle),
             bottomControls = prefs.getBoolean(K_BOTTOM_CONTROLS, defaults.bottomControls),
@@ -600,6 +603,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
 
     fun setSheetBlurEnabled(enabled: Boolean) =
         change({ copy(sheetBlurEnabled = enabled) }) { putBoolean(K_SHEET_BLUR, enabled) }
+
+    fun setFooterBlurEnabled(enabled: Boolean) =
+        change({ copy(footerBlurEnabled = enabled) }) { putBoolean(K_FOOTER_BLUR, enabled) }
 
     fun setRailCollapsed(collapsed: Boolean) =
         change({ copy(railCollapsed = collapsed) }) { putBoolean(K_RAIL_COLLAPSED, collapsed) }
@@ -858,6 +864,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_CARD_CVV = "card_cvv_enabled"
         const val K_WALLET_CARDS = "wallet_cards_enabled"
         const val K_SHEET_BLUR = "sheet_blur_enabled"
+        const val K_FOOTER_BLUR = "footer_blur_enabled"
         const val K_RAIL_COLLAPSED = "rail_collapsed"
         const val K_BACK_STYLE = "back_button_style"
         const val K_BOTTOM_CONTROLS = "bottom_controls"

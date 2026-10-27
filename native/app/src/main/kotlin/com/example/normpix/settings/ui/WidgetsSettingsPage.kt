@@ -194,8 +194,9 @@ fun WidgetsSettingsPage() {
                 }
                 Spacer(Modifier.height(AppSpacing.md))
                 Text(
-                    "The clocks keep time on their own. On Android 12 and later the widgets wear your wallpaper's colors, and " +
-                        "none shows anything of your ledger while NormPix is locked.",
+                    "The clocks keep time on their own. Press and hold a clock on your home screen and choose Widget settings to make " +
+                        "it transparent, or to have the plain digital clock (a clock made small shows it by itself). On Android 12 and " +
+                        "later the widgets wear your wallpaper's colors, and none shows anything of your ledger while NormPix is locked.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = AppSpacing.lg),

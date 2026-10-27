@@ -52,6 +52,16 @@ enum class HomeWidget(
         previewWidthDp = 168f,
         previewHeightDp = 168f,
     ),
+    CookiePlain(
+        pill = "Cookie plain",
+        title = "Cookie clock: plain",
+        description = "The cookie-shaped analog clock with only its hands: no ticks and no numbers, just the face and a sweeping second hand. " +
+            "The second hand is Android 12 and later.",
+        group = HomeWidgetGroup.Clocks,
+        provider = CookiePlainWidget::class.java,
+        previewWidthDp = 168f,
+        previewHeightDp = 168f,
+    ),
     CookieDigital(
         pill = "Cookie digital",
         title = "Cookie clock: digital",
@@ -64,7 +74,7 @@ enum class HomeWidget(
     WatchDial(
         pill = "Watch dial",
         title = "Clock: watch dial",
-        description = "The time on a face after a watch: the hour in the middle, the minute in its pill, and two rings of numbers round them. The inner ring steps with each minute.",
+        description = "The time on a face after a watch: the hour in the middle, the minute in its pill, and two rings of numbers round them. The inner ring steps with each minute and the outer ring turns with the seconds.",
         group = HomeWidgetGroup.Clocks,
         provider = ClockWidget::class.java,
         previewWidthDp = 168f,
@@ -92,10 +102,7 @@ enum class HomeWidget(
 
     /** The widget as it would look on the home screen, drawn for [previewWidthDp] x [previewHeightDp]. */
     fun previewViews(context: Context): RemoteViews = when (this) {
-        CookieAnalog -> CookieClockWidget.analog(context)
-        CookieNumbers -> CookieClockWidget.numbers(context)
-        CookieDigital -> CookieClockWidget.digitalPreview(context, previewWidthDp)
-        WatchDial -> ClockWidget.preview(context, previewWidthDp)
+        CookieAnalog, CookieNumbers, CookiePlain, CookieDigital, WatchDial -> ClockWidgets.preview(context, this, previewWidthDp, previewHeightDp)
         // The picker's own preview: made-up transactions, since the real ones are not for showing on a settings page.
         Recent -> RemoteViews(context.packageName, R.layout.widget_recent_preview)
         Add -> AddWidget.wide(context)

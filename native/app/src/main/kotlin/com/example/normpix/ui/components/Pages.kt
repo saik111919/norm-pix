@@ -628,6 +628,10 @@ fun AppSubPage(
                 actionsVisible = actionsVisible,
             )
         }
+        // Under the back row (or the search card over it) the page is blurred and faded into its own colour; it goes down with the row.
+        if (showFloatingBackEffective || searchCard) {
+            FooterBlur(backdrop, Modifier.align(Alignment.BottomCenter), visible = { 1f - goneFraction })
+        }
         // The page's own search or actions stand in for the tile that opens Search.
         val backRowCompanion = if (actionsAtBottom || searchCard) null else ({ navigator.openSearch() })
         val backRowActions = if (actionsAtBottom && actionsVisible) actions else null

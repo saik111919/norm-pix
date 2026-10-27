@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -57,6 +58,7 @@ import com.example.normpix.ui.components.DeckStackState
 import com.example.normpix.ui.components.focusRing
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppRadius
+import com.example.normpix.wallet.motion.CardTiltState
 
 /**
  * What an account card says, already worked out: the money is formatted and the standing ("Owed", "In credit") decided by
@@ -371,17 +373,27 @@ fun AccountCardView(
     modifier: Modifier = Modifier,
     bankIconStyle: BankIconStyle = BankIconStyle.Full,
     compact: Boolean = false,
+    /** The phone's motion as a lean, as the saved cards have it (see [WalletCardView]); null keeps the card flat. */
+    tilt: CardTiltState? = null,
 ) {
     val press = remember { MutableInteractionSource() }
     val pressed by press.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.98f else 1f, AppMotion.spatial<Float>(), label = "account_card_press")
+    val density = LocalDensity.current.density
     // No clip and no ripple: the card paints its own shadow outside its edge, and a clip here would cut it off.
     Box(
         modifier
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
+                // Read while drawing, so a moving phone redraws the card without recomposing it.
+                if (tilt != null) {
+                    cameraDistance = 12f * density
+                    rotationX = -tilt.pitch
+                    rotationY = tilt.roll
+                }
             }
+            .then(if (tilt != null) Modifier.drawWithContent { drawContent(); drawSheen(tilt) } else Modifier)
             // No ripple, so keyboard focus is shown by a ring along the card's own edge.
             .focusRing(press, AppRadius.rLg)
             .combinedClickable(

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The plain digital clock: the time and nothing else (the date, if the user asked for it), for a clock widget too small for its
+     face or set to be one. The platform keeps it on time (TextClock); SimpleClock sizes and formats it for the widget's size and
+     the user's choices. One stop for a screen reader, which reads the texts as one.
+     tools:targetApi: screenReaderFocusable is Android 9; before that each text is read on its own, which is as good as it gets.
+     tools:ignore: the text sizes are dp, not sp, on purpose - the widget decides them, so the phone's text size does not push the
+     digits out of it; textFontWeight is Android 9 and the font falls back to its regular weight before that. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/widget_simple_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_clock_simple_bg"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:screenReaderFocusable="true"
+    tools:ignore="SpUsage,UnusedAttribute"
+    tools:targetApi="p">
+
+    <TextClock
+        android:id="@+id/widget_simple_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/gs_flex"
+        android:format12Hour="h:mm"
+        android:format24Hour="HH:mm"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:textColor="@color/widget_clock_ink"
+        android:textFontWeight="520"
+        android:textSize="40dp" />
+
+    <TextClock
+        android:id="@+id/widget_simple_date"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/gs_flex"
+        android:format12Hour="EEE d MMM"
+        android:format24Hour="EEE d MMM"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:textAllCaps="true"
+        android:textColor="@color/widget_clock_secondary"
+        android:textFontWeight="520"
+        android:textSize="12dp"
+        android:visibility="gone" />
+</LinearLayout>

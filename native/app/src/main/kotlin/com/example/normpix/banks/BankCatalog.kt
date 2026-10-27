@@ -2,6 +2,7 @@ package com.example.normpix.banks
 
 import androidx.compose.runtime.Immutable
 import com.example.normpix.finance.domain.CustomBank
+import com.example.normpix.wallet.BankCategory
 import com.example.normpix.wallet.BankDirectory
 import com.example.normpix.wallet.BankLogoArt
 import com.example.normpix.wallet.BankLogoResolver
@@ -19,6 +20,12 @@ data class Bank(
     /** The bank's bundled artwork; null for banks with none on file (a generic bank icon stands in). */
     val logo: BankLogoArt?,
     val builtIn: Boolean,
+    /** What kind of bank it is, as the Banks page groups them; null for one the user added. */
+    val category: BankCategory? = null,
+    /** A line the Banks page says under the name ("Now part of Canara Bank"), where the name needs one. */
+    val note: String? = null,
+    /** The other names the bank is known by, as the directory lists them; none for one the user added. */
+    val aliases: List<String> = emptyList(),
 )
 
 /**
@@ -89,7 +96,9 @@ class BankCatalog(custom: List<CustomBank> = emptyList()) {
     }
 
     companion object {
-        private val BUILT_IN: List<Bank> = BankDirectory.entries.map { Bank(it.id, it.name, it.logo, builtIn = true) }
+        private val BUILT_IN: List<Bank> = BankDirectory.entries.map {
+            Bank(it.id, it.name, it.logo, builtIn = true, category = it.category, note = it.note, aliases = it.aliases)
+        }
 
         private val BUILT_IN_NAMES: Map<String, List<String>> = BankDirectory.entries.associate { entry ->
             entry.id to (listOf(entry.name) + entry.aliases).map(BankLogoResolver::normalize).filter { it.isNotEmpty() }.distinct()

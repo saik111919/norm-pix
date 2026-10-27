@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The watch dial's seconds ring starting at second 14, as a view ClockWidget adds to the face. -->
+<!-- Drawn by design/cookie-clock/CookieFace.java: change it there, not here. -->
+<ProgressBar xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:importantForAccessibility="no"
+    android:indeterminate="true"
+    android:indeterminateOnly="true"
+    android:indeterminateDrawable="@drawable/widget_dial_seconds_14" />
