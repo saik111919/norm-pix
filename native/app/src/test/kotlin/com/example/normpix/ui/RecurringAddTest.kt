@@ -1,4 +1,4 @@
-package com.example.normpix.ui
+﻿package com.example.normpix.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.semantics.Role
@@ -35,7 +35,7 @@ import org.robolectric.annotation.Config
 
 /**
  * A recurring payment can be added from the Recurring screen at any time, not only while it is empty: a row at the end of the
- * list, and the floating bar's More menu, which puts it first on this screen (and nowhere else).
+ * list, and the floating bar's More menu, which lists it (with every other add) on every screen.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
@@ -136,11 +136,14 @@ class RecurringAddTest {
     }
 
     @Test
-    fun otherPlanSectionsKeepTheirOwnActions() {
+    fun theMoreMenuOffersEveryAddOnEverySection() {
+        // The "+" menu is one fixed panel (see ActionMenu): the same adds wherever it is opened, so a reminders screen
+        // offers a recurring payment as well, and the reminder stays one tap away from Recurring.
         openPlans("Reminders")
         compose.onNodeWithContentDescription("More actions").performClick()
         compose.waitForIdle()
         compose.onNodeWithContentDescription("Add reminder").assertIsDisplayed()
-        assertTrue(compose.onAllNodesWithContentDescription("Add recurring payment").fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithContentDescription("Add recurring payment").assertIsDisplayed()
+        assertTrue(compose.onAllNodesWithContentDescription("Add recurring payment").fetchSemanticsNodes().size == 1)
     }
 }

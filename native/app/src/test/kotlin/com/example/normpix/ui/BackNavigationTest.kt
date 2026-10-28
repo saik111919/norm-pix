@@ -7,6 +7,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
@@ -167,5 +168,49 @@ class BackNavigationTest {
         // The secondary row is its own level: picking a section never changes the primary view.
         tab("Plans").assertIsSelected()
         compose.onAllNodesWithText("Add reminder").onFirst().assertIsDisplayed()
+    }
+
+    @Test
+    fun back_closesThePlusMenuFirst_thenClimbsAsBefore() {
+        start()
+        click("Plans")
+        click("Reminders")
+        compose.onNodeWithContentDescription("More actions").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Close actions").assertIsDisplayed()
+
+        // The first back only shuts the menu: the screen under it stays where it was.
+        systemBack()
+        compose.onNodeWithContentDescription("More actions").assertIsDisplayed()
+        tab("Reminders").assertIsSelected()
+
+        // The next one is the ordinary climb, Reminders -> Budgets.
+        systemBack()
+        tab("Budgets").assertIsSelected()
+    }
+
+    @Test
+    fun back_leavesTheMenusEditModeFirst_thenClosesTheMenu_thenClimbs() {
+        start()
+        click("Plans")
+        click("Reminders")
+        compose.onNodeWithContentDescription("More actions").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Edit actions").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Done").assertIsDisplayed()
+
+        // Edit mode ends, the menu stays open (nothing the user arranged is lost: it is kept as it is made).
+        systemBack()
+        compose.onAllNodesWithText("Done").assertCountEquals(0)
+        compose.onNodeWithContentDescription("Close actions").assertIsDisplayed()
+        tab("Reminders").assertIsSelected()
+
+        // Then the menu closes, and only then does back climb.
+        systemBack()
+        compose.onNodeWithContentDescription("More actions").assertIsDisplayed()
+        tab("Reminders").assertIsSelected()
+        systemBack()
+        tab("Budgets").assertIsSelected()
     }
 }

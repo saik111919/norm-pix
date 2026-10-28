@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 90" width="380" height="90">
+  <g transform="translate(10, 15) scale(0.65)">
+    <rect x="10" y="10" width="80" height="80" rx="8" fill="none" stroke="#0018a8" stroke-width="12"/>
+    <line x1="28" y1="72" x2="72" y2="28" stroke="#0018a8" stroke-width="12" stroke-linecap="square"/>
+  </g>
+  <text x="88" y="52" font-family="sans-serif" font-weight="700" font-size="28" fill="#0018a8">Deutsche Bank</text>
+</svg>

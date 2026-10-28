@@ -4,8 +4,8 @@ import androidx.compose.runtime.Immutable
 
 /**
  * What kind of institution a bank is, as the Settings > Banks page groups them. The groups follow how India's banks are
- * usually told apart (public sector, private, small finance, payments, co-operative, regional rural, foreign) plus the banks
- * that have merged into another but still print on older cards and statements.
+ * usually told apart (public sector, private, small finance, payments, co-operative, regional rural, foreign, digital & neobanks)
+ * plus the banks that have merged into another but still print on older cards and statements.
  */
 enum class BankCategory(val label: String, val blurb: String) {
     PublicSector("Public sector banks", "Government-owned banks"),
@@ -15,6 +15,7 @@ enum class BankCategory(val label: String, val blurb: String) {
     CoOperative("Co-operative banks", "Urban and state co-operative banks"),
     RegionalRural("Regional rural banks", "Gramin and grameena banks"),
     Foreign("Foreign banks", "Banks from abroad with branches or cards in India"),
+    Digital("Digital & neobanks", "App-based accounts and credit cards"),
     Earlier("Earlier names", "Banks that merged into another and may still be on old cards"),
 }
 
@@ -36,7 +37,7 @@ class BankDirectoryEntry(
 }
 
 /**
- * A bank's bundled logo artwork: the full [wordmark] (mark and name) and the
+ * The bundled artwork on file for a bank: a horizontal [wordmark] and a
  * compact, roughly square [symbol]; either may be missing, and each stands in
  * for the other. The `OnDark` versions are reversed-out artwork made for dark
  * backgrounds; without one, the regular full-color artwork goes on dark
@@ -50,14 +51,16 @@ data class BankLogoArt(
     val wordmarkOnDark: String? = null,
     val symbolOnDark: String? = null,
 ) {
-    /** The file to draw for a [compact] (symbol) or full (wordmark) slot, on a dark surface or not. */
+    /** Picks the asset best suited to [compact] and [onDark]; null when this bank has no artwork at all. */
     fun pick(compact: Boolean, onDark: Boolean): BankLogoFile? {
-        val preferred = if (compact) listOf(symbol to symbolOnDark, wordmark to wordmarkOnDark) else listOf(wordmark to wordmarkOnDark, symbol to symbolOnDark)
-        for ((regular, reversed) in preferred) {
-            if (onDark && reversed != null) return BankLogoFile(reversed, needsLightBacking = false)
-            if (regular != null) return BankLogoFile(regular, needsLightBacking = onDark)
-        }
-        return null
+        val target = when {
+            compact && onDark -> symbolOnDark ?: symbol ?: wordmarkOnDark ?: wordmark
+            compact -> symbol ?: wordmark
+            onDark -> wordmarkOnDark ?: wordmark ?: symbolOnDark ?: symbol
+            else -> wordmark ?: symbol
+        } ?: return null
+        val reversed = if (compact) symbolOnDark != null else wordmarkOnDark != null
+        return BankLogoFile(path = target, needsLightBacking = onDark && !reversed)
     }
 }
 
@@ -70,10 +73,10 @@ data class BankLogoFile(val path: String, val needsLightBacking: Boolean) {
 /**
  * Local, offline directory of banks offered in the card bank picker: India's
  * public-sector, private, small-finance, payments, co-operative and regional rural
- * banks, the foreign banks that issue or service cards in India, and the banks that
- * have since merged into another. Logos are the bundled `assets/banks/` set and the
- * round `assets/brandlogos/` pictures - no network lookup. Banks without a logo are
- * still listed so they stay searchable and recognizable; they show a generic bank icon.
+ * banks, foreign banks that issue or service cards in India, digital apps & neobanks,
+ * and the banks that have since merged into another. Logos are the bundled `assets/banks/`
+ * set and the round `assets/brandlogos/` pictures - no network lookup. Banks without
+ * a logo are still listed so they stay searchable and recognizable; they show a generic bank icon.
  *
  * Adding a bank, or a logo for one, is a change to this list only: every
  * screen that shows a bank's logo finds it through [BankLogoResolver].
@@ -83,7 +86,7 @@ data class BankLogoFile(val path: String, val needsLightBacking: Boolean) {
 object BankDirectory {
     private const val DIR = "banks"
 
-    /** The bundled `<code>.svg` wordmark and `<code>_symbol.svg` symbol; codes are the bank's IFSC prefix. */
+    /** The bundled `<code>.svg` wordmark and `<code>_symbol.svg` symbol; codes are the bank's IFSC prefix or identifier. */
     private fun bundled(code: String) = BankLogoArt(wordmark = "$DIR/$code.svg", symbol = "$DIR/${code}_symbol.svg")
 
     /** A round full-color picture from the bundled brand set (`assets/brandlogos/<key>.webp`), which serves as both slots. */
@@ -218,12 +221,12 @@ object BankDirectory {
         BankDirectoryEntry("hsbc", "HSBC", BankCategory.Foreign, logo = picture("hsbcbank")),
         BankDirectoryEntry("citi", "Citibank", BankCategory.Foreign, listOf("Citi"), picture("citibank")),
         BankDirectoryEntry("dbs", "DBS Bank India", BankCategory.Foreign, listOf("DBS Bank", "DBS"), picture("dbsbank")),
-        BankDirectoryEntry("deutsche", "Deutsche Bank", BankCategory.Foreign, listOf("Deutsche")),
-        BankDirectoryEntry("barclays", "Barclays", BankCategory.Foreign),
-        BankDirectoryEntry("boa", "Bank of America", BankCategory.Foreign, listOf("BofA", "BOA")),
+        BankDirectoryEntry("deutsche", "Deutsche Bank", BankCategory.Foreign, listOf("Deutsche"), bundled("deutsche")),
+        BankDirectoryEntry("barclays", "Barclays", BankCategory.Foreign, listOf("Barclays Bank"), bundled("barclays")),
+        BankDirectoryEntry("boa", "Bank of America", BankCategory.Foreign, listOf("BofA", "BOA"), bundled("boa")),
         BankDirectoryEntry("amex", "American Express", BankCategory.Foreign, listOf("Amex"), picture("amex")),
         BankDirectoryEntry("jpmorgan", "JPMorgan Chase Bank", BankCategory.Foreign, listOf("JPMorgan Chase", "JP Morgan", "Chase Bank"), picture("chasebank")),
-        BankDirectoryEntry("sbmindia", "SBM Bank India", BankCategory.Foreign, listOf("SBM Bank")),
+        BankDirectoryEntry("sbmindia", "SBM Bank India", BankCategory.Foreign, listOf("SBM Bank", "SBM"), bundled("sbm")),
         BankDirectoryEntry("emiratesnbd", "Emirates NBD", BankCategory.Foreign, listOf("Emirates NBD Bank"), picture("emiratesnbd")),
         BankDirectoryEntry("fab", "First Abu Dhabi Bank", BankCategory.Foreign, listOf("FAB Bank"), picture("fabbank")),
         BankDirectoryEntry("adcb", "Abu Dhabi Commercial Bank", BankCategory.Foreign, listOf("ADCB"), picture("adcb")),
@@ -249,6 +252,29 @@ object BankDirectory {
         BankDirectoryEntry("uob", "United Overseas Bank", BankCategory.Foreign, listOf("UOB"), picture("uob")),
         BankDirectoryEntry("bangkokbank", "Bangkok Bank", BankCategory.Foreign, logo = picture("bangkokbank")),
         BankDirectoryEntry("krungthai", "Krung Thai Bank", BankCategory.Foreign, logo = picture("krungthai")),
+        BankDirectoryEntry("icbc", "Industrial and Commercial Bank of China", BankCategory.Foreign, listOf("ICBC")),
+        BankDirectoryEntry("maybank", "Maybank", BankCategory.Foreign, listOf("PT Bank Maybank Indonesia", "Malayan Banking Berhad")),
+        BankDirectoryEntry("rabobank", "Rabobank", BankCategory.Foreign, listOf("Cooperatieve Rabobank")),
+        BankDirectoryEntry("creditsuisse", "Credit Suisse", BankCategory.Foreign, listOf("Credit Suisse AG")),
+    )
+
+    private val digital = listOf(
+        BankDirectoryEntry("onecard", "OneCard", BankCategory.Digital, listOf("One Card", "OneCard Metal", "OneCard Credit Card"), picture("onecard")),
+        BankDirectoryEntry("jupiter", "Jupiter", BankCategory.Digital, listOf("Jupiter Money", "Jupiter Bank", "Jupiter App"), picture("jupiterbank")),
+        BankDirectoryEntry("fimoney", "Fi Money", BankCategory.Digital, listOf("Fi", "epiFi", "Fi Bank"), bundled("fi")),
+        BankDirectoryEntry("slice", "Slice", BankCategory.Digital, listOf("Slice Card", "Slice Super Card", "Slice Pay"), picture("slice")),
+        BankDirectoryEntry("lazypay", "LazyPay", BankCategory.Digital, listOf("Lazy Pay", "LazyPay Card"), picture("lazypay")),
+        BankDirectoryEntry("cred", "CRED", BankCategory.Digital, listOf("CRED Pay", "CRED Cash", "CRED Garage"), picture("cred")),
+        BankDirectoryEntry("simpl", "Simpl", BankCategory.Digital, listOf("Simpl Pay Later", "Simpl Pay"), picture("simpl")),
+        BankDirectoryEntry("mobikwik", "MobiKwik", BankCategory.Digital, listOf("Mobikwik", "MobiKwik ZIP", "MobiKwik Wallet"), picture("mobikwik")),
+        BankDirectoryEntry("amazonpay", "Amazon Pay", BankCategory.Digital, listOf("Amazon Pay ICICI", "Amazon Pay Balance", "Amazon Pay Wallet"), picture("amazonpay")),
+        BankDirectoryEntry("googlepay", "Google Pay", BankCategory.Digital, listOf("GPay", "Google Pay India", "G Pay"), picture("googlepay")),
+        BankDirectoryEntry("phonepe", "PhonePe", BankCategory.Digital, listOf("Phone Pe", "PhonePe Wallet"), picture("phonepe")),
+        BankDirectoryEntry("bhim", "BHIM", BankCategory.Digital, listOf("BHIM UPI", "BHIM App"), picture("bhim")),
+        BankDirectoryEntry("freecharge", "Freecharge", BankCategory.Digital, listOf("FreeCharge", "Freecharge Pay Later"), picture("freecharge")),
+        BankDirectoryEntry("unicards", "Uni Cards", BankCategory.Digital, listOf("Uni Card", "Uni NX Wave", "Uni Paycheck"), bundled("uni")),
+        BankDirectoryEntry("niyo", "Niyo", BankCategory.Digital, listOf("Niyo Global", "NiyoX", "Niyo Bank"), bundled("niyo")),
+        BankDirectoryEntry("freo", "Freo", BankCategory.Digital, listOf("Freo Save", "MoneyTap"), bundled("freo")),
     )
 
     private val earlier = listOf(
@@ -273,5 +299,5 @@ object BankDirectory {
 
     /** In the order a picker lists them: the big banks first, the long tail of small and earlier ones after. */
     val entries: List<BankDirectoryEntry> =
-        publicSector + privateSector + smallFinance + payments + foreign + coOperative + regionalRural + earlier
+        publicSector + privateSector + smallFinance + payments + coOperative + regionalRural + foreign + digital + earlier
 }

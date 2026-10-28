@@ -115,7 +115,7 @@ class ShellNavigationTest {
         // More actions opens contextual actions including Add expense
         compose.onNodeWithContentDescription("More actions").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("Add expense").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Add expense").assertIsDisplayed()
         compose.onNodeWithContentDescription("Close actions").performClick()
         compose.waitForIdle()
 
@@ -129,7 +129,7 @@ class ShellNavigationTest {
         // The contextual actions in More follow the section (the empty state offers one too).
         compose.onNodeWithContentDescription("More actions").performClick()
         compose.waitForIdle()
-        compose.onAllNodesWithText("Add reminder").onFirst().assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("Add reminder").onFirst().assertIsDisplayed()
         compose.onNodeWithContentDescription("Close actions").performClick()
         compose.waitForIdle()
 

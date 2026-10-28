@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 90" width="340" height="90">
+  <g transform="translate(10, 15) scale(0.65)">
+    <path d="M50 12 L62 26 C72 32, 86 38, 92 52 C78 50, 68 56, 62 68 C58 76, 54 86, 50 88 C46 86, 42 76, 38 68 C32 56, 22 50, 8 52 C14 38, 28 32, 38 26 Z" fill="#00aeef"/>
+    <circle cx="50" cy="44" r="8" fill="#ffffff"/>
+  </g>
+  <text x="85" y="54" font-family="sans-serif" font-weight="700" font-size="30" fill="#00aeef" letter-spacing="1">BARCLAYS</text>
+</svg>

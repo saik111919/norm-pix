@@ -126,9 +126,9 @@ internal fun bankGroups(matching: List<Bank>, filter: BankFilter, used: Map<Stri
 
 /**
  * Settings > Banks: every bank NormPix knows, each with its logo - the built-in directory of India's banks (public sector,
- * private, small finance, payments, co-operative, regional rural, foreign, and the earlier names of banks that merged) and the
- * banks you added. A search finds one by any name it goes by, the chips narrow the list to a kind of bank (or to those in use),
- * and a bank that isn't there can be added from here, to be used by accounts and cards like any other.
+ * private, small finance, payments, digital & neobanks, foreign, co-operative, regional rural, and the earlier names of banks
+ * that merged) and the banks you added. A search finds one by any name it goes by, the chips narrow the list to a kind of
+ * bank (or to those in use), and a bank that isn't there can be added from here, to be used by accounts and cards like any other.
  */
 @Composable
 fun BanksSettingsPage() {
@@ -206,7 +206,13 @@ fun BanksSettingsPage() {
                 add(BankFilter.All to "All")
                 if (used.isNotEmpty()) add(BankFilter.InUse to "In use")
                 if (hasYours) add(BankFilter.Yours to "Added by you")
-                for (category in BankCategory.entries) add(BankFilter.Kind(category) to category.label.removeSuffix(" banks").removeSuffix(" bank"))
+                for (category in BankCategory.entries) {
+                    val label = when (category) {
+                        BankCategory.Digital -> "Digital & apps"
+                        else -> category.label.removeSuffix(" banks").removeSuffix(" bank")
+                    }
+                    add(BankFilter.Kind(category) to label)
+                }
             }
             Row(
                 Modifier

@@ -236,7 +236,8 @@ Theme (System/Light/Dark) + Colors (Wallpaper colors on Android 12+, or Other co
 the app), App icon (ten launcher icons), Interface font (GS Flex presets Standard/Zenith/Neo/Impact/Airy or hand-set axes,
 System, or the user's own .ttf/.otf), Icons (category style 3D/Emoji/Outline, bank logo style, shape behind), Progress
 indicators (Wavy | Flat), Transitions (six page styles incl. **Linux window**, five sheet/dialog styles, "Try it"), Effects
-(background blur, footer blur, card tilt), Navigation & controls (bottom controls, back button style, month control), Layouts (Top
+(background blur, footer blur, card tilt), Navigation & controls (footer labels, Reset action menu - the "+" menu itself is
+arranged in its Edit mode, bottom controls, back button style, month control), Layouts (Top
 spending, Accounts, Cards). Search finds each choice by its own name.
 
 ## 11. Open and parked (check `native/TASKS.md` Backlog; verify against the code first - old "[ ]" lines go stale)

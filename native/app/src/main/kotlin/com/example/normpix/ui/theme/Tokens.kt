@@ -51,13 +51,16 @@ object AppFrostedTokens {
     val chromeBlurRadius = 20.dp
 
     /** The blur of the footer zone under the dock: the page there is set well back, so the bars read over it. */
-    val footerBlurRadius = 28.dp
+    val footerBlurRadius = 40.dp
 
     /** How far above the dock the footer's blur and fade begin: it eases in over this and the dock's own height. */
     val footerFade = 36.dp
 
+    /** How much taller than the bars and navigation area the progressive blur zone extends (DropSauce BOTTOM_HEIGHT_FACTOR). */
+    val footerZoneFactor = 1.6f
+
     /** How much of the page's colour the footer's fade washes over the blur at its foot. */
-    val footerWashAlpha = 0.72f
+    val footerWashAlpha = 0.65f
 
     /** Corner radius for sheet and dialog surfaces. */
     val cornerRadius = AppRadius.xxl

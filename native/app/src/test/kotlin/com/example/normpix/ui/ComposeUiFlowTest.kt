@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
@@ -221,8 +222,9 @@ class ComposeUiFlowTest {
         }
 
         compose.waitForIdle()
-        // Shell navigation bar displays tabs; Plans and Transactions share one item.
+        // Shell navigation bar displays tabs; Plans and Transactions share one item. The open tab carries its name as text,
+        // the others (icons) are described.
         compose.onAllNodesWithText("Home").onFirst().assertIsDisplayed()
-        compose.onAllNodesWithText("Plans & Activity").onFirst().assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("Plans & Activity").onFirst().assertIsDisplayed()
     }
 }

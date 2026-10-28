@@ -103,6 +103,7 @@ fun AppearanceSectionPage(section: AppearanceSection) {
                     AppearanceSection.Effects -> EffectsSection(prefs, preferences, haptics)
                     AppearanceSection.Controls -> {
                         FooterLabelsSection(prefs, preferences, haptics)
+                        ActionMenuSection(prefs, preferences, haptics)
                         BottomControlsSection(prefs, preferences, haptics)
                         BackButtonSection(prefs, preferences, haptics)
                         MonthControlSection(prefs, preferences, haptics)
@@ -441,6 +442,31 @@ private fun FooterLabelsSection(prefs: AppPrefsState, preferences: AppPreference
                 onCheckedChange = { on ->
                     haptics.selection()
                     preferences.setShowFooterLabels(on)
+                },
+            )
+        }
+    }
+}
+
+/**
+ * The "+" menu is arranged in the menu itself (its Edit button: drag the tiles into order, drag a handle for the icon-only or
+ * wide size); this is the way back to the design's own arrangement.
+ */
+@Composable
+private fun ActionMenuSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
+    val arranged = prefs.actionMenuLayout.isNotEmpty()
+    ListSection(
+        title = "Action menu",
+        footer = "Open the + button on a phone and tap Edit to put its tiles in your order and size.",
+    ) {
+        item {
+            ListRow(
+                headline = "Reset action menu",
+                supporting = if (arranged) "Put the + menu's tiles back in their original order and sizes" else "The + menu is as it was designed",
+                enabled = arranged,
+                onClick = {
+                    haptics.selection()
+                    preferences.setActionMenuLayout("")
                 },
             )
         }

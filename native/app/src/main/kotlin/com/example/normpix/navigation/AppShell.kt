@@ -1,4 +1,4 @@
-package com.example.normpix.navigation
+﻿package com.example.normpix.navigation
 
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.BackHandler
@@ -39,6 +39,10 @@ import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.PeopleOutline
+import androidx.compose.material.icons.outlined.PieChart
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Insights
@@ -79,6 +83,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -118,6 +123,7 @@ import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.RailStyle
 import com.example.normpix.ui.theme.WindowSize
+import com.example.normpix.ui.theme.isDark
 import com.example.normpix.ui.theme.rememberRailFoldable
 import com.example.normpix.ui.theme.rememberRailStyle
 import com.example.normpix.ui.theme.rememberReducedMotion
@@ -278,8 +284,18 @@ fun AppShell(
     // Dismiss More menu when switching tabs or plans tab
     LaunchedEffect(shell.selected, shell.plansTab) { isMoreOpen = false }
 
+    // Edit mode of the menu (see ActionMenu): it ends with the menu, and Back leaves it before it closes the menu
+    var editingActions by remember { mutableStateOf(false) }
+    LaunchedEffect(isMoreOpen) { if (!isMoreOpen) editingActions = false }
+    val actionLayout = remember(prefs.actionMenuLayout) { ActionMenuLayout.from(prefs.actionMenuLayout) }
+
     // Hardware or predictive back closes the More menu first before navigating back
-    BackHandler(enabled = isMoreOpen) { isMoreOpen = false }
+    BackHandler(enabled = isMoreOpen) { if (editingActions) editingActions = false else isMoreOpen = false }
+
+    // The menu's one clock: the panel, the "+" turning into a cross, the dock stepping back and the page's dim all follow it.
+    val menuProgress = rememberActionMenuProgress(isMoreOpen)
+    val menuProgressNow: () -> Float = remember(menuProgress) { { menuProgress.value } }
+    val menuVisible by remember(menuProgress) { derivedStateOf { isMoreOpen || menuProgress.value > 0.001f } }
 
     // What the screen in front can add: the first of these, the main one, is the dock's button or the rail's.
     val pageActions = remember(current, shell.tab, shell.section, walletLocked, prefs.walletCardsEnabled) {
@@ -399,14 +415,126 @@ fun AppShell(
             }
         }
     }
-    // Contextual actions surfaced inside the More / Actions bottom action area; Settings are always accessible as part of it.
-    val contextualActions = remember(pageActions, navigator) {
-        pageActions + FooterAction(
-            label = "Settings",
-            icon = Icons.Outlined.Settings,
-            isPrimary = false,
-            onClick = { navigator.openSettings() },
-        )
+    // All 11 NormPix actions surfaced in the expandable 4-column "+" action grid menu
+    val allActions = remember(navigator, expenseFlows, reminderFlows, cardFlows, walletLocked, prefs.walletCardsEnabled) {
+        buildList {
+            add(
+                FooterAction(
+                    label = "Expense",
+                    id = "expense",
+                    contentDescription = "Add expense",
+                    icon = Icons.Rounded.Add,
+                    isPrimary = true,
+                    onClick = { expenseFlows.addTransaction(TransactionType.Expense) },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Income",
+                    id = "income",
+                    contentDescription = "Add income",
+                    icon = Icons.AutoMirrored.Rounded.CallReceived,
+                    isPrimary = false,
+                    onClick = { expenseFlows.addTransaction(TransactionType.Income) },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Recurring",
+                    id = "recurring",
+                    contentDescription = "Add recurring payment",
+                    icon = Icons.Outlined.EventRepeat,
+                    isPrimary = false,
+                    onClick = { expenseFlows.addRecurring() },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Reminder",
+                    id = "reminder",
+                    contentDescription = "Add reminder",
+                    icon = Icons.Outlined.AddAlert,
+                    isPrimary = false,
+                    onClick = { reminderFlows.add() },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Card",
+                    id = "card",
+                    contentDescription = "Add card",
+                    icon = Icons.Outlined.CreditCard,
+                    isPrimary = false,
+                    onClick = {
+                        if (prefs.walletCardsEnabled && !walletLocked) {
+                            cardFlows.addCard()
+                        } else {
+                            navigator.go(AppDestination.Wallet)
+                        }
+                    },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Account",
+                    id = "account",
+                    contentDescription = "Add account",
+                    icon = Icons.Outlined.AccountBalanceWallet,
+                    isPrimary = false,
+                    onClick = { expenseFlows.addAccount() },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Categories",
+                    id = "categories",
+                    contentDescription = "Categories",
+                    icon = Icons.Outlined.Category,
+                    isPrimary = false,
+                    onClick = { navigator.openCategories() },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Budgets",
+                    id = "budgets",
+                    contentDescription = "Budgets",
+                    icon = Icons.Outlined.PieChart,
+                    isPrimary = false,
+                    onClick = { navigator.openPlans(PlanSection.Budgets) },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "People",
+                    id = "people",
+                    contentDescription = "People",
+                    icon = Icons.Outlined.PeopleOutline,
+                    isPrimary = false,
+                    onClick = { navigator.openPeople() },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Search",
+                    id = "search",
+                    contentDescription = "Search",
+                    icon = Icons.Outlined.Search,
+                    isPrimary = false,
+                    onClick = { navigator.openSearch() },
+                ),
+            )
+            add(
+                FooterAction(
+                    label = "Settings",
+                    id = "settings",
+                    contentDescription = "Settings",
+                    icon = Icons.Outlined.Settings,
+                    isPrimary = false,
+                    onClick = { navigator.openSettings() },
+                ),
+            )
+        }
     }
 
     val compact = size == WindowSize.Compact
@@ -567,14 +695,19 @@ fun AppShell(
             // What scrolls under the dock is blurred and faded into the page, more towards the edge; it goes down with the dock.
             FooterBlur(backdrop, Modifier.align(Alignment.BottomCenter), visible = { 1f - goneState.value })
 
-            // Outside click dismissal scrim when More is open
-            if (isMoreOpen) {
+            // The page steps back behind the open menu, on the menu's own clock; a tap anywhere outside the menu closes it.
+            // It stays while the menu closes (not pressable then) so the dim fades out instead of cutting.
+            if (menuVisible) {
+                val scrimColor = if (MaterialTheme.colorScheme.isDark) Color.Black.copy(alpha = 0.5f) else Color.Black.copy(alpha = 0.32f)
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .actionMenuScrim(menuProgressNow, scrimColor)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
+                            enabled = isMoreOpen,
+                            onClickLabel = "Close actions",
                         ) { isMoreOpen = false },
                 )
             }
@@ -586,9 +719,14 @@ fun AppShell(
                     overdueCount = overdue,
                     onDestinationSelected = { shell.selected = it.ordinal },
                     onOpenSettings = { navigator.openSettings() },
-                    actions = contextualActions,
+                    actions = allActions,
                     isMoreOpen = isMoreOpen,
                     onMoreToggle = { isMoreOpen = !isMoreOpen },
+                    menuProgress = menuProgress,
+                    actionLayout = actionLayout,
+                    onActionLayoutChange = { container.preferences.setActionMenuLayout(ActionMenuLayout.keptAs(it)) },
+                    editingActions = editingActions,
+                    onEditingActionsChange = { editingActions = it },
                     currentLabel = if (current == AppDestination.PlansAndTransactions) shell.tab.label else current.label,
                     showLabels = prefs.showFooterLabels,
                     modifier = Modifier

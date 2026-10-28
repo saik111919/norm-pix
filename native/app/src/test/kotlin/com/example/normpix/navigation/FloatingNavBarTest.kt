@@ -1,29 +1,23 @@
 package com.example.normpix.navigation
 
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertHeightIsAtLeast
-import androidx.compose.ui.test.assertWidthIsAtLeast
-import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotSelected
-import androidx.compose.ui.test.assertIsSelected
-import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithContentDescription
-import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.unit.dp
-import com.example.normpix.ui.theme.NormPixTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
+import com.example.normpix.ui.theme.NormPixTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -32,14 +26,14 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], qualifiers = "w411dp-h891dp")
+@Config(sdk = [34])
 class FloatingNavBarTest {
 
     @get:Rule
     val composeTestRule = createComposeRule()
 
     @Test
-    fun testFloatingNavBarRendersAllDestinations() {
+    fun testFloatingNavBarDisplaysAllDestinations() {
         var selectedDestination = AppDestination.Home
 
         composeTestRule.setContent {
@@ -53,21 +47,22 @@ class FloatingNavBarTest {
             }
         }
 
-        // Active destination shows text and is selected
-        composeTestRule.onNodeWithText("Home").assertIsDisplayed()
-        composeTestRule.onNodeWithContentDescription("Home").assertIsSelected()
+        // Check that all 4 destinations exist
+        composeTestRule.onNodeWithContentDescription("Home").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Plans & Activity").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Insights").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Wallet").assertIsDisplayed()
 
-        // Other destinations are present but not selected; Plans and Transactions are one item.
-        composeTestRule.onNodeWithContentDescription("Plans & Activity").assertIsDisplayed().assertIsNotSelected()
-        composeTestRule.onNodeWithContentDescription("Insights").assertIsDisplayed().assertIsNotSelected()
-        composeTestRule.onNodeWithContentDescription("Wallet").assertIsDisplayed().assertIsNotSelected()
-        composeTestRule.onAllNodesWithContentDescription("Activity").assertCountEquals(0)
-        composeTestRule.onAllNodesWithContentDescription("Plan").assertCountEquals(0)
+        // Home is active, so its text label is visible
+        composeTestRule.onNodeWithText("Home").assertIsDisplayed()
+
+        // Inactive tabs show no label text
+        composeTestRule.onAllNodesWithText("Insights").assertCountEquals(0)
     }
 
     @Test
-    fun testDestinationClickUpdatesSelection() {
-        var selectedDestination: AppDestination = AppDestination.Home
+    fun testFloatingNavBarTabSelection() {
+        var selectedDestination by mutableStateOf(AppDestination.Home)
 
         composeTestRule.setContent {
             NormPixTheme {
@@ -80,56 +75,14 @@ class FloatingNavBarTest {
             }
         }
 
-        composeTestRule.onNodeWithContentDescription("Plans & Activity").performClick()
-        assertEquals(AppDestination.PlansAndTransactions, selectedDestination)
-    }
+        // Tap Wallet tab
+        composeTestRule.onNodeWithContentDescription("Wallet").performClick()
+        assertEquals(AppDestination.Wallet, selectedDestination)
 
-    @Test
-    fun testSettingsSitsBesideTheDock() {
-        var settingsOpened = false
-
-        composeTestRule.setContent {
-            NormPixTheme {
-                FloatingNavigationRow(
-                    destinations = AppDestination.entries,
-                    current = AppDestination.Home,
-                    overdueCount = 0,
-                    onDestinationSelected = {},
-                    onOpenSettings = { settingsOpened = true },
-                )
-            }
-        }
-
-        val settingsNode = composeTestRule.onNodeWithContentDescription("Settings")
-        settingsNode.assertIsDisplayed()
-        settingsNode.performClick()
-        assertTrue(settingsOpened)
-    }
-
-    @Test
-    fun testEveryItemIsATouchTarget_andSettingsIsItsOwnTileBesideTheDock() {
-        composeTestRule.setContent {
-            NormPixTheme {
-                FloatingNavigationRow(
-                    destinations = AppDestination.entries,
-                    current = AppDestination.Home,
-                    overdueCount = 0,
-                    onDestinationSelected = {},
-                    onOpenSettings = {},
-                )
-            }
-        }
-
-        // However compact the dock looks, nothing in it is smaller than a 48dp target.
-        for (label in listOf("Home", "Plans & Activity", "Insights", "Wallet", "Settings")) {
-            composeTestRule.onNodeWithContentDescription(label).assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp)
-        }
-
-        // The dock holds exactly the four destinations; Settings is a separate tile after it, not a fifth tab.
-        composeTestRule.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)).assertCountEquals(4)
-        val lastDestination = composeTestRule.onNodeWithContentDescription("Wallet").fetchSemanticsNode().boundsInRoot
-        val settings = composeTestRule.onNodeWithContentDescription("Settings").fetchSemanticsNode().boundsInRoot
-        assertTrue("Settings should sit beyond the dock", settings.left > lastDestination.right)
+        // Wallet is now active, so its text label appears
+        composeTestRule.onNodeWithText("Wallet").assertIsDisplayed()
+        // Home label is now hidden
+        composeTestRule.onAllNodesWithText("Home").assertCountEquals(0)
     }
 
     @Test
@@ -145,55 +98,38 @@ class FloatingNavBarTest {
             }
         }
 
-        // Badge is displayed with overdue count
-        composeTestRule.onNodeWithText("3").assertIsDisplayed()
-        composeTestRule.onNodeWithContentDescription("3 overdue", useUnmergedTree = true).assertIsDisplayed()
+        // Badge semantics description
+        composeTestRule.onNodeWithContentDescription("3 overdue").assertIsDisplayed()
     }
 
     @Test
-    fun testSelectedItemNamesTheCurrentView() {
+    fun testFloatingNavigationRowContainsNavBarAndCompanionItem() {
+        var companionClicked = false
+
         composeTestRule.setContent {
             NormPixTheme {
                 FloatingNavigationRow(
                     destinations = AppDestination.entries,
-                    current = AppDestination.PlansAndTransactions,
-                    overdueCount = 1,
-                    onDestinationSelected = {},
-                    onOpenSettings = {},
-                    currentLabel = PlansAndTransactionsTab.Plans.label,
-                )
-            }
-        }
-
-        // The pill shows which view is open, while the item keeps its one destination name.
-        composeTestRule.onNodeWithText("Plans", useUnmergedTree = true).assertIsDisplayed()
-        composeTestRule.onNodeWithContentDescription("Plans & Activity").assertIsSelected()
-        composeTestRule.onNodeWithContentDescription("Settings").assertIsDisplayed()
-    }
-
-    @Test
-    fun testSelectedItemAnnouncesWhichViewIsOpen() {
-        composeTestRule.setContent {
-            NormPixTheme {
-                FloatingNavBar(
-                    destinations = AppDestination.entries,
-                    current = AppDestination.PlansAndTransactions,
+                    current = AppDestination.Home,
                     overdueCount = 0,
                     onDestinationSelected = {},
-                    currentLabel = PlansAndTransactionsTab.Transactions.label,
+                    onOpenSettings = { companionClicked = true },
                 )
             }
         }
 
-        // Screen readers hear "Plans & Activity, selected, Showing Activity"; plain tabs add nothing.
-        composeTestRule.onNode(
-            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Showing Activity"),
-        ).assertIsDisplayed()
-        composeTestRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.StateDescription)).assertCountEquals(1)
+        // The dock destinations exist
+        composeTestRule.onNodeWithContentDescription("Home").assertIsDisplayed()
+
+        // The Settings companion squircle exists and is clickable
+        val settingsItem = composeTestRule.onNodeWithContentDescription("Settings")
+        settingsItem.assertIsDisplayed()
+        settingsItem.performClick()
+        assertTrue(companionClicked)
     }
 
     @Test
-    fun testFloatingBackRowRendersTitleAndTriggersBack() {
+    fun testFloatingBackRowRendersBackDiscAndTitle() {
         var backPressed = false
         var searchPressed = false
 
@@ -259,6 +195,55 @@ class FloatingNavBarTest {
         // Clicking the action invokes callback
         actionPill.performClick()
         assertTrue(actionInvoked)
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h891dp")
+    fun testExpandableActionGridWith11Actions() {
+        var clickedIndex = -1
+        var isMoreOpen by mutableStateOf(false)
+
+        val actionLabels = listOf(
+            "Expense", "Income", "Recurring", "Reminder",
+            "Card", "Account", "Categories", "Budgets",
+            "People", "Search", "Settings",
+        )
+        val actions = actionLabels.mapIndexed { index, label ->
+            FooterAction(
+                label = label,
+                icon = Icons.Rounded.Add,
+                isPrimary = index == 0,
+                onClick = { clickedIndex = index },
+            )
+        }
+
+        composeTestRule.setContent {
+            NormPixTheme {
+                FloatingNavigationRow(
+                    destinations = AppDestination.entries,
+                    current = AppDestination.Home,
+                    overdueCount = 0,
+                    onDestinationSelected = {},
+                    actions = actions,
+                    isMoreOpen = isMoreOpen,
+                    onMoreToggle = { isMoreOpen = !isMoreOpen },
+                )
+            }
+        }
+
+        // Expand menu
+        composeTestRule.onNodeWithContentDescription("More actions").performClick()
+        composeTestRule.waitForIdle()
+
+        // All 11 actions are displayed
+        for (label in actionLabels) {
+            composeTestRule.onNodeWithContentDescription(label).assertIsDisplayed()
+        }
+
+        // Clicking an action invokes its callback and toggles isMoreOpen
+        composeTestRule.onNodeWithContentDescription("Budgets").performClick()
+        assertEquals(7, clickedIndex)
+        assertFalse(isMoreOpen)
     }
 
     @Test

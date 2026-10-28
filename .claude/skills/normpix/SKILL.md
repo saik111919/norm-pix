@@ -93,7 +93,7 @@ reference rather than exploring. For the history or reasoning behind a feature, 
 | `wallet/motion/` | `CardTilt` |
 | `reminders/` | Model, `RemindersDatabase` (v2), alarms, notifications, alert screen, links |
 | `screens/` | The tabs' screens: `HomeScreen`, `HomeBanners`, `PlansAndTransactionsScreen`, `WalletScreen` |
-| `navigation/` | `NormPixRoot` (`Routes`, `ShellState`, locals), `AppShell`, `AppNavigator`, `FloatingNavBar`, `PageTransitions`, `LinuxWindowMotion`, `AppSearch`, `AppearanceSection`, splash |
+| `navigation/` | `NormPixRoot` (`Routes`, `ShellState`, locals), `AppShell`, `AppNavigator`, `FloatingNavBar`, `ActionMenu` (the "+" bento panel), `PageTransitions`, `LinuxWindowMotion`, `AppSearch`, `AppearanceSection`, splash |
 | `settings/` | `AppPreferences` (`AppPrefsState`, all choice enums), app icons, notifications, custom font, profile photos |
 | `settings/ui/` | Settings pages, `SettingsCatalog` (search), `SettingsTwoPane`, Appearance sections, backup UI, ledger-check UI |
 | `ui/` | The design system, nothing app-specific - |
