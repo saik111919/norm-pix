@@ -39,7 +39,7 @@ enum class GuideTopic(
         summary = "Record an expense, income or a transfer in a few taps.",
         hue = 1,
         steps = listOf(
-            "Tap the add button in the bar at the bottom of Home, Activity or Insights. On Home and Activity its menu also has Add income.",
+            "Tap the + button in the bar at the bottom. Its menu has Expense, Income and every other add. Tap Edit in it to put the tiles in your own order, and drag a tile's handle to make it wide or small.",
             "Type the amount, then choose a category and the account the money moved through.",
             "Add a payee, a note, the person it was for, or a picture of the bill if you like.",
             "Switch the type to Transfer to move money between two of your accounts, or to pay a credit card's bill.",

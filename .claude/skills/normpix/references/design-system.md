@@ -91,7 +91,7 @@ Use these before writing anything new:
   the page is blurred (`AppFrostedTokens.footerBlurRadius`) and washed with the page colour, fading in from nothing over `footerFade` above the bars
   (a `DstIn` gradient on an offscreen layer), like DropSauce's `BarBlur`; it draws from the same `frostedSource` recording, takes no touches, and
   goes down with the dock (`visible`). `AppShell` (compact) and `AppSubPage` (floating back row / search card) place it; none where blur is off.
-- Floating bars (dock, More actions, top back circle and actions pill) are real glass: the page records itself once
+- Floating bars (dock, "+" action panel, top back circle and actions pill) are real glass: the page records itself once
   (`frostedSource`) and each bar draws a blurred copy of what is behind it (`frostedGlass`); solid with a slight shadow where
   blur is off; no shadow under glass.
 - Blur can't be seen in Robolectric directly; tests inject `LocalWindowBlurOverride provides true`, drive `mainClock` and
@@ -101,8 +101,31 @@ Use these before writing anything new:
 
 - Bottom **dock** (`FloatingNavBar`): primary-tinted pill, selected item a `primaryContainer` pill with icon + label, other
   items icons, 48 dp targets, concentric corners, hides on scroll down and returns on scroll up / at the list end / on tab
-  change (`ScrollAwareBar`: offset + alpha only so nothing jumps; 16 dp jitter threshold). The trailing button is "More
-  actions" (three dots) with the screen's actions and Settings.
+  change (`ScrollAwareBar`: offset + alpha only so nothing jumps; 16 dp jitter threshold). The trailing button is the **"+"
+  action menu** (`navigation/ActionMenu.kt`): a glass bento panel growing out of the button, on a grid of equal cells - by default a
+  tall Expense capsule down the left, a wide Income capsule, squircles, two circles (Reminder, Budgets) and, in the last cell, the
+  **Edit** button (no ornament: the sparkle in the first mock was removed on the owner's word). The eleven actions are built in
+  `AppShell` (`allActions`, each with a stable `FooterAction.id`); **`ActionMenuLayout`** (pure, `navigation/ActionMenuLayout.kt`) is
+  the user's arrangement - order plus a size per tile, **Small or Wide, the two sizes of Pixel's Quick Settings editor** (verified,
+  `verified-facts.md`) - kept as `id:s,id:w,...` in the preference `action_menu_layout` (empty = the design; carried by an app backup
+  like any preference; Settings > Appearance > Navigation & controls > **Reset action menu** puts it back). `bentoPlan` packs it:
+  the **first tile is the featured one**, a tall capsule as high as the grid; the others flow in the four columns beside it, a wide
+  tile moving to the next row when it does not fit (leaving a hole, as on Pixel), the Edit button last. **Edit mode** (the button;
+  state held in `AppShell` so Back leaves it before it closes the menu) follows Pixel's editor: a tap selects a tile instead of
+  running it, the selected one gets a handle on its right edge that drags between the sizes, touch-and-hold lifts a tile and the
+  others make room (positions and sizes animate on the spatial spring), and a bar under the grid has Reset (only when something
+  changed) and Done, plus Move earlier / Move later / Make wide|small for those who don't drag - the same moves are custom
+  accessibility actions on every tile. Edits show at once and are kept as they are made (`shown` in the panel, so the saved value
+  coming back a frame later never flashes the old order); a tile keeps its colour wherever it is put. **One progress value** (`rememberActionMenuProgress`: spatial
+  spring open, 200 ms close on the fast-start `standard` curve so a dismiss answers the tap at once, instant with animations off) drives the panel's growth from the button's centre, each
+  tile's arrival (staggered by distance from the button, `arrivalRank`), the "+" turning into "x", the dock stepping back and the
+  page's dim (`actionMenuScrim`); read it only in `graphicsLayer`/`drawBehind` lambdas so `AppShell` never recomposes per frame. While
+  open the dock is not pressable and hidden from TalkBack (a tap on it closes the menu), the scrim is a tap-to-close target, back
+  closes it. With large text (font scale over 1.15) or cells under 54 dp the same actions come as a three-column icon-over-label
+  list with two-line labels (reordered with the bar's buttons; sizes mean nothing there, so no resize). Tile colours are a one-hue ramp of theme roles (`tileTone`), so every palette works; the in-between
+  step is a blend no role was made for, so every tile's ink is **checked for 4.5:1** (`tone`: the role's own `on*` colour, else
+  the next candidate, else black or white) and `ActionMenuTest` asserts it for every accent in Light and Dark. Bento labels
+  auto-size from 11 sp down to 8 sp (`TextAutoSize`) so a long word in a custom font never touches the tile's edge.
 - **Back button styles** (`BackButtonStyle`): *Top floating circle* (default; no app bar - a glass circle and an actions pill
   float over a page that scrolls on under them, a large heading scrolls away; the status bar keeps the page's colour), *Bottom
   dock*, *Standard top bar*. The account/profile pill and page title share one floating row on tab pages.

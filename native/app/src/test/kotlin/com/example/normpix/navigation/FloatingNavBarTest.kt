@@ -49,7 +49,7 @@ class FloatingNavBarTest {
 
         // Check that all 4 destinations exist
         composeTestRule.onNodeWithContentDescription("Home").assertIsDisplayed()
-        composeTestRule.onNodeWithContentDescription("Plans & Transactions").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Plans & Activity").assertIsDisplayed()
         composeTestRule.onNodeWithContentDescription("Insights").assertIsDisplayed()
         composeTestRule.onNodeWithContentDescription("Wallet").assertIsDisplayed()
 
@@ -198,6 +198,7 @@ class FloatingNavBarTest {
     }
 
     @Test
+    @Config(sdk = [34], qualifiers = "w411dp-h891dp")
     fun testExpandableActionGridWith11Actions() {
         var clickedIndex = -1
         var isMoreOpen by mutableStateOf(false)

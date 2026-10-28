@@ -8,8 +8,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -21,9 +19,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.isImeVisible
@@ -55,6 +51,8 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -66,6 +64,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -73,11 +72,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.normpix.ui.components.FrostedBackdrop
 import com.example.normpix.ui.components.LocalFrostedBackdrop
 import com.example.normpix.ui.components.frostedGlass
@@ -95,8 +92,8 @@ import com.example.normpix.ui.theme.rememberWindowWidthDp
  *   - Deep saturated container color (primary teal in light theme) with subtle hairline border;
  *   - Active destination expands into an expressive pure white pill capsule containing icon + label;
  *   - Inactive destinations present clean white icons with accessible 48dp touch targets;
- *   - Circular "+" action button beside the dock expands a floating 4-column frosted action grid;
- *   - Coordinated motion: on expand, dock fades and blurs out while "+" morphs into "×" and panel scales in;
+ *   - Circular "+" action button beside the dock opens the bento action panel (ActionMenu.kt);
+ *   - Coordinated motion: one progress value turns "+" into "×", grows the panel out of it and steps the dock back;
  *   - Floating back pill provides thumb-friendly back navigation with circular white arrow disc;
  *   - Transforms smoothly during scroll and IME without triggering layout reflows.
  */
@@ -104,7 +101,7 @@ import com.example.normpix.ui.theme.rememberWindowWidthDp
 private val ItemHeight = 48.dp
 private val DockPadding = 6.dp
 private val DockCorner = 30.dp
-private val DockHeight = 60.dp
+internal val DockHeight = 60.dp
 private val CompanionCorner = 18.dp
 private val MinLabelWidth = 36.dp
 
@@ -132,6 +129,8 @@ data class FooterAction(
     val isPrimary: Boolean = false,
     val contentDescription: String? = null,
     val onClick: () -> Unit,
+    /** What a saved arrangement of the "+" menu calls this action: stable, unlike the label (see [ActionMenuLayout]). */
+    val id: String = label,
 )
 
 /** [blurred]: the bars are glass (see [rememberFrostedChrome]), so their tint is translucent; otherwise it is solid. */
@@ -183,6 +182,14 @@ fun FloatingNavigationRow(
     actions: List<FooterAction> = emptyList(),
     isMoreOpen: Boolean = false,
     onMoreToggle: () -> Unit = {},
+    /** The menu's progress, 0 closed to 1 open; the shell passes its own so the page's dim can follow the same clock. */
+    menuProgress: State<Float> = rememberActionMenuProgress(isMoreOpen && actions.isNotEmpty()),
+    /** How the menu's tiles are arranged (see [ActionMenuLayout]); [onActionLayoutChange] null means it cannot be edited. */
+    actionLayout: ActionMenuLayout = ActionMenuLayout.Default,
+    onActionLayoutChange: ((ActionMenuLayout) -> Unit)? = null,
+    /** The menu is in Edit mode; kept by the caller so Back can leave it before it closes the menu. */
+    editingActions: Boolean = false,
+    onEditingActionsChange: (Boolean) -> Unit = {},
     colors: DockColors = rememberDockColors(),
     currentLabel: String = current.label,
     showLabels: Boolean = true,
@@ -197,17 +204,12 @@ fun FloatingNavigationRow(
             (destinations.size - 1) * (48 + 4) - 2 * (if (isNarrow) 10 else 14) - 22 - 8
         ).dp
 
-    // Coordinated motion: on open, dock fades and blurs out smoothly
-    val navBarAlpha by animateFloatAsState(
-        targetValue = if (isMoreOpen && actions.isNotEmpty()) 0f else 1f,
-        animationSpec = AppMotion.spatial(),
-        label = "nav_bar_alpha",
-    )
-    val navBarScale by animateFloatAsState(
-        targetValue = if (isMoreOpen && actions.isNotEmpty()) 0.92f else 1f,
-        animationSpec = AppMotion.spatial(),
-        label = "nav_bar_scale",
-    )
+    val menuOpen = isMoreOpen && actions.isNotEmpty()
+    // The panel stays composed while it closes, and not a frame longer.
+    val panelShown by remember(menuProgress, menuOpen) {
+        derivedStateOf { menuOpen || menuProgress.value > 0.001f }
+    }
+    val progress: () -> Float = remember(menuProgress) { { menuProgress.value } }
 
     Box(
         modifier = modifier
@@ -219,33 +221,25 @@ fun FloatingNavigationRow(
     ) {
         Column(
             horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(ActionMenuGap),
         ) {
-            // Floating 4-column expandable action menu panel
-            AnimatedVisibility(
-                visible = isMoreOpen && actions.isNotEmpty(),
-                enter = fadeIn(animationSpec = tween(AppMotion.duration(AppMotion.MEDIUM_MS), easing = AppMotion.enter)) +
-                        scaleIn(
-                            initialScale = 0.75f,
-                            transformOrigin = TransformOrigin(1f, 1f),
-                            animationSpec = tween(AppMotion.duration(AppMotion.MEDIUM_MS), easing = AppMotion.enter),
-                        ),
-                exit = fadeOut(animationSpec = tween(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.exit)) +
-                       scaleOut(
-                           targetScale = 0.75f,
-                           transformOrigin = TransformOrigin(1f, 1f),
-                           animationSpec = tween(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.exit),
-                       ),
-                modifier = Modifier.padding(bottom = 6.dp),
-            ) {
-                FloatingActionGridPanel(
+            if (panelShown) {
+                ActionMenuPanel(
                     actions = actions,
+                    layout = actionLayout,
+                    onLayoutChange = onActionLayoutChange,
+                    editing = editingActions,
+                    onEditingChange = onEditingActionsChange,
                     colors = colors,
                     backdrop = backdrop,
+                    progress = progress,
+                    open = menuOpen,
                     onActionClick = { action ->
                         onMoreToggle()
                         action.onClick()
                     },
+                    // A tall panel (large text, many actions) gives way to the dock row instead of pushing it off screen.
+                    modifier = Modifier.weight(1f, fill = false),
                 )
             }
 
@@ -253,27 +247,36 @@ fun FloatingNavigationRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                FloatingNavBar(
-                    destinations = destinations,
-                    current = current,
-                    overdueCount = overdueCount,
-                    onDestinationSelected = {
-                        if (isMoreOpen) onMoreToggle()
-                        onDestinationSelected(it)
-                    },
-                    colors = colors,
-                    backdrop = backdrop,
-                    isNarrow = isNarrow,
-                    currentLabel = currentLabel,
-                    maxLabelWidth = maxLabelWidth,
-                    showLabels = showLabels,
-                    modifier = Modifier.graphicsLayer {
-                        alpha = navBarAlpha
-                        scaleX = navBarScale
-                        scaleY = navBarScale
-                        transformOrigin = TransformOrigin(1f, 0.5f)
-                    },
-                )
+                // The dock steps back towards the "+" as the menu opens. Faded out it must also stop being pressable
+                // (alpha does not do that) and stop being read out, so while the menu is open a tap on it closes the menu.
+                Box(
+                    modifier = Modifier
+                        .graphicsLayer {
+                            val p = progress().coerceIn(0f, 1f)
+                            alpha = 1f - (p * 1.6f).coerceAtMost(1f)
+                            scaleX = 1f - 0.1f * p
+                            scaleY = 1f - 0.1f * p
+                            transformOrigin = TransformOrigin(1f, 0.5f)
+                        }
+                        .then(if (menuOpen) Modifier.clearAndSetSemantics { } else Modifier),
+                ) {
+                    FloatingNavBar(
+                        destinations = destinations,
+                        current = current,
+                        overdueCount = overdueCount,
+                        onDestinationSelected = {
+                            if (isMoreOpen) onMoreToggle()
+                            onDestinationSelected(it)
+                        },
+                        colors = colors,
+                        backdrop = backdrop,
+                        isNarrow = isNarrow,
+                        currentLabel = currentLabel,
+                        maxLabelWidth = maxLabelWidth,
+                        showLabels = showLabels,
+                    )
+                    if (menuOpen) Box(Modifier.matchParentSize().closesMenuOnTap(onMoreToggle))
+                }
                 FloatingNavCompanionItem(
                     icon = if (actions.isEmpty()) Icons.Outlined.Settings else Icons.Rounded.Add,
                     contentDescription = if (actions.isEmpty()) "Settings" else if (isMoreOpen) "Close actions" else "More actions",
@@ -281,6 +284,7 @@ fun FloatingNavigationRow(
                     backdrop = backdrop,
                     isActionMenu = actions.isNotEmpty(),
                     isMoreOpen = isMoreOpen,
+                    menuProgress = progress,
                     onClick = {
                         if (actions.isEmpty()) {
                             onOpenSettings()
@@ -290,194 +294,6 @@ fun FloatingNavigationRow(
                     },
                 )
             }
-        }
-    }
-}
-
-/**
- * 4-column floating action grid panel.
- * Holds rounded-square icon tiles with small labels underneath in a frosted glass container.
- */
-@Composable
-private fun FloatingActionGridPanel(
-    actions: List<FooterAction>,
-    colors: DockColors,
-    backdrop: FrostedBackdrop?,
-    onActionClick: (FooterAction) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val shape = RoundedCornerShape(24.dp)
-    val scheme = MaterialTheme.colorScheme
-    val isDark = scheme.isDark
-    val panelColor = if (isDark) {
-        scheme.surfaceContainerHigh.copy(alpha = 0.88f)
-    } else {
-        scheme.surfaceContainerLowest.copy(alpha = 0.94f)
-    }
-
-    Surface(
-        shape = shape,
-        color = panelColor,
-        contentColor = scheme.onSurface,
-        shadowElevation = 10.dp,
-        border = BorderStroke(1.dp, colors.border),
-        modifier = modifier
-            .fillMaxWidth()
-            .widthIn(max = 380.dp)
-            .frostedGlass(backdrop, shape),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            val rows = actions.chunked(4)
-            for (row in rows) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    for (action in row) {
-                        ActionGridTile(
-                            action = action,
-                            colors = colors,
-                            modifier = Modifier.weight(1f),
-                            onClick = { onActionClick(action) },
-                        )
-                    }
-                    val remaining = 4 - row.size
-                    for (i in 0 until remaining) {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Individual action tile in the 4-column grid.
- * Rounded squircle icon tile with label underneath and tactile touch highlight feedback.
- */
-@Composable
-private fun ActionGridTile(
-    action: FooterAction,
-    colors: DockColors,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val haptics = rememberAppHaptics()
-    val scheme = MaterialTheme.colorScheme
-    val isDark = scheme.isDark
-
-    val tileBg = if (action.isPrimary) {
-        if (isDark) scheme.primaryContainer else scheme.primary
-    } else {
-        if (isDark) scheme.surfaceContainerHighest.copy(alpha = 0.65f) else scheme.secondaryContainer.copy(alpha = 0.65f)
-    }
-    val iconTint = if (action.isPrimary) {
-        if (isDark) scheme.onPrimaryContainer else scheme.onPrimary
-    } else {
-        if (isDark) scheme.onSurface else scheme.onSecondaryContainer
-    }
-    val labelColor = scheme.onSurface
-    val effectiveDescription = action.contentDescription ?: action.label
-
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true),
-            ) {
-                haptics.selection()
-                onClick()
-            }
-            .padding(vertical = 4.dp, horizontal = 2.dp)
-            .semantics {
-                role = Role.Button
-                this.contentDescription = effectiveDescription
-            },
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(tileBg),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = action.icon,
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(22.dp),
-            )
-        }
-
-        Text(
-            text = action.label,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Medium,
-            fontSize = 11.sp,
-            color = labelColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-        )
-    }
-}
-
-/**
- * Contextual action button inside the expanded More menu (legacy fallback).
- */
-@Composable
-private fun FooterActionPill(
-    action: FooterAction,
-    colors: DockColors,
-    backdrop: FrostedBackdrop?,
-    onClick: () -> Unit,
-) {
-    val haptics = rememberAppHaptics()
-    val pillColor = if (action.isPrimary) colors.container else colors.companionContainer
-    val contentColor = if (action.isPrimary) colors.content else colors.companionContent
-
-    Surface(
-        onClick = {
-            haptics.selection()
-            onClick()
-        },
-        shape = RoundedCornerShape(20.dp),
-        color = pillColor,
-        contentColor = contentColor,
-        shadowElevation = 6.dp,
-        border = BorderStroke(1.dp, colors.border),
-        modifier = Modifier
-            .defaultMinSize(minHeight = 48.dp)
-            .frostedGlass(backdrop, RoundedCornerShape(20.dp))
-            .semantics {
-                role = Role.Button
-                contentDescription = action.contentDescription ?: action.label
-            },
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Icon(
-                imageVector = action.icon,
-                contentDescription = null,
-                tint = contentColor,
-                modifier = Modifier.size(20.dp),
-            )
-            Text(
-                text = action.label,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = contentColor,
-            )
         }
     }
 }
@@ -704,11 +520,13 @@ fun FloatingNavCompanionItem(
     contentDescription: String = "Settings",
     isActionMenu: Boolean = false,
     isMoreOpen: Boolean = false,
+    /** The menu's progress when it has one: the "+" then turns on the menu's own clock, in step with the panel. */
+    menuProgress: (() -> Float)? = null,
 ) {
     val haptics = rememberAppHaptics()
     val tooltipState = rememberTooltipState()
 
-    val rotation by animateFloatAsState(
+    val ownRotation by animateFloatAsState(
         targetValue = if (isActionMenu && isMoreOpen) 135f else 0f,
         animationSpec = AppMotion.spatial(),
         label = "companion_rotation",
@@ -774,7 +592,7 @@ fun FloatingNavCompanionItem(
                     tint = contentColor,
                     modifier = Modifier
                         .size(24.dp)
-                        .graphicsLayer { rotationZ = rotation },
+                        .graphicsLayer { rotationZ = if (menuProgress != null) 135f * menuProgress() else ownRotation },
                 )
             }
         }
@@ -855,7 +673,9 @@ private fun FloatingNavItem(
                 contentDescription = destination.label
                 // "Plans & Transactions, selected, showing Plans": the pill's label is the view that is open.
                 if (selected && label != destination.label) stateDescription = "Showing $label"
-                if (showLabel) this[SemanticsProperties.Text] = listOf(AnnotatedString(destination.label))
+                // Only the open tab has a word on it (an icon alone is described, not "texted"): the label may be folding
+                // away this frame, and the tab must not keep saying it once it has.
+                if (selected && showLabel) this[SemanticsProperties.Text] = listOf(AnnotatedString(destination.label))
             },
         contentAlignment = Alignment.Center,
     ) {
