@@ -275,7 +275,7 @@ class AccountCardsTest {
         val button = compose.onNodeWithText("Add account").getUnclippedBoundsInRoot()
         assertTrue(button.top < heading.bottom + 24.dp && button.left > heading.right, "beside the heading: $heading, $button")
         compose.onNodeWithText("Add account").performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("Save account").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Slide to save account").fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

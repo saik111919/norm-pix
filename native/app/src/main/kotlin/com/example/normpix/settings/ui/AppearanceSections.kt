@@ -23,6 +23,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FileOpen
+import androidx.compose.material.icons.outlined.FontDownload
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.TextFields
@@ -71,7 +72,8 @@ import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.customFontFamily
 import com.example.normpix.ui.theme.gsFlexFamily
-import com.example.normpix.ui.theme.rememberCustomFontFile
+import com.example.normpix.ui.theme.nunitoFamily
+import com.example.normpix.ui.theme.rememberCustomFontFiles
 import kotlin.math.roundToInt
 
 /** How many app icons sit in a row: four, so each is big enough to judge, and the rows line up as a grid. */
@@ -170,6 +172,7 @@ internal fun AppIconArt(icon: AppIcon, modifier: Modifier = Modifier) {
 
 private val fontOptions = listOf(
     ChoiceOption(InterfaceFont.GsFlex, InterfaceFont.GsFlex.label, Icons.Outlined.TextFields),
+    ChoiceOption(InterfaceFont.Nunito, InterfaceFont.Nunito.label, Icons.Outlined.FontDownload),
     ChoiceOption(InterfaceFont.System, InterfaceFont.System.label, Icons.Outlined.Smartphone),
     ChoiceOption(InterfaceFont.Custom, InterfaceFont.Custom.label, Icons.Outlined.FileOpen),
 )
@@ -185,8 +188,9 @@ internal fun InterfaceFontCard(prefs: AppPrefsState, preferences: AppPreferences
     val flex = prefs.interfaceFont == InterfaceFont.GsFlex
     val own = prefs.interfaceFont == InterfaceFont.Custom
     // The user's font as the app draws with it (null when there is none that can be used), for the sample and the panel.
-    val ownFile = rememberCustomFontFile(prefs.interfaceFont, prefs.customFontRevision)
-    val ownFamily = remember(ownFile) { ownFile?.let(::customFontFamily) }
+    val ownFiles = rememberCustomFontFiles(prefs.interfaceFont, prefs.customFontRevision)
+    val ownFile = ownFiles?.file
+    val ownFamily = remember(ownFiles) { ownFiles?.let { customFontFamily(it.file, it.faces) } }
     // While a slider is dragged only the sample follows it; the app takes the value once the slider is let go.
     var weight by remember(prefs.fontWeightShift) { mutableFloatStateOf(prefs.fontWeightShift.toFloat()) }
     var width by remember(prefs.fontWidth) { mutableFloatStateOf(prefs.fontWidth.toFloat()) }
@@ -212,11 +216,17 @@ internal fun InterfaceFontCard(prefs: AppPrefsState, preferences: AppPreferences
         )
         RevealVisibility(visible = own) {
             Column {
-                CustomFontPanel(prefs, ownFile, custom)
+                CustomFontPanel(prefs, ownFile, custom, detail = remember(ownFiles) { CustomFont.describe(context) })
                 if (ownFamily != null) {
                     Spacer(Modifier.height(AppSpacing.md))
                     FontSample(ownFamily)
                 }
+            }
+        }
+        RevealVisibility(visible = prefs.interfaceFont == InterfaceFont.Nunito) {
+            Column {
+                Spacer(Modifier.height(AppSpacing.md))
+                FontSample(remember { nunitoFamily() })
             }
         }
         RevealVisibility(visible = flex) {

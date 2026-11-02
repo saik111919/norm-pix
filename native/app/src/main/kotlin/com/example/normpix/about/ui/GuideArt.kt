@@ -1,5 +1,6 @@
 package com.example.normpix.about.ui
 
+import android.content.Context
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -55,6 +56,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
@@ -69,26 +71,91 @@ import com.example.normpix.about.GuideTopic
 import com.example.normpix.finance.ui.paletteColor
 import com.example.normpix.settings.AccentColor
 import com.example.normpix.settings.ui.SwatchCircle
+import com.example.normpix.ui.components.AssetImage
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppTheme
 import com.example.normpix.ui.theme.isDark
+
+/**
+ * The screenshots of the app the Feature guide shows (`assets/guide/<topic>-light.webp` and `-dark.webp`), made from the real screens
+ * on the sample data by the `GuideScreenshots` test (`-Pguideshots=<this folder>`, see it): run it again when a screen changes. A topic
+ * without one keeps its drawing.
+ */
+internal object GuideShots {
+    private const val DIR = "guide"
+
+    /** The part of the screen shown: its width over its height (411 x 452 dp of the phone's 411 x 891). */
+    const val ASPECT = 200f / 220f
+
+    @Volatile
+    private var files: Set<String>? = null
+
+    /** The screenshot of [topic] for a [dark] or light app, or null when there is none. */
+    fun path(context: Context, topic: GuideTopic, dark: Boolean): String? {
+        val all = files ?: (runCatching { context.assets.list(DIR)?.toSet() }.getOrNull() ?: emptySet()).also { files = it }
+        val name = "${fileName(topic)}-${if (dark) "dark" else "light"}.webp"
+        return if (name in all) "$DIR/$name" else null
+    }
+
+    /** The name a topic's screenshots are kept under: its name in lowercase, words joined by "_" (AddTransaction -> add_transaction). */
+    fun fileName(topic: GuideTopic): String = topic.name.replace(Regex("(?<=[a-z])(?=[A-Z])"), "_").lowercase()
+}
+
+/**
+ * A screenshot shown as a phone's screen rising out of the topic's color: centered, its top a little below the picture's and its foot
+ * running off the bottom, with rounded top corners and a hairline so a light screen stands off a light color.
+ */
+@Composable
+private fun GuideShot(path: String, background: Color, modifier: Modifier = Modifier, shape: Shape = AppRadius.rXl) {
+    val outline = MaterialTheme.colorScheme.outlineVariant
+    BoxWithConstraints(
+        modifier
+            .fillMaxWidth()
+            .aspectRatio(ART_WIDTH / ART_HEIGHT)
+            .clip(shape)
+            .background(background)
+            .clearAndSetSemantics {},
+    ) {
+        val corner = maxWidth * 0.045f
+        val screen = RoundedCornerShape(topStart = corner, topEnd = corner)
+        AssetImage(
+            path,
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth(SHOT_WIDTH)
+                .aspectRatio(GuideShots.ASPECT)
+                .clip(screen)
+                .border(1.dp, outline, screen),
+        )
+    }
+}
+
+/** How much of the picture's width the screenshot takes: with [GuideShots.ASPECT] its top sits a twelfth of the way down. */
+private const val SHOT_WIDTH = 0.625f
 
 /** The size every picture is drawn at; it is then scaled to the room it has (see [GuideArt]). */
 private val ART_WIDTH = 320.dp
 private val ART_HEIGHT = 240.dp
 
 /**
- * The picture of a guide topic: a small drawing of the screen or the thing the topic is about, on the topic's color, in the colors
- * the app is wearing - so it follows the theme (light, dark, Pure, the wallpaper's colors) and the interface font, and is never out
- * of date the way a screenshot would be.
+ * The picture of a guide topic, on the topic's color: a **screenshot of the app itself** ([GuideShots]) where there is one - the owner
+ * asked for real pictures of the app (2026-11-01) - in light or dark as the app is; otherwise a small drawing of the screen or the
+ * thing the topic is about, in the colors the app is wearing.
  *
- * It is drawn at one fixed size and scaled to the width it is given, so a card on the About page and the picture at the head of a
- * topic are the same drawing. Text in it ignores the font size the user chose, for the same reason: it is a picture, not a page.
- * It is inert and hidden from screen readers; the words around it say everything it shows.
+ * Either is laid out at one fixed size and scaled to the width it is given, so a card in the Feature guide and the picture at the
+ * head of a topic are the same picture. Text in a drawing ignores the font size the user chose, for the same reason: it is a picture,
+ * not a page. It is inert and hidden from screen readers; the words around it say everything it shows.
  */
 @Composable
 internal fun GuideArt(topic: GuideTopic, modifier: Modifier = Modifier, shape: Shape = AppRadius.rXl) {
     val tone = paletteColor(topic.hue)
+    val dark = MaterialTheme.colorScheme.isDark
+    val context = LocalContext.current
+    val shot = remember(topic, dark) { GuideShots.path(context, topic, dark) }
+    if (shot != null) {
+        GuideShot(shot, tone.container, modifier, shape)
+        return
+    }
     val density = LocalDensity.current
     BoxWithConstraints(
         modifier

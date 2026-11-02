@@ -4,7 +4,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -21,9 +20,9 @@ class ActionMenuLayoutTest {
 
     private fun small(vararg ids: String) = ids.map { ArrangedAction(action(it), ActionTileSize.Small) }
 
-    /** Every cell a plan covers, as (row, col) pairs, hero and button included. */
+    /** Every cell a plan covers, as (row, col) pairs, hero included. */
     private fun cells(plan: BentoPlan): List<Pair<Int, Int>> =
-        (plan.tiles + listOfNotNull(plan.trailing)).flatMap { s ->
+        plan.tiles.flatMap { s ->
             (0 until s.rowSpan).flatMap { r -> (0 until s.colSpan).map { c -> (s.row + r) to (s.col + c) } }
         }
 
@@ -34,86 +33,87 @@ class ActionMenuLayoutTest {
     }
 
     @Test
-    fun the_default_packs_exactly_as_the_design_with_the_edit_button_in_the_free_corner() {
-        val plan = bentoPlan(arranged(ActionMenuLayout.Default), withEditButton = true)
-        assertEquals(3, plan.rows)
-        assertEquals(BentoSlot(0, 0, 3, 1, BentoShape.Hero), plan.tiles[0])
-        assertEquals(BentoSlot(0, 1, 1, 2, BentoShape.Wide), plan.tiles[1])
-        assertEquals(BentoSlot(0, 3, 1, 1, BentoShape.Squircle), plan.tiles[2])
-        assertEquals(BentoSlot(0, 4, 1, 1, BentoShape.Circle), plan.tiles[3]) // Reminder
-        assertEquals(BentoSlot(1, 4, 1, 1, BentoShape.Circle), plan.tiles[7]) // Budgets
-        assertEquals(BentoSlot(2, 3, 1, 1, BentoShape.Squircle), plan.tiles[10]) // Settings
-        assertEquals(BentoSlot(2, 4, 1, 1, BentoShape.Circle), plan.trailing)
-        // Every cell of the 5 x 3 grid is covered once: nothing is left over, nothing overlaps.
+    fun the_default_packs_exactly_as_the_design_and_ends_with_its_last_tile() {
+        val plan = bentoPlan(arranged(ActionMenuLayout.Default))
+        assertEquals(4, plan.rows)
+        // The two main actions are capsules side by side on the top row.
+        assertEquals(BentoSlot(0, 0, 1, 2, BentoShape.Hero), plan.tiles[0])
+        assertEquals(BentoSlot(0, 2, 1, 2, BentoShape.Wide), plan.tiles[1])
+        // Then every other action is the same squircle, four to a row.
+        assertEquals(BentoSlot(1, 0, 1, 1, BentoShape.Squircle), plan.tiles[2]) // Recurring
+        assertEquals(BentoSlot(1, 1, 1, 1, BentoShape.Squircle), plan.tiles[3]) // Reminder
+        assertEquals(BentoSlot(2, 1, 1, 1, BentoShape.Squircle), plan.tiles[7]) // Budgets
+        assertEquals(BentoSlot(3, 0, 1, 1, BentoShape.Squircle), plan.tiles[10]) // Settings
+        assertTrue("no mix of shapes among the small tiles", plan.tiles.drop(2).all { it.shape == BentoShape.Squircle })
+        // 13 of the 16 cells of the 4 x 4 grid are covered once: nothing overlaps, and no cell is kept for a button.
         val covered = cells(plan)
-        assertEquals(15, covered.size)
-        assertEquals(15, covered.toSet().size)
-        assertTrue(covered.all { (r, c) -> r in 0..2 && c in 0..4 })
+        assertEquals(13, covered.size)
+        assertEquals(13, covered.toSet().size)
+        assertTrue(covered.all { (r, c) -> r in 0..3 && c in 0..3 })
     }
 
     @Test
-    fun without_the_edit_button_the_free_corner_is_empty() {
-        val plan = bentoPlan(arranged(ActionMenuLayout.Default), withEditButton = false)
-        assertNull(plan.trailing)
-        val free = (0..2).flatMap { r -> (0..4).map { c -> r to c } } - cells(plan).toSet()
-        assertEquals(listOf(2 to 4), free)
+    fun the_last_row_has_room_left_where_the_edit_button_used_to_be() {
+        val plan = bentoPlan(arranged(ActionMenuLayout.Default))
+        val free = (0..3).flatMap { r -> (0..3).map { c -> r to c } } - cells(plan).toSet()
+        assertEquals(listOf(3 to 1, 3 to 2, 3 to 3), free)
     }
 
     @Test
     fun a_wide_tile_that_does_not_fit_the_row_starts_the_next_one_and_leaves_a_hole() {
-        // Featured, then three small ones fill columns 1-3; the wide one needs two cells and only column 4 is left.
-        val tiles = small("a", "b", "c", "d") + ArrangedAction(action("e"), ActionTileSize.Wide)
-        val plan = bentoPlan(tiles, withEditButton = false)
-        assertEquals(BentoSlot(1, 1, 1, 2, BentoShape.Wide), plan.tiles[4])
-        assertEquals(2, plan.rows)
-        assertTrue((0 to 4) !in cells(plan))
+        // Featured and two small ones fill the top row, three small ones take the second row's first columns; the wide one needs two
+        // cells and only the last is left, so it starts the next row.
+        val tiles = small("a", "b", "c", "d", "e", "f") + ArrangedAction(action("g"), ActionTileSize.Wide)
+        val plan = bentoPlan(tiles)
+        assertEquals(BentoSlot(2, 0, 1, 2, BentoShape.Wide), plan.tiles[6])
+        assertEquals(3, plan.rows)
+        assertTrue((1 to 3) !in cells(plan))
     }
 
     @Test
-    fun two_wide_tiles_share_a_row_and_the_next_small_one_goes_below() {
+    fun a_second_wide_tile_goes_below_the_top_row_and_the_next_small_one_follows_it() {
         val tiles = small("a") + listOf("b", "c").map { ArrangedAction(action(it), ActionTileSize.Wide) } + small("d")
-        val plan = bentoPlan(tiles, withEditButton = false)
-        assertEquals(BentoSlot(0, 1, 1, 2, BentoShape.Wide), plan.tiles[1])
-        assertEquals(BentoSlot(0, 3, 1, 2, BentoShape.Wide), plan.tiles[2])
-        assertEquals(BentoSlot(1, 1, 1, 1, BentoShape.Squircle), plan.tiles[3])
+        val plan = bentoPlan(tiles)
+        assertEquals(BentoSlot(0, 2, 1, 2, BentoShape.Wide), plan.tiles[1])
+        assertEquals(BentoSlot(1, 0, 1, 2, BentoShape.Wide), plan.tiles[2])
+        assertEquals(BentoSlot(1, 2, 1, 1, BentoShape.Squircle), plan.tiles[3])
         assertEquals(2, plan.rows)
-        assertEquals(2, plan.tiles[0].rowSpan)
+        assertEquals("the featured tile is one row tall", 1, plan.tiles[0].rowSpan)
     }
 
     @Test
-    fun the_featured_tile_is_tall_whatever_it_is_and_whatever_size_it_was() {
+    fun the_featured_tile_is_the_wide_capsule_whatever_it_is_and_whatever_size_it_was() {
         val layout = ActionMenuLayout.Default.moved("income", 0)
-        val plan = bentoPlan(arranged(layout), withEditButton = true)
+        val plan = bentoPlan(arranged(layout))
         assertEquals("income", arranged(layout)[0].action.id)
         assertEquals(BentoShape.Hero, plan.tiles[0].shape)
-        assertEquals(1, plan.tiles[0].colSpan)
-        assertEquals(plan.rows, plan.tiles[0].rowSpan)
-        // Expense, pushed down, is an ordinary small tile now.
-        assertEquals(BentoShape.Squircle, plan.tiles[1].shape)
+        assertEquals(FeaturedSpan, plan.tiles[0].colSpan)
+        assertEquals(1, plan.tiles[0].rowSpan)
+        // Expense, pushed down, is an ordinary small tile now, beside the capsule.
+        assertEquals(BentoSlot(0, 2, 1, 1, BentoShape.Squircle), plan.tiles[1])
     }
 
     @Test
-    fun a_grid_of_one_has_one_row_and_the_button_goes_beside_it() {
-        val plan = bentoPlan(small("expense"), withEditButton = true)
+    fun a_grid_of_one_has_one_row() {
+        val plan = bentoPlan(small("expense"))
         assertEquals(1, plan.rows)
-        assertEquals(BentoSlot(0, 0, 1, 1, BentoShape.Hero), plan.tiles[0])
-        assertEquals(BentoSlot(0, 1, 1, 1, BentoShape.Circle), plan.trailing)
-        assertEquals(1, bentoPlan(small("expense"), withEditButton = false).rows)
+        assertEquals(BentoSlot(0, 0, 1, 2, BentoShape.Hero), plan.tiles[0])
     }
 
     @Test
-    fun a_full_last_row_pushes_the_edit_button_onto_a_new_one() {
-        // Featured + 8 small tiles fill two rows of four; the button starts the third.
-        val plan = bentoPlan(small("a", "b", "c", "d", "e", "f", "g", "h", "i"), withEditButton = true)
-        assertEquals(BentoSlot(2, 1, 1, 1, BentoShape.Circle), plan.trailing)
+    fun a_full_last_row_does_not_get_an_extra_row_for_a_button() {
+        // Featured and two small tiles fill the top row, then two rows of four: the grid ends there, three rows.
+        val plan = bentoPlan(small("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"))
         assertEquals(3, plan.rows)
+        assertEquals(BentoSlot(2, 3, 1, 1, BentoShape.Squircle), plan.tiles[10])
     }
 
     @Test
     fun a_tile_nearer_the_plus_button_arrives_before_one_further_away() {
-        val plan = bentoPlan(arranged(ActionMenuLayout.Default), withEditButton = true)
-        assertEquals(0, plan.trailing!!.arrivalRank(plan.rows)) // the corner the "+" button is under
-        assertEquals(1, plan.tiles[10].arrivalRank(plan.rows)) // Settings
+        val plan = bentoPlan(arranged(ActionMenuLayout.Default))
+        // The "+" button is under the bottom-right corner: Settings starts the bottom row, three cells from it; the featured
+        // capsule at the far corner is the last to arrive.
+        assertEquals(3, plan.tiles[10].arrivalRank(plan.rows)) // Settings
         assertEquals(plan.tiles.maxOf { it.arrivalRank(plan.rows) }, plan.tiles[0].arrivalRank(plan.rows))
     }
 

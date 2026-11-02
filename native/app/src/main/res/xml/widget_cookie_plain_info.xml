@@ -6,7 +6,7 @@
     android:description="@string/widget_cookie_plain_description"
     android:initialLayout="@layout/widget_cookie_plain"
     android:maxResizeHeight="280dp"
-    android:maxResizeWidth="280dp"
+    android:maxResizeWidth="1200dp"
     android:minHeight="110dp"
     android:minResizeHeight="40dp"
     android:minResizeWidth="40dp"

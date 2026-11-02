@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
@@ -101,13 +102,14 @@ class DeckCardSpace(val width: Dp, val underlap: Dp)
 /** Neighbouring cards' centres are this far apart, in card widths: far enough that each shows from behind the one in front of it. */
 private const val STEP_SHARE = 0.52f
 
-/** A card a whole step away is turned this many degrees about the upright, drawn this size, and shaded this much; farther ones stay so. */
-private const val SIDE_ANGLE = 46f
-private const val SIDE_SCALE = 0.82f
-private const val SIDE_SHADE = 0.45f
-
-/** The details turn, slide and fade as the cards do, only less: a step away they are turned this many degrees and gone before it. */
-private const val DETAILS_ANGLE = 22f
+/**
+ * A card a whole step away is drawn this size and shaded this much; farther ones stay so. The cards are flat: they are not turned
+ * away (an earlier design fanned them 46 degrees about the upright, which read as a trick rather than as a row of cards), so what
+ * says which is in front is its size, its light and what covers what - as in Material's own carousels, where the ones beside the
+ * large item are the same shape, smaller, showing 40 to 56 dp of themselves at the edge.
+ */
+private const val SIDE_SCALE = 0.9f
+private const val SIDE_SHADE = 0.32f
 
 /** The panel under the cards is drawn this far over their lower edge, so they stand in it. The card's own print stays clear of it. */
 private val PocketOverlap = 10.dp
@@ -126,20 +128,20 @@ val DeckMarkerInset = AppSpacing.x5l + AppSpacing.lg
  * and of its accounts. It holds the look and the motion; what a card shows, what its details say and what the controls
  * at the panel's foot are come from the caller.
  *
- * The cards are fanned like a deck seen in perspective: the one in front faces you, those either side are turned away about
- * the upright, smaller and shaded, each tucked partly behind the next, all standing on the same line - the top of the panel.
- * Swipe to change card (one at a time), or tap one at the side to bring it forward.
+ * The cards are a flat row, overlapping: the one in front is whole, those either side are smaller and shaded, each tucked partly
+ * behind the next and showing about 44 dp of itself, all standing on the same line - the top of the panel. Swipe to change card
+ * (one at a time, snapping on Material's default spatial spring), or tap one at the side to bring it forward.
  *
  * The panel holds the front card's [details] on a surface washed with its [tint], with [footer] under them. It moves with the
  * cards: as you swipe, the details of the card leaving slide away, turning and fading, those of the card arriving take their
  * place, and the panel's colour runs from one card's to the next's. All of it follows the finger, not a timer. With animations
- * off in system settings the cards are still turned to show depth but the details only cross-fade.
+ * off in system settings the cards still differ in size and shade to show depth but the details only cross-fade.
  *
  * The details of every card must be the same height (the same rows), so the panel does not change size mid-swipe; the first
  * line of them keeps clear of the page marker with `Modifier.padding(end = DeckMarkerInset)`.
  *
  * @param card one card's face, drawn at the card's full size; [inFront] says whether it is the one in front, and the
- *   [DeckCardSpace] where it is drawn (how wide, how much of its foot the panel covers). It is turned and shaded by the deck,
+ *   [DeckCardSpace] where it is drawn (how wide, how much of its foot the panel covers). It is scaled and shaded by the deck,
  *   and is not pressable at the side: a tap there brings the card forward.
  * @param sideDescription how a screen reader hears a card that is not in front: it has one action, to bring it forward.
  * @param footer the controls under the details - the same set for every card, so they stay still and act on [front].
@@ -158,6 +160,7 @@ fun <T : Any> DeckCarousel(
 ) {
     if (items.isEmpty()) return
     val pagerState = rememberPagerState(pageCount = { items.size })
+    val snapSpec = AppMotion.spatial<Float>()
     val haptics = rememberAppHaptics()
     val scope = rememberCoroutineScope()
     val reduced = rememberReducedMotion()
@@ -189,10 +192,14 @@ fun <T : Any> DeckCarousel(
                     contentPadding = PaddingValues(start = sidePadding, end = sidePadding, top = AppSpacing.sm),
                     // A page is one step wide and its card is wider, so the cards overlap: each is centred on its page.
                     pageSize = PageSize.Fixed(step),
+                    // Settles on Material's default spatial spring (a hint of overshoot), as the rest of the app's movement does.
+                    flingBehavior = PagerDefaults.flingBehavior(state = pagerState, snapAnimationSpec = snapSpec),
                     beyondViewportPageCount = 1,
-                    key = { itemKey(items[it]) },
+                    // The pager asks by place in the list, and for a moment after the list has got shorter (a card deleted, the
+                    // accounts read again) that place can be past its end: a place with no item has no key and nothing to draw.
+                    key = { index -> items.getOrNull(index)?.let(itemKey) ?: index },
                 ) { page ->
-                    val item = items[page]
+                    val item = items.getOrNull(page) ?: return@HorizontalPager
                     val inFront = page == pagerState.currentPage
                     fun bringForward() {
                         scope.launch { pagerState.animateScrollToPage(page) }
@@ -206,10 +213,8 @@ fun <T : Any> DeckCarousel(
                                 // Positive for a card to the right of the one in front, negative to the left.
                                 val away = (page - position.value).coerceIn(-1.5f, 1.5f)
                                 val near = abs(away).coerceAtMost(1f)
-                                cameraDistance = 12f * density
-                                // Everything turns about the bottom edge's middle: the cards all keep standing on the panel.
+                                // Everything scales about the bottom edge's middle: the cards all keep standing on the panel.
                                 transformOrigin = TransformOrigin(0.5f, 1f)
-                                rotationY = -away * SIDE_ANGLE
                                 val scale = 1f - (1f - SIDE_SCALE) * near
                                 scaleX = scale
                                 scaleY = scale
@@ -242,7 +247,7 @@ fun <T : Any> DeckCarousel(
                         card(item, inFront, space)
                         if (!inFront) {
                             // A card at the side is a way to it, not a card to press: a tap brings it to the front. It has no ripple
-                            // (it is turned and shaded), so keyboard focus is shown by a ring.
+                            // (it is smaller and shaded), so keyboard focus is shown by a ring.
                             val source = remember { MutableInteractionSource() }
                             Box(
                                 Modifier
@@ -344,8 +349,8 @@ private fun <T : Any> PocketPanel(
 
 /**
  * What one card holds, as text on the panel. [index] is its place in the deck: while the carousel is between two cards the
- * panel shows both, each by how far it is from the front - sliding in from the side it comes from, turning about the upright
- * the way its card does, and fading, so it is gone before it is a whole step away.
+ * panel shows both, each by how far it is from the front - sliding in from the side it comes from, a little smaller, and
+ * fading, so it is gone before it is a whole step away.
  */
 @Composable
 private fun DetailsLayer(
@@ -363,9 +368,7 @@ private fun DetailsLayer(
                 val near = abs(away).coerceAtMost(1f)
                 alpha = (1f - near * 1.6f).coerceIn(0f, 1f)
                 if (!reduced) {
-                    cameraDistance = 12f * density
                     translationX = away * size.width * 0.45f
-                    rotationY = -away * DETAILS_ANGLE
                     val scale = 1f - 0.06f * near
                     scaleX = scale
                     scaleY = scale

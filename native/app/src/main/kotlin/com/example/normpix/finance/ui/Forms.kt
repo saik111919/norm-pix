@@ -70,6 +70,7 @@ import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.StatusColorRole
 import com.example.normpix.wallet.CardsState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import kotlin.math.abs
@@ -187,6 +188,10 @@ fun CategoryFormSheet(
                 error = e.message
             } catch (e: FinanceConflictException) {
                 error = e.message
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                error = "Couldn't save the category. Nothing was changed."
             } finally {
                 saving = false
             }
@@ -413,6 +418,8 @@ fun AccountFormSheet(
     }
     var nameError by remember { mutableStateOf<String?>(null) }
     var amountError by remember { mutableStateOf<String?>(null) }
+    // Whatever the save itself said no to (a rule of the ledger, or a failure): shown above Save, where it cannot be scrolled past.
+    var formError by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
 
@@ -540,6 +547,7 @@ fun AccountFormSheet(
                 )
             }
             saving = true
+            formError = null
             scope.launch {
                 try {
                     val saved = controller.saveAccount(draft)
@@ -550,7 +558,12 @@ fun AccountFormSheet(
                     haptics.success()
                     onDone(saved)
                 } catch (e: FinanceValidationException) {
-                    nameError = e.message
+                    formError = e.message
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // Any other failure (the database, say) is said here; uncaught in this scope it would close the whole app.
+                    formError = "Couldn't save the account. Nothing was changed."
                 } finally {
                     saving = false
                 }
@@ -564,6 +577,8 @@ fun AccountFormSheet(
         onSave = { save() },
         subtitle = "Cash, a bank account, a card, or a wallet app",
         saving = saving,
+        errorText = formError,
+        slideToSave = true,
     ) {
         OutlinedTextField(
             value = name,

@@ -59,6 +59,7 @@ import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.wallet.CardsState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
@@ -203,6 +204,72 @@ fun BankSelector(
 }
 
 /**
+ * Renames a bank the user added (a bottom sheet). Every account and card that uses it follows the new name, since they point at
+ * its key. Calls [onDone] with true once renamed, or null if cancelled. A name that is another bank's is refused with a line
+ * saying whose it is.
+ */
+@Composable
+fun BankRenameSheet(bank: Bank, onDone: (Boolean?) -> Unit) {
+    val controller = LocalFinance.current
+    val finance = rememberFinanceState()
+    val haptics = rememberAppHaptics()
+    val scope = rememberCoroutineScope()
+    var name by remember { mutableStateOf(bank.name) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+
+    val takenBy = finance.catalog.exact(name)?.takeIf { it.key != bank.key }
+    DiscardChangesGuard(dirty = name != bank.name, saving = saving, isEditing = true, keptMessage = "The bank keeps its name.")
+
+    fun save() {
+        saving = true
+        error = null
+        scope.launch {
+            try {
+                controller.renameBank(bank.key, name)
+                haptics.success()
+                onDone(true)
+            } catch (e: FinanceValidationException) {
+                error = e.message
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                error = "Couldn't rename the bank. Nothing was changed."
+            } finally {
+                saving = false
+            }
+        }
+    }
+
+    EditorSheet(
+        title = "Rename bank",
+        subtitle = "Your accounts and cards that use it follow",
+        saveLabel = "Rename",
+        onSave = ::save,
+        saving = saving,
+    ) {
+        OutlinedTextField(
+            value = name,
+            onValueChange = {
+                name = it
+                error = null
+            },
+            modifier = Modifier.fillMaxWidth().focusRequester(focus),
+            label = { Text("Bank name") },
+            isError = error != null || takenBy != null,
+            supportingText = (error ?: takenBy?.let { "${it.name} is already in your list." })?.let { { Text(it) } },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
+            colors = typedFieldColors(),
+            shape = TonalFieldShape,
+        )
+        Spacer(Modifier.height(AppSpacing.sm))
+    }
+}
+
+/**
  * Adds a bank (shown in a bottom sheet over the form that asked). Calls [onDone] with the bank's key, or null if
  * cancelled. A name the app already knows ("hdfc bank ltd") is not added again: that bank is used, and the sheet says so.
  */
@@ -231,6 +298,10 @@ fun BankFormSheet(initialName: String, onDone: (String?) -> Unit) {
                 onDone(key)
             } catch (e: FinanceValidationException) {
                 error = e.message
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                error = "Couldn't add the bank. Nothing was changed."
             } finally {
                 saving = false
             }

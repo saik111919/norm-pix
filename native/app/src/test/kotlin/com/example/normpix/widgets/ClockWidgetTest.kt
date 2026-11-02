@@ -32,6 +32,9 @@ class ClockWidgetTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val density get() = context.resources.displayMetrics.density
 
+    /** The margin the dial keeps between its face and the widget's edge on every side (ClockWidget's INSET_DP), so the face is that much smaller than the widget. */
+    private val MARGIN_DP = 6f
+
     private fun options(width: Int, height: Int) = Bundle().apply {
         putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, width)
         putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, width)
@@ -69,7 +72,7 @@ class ClockWidgetTest {
     fun `the text is sized with the face and the minute moved into its pill`() {
         for (size in listOf(110, 160, 200, 280)) {
             val root = shown(ClockWidget.views(context, options(size, size)))
-            val face = ClockFace(size.toFloat(), size.toFloat())
+            val face = ClockFace(size - 2 * MARGIN_DP, size - 2 * MARGIN_DP)
             assertEquals(face.hourTextDp, root.findViewById<TextClock>(R.id.widget_clock_hour).textSize / density, 0.5f, "hour at $size")
             assertEquals(face.minuteTextDp, root.findViewById<TextClock>(R.id.widget_clock_minute).textSize / density, 0.5f, "minute at $size")
             val box = root.findViewById<View>(R.id.widget_clock_minute_box)
@@ -98,7 +101,7 @@ class ClockWidgetTest {
     @Test
     fun `the preview is the widget at the size it is previewed at`() {
         val root = shown(ClockWidget.preview(context, 168f))
-        val face = ClockFace(168f, 168f)
+        val face = ClockFace(168f - 2 * MARGIN_DP, 168f - 2 * MARGIN_DP)
         assertEquals(face.hourTextDp, root.findViewById<TextClock>(R.id.widget_clock_hour).textSize / density, 0.5f)
         assertNotNull((root.findViewById<ImageView>(R.id.widget_clock_rings).drawable as? BitmapDrawable)?.bitmap)
     }

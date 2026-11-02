@@ -107,30 +107,40 @@ class HeroSlot internal constructor(val shape: Shape, val modifier: Modifier)
 
 /**
  * The hero group: [content] on the main card (tappable when [onClick] is set - Home opens Insights from it), then the
- * [tiles] side by side under it - or, where large text could not fit them across, one above another.
+ * [tiles] side by side under it - or, where large text could not fit them across, one above another. With a [weather] (Home's)
+ * the main card wears it behind its content ([heroWeather]), moving while it can be seen (see [rememberHeroWeatherClock]).
  */
 @Composable
 fun Hero(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     tiles: List<@Composable (HeroSlot) -> Unit> = emptyList(),
+    weather: HeroWeather? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val clock = if (weather != null) rememberHeroWeatherClock() else null
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(GroupGap)) {
         HeroSurface(
             color = scheme.primary,
             contentColor = scheme.onPrimary,
             shape = heroMainShape(tiles.isNotEmpty()),
             onClick = onClick,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().then(clock?.positioned ?: Modifier),
         ) {
+            val weatherLayer = if (weather != null && clock != null && clock.shown) {
+                Modifier.heroWeather(weather, scheme.onPrimary) { clock.time.value }
+            } else {
+                Modifier
+            }
             Column(
                 Modifier
                     .heroDecoration(scheme.onPrimary.copy(alpha = 0.08f))
+                    .then(weatherLayer)
                     .padding(start = AppSpacing.xxl, top = AppSpacing.xxl, end = AppSpacing.xxl, bottom = AppSpacing.xl),
-                content = content,
-            )
+            ) {
+                Column(Modifier.heatHaze(weather == HeroWeather.Heat && clock?.running == true) { clock?.time?.value ?: 0f }, content = content)
+            }
         }
         if (tiles.isEmpty()) return@Column
         if (LocalDensity.current.fontScale > HERO_STATS_STACK_SCALE) {

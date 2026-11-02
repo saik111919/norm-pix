@@ -121,7 +121,7 @@ import com.example.normpix.wallet.AccountCardView
 import com.example.normpix.wallet.AccountStack
 import com.example.normpix.wallet.CardKind
 import com.example.normpix.wallet.CardCarousel
-import com.example.normpix.wallet.CardStack
+import com.example.normpix.wallet.CardFolderStack
 import com.example.normpix.wallet.CardsState
 import com.example.normpix.wallet.WalletCardView
 import com.example.normpix.wallet.expiry.CardExpiryNotice
@@ -385,7 +385,8 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                             if (prefs.cardsLayout == CardsLayout.Stack) {
                                 block("cards-stack") {
                                     Column(Modifier.padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg)) {
-                                        CardStack(cards = visible, onOpen = flows::showCard, state = cardsDeck, bankIconStyle = prefs.bankIconStyle)
+                                        // Filed one behind another, each showing its strip (since 2026-11-02; Home keeps the older stack).
+                                        CardFolderStack(cards = visible, onOpen = flows::showCard, bankIconStyle = prefs.bankIconStyle)
                                     }
                                 }
                             } else if (prefs.cardsLayout == CardsLayout.Carousel) {

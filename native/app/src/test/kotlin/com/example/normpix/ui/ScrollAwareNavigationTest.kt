@@ -96,8 +96,10 @@ class ScrollAwareNavigationTest {
         compose.setContent { NormPixRoot(container = container) }
         compose.waitUntil(timeoutMillis = 15_000) { compose.onAllNodesWithText("Spent in", substring = true).fetchSemanticsNodes().isNotEmpty() }
         // "Spent in ..." is also there before the sample data has loaded, when Home is too short to scroll and the bar
-        // rightly stays put. Wait for the figures to fill in (nothing reads zero any more) before reading down the page.
-        compose.waitUntil(timeoutMillis = 15_000) { compose.onAllNodesWithText("₹0.00").fetchSemanticsNodes().isEmpty() }
+        // rightly stays put. Wait for the sample data to be there before reading down the page: Home has stopped offering to
+        // "Record your first expense". (Not for the figures to stop reading zero: on the first day of a month nothing has been
+        // spent yet in the sample set, so they honestly read zero all day.)
+        compose.waitUntil(timeoutMillis = 15_000) { compose.onAllNodesWithText("Record your first expense").fetchSemanticsNodes().isEmpty() }
         compose.waitForIdle()
         navItem("Home").assertIsDisplayed()
         // Reading down the page: the bar gets out of the way.

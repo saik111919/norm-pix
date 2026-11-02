@@ -1,5 +1,6 @@
 package com.example.normpix.settings.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,24 +10,33 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Done
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +45,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -44,6 +56,9 @@ import androidx.compose.ui.unit.dp
 import com.example.normpix.banks.Bank
 import com.example.normpix.banks.ui.BankBadge
 import com.example.normpix.banks.ui.BankFormSheet
+import com.example.normpix.banks.ui.BankRenameSheet
+import com.example.normpix.finance.domain.FinanceValidationException
+import com.example.normpix.finance.ui.LocalFinance
 import com.example.normpix.finance.ui.rememberFinanceState
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
@@ -53,15 +68,21 @@ import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.LocalOverlays
+import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.SearchField
 import com.example.normpix.ui.components.SectionSubheader
+import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.components.rememberBottomControls
 import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.wallet.BankCategory
 import com.example.normpix.wallet.CardsState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+
+/** The list item holding the search field, found by this key to tell whether the field is on screen. */
+private const val SEARCH_ITEM_KEY = "search"
 
 /** How many of the user's accounts and saved cards belong to one bank. */
 internal data class BankUsage(val accounts: Int, val cards: Int) {
@@ -124,19 +145,28 @@ internal fun bankGroups(matching: List<Bank>, filter: BankFilter, used: Map<Stri
     }
 }
 
+/** Settings > Banks & Categories, opened on Banks: the legacy page name kept as a shell. */
+@Composable
+fun BanksSettingsPage() = BanksAndCategoriesPage(BanksAndCategoriesTab.Banks)
+
 /**
- * Settings > Banks: every bank NormPix knows, each with its logo - the built-in directory of India's banks (public sector,
- * private, small finance, payments, digital & neobanks, foreign, co-operative, regional rural, and the earlier names of banks
- * that merged) and the banks you added. A search finds one by any name it goes by, the chips narrow the list to a kind of
- * bank (or to those in use), and a bank that isn't there can be added from here, to be used by accounts and cards like any other.
+ * The Banks side of Settings > Banks & Categories: every bank NormPix knows, each with its logo - the built-in directory of
+ * India's banks (public sector, private, small finance, payments, digital & neobanks, foreign, co-operative, regional rural,
+ * and the earlier names of banks that merged) and the banks you added. A search finds one by any name it goes by, the chips
+ * narrow the list to a kind of bank (or to those in use), and a bank that isn't there can be added from here, to be used by
+ * accounts and cards like any other.
+ *
+ * [tabBar] is the page's own switch between its two sides, at the top of the list; the page around it is [BanksAndCategoriesPage].
  */
 @Composable
-fun BanksSettingsPage() {
+fun BanksContent(title: String, tabBar: @Composable () -> Unit) {
     val navigator = LocalNavigator.current
     val finance = rememberFinanceState()
     val container = LocalAppContainer.current
     val cardsState by container.cards.state.collectAsState()
     val overlays = LocalOverlays.current
+    val snackbars = LocalSnackbars.current
+    val controller = LocalFinance.current
     val scope = rememberCoroutineScope()
     val haptics = rememberAppHaptics()
     val catalog = finance.catalog
@@ -152,22 +182,85 @@ fun BanksSettingsPage() {
     val query = search.trim()
     val groups = remember(catalog, query, filter, used) { bankGroups(catalog.matching(query), filter, used) }
 
+    fun renameBank(bank: Bank) {
+        scope.launch {
+            val renamed = overlays.sheet<Boolean> { dismiss -> BankRenameSheet(bank, onDone = dismiss) }
+            if (renamed == true) snackbars.show("Bank renamed")
+        }
+    }
+
+    fun deleteBank(bank: Bank) {
+        scope.launch {
+            val confirmed = overlays.confirm(
+                title = "Delete ${bank.name}?",
+                message = "It is removed from your list of banks. No account or card uses it, so nothing else changes. You can add it again later.",
+                confirmLabel = "Delete",
+                destructive = true,
+                icon = Icons.Outlined.DeleteOutline,
+            )
+            if (!confirmed) return@launch
+            try {
+                controller.deleteBank(bank.key)
+                haptics.success()
+                snackbars.show("${bank.name} deleted", SnackbarKind.Deleted)
+            } catch (e: FinanceValidationException) {
+                snackbars.show(e.message ?: "Couldn't delete the bank.", SnackbarKind.Error)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                snackbars.show("Couldn't delete the bank. Nothing was changed.", SnackbarKind.Error)
+            }
+        }
+    }
+
     fun showBank(bank: Bank) {
         haptics.selection()
-        scope.launch { overlays.sheet<Unit> { dismiss -> BankDetailSheet(bank, used[bank.key], onDone = { dismiss(Unit) }) } }
+        scope.launch {
+            // Rename and delete are asked for in the sheet and done here once it has closed, so nothing is said from inside it.
+            when (overlays.sheet<BankAction> { dismiss -> BankDetailSheet(bank, used[bank.key], onAction = dismiss) }) {
+                BankAction.Rename -> renameBank(bank)
+                BankAction.Delete -> deleteBank(bank)
+                BankAction.Done, null -> Unit
+            }
+        }
     }
 
     fun addBank() {
         scope.launch { overlays.sheet<String> { dismiss -> BankFormSheet(initialName = query, onDone = dismiss) } }
     }
 
-    // With Bottom controls on, the search sits in a card at the foot of the page.
+    // With Bottom controls on, the search sits in a card at the foot of the page for good: nothing to scroll away from.
     val searchAtBottom = rememberBottomControls()
+    // Once the search field has scrolled out of sight it waits in the header as an icon beside "+", as on the Settings screen:
+    // tapping it brings the field back and puts the cursor in it. "Out of sight" is the field's own item being wholly above the
+    // list (the summary item above it moving off is not enough).
+    val listState = rememberLazyListState()
+    val searchFocus = remember { FocusRequester() }
+    val searchOutOfView by remember(listState) {
+        derivedStateOf {
+            val layout = listState.layoutInfo
+            // Not measured yet: nothing has scrolled anywhere.
+            if (layout.visibleItemsInfo.isEmpty()) return@derivedStateOf false
+            val field = layout.visibleItemsInfo.firstOrNull { it.key == SEARCH_ITEM_KEY } ?: return@derivedStateOf true
+            field.offset + field.size <= 0
+        }
+    }
     AppSubPage(
-        title = "Banks",
+        title = title,
         onBack = navigator::back,
         maxWidth = AppLayout.maxListWidth,
+        listState = listState,
         actions = {
+            AnimatedVisibility(visible = searchOutOfView && !searchAtBottom) {
+                IconButton(
+                    onClick = {
+                        scope.launch {
+                            listState.animateScrollToItem(0)
+                            runCatching { searchFocus.requestFocus() }
+                        }
+                    },
+                ) { Icon(Icons.Rounded.Search, contentDescription = "Search banks") }
+            }
             IconButton(onClick = ::addBank) { Icon(Icons.Rounded.Add, contentDescription = "Add a bank") }
         },
         bottomSearch = if (searchAtBottom) {
@@ -176,6 +269,7 @@ fun BanksSettingsPage() {
             null
         },
     ) {
+        item(key = "tabs") { tabBar() }
         item(key = "summary") {
             val total = catalog.all.size
             val inUse = catalog.all.count { used[it.key]?.any == true }
@@ -194,9 +288,14 @@ fun BanksSettingsPage() {
             }
         }
         if (!searchAtBottom) {
-            item(key = "search") {
+            item(key = SEARCH_ITEM_KEY) {
                 Column(Modifier.padding(AppSpacing.page)) {
-                    SearchField(value = search, onValueChange = { search = it }, placeholder = "Search banks")
+                    SearchField(
+                        value = search,
+                        onValueChange = { search = it },
+                        placeholder = "Search banks",
+                        modifier = Modifier.focusRequester(searchFocus),
+                    )
                 }
             }
         }
@@ -318,9 +417,15 @@ private fun InUsePill() {
     }
 }
 
-/** One bank in a sheet: its logo large, what it is, what else it is called, and which of your accounts and cards use it. */
+/** What the bank's sheet asks for: closing it, or - for a bank the user added - renaming or deleting it. */
+private enum class BankAction { Done, Rename, Delete }
+
+/**
+ * One bank in a sheet: its logo large, what it is, what else it is called, and which of your accounts and cards use it. A bank
+ * the user added can also be renamed or deleted; delete is there only while nothing of theirs uses the bank, and says why when not.
+ */
 @Composable
-private fun BankDetailSheet(bank: Bank, usage: BankUsage?, onDone: () -> Unit) {
+private fun BankDetailSheet(bank: Bank, usage: BankUsage?, onAction: (BankAction) -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Column(
         Modifier
@@ -349,7 +454,36 @@ private fun BankDetailSheet(bank: Bank, usage: BankUsage?, onDone: () -> Unit) {
             Text(fact, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, modifier = Modifier.padding(bottom = AppSpacing.xs))
         }
         Spacer(Modifier.height(AppSpacing.lg))
-        Button(onClick = onDone, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+        if (!bank.builtIn) {
+            val inUse = usage?.any == true
+            Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.md), modifier = Modifier.fillMaxWidth()) {
+                FilledTonalButton(onClick = { onAction(BankAction.Rename) }, modifier = Modifier.weight(1f).height(56.dp)) {
+                    Icon(Icons.Outlined.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(AppSpacing.sm))
+                    Text("Rename", style = MaterialTheme.typography.titleMedium)
+                }
+                OutlinedButton(
+                    onClick = { onAction(BankAction.Delete) },
+                    enabled = !inUse,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = scheme.error),
+                    modifier = Modifier.weight(1f).height(56.dp),
+                ) {
+                    Icon(Icons.Outlined.DeleteOutline, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(AppSpacing.sm))
+                    Text("Delete", style = MaterialTheme.typography.titleMedium)
+                }
+            }
+            if (inUse) {
+                Text(
+                    "To delete it, first change the accounts and cards that use it to another bank.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = AppSpacing.sm),
+                )
+            }
+            Spacer(Modifier.height(AppSpacing.md))
+        }
+        Button(onClick = { onAction(BankAction.Done) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
             Text("Done", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
         }
     }

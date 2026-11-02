@@ -238,12 +238,14 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
             else -> null
         }
         if (amountError != null || categoryError != null || accountError != null || parsed == null) return
+        // No shortcut for "nothing changed" here, unlike the transaction form: saving a rule again writes it the way the rule needs
+        // (a last day stored as midnight takes the payment's time of day), so a save with no edits is still a change.
         saving = true
         scope.launch {
             try {
                 val saved = controller.saveRecurringRule(draft(parsed))
                 haptics.success()
-                snackbars.show(if (isEditing) "Changes saved" else "Recurring payment saved")
+                snackbars.show(if (isEditing) "Recurring payment updated" else "Recurring payment saved")
                 // A new repeating payment gets a reminder of its own at once, linked to it.
                 if (!isEditing) reminderLauncher?.linkAutomatically(saved)
                 onDone(true)

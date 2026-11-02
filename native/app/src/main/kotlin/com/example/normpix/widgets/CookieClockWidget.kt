@@ -82,14 +82,14 @@ abstract class CookieClockWidget : AppWidgetProvider() {
 
         private fun analogClock(context: Context, @LayoutRes layout: Int, clock: ClockOptions): RemoteViews =
             RemoteViews(context.packageName, layout).apply {
-                if (clock.transparent) setViewVisibility(R.id.widget_cookie_fill, View.GONE)
+                tintBehind(R.id.widget_cookie_fill, clock)
                 setOnClickPendingIntent(R.id.widget_cookie_root, ClockWidget.clockApp(context))
             }
 
         private fun digital(context: Context, face: CookieFace, clock: ClockOptions): RemoteViews {
             val density = context.resources.displayMetrics.density
             return RemoteViews(context.packageName, R.layout.widget_cookie_digital).apply {
-                if (clock.transparent) setViewVisibility(R.id.widget_cookie_face, View.GONE)
+                tintBehind(R.id.widget_cookie_face, clock)
                 place(R.id.widget_cookie_hour, face.hour, density)
                 place(R.id.widget_cookie_minute, face.minute, density)
                 place(R.id.widget_cookie_date, face.date, density)

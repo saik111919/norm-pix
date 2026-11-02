@@ -54,6 +54,9 @@ const val FONT_TOO_BIG_MESSAGE = "That font file is too big. NormPix takes fonts
 /** What it says when the file could not be read at all. */
 const val FONT_UNREADABLE_MESSAGE = "Couldn't read that file. Try again."
 
+/** What it says when a zip has no .ttf or .otf font in it. */
+const val FONT_ZIP_EMPTY_MESSAGE = "That zip has no font NormPix can use. It needs .ttf or .otf files."
+
 /** What the Interface font page can do with the user's own font: choose a file for it, or let it go. */
 @Immutable
 class CustomFontActions(
@@ -88,6 +91,7 @@ internal fun rememberCustomFontActions(): CustomFontActions {
                     FontInstall.NotAFont -> snackbars.show(NOT_A_FONT_MESSAGE, SnackbarKind.Error)
                     FontInstall.TooLarge -> snackbars.show(FONT_TOO_BIG_MESSAGE, SnackbarKind.Error)
                     FontInstall.Failed -> snackbars.show(FONT_UNREADABLE_MESSAGE, SnackbarKind.Error)
+                    FontInstall.NoFonts -> snackbars.show(FONT_ZIP_EMPTY_MESSAGE, SnackbarKind.Error)
                 }
             }
         }
@@ -116,13 +120,14 @@ internal fun rememberCustomFontActions(): CustomFontActions {
  * is not usable: the text is then in GS Flex, and the panel says so).
  */
 @Composable
-internal fun CustomFontPanel(prefs: AppPrefsState, file: File?, actions: CustomFontActions) {
+internal fun CustomFontPanel(prefs: AppPrefsState, file: File?, actions: CustomFontActions, detail: String? = null) {
     val scheme = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(AppSpacing.md))
         if (prefs.customFontName.isBlank()) {
             Text(
-                "Pick a .ttf or .otf font file from your phone, up to 10 MB. It is copied into NormPix, so it stays when you move the original.",
+                "Pick a .ttf or .otf font file from your phone, up to 10 MB - or the .zip you download from Google Fonts, which brings " +
+                    "every weight of the family along. It is copied into NormPix, so it stays when you move the original.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = scheme.onSurfaceVariant,
             )
@@ -148,7 +153,7 @@ internal fun CustomFontPanel(prefs: AppPrefsState, file: File?, actions: CustomF
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        if (file != null) "In use" else "Can't be read, so NormPix is using GS Flex",
+                        if (file != null) listOfNotNull("In use", detail).joinToString(" · ") else "Can't be read, so NormPix is using GS Flex",
                         style = MaterialTheme.typography.bodySmall,
                         color = if (file != null) scheme.onSurfaceVariant else scheme.error,
                     )

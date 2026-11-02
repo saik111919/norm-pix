@@ -72,12 +72,22 @@ class BankLogoResolverTest {
 
     @Test
     fun foreignBanksAndNeobanksResolveToTheirArtwork() {
-        assertEquals("banks/boa.svg", BankLogoResolver.logoFor("Bank of America")?.pick(compact = false, onDark = true)?.path)
-        assertEquals("banks/boa_symbol.svg", BankLogoResolver.logoFor("Bank of America")?.pick(compact = true, onDark = true)?.path)
-        assertEquals("banks/sbm.svg", BankLogoResolver.logoFor("SBM Bank India")?.pick(compact = false, onDark = true)?.path)
-        assertEquals("banks/sbm_symbol.svg", BankLogoResolver.logoFor("SBM Bank India")?.pick(compact = true, onDark = true)?.path)
         assertEquals("brandlogos/onecard.webp", BankLogoResolver.logoFor("OneCard")?.pick(compact = true, onDark = false)?.path)
         assertEquals("brandlogos/jupiterbank.webp", BankLogoResolver.logoFor("Jupiter")?.pick(compact = true, onDark = false)?.path)
+    }
+
+    @Test
+    fun banksWhoseOnlyArtworkWasAMadeUpMarkWearAMonogramInstead() {
+        // These had hand-drawn imitations (a text label in a generic font, or an invented symbol) that were not the banks' logos.
+        // They are still recognized - by name and by what they are called - but have no artwork, so the badge shows their letters.
+        val expected = mapOf(
+            "Bank of America" to "boa", "BofA" to "boa", "SBM Bank India" to "sbmindia", "Deutsche Bank" to "deutsche",
+            "Barclays" to "barclays", "Fi Money" to "fimoney", "Uni Cards" to "unicards", "Niyo" to "niyo", "Freo" to "freo",
+        )
+        for ((name, id) in expected) {
+            assertEquals(name, id, bank(name))
+            assertNull("$name has no artwork on file", BankLogoResolver.logoFor(name))
+        }
     }
 
     @Test

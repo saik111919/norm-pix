@@ -1,17 +1,26 @@
 package com.example.normpix.navigation
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -25,9 +34,12 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
+import com.example.normpix.settings.ThemeMode
+import com.example.normpix.ui.theme.Appearance
 import com.example.normpix.ui.theme.NormPixTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -35,6 +47,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 private val designLabels = listOf("Expense", "Income", "Recurring", "Reminder", "Card", "Account", "Categories", "Budgets", "People", "Search", "Settings")
 
@@ -43,6 +56,7 @@ private val designLabels = listOf("Expense", "Income", "Recurring", "Reminder", 
  * place, Reset, Done. Everything is also reachable without dragging.
  */
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
 class ActionMenuEditTest {
 
@@ -59,30 +73,50 @@ class ActionMenuEditTest {
         FooterAction(label = label, icon = Icons.Rounded.Add, isPrimary = i == 0, onClick = { clicked = label }, id = label.lowercase())
     }
 
+    private var scheme: ColorScheme? = null
+    private var dockColors: DockColors? = null
+
     /** [saved]: the callback puts an edit into [layout], as the preferences do; false, it only records it (saving that is slow). */
-    private fun show(fontScale: Float = 1f, editable: Boolean = true, saved: Boolean = true) {
+    private fun show(
+        fontScale: Float = 1f,
+        editable: Boolean = true,
+        saved: Boolean = true,
+        startOpen: Boolean = true,
+        appearance: Appearance = Appearance(ThemeMode.Light),
+    ) {
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
-                NormPixTheme {
-                    FloatingNavigationRow(
-                        destinations = AppDestination.entries,
-                        current = AppDestination.Home,
-                        overdueCount = 0,
-                        onDestinationSelected = {},
-                        actions = actions(),
-                        isMoreOpen = open,
-                        onMoreToggle = { open = !open },
-                        actionLayout = layout,
-                        onActionLayoutChange = if (editable) ({ if (saved) layout = it; kept += it }) else null,
-                        editingActions = editing,
-                        onEditingActionsChange = { editing = it },
-                    )
+                NormPixTheme(appearance) {
+                    val currentScheme = MaterialTheme.colorScheme
+                    scheme = currentScheme
+                    val currentColors = rememberDockColors()
+                    dockColors = currentColors
+                    Box(Modifier.fillMaxSize().background(currentScheme.surface)) {
+                        FloatingNavigationRow(
+                            destinations = AppDestination.entries,
+                            current = AppDestination.Home,
+                            overdueCount = 0,
+                            onDestinationSelected = {},
+                            actions = actions(),
+                            isMoreOpen = open,
+                            onMoreToggle = { open = !open },
+                            actionLayout = layout,
+                            onActionLayoutChange = if (editable) ({ if (saved) layout = it; kept += it }) else null,
+                            editingActions = editing,
+                            onEditingActionsChange = { editing = it },
+                            colors = currentColors,
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
+                    }
                 }
             }
         }
-        compose.onNodeWithContentDescription("More actions").performClick()
         compose.waitForIdle()
+        if (startOpen) {
+            compose.onNodeWithContentDescription("More actions").performClick()
+            compose.waitForIdle()
+        }
     }
 
     private fun startEditing() {
@@ -105,16 +139,43 @@ class ActionMenuEditTest {
     private fun order() = layout.entries.map { it.id }
 
     @Test
-    fun the_edit_button_is_in_the_corner_the_design_left_free_and_there_is_nothing_else_there() {
+    fun the_edit_button_sits_beside_the_close_button_in_the_dock_row() {
         show()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
         val edit = bounds("Edit actions")
-        val reminder = bounds("Reminder")
-        val settings = bounds("Settings")
-        assertEquals(reminder.left.value, edit.left.value, 1f)
-        assertEquals(settings.top.value, edit.top.value, 1f)
-        assertEquals(settings.width.value, edit.width.value, 1f)
+        val close = bounds("Close actions")
+        assertEquals("a 10 dp gap, as the row spaces its children", 10f, (close.left - edit.right).value, 1f)
+        assertEquals("vertically centred on the close button", close.top.value + close.height.value / 2, edit.top.value + edit.height.value / 2, 1f)
+        assertEquals("the same diameter as the close button", close.width.value, edit.width.value, 1f)
         assertEquals(edit.width.value, edit.height.value, 1f)
         compose.onAllNodesWithContentDescription("Edit actions").assertCountEquals(1)
+    }
+
+    @Test
+    fun the_edit_button_is_visible_in_a_light_theme() {
+        show()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        val pixels = compose.onNodeWithContentDescription("Edit actions").captureToImage().toPixelMap()
+        val buttonFill = pixels[(pixels.width * 0.20f).toInt(), (pixels.height * 0.50f).toInt()]
+        val expectedCompanion = dockColors!!.companionContainer
+        val pageBackground = scheme!!.surface
+        assertEquals("the edit button fill matches the dock companionContainer colour", expectedCompanion, buttonFill)
+        assertNotEquals("the edit button fill is clearly different from the page background", pageBackground, buttonFill)
+    }
+
+    @Test
+    fun the_edit_button_appears_only_with_the_menu_open_and_starts_edit_mode() {
+        show(startOpen = false)
+        compose.onAllNodesWithContentDescription("Edit actions").assertCountEquals(0)
+        compose.onNodeWithContentDescription("More actions").performClick()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Edit actions").assertIsDisplayed()
+        startEditing()
+        assertTrue(editing)
+        compose.onNodeWithText("Done").assertIsDisplayed()
     }
 
     @Test
@@ -160,7 +221,7 @@ class ActionMenuEditTest {
         tap("Card")
         press("Make wide")
         assertEquals(ActionTileSize.Wide, layout.entries.single { it.id == "card" }.size)
-        assertEquals(2 * cell.value + 6f, bounds("Card").width.value, 1.5f)
+        assertEquals(2 * cell.value + 8f, bounds("Card").width.value, 1.5f)
         press("Make small")
         assertEquals(ActionTileSize.Small, layout.entries.single { it.id == "card" }.size)
         assertEquals(cell.value, bounds("Card").width.value, 1f)
@@ -180,7 +241,7 @@ class ActionMenuEditTest {
     }
 
     @Test
-    fun the_featured_tile_is_tall_and_cannot_be_resized_or_moved_before_the_start() {
+    fun the_featured_tile_is_the_wide_capsule_and_cannot_be_resized_or_moved_before_the_start() {
         show()
         startEditing()
         tap("Expense")
@@ -191,7 +252,7 @@ class ActionMenuEditTest {
     }
 
     @Test
-    fun moving_a_tile_to_the_start_makes_it_the_tall_one() {
+    fun moving_a_tile_to_the_start_makes_it_the_featured_capsule() {
         show()
         startEditing()
         tap("Budgets")
@@ -200,8 +261,8 @@ class ActionMenuEditTest {
         assertEquals("budgets", order().first())
         val budgets = bounds("Budgets")
         val expense = bounds("Expense")
-        assertTrue("Budgets is tall now", budgets.height.value > 2 * budgets.width.value)
-        assertTrue("Expense is an ordinary tile", expense.height.value < 1.5f * expense.width.value)
+        assertTrue("Budgets is the wide capsule now", budgets.width.value > 2 * budgets.height.value)
+        assertTrue("Expense is an ordinary square tile", expense.width.value < 1.2f * expense.height.value)
     }
 
     @Test

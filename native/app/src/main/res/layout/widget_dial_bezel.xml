@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The watch dial's seconds ring on Android 12 and later, as ClockWidget adds it to widget_clock_seconds: an AnalogClock whose only
+     visible hand is the ring (widget_dial_bezel, the ring at :00), which the system turns by the real time, a step a second. Its dial
+     and its hour and minute hands draw nothing; the dial is as large as the bezel so AnalogClock (which only scales down) fits the
+     bezel to the face exactly as the picture under it is fitted. Before Android 12 an AnalogClock has no second hand, and the
+     animated ring (widget_dial_seconds_NN) is used instead. -->
+<AnalogClock xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/widget_clock_bezel"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:dial="@drawable/widget_dial_bezel_frame"
+    android:hand_hour="@drawable/widget_dial_bezel_frame"
+    android:hand_minute="@drawable/widget_dial_bezel_frame"
+    android:hand_second="@drawable/widget_dial_bezel"
+    android:importantForAccessibility="no"
+    tools:targetApi="31" />

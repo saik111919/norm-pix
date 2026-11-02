@@ -336,6 +336,11 @@ private fun TransactionEditor(
         }
         dateError = if (dateUnset) "Choose the date" else null
         if (amountError != null || typeError != null || categoryError != null || accountError != null || dateError != null || parsed == null) return
+        // Saving what is already saved changes nothing: the sheet closes without announcing a change that never happened.
+        if (isEditing && !dirty) {
+            onDone(false)
+            return
+        }
 
         saving = true
         val now = LocalDateTime.now()
@@ -375,7 +380,7 @@ private fun TransactionEditor(
                 }
                 val repeating = schedule?.let { " · ${describeRepeat(it).replaceFirstChar { c -> c.lowercase() }}" }.orEmpty()
                 snackbars.show(
-                    if (isEditing) "Changes saved$repeating" else "${saved.type.label} of ${finance.money.format(saved.amount)} saved$repeating",
+                    if (isEditing) "${saved.type.label} updated$repeating" else "${saved.type.label} of ${finance.money.format(saved.amount)} saved$repeating",
                 )
                 onDone(true)
             } catch (e: FinanceValidationException) {

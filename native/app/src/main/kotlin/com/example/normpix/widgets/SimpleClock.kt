@@ -1,7 +1,6 @@
 package com.example.normpix.widgets
 
 import android.content.Context
-import android.graphics.Color
 import android.util.TypedValue
 import android.widget.RemoteViews
 import com.example.normpix.R
@@ -68,7 +67,7 @@ internal object SimpleClock {
             setTextViewTextSize(R.id.widget_simple_time, TypedValue.COMPLEX_UNIT_DIP, layout.timeDp)
             setViewVisibility(R.id.widget_simple_date, if (showDate) android.view.View.VISIBLE else android.view.View.GONE)
             if (showDate) setTextViewTextSize(R.id.widget_simple_date, TypedValue.COMPLEX_UNIT_DIP, layout.dateDp)
-            if (clock.transparent) setInt(R.id.widget_simple_root, "setBackgroundColor", Color.TRANSPARENT)
+            tintBehind(R.id.widget_simple_fill, clock)
             setOnClickPendingIntent(R.id.widget_simple_root, ClockWidget.clockApp(context))
         }
     }

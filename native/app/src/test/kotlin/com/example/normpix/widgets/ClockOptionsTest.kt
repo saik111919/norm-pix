@@ -48,6 +48,55 @@ class ClockOptionsTest {
     }
 
     @Test
+    fun `a transparent clock keeps no tint to begin with, and the tint chosen is kept for that widget alone`() {
+        val store = ClockOptionsStore(context)
+        assertEquals(ClockBackdrop.Clear, store.get(3).backdrop)
+        assertEquals(0, ClockOptions(transparent = true).backdropAlpha, "clear is no tint at all")
+        store.set(3, ClockOptions(transparent = true, backdropPercent = ClockBackdrop.Strong.percent))
+        assertEquals(ClockBackdrop.Strong, ClockOptionsStore(context).get(3).backdrop)
+        assertEquals(ClockBackdrop.Clear, store.get(4).backdrop)
+        assertEquals(ClockBackdrop.Strong.alpha, store.get(3).backdropAlpha)
+    }
+
+    @Test
+    fun `the slider's tint is kept as a number, and a strength an earlier version saved by name still reads as it was`() {
+        val store = ClockOptionsStore(context)
+        store.set(3, ClockOptions(transparent = true, backdropPercent = 65))
+        assertEquals(65, ClockOptionsStore(context).get(3).backdropPercent)
+        assertEquals(tintAlpha(65), store.get(3).backdropAlpha)
+        // The nearest of the old four is saved by name beside it, for an earlier version to find.
+        val saved = context.getSharedPreferences(ClockOptionsStore.FILE, Context.MODE_PRIVATE)
+        assertEquals("Medium", saved.getString("3.backdrop", null))
+        // A widget set up before the slider: only the name.
+        saved.edit().putBoolean("9.transparent", true).putString("9.backdrop", "Soft").commit()
+        assertEquals(ClockBackdrop.Soft.percent, store.get(9).backdropPercent)
+        assertEquals(ClockBackdrop.Soft.alpha, store.get(9).backdropAlpha, "it looks exactly as it did")
+        // Out of range never gets through.
+        saved.edit().putInt("10.backdrop_percent", 140).commit()
+        assertEquals(100, store.get(10).backdropPercent)
+    }
+
+    @Test
+    fun `any tint at all is described as one, and the words follow the strength`() {
+        assertEquals(ClockBackdrop.Clear, ClockBackdrop.nearest(0))
+        assertEquals(ClockBackdrop.Soft, ClockBackdrop.nearest(5))
+        assertEquals(ClockBackdrop.Soft, ClockBackdrop.nearest(40))
+        assertEquals(ClockBackdrop.Medium, ClockBackdrop.nearest(50))
+        assertEquals(ClockBackdrop.Strong, ClockBackdrop.nearest(70))
+        assertEquals(ClockBackdrop.Strong, ClockBackdrop.nearest(100))
+        assertEquals(255, tintAlpha(100))
+    }
+
+    @Test
+    fun `a tint says nothing for a clock whose face is whole, and the strengths rise`() {
+        assertEquals(0, ClockOptions(transparent = false, backdropPercent = ClockBackdrop.Strong.percent).backdropAlpha)
+        val alphas = ClockBackdrop.entries.map { it.alpha }
+        assertEquals(alphas.sorted(), alphas, "each choice is stronger than the one before")
+        assertEquals(0, ClockBackdrop.Clear.alpha)
+        assertTrue(ClockBackdrop.Strong.alpha in 150..230, "strong is strong but not solid: ${ClockBackdrop.Strong.alpha}")
+    }
+
+    @Test
     fun `a widget taken off the home screen is forgotten, and no other`() {
         val store = ClockOptionsStore(context)
         store.set(7, ClockOptions(transparent = true))
@@ -64,7 +113,7 @@ class ClockOptionsTest {
     @Test
     fun `a name that is not a choice any more reads as the default`() {
         context.getSharedPreferences(ClockOptionsStore.FILE, Context.MODE_PRIVATE).edit()
-            .putString("5.style", "Hologram").putString("5.format", "Julian").commit()
+            .putString("5.style", "Hologram").putString("5.format", "Julian").putString("5.backdrop", "Frosted").commit()
         val options = ClockOptionsStore(context).get(5)
         assertEquals(ClockStyle.Face, options.style)
         assertEquals(ClockTimeFormat.System, options.format)

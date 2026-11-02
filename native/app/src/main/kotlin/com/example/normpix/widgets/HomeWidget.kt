@@ -74,7 +74,7 @@ enum class HomeWidget(
     WatchDial(
         pill = "Watch dial",
         title = "Clock: watch dial",
-        description = "The time on a face after a watch: the hour in the middle, the minute in its pill, and two rings of numbers round them. The inner ring steps with each minute and the outer ring turns with the seconds.",
+        description = "The time on a face after a watch: the hour in the middle, the minute in its pill, and two rings of numbers round them. The inner ring creeps round with the minutes and the outer ring turns with the seconds.",
         group = HomeWidgetGroup.Clocks,
         provider = ClockWidget::class.java,
         previewWidthDp = 168f,

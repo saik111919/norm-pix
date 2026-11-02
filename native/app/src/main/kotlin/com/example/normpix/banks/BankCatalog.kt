@@ -5,6 +5,7 @@ import com.example.normpix.finance.domain.CustomBank
 import com.example.normpix.wallet.BankCategory
 import com.example.normpix.wallet.BankDirectory
 import com.example.normpix.wallet.BankLogoArt
+import com.example.normpix.wallet.BankMarks
 import com.example.normpix.wallet.BankLogoResolver
 
 /**
@@ -26,7 +27,10 @@ data class Bank(
     val note: String? = null,
     /** The other names the bank is known by, as the directory lists them; none for one the user added. */
     val aliases: List<String> = emptyList(),
-)
+) {
+    /** The few letters the bank wears where it has no logo (see [BankMarks]); the listed abbreviation for a built-in bank, else its initials. */
+    val mark: String get() = BankMarks.of(key, name)
+}
 
 /**
  * Every bank the app knows: the built-in directory (names, aliases and logos, the one place they are defined)

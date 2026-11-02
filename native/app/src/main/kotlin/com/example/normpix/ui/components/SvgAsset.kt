@@ -6,13 +6,17 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.RectF
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -20,8 +24,13 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.caverock.androidsvg.PreserveAspectRatio
 import com.caverock.androidsvg.RenderOptions
 import com.caverock.androidsvg.SVG
@@ -29,6 +38,7 @@ import com.example.normpix.banks.Bank
 import com.example.normpix.wallet.BankLogoArt
 import com.example.normpix.wallet.BankLogoFile
 import com.example.normpix.wallet.BankLogoResolver
+import com.example.normpix.wallet.BankMarks
 import java.util.concurrent.ConcurrentHashMap
 
 /** Parsed SVG assets, shared across the app (parsing is the expensive part). */
@@ -109,25 +119,60 @@ fun SvgAsset(path: String, modifier: Modifier = Modifier, tint: Color? = null) {
  */
 @Composable
 fun BankGlyph(bank: Bank?, tint: Color, modifier: Modifier = Modifier, size: Dp = 18.dp) =
-    BankLogoGlyph(bank?.logo, tint, modifier, size)
+    BankLogoGlyph(bank?.logo, tint, modifier, size, mark = bank?.mark)
 
 /**
  * The mark of the bank called [bankName], found by [BankLogoResolver] like every other bank logo in the app - for the
  * places that only hold a name (a reminder's linked card). Unknown names get the generic glyph.
  */
 @Composable
-fun BankGlyph(bankName: String, tint: Color, modifier: Modifier = Modifier, size: Dp = 18.dp) =
-    BankLogoGlyph(remember(bankName) { BankLogoResolver.logoFor(bankName) }, tint, modifier, size)
+fun BankGlyph(bankName: String, tint: Color, modifier: Modifier = Modifier, size: Dp = 18.dp) {
+    // A directory bank without artwork wears its mark; a name the directory does not know gets the generic glyph.
+    val entry = remember(bankName) { BankLogoResolver.bankFor(bankName) }
+    BankLogoGlyph(entry?.logo, tint, modifier, size, mark = entry?.let { BankMarks.of(it.id, it.name) })
+}
 
+/** [mark] is the monogram for a bank with no artwork (or whose artwork will not load); null for a bank not known at all, which gets the generic bank icon. */
 @Composable
-private fun BankLogoGlyph(logo: BankLogoArt?, tint: Color, modifier: Modifier, size: Dp) {
+private fun BankLogoGlyph(logo: BankLogoArt?, tint: Color, modifier: Modifier, size: Dp, mark: String?) {
     val onDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val icon = remember(logo, onDark) { logo?.pick(compact = true, onDark = onDark) }
     val loads = icon?.let { rememberBankArtAspectRatio(it) } != null
     if (icon == null || !loads) {
-        Icon(Icons.Rounded.AccountBalance, contentDescription = null, tint = tint, modifier = modifier.size(size))
+        if (mark != null) {
+            BankMonogram(mark, tint, modifier, size)
+        } else {
+            Icon(Icons.Rounded.AccountBalance, contentDescription = null, tint = tint, modifier = modifier.size(size))
+        }
     } else {
         BankArtwork(icon, modifier.size(size))
+    }
+}
+
+/**
+ * A bank's [mark] as the letters of a badge: bold, centred, in [tint], sized to the badge and to how many letters there are, and never
+ * scaled with the system font size (the badge does not grow with it, so the letters must not outgrow it).
+ */
+@Composable
+internal fun BankMonogram(mark: String, tint: Color, modifier: Modifier = Modifier, size: Dp = 18.dp) {
+    val fraction = when (mark.length) {
+        1 -> 0.62f
+        2 -> 0.52f
+        3 -> 0.4f
+        else -> 0.33f
+    }
+    val fontSize = with(LocalDensity.current) { (size * fraction).toSp() }
+    Box(modifier.size(size).clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
+        Text(
+            mark,
+            color = tint,
+            fontSize = fontSize,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 0.sp,
+            maxLines = 1,
+            softWrap = false,
+            style = LocalTextStyle.current.copy(lineHeight = fontSize, platformStyle = PlatformTextStyle(includeFontPadding = false)),
+        )
     }
 }
 

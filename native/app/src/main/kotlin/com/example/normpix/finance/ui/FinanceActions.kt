@@ -222,6 +222,15 @@ class FinanceActions(
         scope.launch { deleteTransactionNow(transaction) }
     }
 
+    /**
+     * Deleted as a swipe asks, the way Gmail does it: at once, with no question first, because the swipe already took a deliberate
+     * pull to its end and the Undo that follows puts the entry back whole. Everywhere else (the details sheet, TalkBack's
+     * action) [deleteTransaction] still asks.
+     */
+    fun deleteTransactionSwiped(transaction: FinanceTransaction) {
+        scope.launch { removeTransaction(transaction) }
+    }
+
     private suspend fun deleteTransactionNow(transaction: FinanceTransaction) {
         val confirmed = overlays.confirm(
             title = "Delete this ${transaction.type.label.lowercase()}?",
@@ -233,6 +242,10 @@ class FinanceActions(
             icon = Icons.Outlined.DeleteOutline,
         )
         if (!confirmed) return
+        removeTransaction(transaction)
+    }
+
+    private suspend fun removeTransaction(transaction: FinanceTransaction) {
         val undo = finance.deleteTransactionUndoably(transaction.id!!)
         haptics.success()
         snackbars.offerUndo("${transaction.type.label} deleted", finance, undo, scope)
@@ -299,7 +312,10 @@ class FinanceActions(
             when (action) {
                 "pay" -> payBill(account)
                 "spend" -> addTransaction(TransactionType.Expense, accountId = account.id)
-                "edit" -> overlays.sheet<Account> { dismiss -> AccountFormSheet(existing = account, onDone = dismiss) }
+                "edit" -> {
+                    val edited = overlays.sheet<Account> { dismiss -> AccountFormSheet(existing = account, onDone = dismiss) }
+                    if (edited != null) snackbars.show("${edited.name} updated")
+                }
                 "remind" -> reminders?.about(account)
                 "default" -> {
                     finance.setDefaultAccountId(account.id)

@@ -76,6 +76,9 @@ interface AppNavigator {
     /** The About page: what NormPix is and a guide to how each of its features works (a navigator without it does nothing). */
     fun openAbout() = Unit
 
+    /** The Feature guide: every topic of the About guide, as a card each; a navigator without the route shows the About page. */
+    fun openGuideIndex() = openAbout()
+
     /** One topic of the About guide, step by step; a navigator without the route shows the About page. */
     fun openGuide(topic: GuideTopic) = openAbout()
 

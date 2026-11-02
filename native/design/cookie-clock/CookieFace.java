@@ -137,6 +137,11 @@ public class CookieFace {
 
         writeSecondsRing(res);
 
+        // Android 12 and later: the seconds ring as a bezel the system turns, and the pill over it with the second in it.
+        write(res, "widget_dial_bezel", "The watch dial's seconds ring as a bezel: AnalogClock's second hand (Android 12 and later), at :00.", BEZEL_DP, bezel());
+        write(res, "widget_dial_bezel_frame", "Nothing, as large as the bezel: the bezel AnalogClock's dial and its hour and minute hands, so it fits the bezel to the face.", BEZEL_DP, List.of());
+        write(res, "widget_dial_pill", "The watch dial's pill at three o'clock, over the seconds ring: the minute and the second are text on it.", 200, pillCap());
+
         sheet(png);
         System.out.println("wrote drawables to " + res + " and " + png);
     }
@@ -448,6 +453,54 @@ public class CookieFace {
     // An animation can't be told where to start, so there is one of each for every second (widget_dial_seconds_00 .. 59): the
     // widget is drawn with the one for the second it is, and the ring then keeps time on its own until it is drawn again.
     static String two(int n) { return String.format("%02d", n); }
+
+    // ---- the watch dial's seconds ring on Android 12 and later: a bezel the system turns --------------------------------
+    //
+    // From Android 12 an AnalogClock takes a second hand, which the system turns by the real time: nothing to restart, so the ring
+    // is never out and never nudged (the animated ring is restarted every few seconds, and each restart can nudge it - the owner
+    // saw it, 2026-11-01, and chose an exact ring that steps once a second). The whole ring is that hand, ticks and numbers; the
+    // numbers turn with it, so they are set along the ring as a watch's bezel's are. As large as the widget can be, because
+    // AnalogClock only ever scales its drawables down: it then fits the bezel to the face just as the picture under it is fitted.
+    static final int BEZEL_DP = 1200;
+
+    static List<Item> bezel() {
+        List<Item> items = new ArrayList<>();
+        Path2D minor = new Path2D.Double(), major = new Path2D.Double();
+        for (int i = 0; i < 60; i++) {
+            boolean big = i % 5 == 0;
+            (big ? major : minor).append(new Line2D.Double(at(wOuter(i), big ? W_OUTER_MAJOR : W_OUTER_MINOR), at(wOuter(i), W_OUTER_OUT)), false);
+        }
+        items.add(stroke(minor, "tick", 0.9));
+        items.add(faded(stroke(major, "secondary", 1.6), 190 / 255.0));
+        for (int value = 0; value < 60; value += 5) {
+            double a = wOuter(value);
+            Point2D p = at(a, W_OUTER_R);
+            Shape number = text(two(value), p.getX(), p.getY(), W_OUTER_SIZE * DIGIT_EM);
+            // Along the ring: upright at twelve, its foot towards the middle everywhere else.
+            items.add(bold(AffineTransform.getRotateInstance(Math.toRadians(a), p.getX(), p.getY()).createTransformedShape(number), "secondary", 0.3));
+        }
+        return items;
+    }
+
+    /**
+     * The pill at three o'clock as its own layer over the seconds ring: the face's colour, its rim, and the accent dash of the minute,
+     * open at the right where the face's edge clips it. The ring passes behind it, so the number in it is never crossed by the ring's.
+     */
+    static List<Item> pillCap() {
+        List<Item> items = new ArrayList<>();
+        double edgeX = C + Math.sqrt(100 * 100 - W_PILL_H * W_PILL_H);
+        java.awt.geom.Area pill = new java.awt.geom.Area(new java.awt.geom.RoundRectangle2D.Double(W_PILL_LEFT, C - W_PILL_H, 200, 2 * W_PILL_H, 2 * W_PILL_H, 2 * W_PILL_H));
+        pill.intersect(new java.awt.geom.Area(new Ellipse2D.Double(0, 0, 200, 200)));
+        items.add(fill(pill, "face"));
+        Path2D rim = new Path2D.Double();
+        rim.moveTo(edgeX, C - W_PILL_H);
+        rim.lineTo(W_PILL_LEFT + W_PILL_H, C - W_PILL_H);
+        rim.append(new java.awt.geom.Arc2D.Double(W_PILL_LEFT, C - W_PILL_H, 2 * W_PILL_H, 2 * W_PILL_H, 90, 180, java.awt.geom.Arc2D.OPEN), true);
+        rim.lineTo(edgeX, C + W_PILL_H);
+        items.add(faded(stroke(rim, "secondary", 1.3), 150 / 255.0));
+        items.add(stroke(new Line2D.Double(at(90, W_INNER_MAJOR), at(90, W_INNER_OUT)), "accent", 1.9));
+        return items;
+    }
 
     static void writeSecondsRing(File res) throws IOException {
         File root = res.getParentFile();

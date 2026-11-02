@@ -16,6 +16,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -30,8 +31,18 @@ class SelfTransferImportTest {
     private val repository = finance.repository
     private val now = LocalDateTime.of(2026, 10, 25, 10, 0)
 
+    // The logic is tested as if every app were trusted (what it will be as receipts of the others turn up); what is trusted today
+    // is tested at the end.
+    @Before
+    fun trustEveryApp() {
+        SelfTransfers.trustedApps = null
+    }
+
     @After
-    fun tearDown() = env.close()
+    fun tearDown() {
+        SelfTransfers.trustedApps = SelfTransfers.DEFAULT_TRUSTED
+        env.close()
+    }
 
     private fun account(name: String, bankKey: String?, ending: String? = null, kind: AccountKind = AccountKind.Bank): Account = runBlocking {
         finance.saveAccount(Account(name = name, kind = kind, bankKey = bankKey, numberEnding = ending, createdAt = now, updatedAt = now))
@@ -301,5 +312,29 @@ class SelfTransferImportTest {
         assertEquals(TransactionType.Transfer, prefill.type)
         assertEquals(card.id, prefill.toAccountId)
         assertTrue(prefill.note!!.startsWith("Card bill payment"))
+    }
+
+    // ------------------------------------------------------- what is on today
+
+    @Test
+    fun `only Google Pay's receipt is taken for a self transfer, the others stay what they were read as`() {
+        SelfTransfers.trustedApps = SelfTransfers.DEFAULT_TRUSTED
+        assertEquals(setOf("Google Pay"), SelfTransfers.DEFAULT_TRUSTED, "no other app has a real receipt of one yet")
+        val hdfc = account("HDFC Salary", "hdfc", ending = "1234")
+        val sbi = account("SBI Savings", "sbi", ending = "5678")
+
+        val googlePay = prefillOf(SelfTransfersTest.googlePaySelf)
+        assertEquals(TransactionType.Transfer, googlePay.type, "Google Pay's is the one with a real receipt")
+        assertEquals(sbi.id, googlePay.toAccountId)
+
+        val paytm = prefillOf(SelfTransfersTest.paytmSelf)
+        assertEquals(TransactionType.Expense, paytm.type, "Paytm's has none")
+        assertNull(paytm.toAccountId)
+        assertTrue(paytm.notices.none { it.text.contains("self transfer", ignoreCase = true) }, "and says nothing of one")
+
+        val bank = prefillOf(sentOut)
+        assertEquals(TransactionType.Expense, bank.type, "a bank's message of money sent to another of their accounts is a payment, as before")
+        assertNull(bank.toAccountId)
+        assertEquals(hdfc.id, bank.accountId, "still read onto the account it left")
     }
 }

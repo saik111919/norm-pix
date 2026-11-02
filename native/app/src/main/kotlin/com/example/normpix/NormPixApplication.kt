@@ -129,7 +129,11 @@ class NormPixApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Read before anything opens it: whether NormPix has kept a ledger on this phone yet (it is made on the first launch, with
+        // the Cash account in it). None: a new install, or one whose storage was cleared.
+        val hadData = getDatabasePath(FinanceDatabase.DB_NAME).exists()
         container = buildContainer(this)
+        welcomeNewInstall(hadData)
         ReminderNotifications.createChannel(this)
         CardExpiryNotifications.createChannel(this)
         // The card-emulation service is started by the system, not by the UI, so it asks the schedule itself.
@@ -141,6 +145,17 @@ class NormPixApplication : Application() {
         container.updates?.start()
         followUpdateSettings()
         followLedgerForWidgets()
+    }
+
+    /**
+     * A new install gets the welcome tour once, and so does one whose storage was cleared ([hadData] false). An update of an
+     * install that already had NormPix does not (it is told apart by the package's first install being the same moment as its last
+     * update, and by its ledger already being there) - and is marked as welcomed, so it never is.
+     */
+    private fun welcomeNewInstall(hadData: Boolean) {
+        val (first, last) = runCatching { packageManager.getPackageInfo(packageName, 0).let { it.firstInstallTime to it.lastUpdateTime } }
+            .getOrDefault(0L to 0L)
+        welcomeNewInstall(container.preferences, first, last, hadData)
     }
 
     /**
@@ -240,4 +255,16 @@ class NormPixApplication : Application() {
             )
         }
     }
+}
+
+/**
+ * Settles whether the welcome tour is to be shown, once: a new install (its first install and its last update are the same moment) is
+ * welcomed, and so is an app with nothing of its own on the phone yet ([hadData] false: its storage was cleared, which leaves the
+ * install's times as an update's - the owner found no tour after that, 2026-11-01); an update of an install that already had NormPix
+ * - or a phone that will not say - is not, and is marked as welcomed so it never is. A decision already made is left as it is.
+ */
+internal fun welcomeNewInstall(preferences: AppPreferences, firstInstallTime: Long, lastUpdateTime: Long, hadData: Boolean = true) {
+    if (preferences.onboardingDecided()) return
+    val newInstall = !hadData || (firstInstallTime > 0 && firstInstallTime == lastUpdateTime)
+    if (newInstall) preferences.startOnboarding() else preferences.finishOnboarding()
 }

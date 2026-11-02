@@ -12,6 +12,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
@@ -23,19 +24,19 @@ import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.settings.TransactionSwipeActions
-import com.example.normpix.ui.components.SwipeActionButton
-import com.example.normpix.ui.components.SwipeActionWidth
-import com.example.normpix.ui.components.SwipeRevealHost
-import com.example.normpix.ui.components.SwipeRevealRow
+import com.example.normpix.ui.components.SwipeAction
+import com.example.normpix.ui.components.SwipeActionRow
 import com.example.normpix.ui.components.segmentShape
 import com.example.normpix.ui.theme.AppSpacing
 
 /**
- * A transaction in the history list, swipeable to Edit and Delete. The swipe is only a shortcut: it
- * runs the same [onEdit] / [onDelete] flows as the details sheet (Delete still asks first), and the
- * same two actions are always exposed to TalkBack as custom actions, whether or not swiping is on.
+ * A transaction in the history list, swiped the way Gmail's rows are (see [SwipeActionRow]): to the left for Edit, which opens
+ * the editor and lets the row spring back, to the right for Delete, which sends the row off and folds it away and offers Undo.
+ * The swipe is only a shortcut: it runs the same flows as the details sheet - except that [onSwipeDelete] does not ask first, as
+ * the Undo is the way back - and both actions are always exposed to TalkBack as custom actions, whether or not swiping is on
+ * ([onDelete], which asks).
  *
- * [swipe] null (or an empty choice) turns the gesture off and leaves the plain row.
+ * [swipe] null (or an empty choice) turns the gesture off and leaves the plain row; with one action chosen, only that side moves.
  */
 @Composable
 fun SwipeableTransactionRow(
@@ -46,27 +47,50 @@ fun SwipeableTransactionRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    /** What a swipe to the right does; the question [onDelete] asks is left out, the Undo that follows being the way back. */
+    onSwipeDelete: () -> Unit = onDelete,
     /** Shows the date in the row (lists that are not grouped under day headings). */
     showDate: Boolean = false,
     /** The account whose list this is, if it is one account's: its transfers show as money in or out of it. */
     perspectiveAccountId: Long? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val edit = swipe?.edit == true
-    val delete = swipe?.delete == true
-    SwipeRevealRow(
-        actionsWidth = SwipeActionWidth * (if (edit) 1 else 0) + SwipeActionWidth * (if (delete) 1 else 0),
+    val editAction = if (swipe?.edit == true) {
+        SwipeAction(
+            icon = Icons.Outlined.Edit,
+            label = "Edit",
+            container = scheme.secondaryContainer,
+            onContainer = scheme.onSecondaryContainer,
+            armed = scheme.secondary,
+            onArmed = scheme.onSecondary,
+            leaves = false,
+            onTrigger = onEdit,
+        )
+    } else {
+        null
+    }
+    val deleteAction = if (swipe?.delete == true) {
+        SwipeAction(
+            icon = Icons.Outlined.DeleteOutline,
+            label = "Delete",
+            container = scheme.errorContainer,
+            onContainer = scheme.onErrorContainer,
+            armed = scheme.error,
+            onArmed = scheme.onError,
+            leaves = true,
+            onTrigger = onSwipeDelete,
+        )
+    } else {
+        null
+    }
+    SwipeActionRow(
+        startAction = deleteAction,
+        endAction = editAction,
         key = transaction.id,
-        enabled = edit || delete,
         shape = shape,
         modifier = modifier,
-        actions = {
-            if (edit) SwipeActionButton(Icons.Outlined.Edit, "Edit", scheme.secondaryContainer, scheme.onSecondaryContainer, onEdit)
-            if (delete) SwipeActionButton(Icons.Outlined.DeleteOutline, "Delete", scheme.errorContainer, scheme.onErrorContainer, onDelete)
-        },
     ) {
-        // No corner of its own: the swipe row clips it to [shape], and squares the trailing corners off as it opens so
-        // it meets the action tiles flush (a rounded one would leave a notch between its curve and the tile's corner).
+        // No corner of its own: the swipe row clips it to [shape].
         Surface(color = scheme.surfaceContainer, shape = RectangleShape, modifier = Modifier.fillMaxWidth()) {
             TransactionTile(
                 transaction = transaction,
@@ -85,9 +109,9 @@ fun SwipeableTransactionRow(
 }
 
 /**
- * Transactions as one group of tonal segments, each swipeable to Edit and Delete exactly like the history's rows: the
- * form for lists that sit among other things (Home's Recent, search results). It follows the same swipe setting, and
- * a swipe is never the only way - tapping a row opens its details, where Edit and Delete are too.
+ * Transactions as one group of tonal segments, each swiped like the history's rows: the form for lists that sit among
+ * other things (Home's Recent, search results). It follows the same swipe setting, and a swipe is never the only way -
+ * tapping a row opens its details, where Edit and Delete are too.
  */
 @Composable
 fun SwipeableTransactionSection(
@@ -98,19 +122,20 @@ fun SwipeableTransactionSection(
     val prefs by LocalAppContainer.current.preferences.state.collectAsState()
     val swipe = if (prefs.swipeActionsEnabled) prefs.transactionSwipeActions else null
     val actions = rememberFinanceActions()
-    SwipeRevealHost(modifier) {
-        Column(Modifier.fillMaxWidth()) {
-            if (title != null) {
-                androidx.compose.material3.Text(
-                    title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .padding(start = AppSpacing.lg, top = AppSpacing.lg, end = AppSpacing.lg, bottom = AppSpacing.sm)
-                        .semantics { heading() },
-                )
-            }
-            transactions.forEachIndexed { index, t ->
+    Column(modifier.fillMaxWidth()) {
+        if (title != null) {
+            androidx.compose.material3.Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .padding(start = AppSpacing.lg, top = AppSpacing.lg, end = AppSpacing.lg, bottom = AppSpacing.sm)
+                    .semantics { heading() },
+            )
+        }
+        transactions.forEachIndexed { index, t ->
+            // Keyed by the entry: when one is deleted, the rows after it are the same rows, not each taking the one before's state.
+            key(t.id) {
                 Box(Modifier.padding(top = if (index == 0) 0.dp else 2.dp)) {
                     SwipeableTransactionRow(
                         transaction = t,
@@ -119,6 +144,7 @@ fun SwipeableTransactionSection(
                         onOpen = { actions.showDetails(t) },
                         onEdit = { actions.editTransaction(t) },
                         onDelete = { actions.deleteTransaction(t) },
+                        onSwipeDelete = { actions.deleteTransactionSwiped(t) },
                         showDate = true,
                     )
                 }

@@ -20,19 +20,23 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.normpix.finance.ui.Fluent3d
 import com.example.normpix.finance.ui.paletteColor
 import com.example.normpix.navigation.SettingsPage
+import com.example.normpix.ui.components.AssetImage
 import com.example.normpix.ui.components.ListSectionStyle
 import com.example.normpix.ui.components.ProfileAvatar
 
@@ -67,18 +71,59 @@ fun settingsGroupStyle(): ListSectionStyle {
 private const val GROUP_FILL_ALPHA = 0.3f
 
 /**
+ * The emoji each settings group is pictured by in 3D (see [SettingsGlyph]); every one has a bundled 3D picture
+ * (`SettingsIcons3dTest` checks).
+ */
+val SettingsPage.emoji: String
+    get() = when (this) {
+        SettingsPage.Appearance -> "🎨"
+        SettingsPage.Widgets -> "🧩"
+        SettingsPage.Finance -> "💰"
+        SettingsPage.Banks -> "🏦"
+        SettingsPage.Data -> "💾"
+        SettingsPage.Wallet -> "💳"
+        SettingsPage.Availability -> "🗓️"
+        SettingsPage.Notifications -> "🔔"
+        SettingsPage.Updates -> "📥"
+        SettingsPage.Security -> "🔒"
+    }
+
+/** The 3D emoji of the main Settings list's other rows. */
+internal object SettingsRowEmoji {
+    const val RESET = "🧹"
+    const val UPDATES = "📥"
+    const val WELCOME_TOUR = "🎉"
+    const val ABOUT = "📖"
+}
+
+/**
+ * Whether Settings' own icons are drawn as 3D pictures: the category icon style is 3D and the user has not turned it off for
+ * Settings (Appearance > Icons > 3D icons in Settings). Provided by `ProvideAppEnvironment`; flat outside it.
+ */
+val LocalSettingsIcons3d = staticCompositionLocalOf { false }
+
+/**
  * A settings icon in a soft rounded tile of its group's colour (neutral when there is none), the glyph in that colour's deep
- * tone - the tile is tinted, not filled, so a column of them stays quiet.
+ * tone - the tile is tinted, not filled, so a column of them stays quiet. With 3D icons on ([LocalSettingsIcons3d]) and an [emoji]
+ * the app has a 3D picture of, the picture stands on the same tile instead, drawn larger than the glyph as the 3D category
+ * pictures are (a 3D picture at a glyph's size looks lost).
  */
 @Composable
-fun SettingsGlyph(icon: ImageVector, hue: Int?, modifier: Modifier = Modifier) {
+fun SettingsGlyph(icon: ImageVector, hue: Int?, modifier: Modifier = Modifier, emoji: String? = null) {
     val scheme = MaterialTheme.colorScheme
     val tone = hue?.let { paletteColor(it) }
+    val threeD = LocalSettingsIcons3d.current
+    val context = LocalContext.current
+    val picture = remember(emoji, threeD) { if (threeD && emoji != null) Fluent3d.path(context, emoji) else null }
     Box(
         modifier.size(44.dp).background(tone?.container ?: scheme.surfaceContainerHighest, RoundedCornerShape(14.dp)),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = tone?.onContainer ?: scheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+        if (picture != null) {
+            AssetImage(picture, Modifier.size(30.dp))
+        } else {
+            Icon(icon, contentDescription = null, tint = tone?.onContainer ?: scheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+        }
     }
 }
 
@@ -103,6 +148,8 @@ fun SettingsRow(
      * open one: the row is filled if it is, and every row is announced as one of the list's tabs, the open one as selected.
      */
     selected: Boolean? = null,
+    /** The emoji the row is pictured by when Settings' icons are 3D ([SettingsGlyph]); null keeps [icon] always. */
+    emoji: String? = null,
 ) {
     ListItem(
         modifier = modifier.then(
@@ -113,7 +160,7 @@ fun SettingsRow(
             },
         ),
         colors = ListItemDefaults.colors(containerColor = selectedRowColor(selected == true)),
-        leadingContent = { SettingsGlyph(icon, hue) },
+        leadingContent = { SettingsGlyph(icon, hue, emoji = emoji) },
         headlineContent = { Text(headline, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) },
         supportingContent = supporting?.let {
             {

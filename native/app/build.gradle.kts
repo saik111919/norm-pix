@@ -181,6 +181,9 @@ android {
                 test.jvmArgs("--enable-native-access=ALL-UNNAMED")
                 // `-Pscreenshots=<folder>`: ReadmeScreenshots renders the README's pictures there (it is skipped otherwise).
                 providers.gradleProperty("screenshots").orNull?.let { test.systemProperty("normpix.screenshots", it) }
+                // `-Pguideshots=<folder>`: GuideScreenshots renders the Feature guide's pictures there (skipped otherwise); the folder
+                // to keep them in is `src/main/assets/guide`.
+                providers.gradleProperty("guideshots").orNull?.let { test.systemProperty("normpix.guideshots", it) }
             }
         }
     }

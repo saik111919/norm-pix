@@ -16,6 +16,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.width
+import com.example.normpix.settings.ui.BanksAndCategoriesPage
+import com.example.normpix.settings.ui.BanksAndCategoriesTab
 import com.example.normpix.testing.TestEnvironment
 import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.theme.AppLayout
@@ -64,7 +66,7 @@ class WidePushedPagesTest {
 
     @Test
     fun categories_takeTheWiderListColumn() {
-        compose.setContent { env.Content { CategoriesPage() } }
+        compose.setContent { env.Content { BanksAndCategoriesPage(BanksAndCategoriesTab.Categories) } }
         val width = categoriesColumn()
         assertTrue(width > AppLayout.maxContentWidth, "the column is $width, no wider than a form's ${AppLayout.maxContentWidth}")
         assertTrue(width <= AppLayout.maxListWidth, "the column is $width, past ${AppLayout.maxListWidth}")
@@ -73,7 +75,7 @@ class WidePushedPagesTest {
     @Test
     @Config(sdk = [34], qualifiers = "w411dp-h900dp")
     fun categories_onAPhone_fillTheWindow() {
-        compose.setContent { env.Content { CategoriesPage() } }
+        compose.setContent { env.Content { BanksAndCategoriesPage(BanksAndCategoriesTab.Categories) } }
         assertTrue(categoriesColumn() <= 411.dp)
     }
 

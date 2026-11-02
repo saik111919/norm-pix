@@ -40,6 +40,7 @@ import com.example.normpix.settings.ui.automaticUpdatesSummary
 import com.example.normpix.ui.components.AppEmptyState
 import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.LeadingIcon
+import com.example.normpix.ui.components.PagePill
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.rememberAppHaptics
@@ -142,29 +143,8 @@ private fun UpdatePageFor(updater: AppUpdater, onClose: () -> Unit) {
 
 /** A pill button that opens the full changelog page. */
 @Composable
-fun ChangelogPill(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val scheme = MaterialTheme.colorScheme
-    val haptics = rememberAppHaptics()
-    Surface(
-        onClick = {
-            haptics.selection()
-            onClick()
-        },
-        shape = CircleShape,
-        color = scheme.secondaryContainer,
-        contentColor = scheme.onSecondaryContainer,
-        modifier = modifier,
-    ) {
-        Row(
-            Modifier.heightIn(min = 36.dp).padding(start = AppSpacing.md, end = AppSpacing.lg),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Outlined.History, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(AppSpacing.sm))
-            Text("Changelog", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-        }
-    }
-}
+fun ChangelogPill(onClick: () -> Unit, modifier: Modifier = Modifier) =
+    PagePill(Icons.Outlined.History, "Changelog", onClick, modifier)
 
 /** The buttons pinned at the foot of the page, with a line above them while there is more of the page to scroll to. */
 @Composable

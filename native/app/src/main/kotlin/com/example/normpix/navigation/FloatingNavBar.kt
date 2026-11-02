@@ -2,8 +2,11 @@ package com.example.normpix.navigation
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -33,6 +36,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.rounded.Add
@@ -58,6 +62,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -73,7 +78,10 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.normpix.ui.components.FrostedBackdrop
 import com.example.normpix.ui.components.LocalFrostedBackdrop
@@ -82,6 +90,7 @@ import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.components.rememberFrostedChrome
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.isDark
+import com.example.normpix.ui.theme.rememberReducedMotion
 import com.example.normpix.ui.theme.rememberWindowWidthDp
 
 /*
@@ -231,7 +240,6 @@ fun FloatingNavigationRow(
                     editing = editingActions,
                     onEditingChange = onEditingActionsChange,
                     colors = colors,
-                    backdrop = backdrop,
                     progress = progress,
                     open = menuOpen,
                     onActionClick = { action ->
@@ -247,35 +255,55 @@ fun FloatingNavigationRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // The dock steps back towards the "+" as the menu opens. Faded out it must also stop being pressable
-                // (alpha does not do that) and stop being read out, so while the menu is open a tap on it closes the menu.
-                Box(
-                    modifier = Modifier
-                        .graphicsLayer {
-                            val p = progress().coerceIn(0f, 1f)
-                            alpha = 1f - (p * 1.6f).coerceAtMost(1f)
-                            scaleX = 1f - 0.1f * p
-                            scaleY = 1f - 0.1f * p
-                            transformOrigin = TransformOrigin(1f, 0.5f)
-                        }
-                        .then(if (menuOpen) Modifier.clearAndSetSemantics { } else Modifier),
-                ) {
-                    FloatingNavBar(
-                        destinations = destinations,
-                        current = current,
-                        overdueCount = overdueCount,
-                        onDestinationSelected = {
-                            if (isMoreOpen) onMoreToggle()
-                            onDestinationSelected(it)
-                        },
-                        colors = colors,
-                        backdrop = backdrop,
-                        isNarrow = isNarrow,
-                        currentLabel = currentLabel,
-                        maxLabelWidth = maxLabelWidth,
-                        showLabels = showLabels,
-                    )
-                    if (menuOpen) Box(Modifier.matchParentSize().closesMenuOnTap(onMoreToggle))
+                // Which way the "+" is: the end of the row, on the left in a right-to-left layout.
+                val towardsPlus = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1f else 1f
+                // The dock slides into the "+" as the menu opens and back out of it as the menu closes (see [dockShown]). Faded
+                // out it must also stop being pressable (alpha does not do that) and stop being read out, so while the menu is
+                // open a tap on it closes the menu. The Edit button overlays the dock's end, in the space it leaves, so nothing
+                // here changes the dock's or the "+" button's size and place.
+                Box {
+                    Box(
+                        modifier = Modifier
+                            .graphicsLayer {
+                                val shown = dockShown(progress().coerceIn(0f, 1f))
+                                val gone = 1f - shown
+                                alpha = shown
+                                translationX = gone * DockSlide.toPx() * towardsPlus
+                                scaleX = 1f - DockShrink * gone
+                                scaleY = 1f - DockShrink * gone
+                                transformOrigin = TransformOrigin(if (towardsPlus < 0f) 0f else 1f, 0.5f)
+                            }
+                            .then(if (menuOpen) Modifier.clearAndSetSemantics { } else Modifier),
+                    ) {
+                        FloatingNavBar(
+                            destinations = destinations,
+                            current = current,
+                            overdueCount = overdueCount,
+                            onDestinationSelected = {
+                                if (isMoreOpen) onMoreToggle()
+                                onDestinationSelected(it)
+                            },
+                            colors = colors,
+                            backdrop = backdrop,
+                            isNarrow = isNarrow,
+                            currentLabel = currentLabel,
+                            maxLabelWidth = maxLabelWidth,
+                            showLabels = showLabels,
+                        )
+                        if (menuOpen) Box(Modifier.matchParentSize().closesMenuOnTap(onMoreToggle))
+                    }
+                    // The Edit button exists only while the panel does, is shown only once the dock has gone, and is offered
+                    // (to a finger or to TalkBack) only while the menu is open and the arrangement can be edited. In Edit
+                    // mode the panel's own Reset/Done bar takes over.
+                    if (panelShown && !editingActions && onActionLayoutChange != null) {
+                        EditActionsButton(
+                            progress = progress,
+                            colors = colors,
+                            enabled = menuOpen,
+                            onClick = { onEditingActionsChange(true) },
+                            modifier = Modifier.align(Alignment.CenterEnd),
+                        )
+                    }
                 }
                 FloatingNavCompanionItem(
                     icon = if (actions.isEmpty()) Icons.Outlined.Settings else Icons.Rounded.Add,
@@ -505,6 +533,56 @@ private fun FloatingActionsPill(
 }
 
 /**
+ * The Edit button that lives in the bottom row while the "+" menu is open: it sits in the space the faded dock leaves, just
+ * left of the close button, and only once the dock has gone ([progress] past [DockGoneAt]). It is a filled circle in the dock's
+ * `companionContainer` with an `Icons.Outlined.Edit` icon in `companionContent` - the "+" button's own resting colours -
+ * reading as the "x" button's partner and ensuring visibility across light and dark palettes (the previous outlined circle
+ * on the near-white panel fill disappeared on light pages). It grows in from its right edge towards the close button, on
+ * the menu's own clock and without recomposing a frame.
+ */
+@Composable
+private fun EditActionsButton(
+    progress: () -> Float,
+    colors: DockColors,
+    /** Whether it takes touches and is read out: the menu is open. It stays composed while the panel closes, fading with it. */
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = rememberAppHaptics()
+    Box(
+        modifier = modifier
+            .size(DockHeight)
+            .graphicsLayer {
+                val p = progress().coerceIn(0f, 1f)
+                val reveal = ((p - DockGoneAt) / (1f - DockGoneAt)).coerceIn(0f, 1f)
+                alpha = reveal
+                val s = 0.6f + 0.4f * reveal
+                scaleX = s
+                scaleY = s
+                transformOrigin = TransformOrigin(1f, 0.5f)
+            }
+            .shadow(6.dp, CircleShape)
+            .background(colors.companionContainer, CircleShape)
+            .clip(CircleShape)
+            .clickable(enabled = enabled, onClickLabel = "Edit actions", role = Role.Button) {
+                haptics.selection()
+                onClick()
+            }
+            .then(
+                if (enabled) {
+                    Modifier.semantics { contentDescription = "Edit actions" }
+                } else {
+                    Modifier.clearAndSetSemantics { }
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Outlined.Edit, contentDescription = null, tint = colors.companionContent, modifier = Modifier.size(22.dp))
+    }
+}
+
+/**
  * Expressive companion button beside the dock or back row.
  * When [isActionMenu] is true, renders a circular "+" button that rotates into "×" when open.
  * Otherwise renders a squircle companion tile with [icon].
@@ -600,6 +678,15 @@ fun FloatingNavCompanionItem(
 }
 
 /**
+ * The dock's spring for what changes size: livelier than the app's own spatial spring ([AppMotion.spatial], damping 0.8, which
+ * measured almost the same as the curve it replaced), after Essentials' toolbar (damping 0.5, low stiffness) but not as loose -
+ * damping 0.65 and stiffness 300 overshoot by about 7% and settle in a third of a second. Instant where animations are off.
+ */
+@Composable
+internal fun <T> dockSpring(): FiniteAnimationSpec<T> =
+    if (rememberReducedMotion()) snap() else spring(dampingRatio = 0.65f, stiffness = 300f)
+
+/**
  * Individual navigation item inside the dock.
  * - Selected: pure white high-contrast pill capsule with dark icon + label.
  * - Inactive: recognizable clean icon with 48dp touch target.
@@ -633,13 +720,18 @@ private fun FloatingNavItem(
     )
 
     val shape = CircleShape
+    // What changes SIZE moves on a spring, as Essentials' toolbar does (its items grow and shrink on a bouncy low-stiffness
+    // spring, and its mode swaps are a short fade with a scale): a spring starts on the first frame, carries its speed into
+    // whatever comes next - a second tap mid-change does not start over from a standstill - and settles with a little life, where
+    // a fixed-length curve sat still for a moment and then stopped dead. Colours stay short curves: they must not overshoot.
+    val sizeSpring = dockSpring<IntSize>()
     val horizontalPadding by animateDpAsState(
         targetValue = if (selected && showLabel) {
             if (isNarrow) 10.dp else 14.dp
         } else {
             12.dp
         },
-        animationSpec = tween(animDuration, easing = AppMotion.standard),
+        animationSpec = dockSpring(),
         label = "nav_item_padding",
     )
 
@@ -722,9 +814,9 @@ private fun FloatingNavItem(
             // instead of swapping labels in one frame.
             AnimatedVisibility(
                 visible = selected && showLabel && (maxLabelWidth == Dp.Unspecified || maxLabelWidth >= MinLabelWidth),
-                enter = expandHorizontally(tween(animDuration, easing = AppMotion.standard), expandFrom = Alignment.Start) +
-                    fadeIn(tween(animDuration / 2, delayMillis = animDuration / 3)),
-                exit = shrinkHorizontally(tween(animDuration, easing = AppMotion.standard), shrinkTowards = Alignment.Start) +
+                enter = expandHorizontally(sizeSpring, expandFrom = Alignment.Start) +
+                    fadeIn(tween(animDuration / 2, delayMillis = animDuration / 4)),
+                exit = shrinkHorizontally(sizeSpring, shrinkTowards = Alignment.Start) +
                     fadeOut(tween(animDuration / 3)),
             ) {
                 Text(

@@ -79,6 +79,7 @@ enum class GuideTopic(
         tips = listOf(
             "Press and hold a stack of cards or banners to spread it out.",
             "Choose how Top spending is laid out in Settings > Appearance > Layouts.",
+            "The top card wears the month's weather: snow before anything is spent, sun while you are on track, heat as the budget runs low, rain once it is over. Settings > Appearance > Effects > Hero weather turns it off.",
         ),
         link = GuideLink.Home,
     ),
@@ -121,7 +122,7 @@ enum class GuideTopic(
         steps = listOf(
             "Pick a month, or choose your own range of days.",
             "The snapshot shows income, spending and how the month is trending.",
-            "Where your money went breaks spending down by category; What changed compares it with the month before.",
+            "Where your money went breaks spending down by category, as a ranked list or - in Settings > Appearance > Layouts - as a carousel; What changed compares it with the month before.",
             "See what you spend on each person, and the month day by day.",
         ),
         tips = listOf(
@@ -135,7 +136,7 @@ enum class GuideTopic(
         hue = 7,
         steps = listOf(
             "Open Wallet to see your accounts and your saved cards.",
-            "Add account for cash, a bank, a card, a wallet or savings. Add card to save a card. Settings > Banks lists every bank NormPix knows, with its logo.",
+            "Add account for cash, a bank, a card, a wallet or savings. Add card to save a card. Settings > Banks & Categories lists every bank NormPix knows, with its logo.",
             "A card's number and CVV stay hidden until you unlock with your fingerprint, face or screen lock, or tap your own NFC tag.",
             "Tap a detail to copy it. The clipboard is cleared after the time you set.",
         ),
@@ -169,7 +170,7 @@ enum class GuideTopic(
         steps = listOf(
             "Open Settings > Widgets, tap a pill to see that widget, then Add to home screen. Or press and hold an empty spot on your home screen, choose Widgets and find NormPix.",
             "Cookie clock: a clock in a cookie shape, in four styles - analog, analog with numbers, plain (only the hands), or digital with the date.",
-            "Watch dial: the time on a face of two rings, the hour in the middle. The outer ring turns with the seconds and the inner one steps with the minute.",
+            "Watch dial: the time on a face of two rings, the hour in the middle. The outer ring turns with the seconds and the inner one creeps round with the minutes.",
             "Recent transactions: your latest entries, with a button to add one.",
             "Add transaction: one tap to start an expense, an income or a transfer.",
         ),
@@ -189,7 +190,7 @@ enum class GuideTopic(
             "Open Settings > Appearance and choose Light, Dark or the system's theme.",
             "In Colors, choose Wallpaper colors (Android 12 and later) or Other colors. Each palette shows the colors it gives the app: primary above, container and accent below.",
             "Choose Pure for black and white with greys between: black surfaces in dark, white in light.",
-            "Fonts, icon shapes, transitions and the app icon each have a screen of their own in Appearance.",
+            "Fonts, icon shapes, transitions and the app icon each have a screen of their own in Appearance. Interface font has GS Flex, Nunito, your phone's font, or a font file - or the zip you download from Google Fonts, with every weight of the family. With 3D category icons the Settings list is in 3D too; Appearance > Icons > 3D icons in Settings keeps it flat.",
         ),
         tips = listOf(
             "Every theme works in light and dark, and the pictures in this guide follow whichever you pick.",

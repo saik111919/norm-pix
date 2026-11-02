@@ -497,7 +497,7 @@ class PictureAttachmentFlowTest {
         waitFor("Save changes")
         amountField().performTextInput("0")
         compose.onNodeWithText("Save changes").performClick()
-        waitFor("Changes saved")
+        waitFor("Expense updated")
         // By the time it shows, the form has gone: it isn't dimmed under the sheet.
         assertTrue(compose.onAllNodesWithText("Save changes").fetchSemanticsNodes().isEmpty())
     }

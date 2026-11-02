@@ -2,9 +2,10 @@ package com.example.normpix.navigation
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateIntOffsetAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.foundation.BorderStroke
@@ -39,7 +40,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
@@ -67,9 +67,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -92,26 +92,32 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import com.example.normpix.ui.components.FrostedBackdrop
-import com.example.normpix.ui.components.frostedGlass
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.isDark
+import com.example.normpix.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.launch
 
 /*
  * The "+" action menu: a bento panel that opens out of the "+" button above the dock.
  *
- *     ┌───────┬───────────────┬──────┬──────┐
- *     │       │    Income     │Recur.│ (Rem)│
- *     │  Exp  ├──────┬────────┼──────┼──────┤
- *     │ ense  │ Card │Account │Categ.│(Budg)│
- *     │       ├──────┼────────┼──────┼──────┤
- *     │       │People│ Search │Setti.│ Edit │
- *     └───────┴──────┴────────┴──────┴──────┘
+ *     ┌───────────────┬───────────────┐
+ *     │    Expense    │    Income     │
+ *     ├──────┬──────┬─┴────┬──────────┤
+ *     │Recur.│Remind│ Card │ Account  │
+ *     ├──────┼──────┼──────┼──────────┤
+ *     │Categ.│Budget│People│  Search  │
+ *     ├──────┴──────┴──────┴──────────┘
+ *     │Settin│
+ *     └──────┘
  *
- * One tall capsule (the featured tile), then wide capsules, squircles and circles on a grid of equal cells, in the order and at
- * the sizes the user left them (see [ActionMenuLayout]; the picture is the design's own). The last cell is the Edit button.
+ * The two main actions come first as capsules side by side (the featured tile, filled, then a wide one, tonal), then every other
+ * action as an icon over its name on a grid of four equal cells, in the order and at the sizes the user left them (see
+ * [ActionMenuLayout]; the picture is the design's own). The Edit button is not a cell of the grid: while the menu is open it
+ * sits in the dock row, in the empty space left of the close button (see FloatingNavBar.kt), so the grid ends with its last
+ * action and the two buttons read as a pair:
+ *
+ *     [   dock, faded out   ]  ( Edit )  ( × )
  *
  * Edit mode follows Pixel's Quick Settings editor: tiles stop running their action and are selected instead; a selected tile
  * has a handle on its right edge that drags between the two sizes, touch-and-hold lifts a tile to drag it into place (the
@@ -119,21 +125,21 @@ import kotlinx.coroutines.launch
  * drag (and for screen readers, which are also given them as actions on each tile).
  *
  * One progress value (0 closed, 1 open) drives the whole thing - the panel's growth out of the "+" button, each tile arriving a
- * beat after its neighbour nearer the button, the button's turn into a cross, the dock stepping back and the page dimming -
- * so they can never drift apart. It is only ever read in graphics layers and draw lambdas, so a frame of this recomposes
- * nothing.
+ * beat after its neighbour nearer the button, the button's turn into a cross, the dock stepping back, the Edit button arriving
+ * where the dock's end stood and the page dimming - so they can never drift apart. It is only ever read in graphics layers and
+ * draw lambdas, so a frame of this recomposes nothing.
  *
- * With large text, or on a screen too narrow for labels inside five columns, the same actions come as three columns of
+ * With large text, or on a screen too narrow for labels inside four columns, the same actions come as three columns of
  * icon-over-label tiles whose labels may take two lines (and reorder with the bar's buttons only).
  */
 
-private val BentoGap = 6.dp
-private val PanelPadding = 10.dp
-private val PanelCorner = 28.dp
-private val TileCorner = 18.dp
+private val BentoGap = 8.dp
+private val PanelPadding = 12.dp
+private val PanelCorner = 32.dp
+private val TileCorner = 22.dp
 
 /** Narrowest cell that still holds a label of a word ("Categories") beside no more than the tile's padding. */
-private val MinBentoCell = 54.dp
+private val MinBentoCell = 64.dp
 
 /** Above this the labels would not fit their tiles, so the panel falls back to the three-column list. */
 private const val MaxBentoFontScale = 1.15f
@@ -154,66 +160,83 @@ private const val TileStagger = 0.045f
 /** How far a handle must be dragged, as a share of a cell, before the tile changes size. */
 private const val ResizeDragCells = 0.4f
 
+/** The close: a spring with no overshoot, stiff enough to answer a dismiss at once and to be gone in about a quarter of a second. */
+private const val CloseStiffness = 520f
+
 /**
  * Progress of the action menu: 0 closed, 1 open. Opens on the app's spatial spring (it may pass 1 by a hair while it
- * settles), closes in 200 ms on the fast-start curve; instant when animations are off. A [State], so the readers that draw from it
- * recompose nothing.
+ * settles), closes on a stiffer spring that does not overshoot; instant when animations are off. A [State], so the readers that
+ * draw from it recompose nothing.
+ *
+ * The close is a spring and not a curve of fixed length: a fast-start curve took the panel from open to nearly closed in
+ * three frames, so it blinked out instead of shrinking back to the button, and a tap on "+" while it was closing started the
+ * open from a standstill. A spring carries its speed over into whatever comes next.
  */
 @Composable
 fun rememberActionMenuProgress(open: Boolean): State<Float> {
     val progress = remember { Animatable(if (open) 1f else 0f) }
     val openSpec = AppMotion.spatial<Float>()
-    val closeMs = AppMotion.duration(AppMotion.SHORT_MS)
-    LaunchedEffect(open, openSpec, closeMs) {
+    val reduced = rememberReducedMotion()
+    LaunchedEffect(open, openSpec, reduced) {
         when {
             open -> progress.animateTo(1f, openSpec)
-            closeMs == 0 -> progress.snapTo(0f)
-            // The fast-start curve, not the accelerating exit one: a dismiss must answer the tap at once, not sit still first.
-            else -> progress.animateTo(0f, tween(closeMs, easing = AppMotion.standard))
+            reduced -> progress.snapTo(0f)
+            else -> progress.animateTo(0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = CloseStiffness))
         }
     }
     return progress.asState()
 }
 
-/** A tile's fill and the colour of what is drawn on it, from the theme so every palette (Light, Dark, Pure, wallpaper) works. */
-internal data class TileTone(val container: Color, val content: Color)
+/**
+ * How much of the dock shows while the menu is at [progress]: gone once the panel is three-quarters open, and back as the panel
+ * goes - so the dock and the panel cross over without ever being fully there together. While it is not all there it slides
+ * ([dockSlide]) and shrinks towards the "+" it goes into, so it is seen to go and come back rather than fade.
+ *
+ * Until 2026-11-01 it was gone by half open and only faded, with a 10% shrink: on the close spring that is the last ~130 ms, and
+ * the owner saw it "snap into place" instead of sliding in. Three-quarters gives it ~200 ms of the close, and the slide gives it
+ * somewhere to come from.
+ */
+internal fun dockShown(progress: Float): Float = ((DockGoneAt - progress) / DockGoneAt).coerceIn(0f, 1f)
+
+/** The menu's progress by which the dock has gone; the Edit button beside the "x" comes in only after it. */
+internal const val DockGoneAt = 0.75f
+
+/** How far the dock slides towards the "+" as it goes, at its farthest. */
+internal val DockSlide = 72.dp
+
+/** How much smaller the dock is, at its farthest, as it goes into the "+". */
+internal const val DockShrink = 0.15f
 
 /**
- * A ramp of one hue from the theme's own roles - the saturated primary down through the containers to a quiet neutral - so
- * the panel reads as one family, as in the design, and every fill is paired with the role made to be read on it. [index] is
- * the action's place in the design's own order, so a tile keeps its colour wherever the user moves it.
+ * A tile's fill, the colour of its label and the colour of its icon (the same, unless the tile is a neutral one whose icon takes
+ * the accent), from the theme so every palette (Light, Dark, Pure, wallpaper) works.
  */
-internal fun tileTone(index: Int, scheme: ColorScheme): TileTone {
-    // Every pair is checked, not trusted: the hand-drawn palettes and the in-between step have no role made for them.
-    val deep = tone(scheme.primary, listOf(scheme.onPrimary, scheme.onSurface))
-    val strong = tone(scheme.primaryContainer, listOf(scheme.onPrimaryContainer, scheme.onSurface))
-    val mid = tone(
-        lerp(scheme.primaryContainer, scheme.secondaryContainer, 0.5f),
-        listOf(scheme.onSecondaryContainer, scheme.onPrimaryContainer, scheme.onSurface),
-    )
-    val soft = tone(scheme.secondaryContainer, listOf(scheme.onSecondaryContainer, scheme.onSurface))
-    val quiet = tone(scheme.surfaceContainerHighest, listOf(scheme.onSurface))
-    return when (index) {
-        0 -> deep
-        1 -> strong
-        2 -> mid
-        3 -> soft
-        4 -> mid
-        5 -> soft
-        6 -> mid
-        7 -> soft
-        8 -> mid
-        9 -> strong
-        10 -> quiet
-        else -> if (index % 2 == 0) mid else soft
-    }
+internal data class TileTone(val container: Color, val content: Color, val accent: Color = content)
+
+/**
+ * Three roles, as the rest of the app uses them: the main action is **filled** primary (as Home's "Add income" is), the next is
+ * the tonal primary container, and every other tile is the neutral tonal surface that fields and list segments are, its icon in
+ * the accent. The rank is the size and the fill, not a different blue for each tile: an earlier ramp of five alternating tones read
+ * as a patchwork, and its darkest tiles melted into the panel. [index] is the action's place in the design's own order, so a tile
+ * keeps its look wherever the user moves it.
+ */
+internal fun tileTone(index: Int, scheme: ColorScheme): TileTone = when (index) {
+    // Every pair is checked, not trusted: the hand-drawn palettes have no role made for some of them.
+    0 -> tone(scheme.primary, listOf(scheme.onPrimary, scheme.onSurface))
+    1 -> tone(scheme.primaryContainer, listOf(scheme.onPrimaryContainer, scheme.onSurface))
+    else -> tone(scheme.surfaceContainerHighest, listOf(scheme.onSurface), accents = listOf(scheme.primary, scheme.onSurface))
 }
 
-/** The first of [preferred] that reads on [container] at WCAG's 4.5:1 for small text, else whichever of black and white reads better. */
-private fun tone(container: Color, preferred: List<Color>): TileTone {
-    val ink = preferred.firstOrNull { contrastRatio(it, container) >= 4.5f }
-        ?: if (contrastRatio(Color.Black, container) >= contrastRatio(Color.White, container)) Color.Black else Color.White
-    return TileTone(container, ink)
+/**
+ * The first of [preferred] that reads on [container] at WCAG's 4.5:1 for small text, else whichever of black and white reads
+ * better; the icon's colour is chosen the same way from [accents], or is the same ink.
+ */
+private fun tone(container: Color, preferred: List<Color>, accents: List<Color> = emptyList()): TileTone {
+    fun readable(from: List<Color>): Color =
+        from.firstOrNull { contrastRatio(it, container) >= 4.5f }
+            ?: if (contrastRatio(Color.Black, container) >= contrastRatio(Color.White, container)) Color.Black else Color.White
+    val ink = readable(preferred)
+    return TileTone(container, ink, if (accents.isEmpty()) ink else readable(accents))
 }
 
 internal fun contrastRatio(a: Color, b: Color): Float {
@@ -221,6 +244,10 @@ internal fun contrastRatio(a: Color, b: Color): Float {
     val lb = b.luminance()
     return (maxOf(la, lb) + 0.05f) / (minOf(la, lb) + 0.05f)
 }
+
+/** The panel's fill, a tone below the tiles; the Edit button in the dock row wears it too, so it looks as it did on the panel. */
+internal fun actionMenuPanelColor(scheme: ColorScheme): Color =
+    if (scheme.isDark) scheme.surfaceContainerLow else scheme.surfaceContainerLowest
 
 /** The tone for the action [id] at [position] in the arrangement: by its place in the design, else alternating. */
 private fun toneIndexOf(id: String, position: Int): Int =
@@ -242,7 +269,6 @@ internal fun ActionMenuPanel(
     editing: Boolean,
     onEditingChange: (Boolean) -> Unit,
     colors: DockColors,
-    backdrop: FrostedBackdrop?,
     progress: () -> Float,
     open: Boolean,
     onActionClick: (FooterAction) -> Unit,
@@ -250,11 +276,10 @@ internal fun ActionMenuPanel(
 ) {
     val shape = RoundedCornerShape(PanelCorner)
     val scheme = MaterialTheme.colorScheme
-    val panelColor = if (scheme.isDark) {
-        scheme.surfaceContainerHigh.copy(alpha = 0.88f)
-    } else {
-        scheme.surfaceContainerLowest.copy(alpha = 0.94f)
-    }
+    // A tone below the tiles' (they are the highest container), so each tile stands off the panel in light and in dark alike, and
+    // fully opaque: the panel draws no blur any more (it cost a frame's GPU and was invisible at 95%), and without one a faint
+    // page behind it - a card's name, a banner - showed through the tiles as a ghost (seen on the phone).
+    val panelColor = actionMenuPanelColor(scheme)
     val fontScale = LocalDensity.current.fontScale
     val originBelow = OriginBelowPanel
 
@@ -281,9 +306,7 @@ internal fun ActionMenuPanel(
 
     val edit = MenuEdit(
         editing = inEditMode,
-        offerEdit = editable && !editing,
         selectedId = selectedId,
-        onStartEditing = { onEditingChange(true) },
         onSelect = { id -> selectedId = if (selectedId == id) null else id },
         onNudge = ::nudge,
         onToggleSize = ::toggleSize,
@@ -309,11 +332,14 @@ internal fun ActionMenuPanel(
                 val s = 0.4f + 0.6f * p
                 scaleX = s
                 scaleY = s
-                alpha = (p * 2f).coerceIn(0f, 1f)
+                // Seen early on the way open and kept to the end of the way back, so the panel is visibly carried to the button.
+                alpha = (p * 3f).coerceIn(0f, 1f)
+                // The alpha goes onto what is drawn, not onto a copy of the whole panel made for it every frame: the panel is
+                // one surface of one colour, so nothing shows through itself, and a frame of the animation costs far less.
+                compositingStrategy = CompositingStrategy.ModulateAlpha
             }
             .fillMaxWidth()
             .widthIn(max = ActionMenuMaxWidth)
-            .frostedGlass(backdrop, shape)
             .semantics { paneTitle = if (inEditMode) "Edit actions" else "Actions" },
     ) {
         BoxWithConstraints(Modifier.padding(PanelPadding)) {
@@ -356,10 +382,7 @@ internal fun ActionMenuPanel(
 /** What the grids need of Edit mode, in one piece. */
 private class MenuEdit(
     val editing: Boolean,
-    /** The Edit button is offered (the menu can be edited and is not being). */
-    val offerEdit: Boolean,
     val selectedId: String?,
-    val onStartEditing: () -> Unit,
     val onSelect: (String) -> Unit,
     val onNudge: (id: String, by: Int) -> Unit,
     val onToggleSize: (id: String) -> Unit,
@@ -380,7 +403,7 @@ private fun BentoGrid(
     edit: MenuEdit,
     onActionClick: (FooterAction) -> Unit,
 ) {
-    val plan = remember(arranged, edit.offerEdit) { bentoPlan(arranged, edit.offerEdit) }
+    val plan = remember(arranged) { bentoPlan(arranged) }
     val density = LocalDensity.current
     val cellPx = with(density) { cell.toPx() }
     val gapPx = with(density) { BentoGap.toPx() }
@@ -419,18 +442,6 @@ private fun BentoGrid(
                 )
             }
         }
-        plan.trailing?.let { slot ->
-            EditTile(
-                slot = slot,
-                cellPx = cellPx,
-                gapPx = gapPx,
-                scheme = scheme,
-                delay = if (open) slot.arrivalRank(plan.rows) * TileStagger else 0f,
-                progress = progress,
-                interactive = open,
-                onClick = edit.onStartEditing,
-            )
-        }
     }
 }
 
@@ -451,46 +462,27 @@ private fun CompactGrid(
     edit: MenuEdit,
     onActionClick: (FooterAction) -> Unit,
 ) {
-    // The tiles, then the Edit button as the last of them.
-    val count = arranged.size + if (edit.offerEdit) 1 else 0
+    val count = arranged.size
     Column(verticalArrangement = Arrangement.spacedBy(BentoGap)) {
         val rows = (0 until count).chunked(CompactColumns)
         rows.forEachIndexed { r, indices ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(BentoGap)) {
                 indices.forEachIndexed { c, index ->
                     val delay = if (open) ((rows.size - 1 - r) + (CompactColumns - 1 - c)) * TileStagger else 0f
-                    if (index < arranged.size) {
-                        val action = arranged[index]
-                        CompactTile(
-                            label = action.action.label,
-                            description = action.action.contentDescription ?: action.action.label,
-                            icon = { Icon(action.action.icon, contentDescription = null, tint = tileTone(toneIndexOf(action.action.id, index), scheme).content, modifier = Modifier.size(24.dp)) },
-                            container = tileTone(toneIndexOf(action.action.id, index), scheme).container,
-                            delay = delay,
-                            progress = progress,
-                            interactive = open,
-                            editing = edit.editing,
-                            selected = edit.selectedId == action.action.id,
-                            outlined = false,
-                            onClick = { if (edit.editing) edit.onSelect(action.action.id) else onActionClick(action.action) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    } else {
-                        CompactTile(
-                            label = "Edit",
-                            description = "Edit actions",
-                            icon = { Icon(Icons.Outlined.Edit, contentDescription = null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(24.dp)) },
-                            container = Color.Transparent,
-                            delay = delay,
-                            progress = progress,
-                            interactive = open,
-                            editing = false,
-                            selected = false,
-                            outlined = true,
-                            onClick = edit.onStartEditing,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+                    val action = arranged[index]
+                    CompactTile(
+                        label = action.action.label,
+                        description = action.action.contentDescription ?: action.action.label,
+                        icon = { Icon(action.action.icon, contentDescription = null, tint = tileTone(toneIndexOf(action.action.id, index), scheme).accent, modifier = Modifier.size(24.dp)) },
+                        container = tileTone(toneIndexOf(action.action.id, index), scheme).container,
+                        delay = delay,
+                        progress = progress,
+                        interactive = open,
+                        editing = edit.editing,
+                        selected = edit.selectedId == action.action.id,
+                        onClick = { if (edit.editing) edit.onSelect(action.action.id) else onActionClick(action.action) },
+                        modifier = Modifier.weight(1f),
+                    )
                 }
                 repeat(CompactColumns - indices.size) { Spacer(Modifier.weight(1f)) }
             }
@@ -505,6 +497,8 @@ private fun Modifier.arriving(progress: () -> Float, delay: Float): Modifier = g
     scaleX = s
     scaleY = s
     alpha = (p * 1.4f).coerceIn(0f, 1f)
+    // A dozen tiles fade at once: each with its own off-screen copy was the most expensive thing in the frame.
+    compositingStrategy = CompositingStrategy.ModulateAlpha
 }
 
 /** Presses sink a tile a little, on the app's spring, so a tap is felt as well as heard. */
@@ -642,19 +636,19 @@ private fun BentoTile(
                     }
                 }
             },
-        contentAlignment = if (slot.shape == BentoShape.Wide) Alignment.CenterStart else Alignment.Center,
+        contentAlignment = if (slot.shape == BentoShape.Wide || slot.shape == BentoShape.Hero) Alignment.CenterStart else Alignment.Center,
     ) {
-        if (slot.shape == BentoShape.Wide) {
+        if (slot.shape == BentoShape.Wide || slot.shape == BentoShape.Hero) {
             Row(
-                modifier = Modifier.padding(start = 20.dp, end = 12.dp),
+                modifier = Modifier.padding(start = 22.dp, end = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Icon(action.icon, contentDescription = null, tint = tone.content, modifier = Modifier.size(24.dp))
+                Icon(action.icon, contentDescription = null, tint = tone.accent, modifier = Modifier.size(if (slot.shape == BentoShape.Hero) 28.dp else 26.dp))
                 Text(
                     text = action.label,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Medium,
+                    style = if (slot.shape == BentoShape.Hero) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
+                    fontWeight = if (slot.shape == BentoShape.Hero) FontWeight.SemiBold else FontWeight.Medium,
                     color = tone.content,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -670,8 +664,8 @@ private fun BentoTile(
                 Icon(
                     imageVector = action.icon,
                     contentDescription = null,
-                    tint = tone.content,
-                    modifier = Modifier.size(if (slot.shape == BentoShape.Hero) 28.dp else 24.dp),
+                    tint = tone.accent,
+                    modifier = Modifier.size(26.dp),
                 )
                 TileLabel(action.label, tone.content)
             }
@@ -710,47 +704,6 @@ private fun BentoTile(
     }
 }
 
-/** The Edit button, where the design left a cell free: outlined rather than filled, so it reads as the menu's own, not an action. */
-@Composable
-private fun EditTile(
-    slot: BentoSlot,
-    cellPx: Float,
-    gapPx: Float,
-    scheme: ColorScheme,
-    delay: Float,
-    progress: () -> Float,
-    interactive: Boolean,
-    onClick: () -> Unit,
-) {
-    val haptics = rememberAppHaptics()
-    val density = LocalDensity.current
-    val sizePx = slot.sizePx(cellPx, gapPx)
-    val offset by animateIntOffsetAsState(slot.offsetPx(cellPx, gapPx).round(), AppMotion.spatial(), label = "edit_tile_offset")
-    val ink = scheme.onSurfaceVariant
-    Box(
-        modifier = Modifier
-            .offset { offset }
-            .size(with(density) { sizePx.width.toDp() }, with(density) { sizePx.height.toDp() })
-            .arriving(progress, delay)
-            .clip(CircleShape)
-            .border(1.5.dp, ink.copy(alpha = 0.55f), CircleShape)
-            .clickable(enabled = interactive, onClickLabel = "Edit actions", role = Role.Button) {
-                haptics.selection()
-                onClick()
-            }
-            .semantics { contentDescription = "Edit actions" },
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
-        ) {
-            Icon(Icons.Outlined.Edit, contentDescription = null, tint = ink, modifier = Modifier.size(22.dp))
-            TileLabel("Edit", ink)
-        }
-    }
-}
-
 @Composable
 private fun CompactTile(
     label: String,
@@ -762,7 +715,6 @@ private fun CompactTile(
     interactive: Boolean,
     editing: Boolean,
     selected: Boolean,
-    outlined: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -805,7 +757,6 @@ private fun CompactTile(
                 .then(
                     when {
                         selected -> Modifier.border(2.dp, scheme.onSurface, RoundedCornerShape(TileCorner))
-                        outlined -> Modifier.border(1.5.dp, scheme.onSurfaceVariant.copy(alpha = 0.55f), RoundedCornerShape(TileCorner))
                         editing -> Modifier.border(1.dp, scheme.onSurface.copy(alpha = 0.25f), RoundedCornerShape(TileCorner))
                         else -> Modifier
                     },
@@ -827,8 +778,8 @@ private fun CompactTile(
 
 @Composable
 private fun TileLabel(text: String, color: Color) {
-    // A word in a fifth of a phone's width: it steps down from 11 sp until it fits (a long word in a wide custom font
-    // included) instead of running into the tile's edge or being cut.
+    // A word in a fifth of a phone's width: it steps down from 12 sp until it fits (a long word in a wide custom font
+    // included) instead of running into the tile's edge or being cut. 12 sp is a label's size; the smallest, 9, is still legible.
     Text(
         text = text,
         style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.1.sp),
@@ -836,7 +787,7 @@ private fun TileLabel(text: String, color: Color) {
         color = color,
         maxLines = 1,
         softWrap = false,
-        autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = 11.sp),
+        autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 12.sp),
         textAlign = TextAlign.Center,
         modifier = Modifier.clearAndSetSemantics { },
     )

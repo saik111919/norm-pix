@@ -21,8 +21,8 @@ When a fact drifts: fix the prose that mentions it **first**, then change the va
 nothing needed changing.
 
 <!-- facts:begin -->
-verified_commit=46665c2c
-verified_date=2026-10-28
+verified_commit=5ee89b6d
+verified_date=2026-11-02
 versionName=1.5.0
 finance_db_version=12
 reminders_db_version=2
@@ -76,6 +76,7 @@ ConfirmSheetContent
 ConnectedChoiceRow
 DeckFacts
 SwipeRevealRow
+SwipeActionRow
 AppSplitButton
 AppLinearProgress
 AppLoadingIndicator
@@ -107,6 +108,23 @@ BackButtonStyle
 AccentColor
 GuideTopic
 GuideArt
+GuideShots
+GuideIndexPage
+PagePill
+BanksAndCategoriesPage
+LocalSettingsIcons3d
+bannerColors
+EditActionsButton
+DockGoneAt
+refreshAllOnTheSecond
+HeroWeather
+heroWeatherFor
+LocalLiveMotion
+rememberLiveClock
+ProfileAvatarSteadyTest
+secondBoxPaddingDp
+CardFolderStack
+FolderTabShape
 WidgetRequest
 WidgetIntents
 DropTelemetryBackend

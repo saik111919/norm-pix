@@ -150,7 +150,7 @@ fun WalletCardView(
     val scope = rememberCoroutineScope()
     val reduced = rememberReducedMotion()
     val flip = remember { Animatable(0f) }
-    val theme = remember(card.bankName) { BankCardDesign.themeFor(card.bankName) }
+    val theme = remember(card.bankName, card.bankKey, card.cardName) { BankCardDesign.forCard(card) }
     val showingBack = flip.value >= 0.5f
 
     val revealLabel = revealLabelOf(revealed, nfcGated)
@@ -392,6 +392,17 @@ private fun CardFront(card: StoredCard, theme: BankBrandTheme, revealed: Boolean
             // The chip sits where it does on a physical card, just above the number; what is left of the card above it is
             // the bank's pattern.
             Spacer(Modifier.weight(1f))
+            if (card.cardName.isNotBlank()) {
+                // The card's own name, as printed above the chip on a real one.
+                Text(
+                    card.cardName.uppercase(),
+                    style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.6.sp, fontWeight = FontWeight.SemiBold),
+                    color = Color.White.copy(alpha = 0.88f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 EmvChip(theme.chipFinish)
                 Spacer(Modifier.width(10.dp))
@@ -780,7 +791,7 @@ fun WalletCardFacePreview(
 ) {
     val density = LocalDensity.current
     val fixedDensity = remember(density) { Density(density.density, fontScale = 1f) }
-    val theme = remember(card.bankName) { BankCardDesign.themeFor(card.bankName) }
+    val theme = remember(card.bankName, card.bankKey, card.cardName) { BankCardDesign.forCard(card) }
     CompositionLocalProvider(LocalDensity provides fixedDensity) {
         Box(modifier.fillMaxWidth().aspectRatio(CARD_ASPECT)) { CardFront(card, theme, revealed, bankIconStyle) }
     }
@@ -789,6 +800,6 @@ fun WalletCardFacePreview(
 /** A card's colours and pattern with nothing printed on it: all that shows of a card that lies behind another. */
 @Composable
 fun WalletCardPlate(card: StoredCard, modifier: Modifier = Modifier) {
-    val theme = remember(card.bankName) { BankCardDesign.themeFor(card.bankName) }
+    val theme = remember(card.bankName, card.bankKey, card.cardName) { BankCardDesign.forCard(card) }
     Box(modifier.fillMaxWidth().aspectRatio(CARD_ASPECT)) { CardFace(theme) {} }
 }

@@ -75,6 +75,63 @@ class BankRepositoryTest {
     }
 
     @Test
+    fun aBankYouAddedCanBeRenamed_andItsAccountsKeepPointingAtIt() = run {
+        val key = repo.bankKeyFor("My Credit Union")
+        val saved = repo.saveAccount(account("Co-op", kind = AccountKind.Savings, bankKey = key))
+
+        repo.renameBank(key, "  Our   Credit Union ")
+
+        assertEquals(listOf("Our Credit Union"), repo.customBanks().map { it.name })
+        assertEquals(key, repo.customBanks().single().key, "the key never changes")
+        assertEquals(key, repo.accounts().first { it.id == saved.id }.bankKey)
+        // The old name is free again, and the new one finds the same bank.
+        assertEquals(key, repo.bankKeyFor("our credit union"))
+        assertNotEquals(key, repo.bankKeyFor("My Credit Union"))
+    }
+
+    @Test
+    fun aRenameCannotTakeAnotherBanksNameOrBeEmpty() = run {
+        val mine = repo.bankKeyFor("My Credit Union")
+        repo.bankKeyFor("Another Co-op")
+
+        assertFailsWith<FinanceValidationException> { repo.renameBank(mine, "HDFC Bank") }
+        assertFailsWith<FinanceValidationException> { repo.renameBank(mine, "another co-op") }
+        assertFailsWith<FinanceValidationException> { repo.renameBank(mine, "  ") }
+        assertFailsWith<FinanceValidationException> { repo.renameBank(mine, "x".repeat(61)) }
+        assertFailsWith<FinanceValidationException> { repo.renameBank("hdfc", "Not HDFC") }
+        assertFailsWith<FinanceValidationException> { repo.renameBank("custom-nothing", "Whatever") }
+        assertEquals(listOf("Another Co-op", "My Credit Union"), repo.customBanks().map { it.name })
+        // Only changing the way it is written is fine: the bank is not "taken" by itself.
+        repo.renameBank(mine, "MY CREDIT UNION")
+        assertTrue(repo.customBanks().any { it.name == "MY CREDIT UNION" })
+    }
+
+    @Test
+    fun aBankNothingUsesCanBeDeleted_andOneAnAccountUsesCannot() = run {
+        val unused = repo.bankKeyFor("Unused Co-op")
+        val used = repo.bankKeyFor("My Credit Union")
+        val account = repo.saveAccount(account("Co-op", kind = AccountKind.Savings, bankKey = used))
+
+        repo.deleteBank(unused)
+        assertEquals(listOf("My Credit Union"), repo.customBanks().map { it.name })
+
+        assertFailsWith<FinanceValidationException> { repo.deleteBank(used) }
+        assertEquals(listOf("My Credit Union"), repo.customBanks().map { it.name }, "nothing was removed")
+        assertEquals(used, repo.accounts().first { it.id == account.id }.bankKey)
+
+        // Once the account has another bank, it can go.
+        repo.saveAccount(account.copy(bankKey = "hdfc"))
+        repo.deleteBank(used)
+        assertTrue(repo.customBanks().isEmpty())
+    }
+
+    @Test
+    fun aBuiltInBankCannotBeDeleted() = run {
+        assertFailsWith<FinanceValidationException> { repo.deleteBank("hdfc") }
+        assertFailsWith<FinanceValidationException> { repo.deleteBank("custom-nothing") }
+    }
+
+    @Test
     fun anAccountKeepsItsBank() = run {
         val custom = repo.bankKeyFor("My Credit Union")
         val saved = repo.saveAccount(account("HDFC Savings", bankKey = "hdfc"))

@@ -52,7 +52,7 @@ fun CardCarousel(
     DeckCarousel(
         items = cards,
         itemKey = { it.id },
-        tint = { BankCardDesign.themeFor(it.bankName).gradientColors.firstOrNull() },
+        tint = { BankCardDesign.forCard(it).gradientColors.firstOrNull() },
         sideDescription = { card, index, count ->
             val kind = if (card.kind == CardKind.Credit) "credit" else "debit"
             "${card.bankName} $kind card, ending in ${card.last4}, card ${index + 1} of $count"

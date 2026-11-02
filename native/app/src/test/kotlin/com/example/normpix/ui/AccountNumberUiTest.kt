@@ -1,5 +1,6 @@
 package com.example.normpix.ui
 
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -7,6 +8,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import com.example.normpix.finance.domain.Account
@@ -77,7 +79,7 @@ class AccountNumberUiTest {
         showForm(salary) { saved = it }
 
         compose.onNodeWithText("Account number ends with (optional)").performTextInput("3588")
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
 
         assertEquals("3588", assertNotNull(saved).numberEnding)
@@ -105,7 +107,7 @@ class AccountNumberUiTest {
         showForm(salary) { saved = it }
 
         compose.onNodeWithText("Account number ends with (optional)").performTextInput("35a8-8 9")
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
 
         assertEquals("3588", assertNotNull(saved).numberEnding)
@@ -118,7 +120,7 @@ class AccountNumberUiTest {
         showForm(salary) { saved = it }
 
         compose.onNodeWithText("Account number ends with (optional)").performTextInput("35")
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitForIdle()
 
         compose.onNodeWithText("Enter all 4 digits, or leave it empty").assertIsDisplayed()
@@ -134,7 +136,7 @@ class AccountNumberUiTest {
 
         compose.onNodeWithText("3588").assertIsDisplayed()
         compose.onNodeWithText("3588").performTextClearance()
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
 
         assertNull(assertNotNull(saved).numberEnding)
@@ -160,7 +162,7 @@ class AccountNumberUiTest {
 
         compose.onNodeWithText("Card number (optional)").performTextInput("4111111111111111")
         compose.onNodeWithText("Only the first 6 and last 4 digits are kept, to recognise this card on receipts").assertIsDisplayed()
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
 
         assertEquals("411111", assertNotNull(saved).numberStart)
@@ -186,7 +188,7 @@ class AccountNumberUiTest {
         showForm(credit) { saved = it }
 
         compose.onNodeWithText("Card number (optional)").performTextInput("4455")
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
 
         assertEquals("4455", assertNotNull(saved).numberEnding)
@@ -200,7 +202,7 @@ class AccountNumberUiTest {
         showForm(credit) { saved = it }
 
         compose.onNodeWithText("Kept: 4111 11•• •••• 1111. Type the number again to change it.").assertIsDisplayed()
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
 
         assertEquals("411111", stored(credit.id).numberStart)
@@ -214,7 +216,7 @@ class AccountNumberUiTest {
         showForm(credit) { saved = it }
 
         compose.onNodeWithContentDescription("Forget the kept digits").performClick()
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
 
         assertNull(stored(credit.id).numberStart)
@@ -228,7 +230,7 @@ class AccountNumberUiTest {
         showForm(credit) { saved = it }
 
         compose.onNodeWithText("Card number (optional)").performTextInput("41111111")
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitForIdle()
 
         compose.onNodeWithText("Enter the whole card number, or just its last 4 digits, or leave it empty").assertIsDisplayed()
@@ -244,7 +246,7 @@ class AccountNumberUiTest {
 
         compose.onNodeWithText("Card number (optional)").performTextInput("4111111111111112")
         compose.onNodeWithText("That doesn't look like a card number. Check the digits.").assertIsDisplayed()
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
         assertEquals("411111", assertNotNull(saved).numberStart)
     }
@@ -264,7 +266,7 @@ class AccountNumberUiTest {
         showForm(salary) { saved = it }
         compose.onAllNodesWithText("Card number (optional)").assertCountEquals(0)
         compose.onNodeWithText("Account number ends with (optional)").performTextInput("3588")
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
         assertNull(assertNotNull(saved).numberStart)
         assertEquals("3588", saved?.numberEnding)
@@ -282,7 +284,7 @@ class AccountNumberUiTest {
         compose.onNodeWithText("Card in your Wallet (optional)").performClick()
         // By what the Wallet shows of a card - bank, kind, last four - never its number.
         compose.onNodeWithText("HDFC Bank · Credit •••• 4455").performClick()
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
 
         assertEquals("rupay", assertNotNull(saved).cardId)
@@ -312,7 +314,7 @@ class AccountNumberUiTest {
         compose.onNodeWithText("HDFC Bank · Credit •••• 4455").assertIsDisplayed()
         compose.onNodeWithText("Card in your Wallet (optional)").performClick()
         compose.onNodeWithText("No card").performClick()
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
 
         assertNull(assertNotNull(saved).cardId)
@@ -327,7 +329,7 @@ class AccountNumberUiTest {
         showForm(old) { saved = it }
 
         compose.onAllNodesWithText("deleted-long-ago").assertCountEquals(0)
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
 
         assertNull(assertNotNull(saved).cardId)

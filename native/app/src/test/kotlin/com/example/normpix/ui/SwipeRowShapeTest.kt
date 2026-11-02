@@ -9,9 +9,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
@@ -44,6 +48,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * A swiped-open row meets its action tiles flush, with a square edge: a rounded corner there would leave a notch of page
  * between its curve and the tile's square corner. Told apart by what is drawn - and shut, the row keeps its rounded corner.
+ * And a transaction row pulled sideways shows its action's colour in the strip it leaves bare.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -107,42 +112,65 @@ class SwipeRowShapeTest {
         assertEquals(row, at(bounds.right.value - 20f, (bounds.top.value + bounds.bottom.value) / 2), "and the row is there")
     }
 
-    @Test
-    fun aRealTransactionRowOpenedAlsoMeetsItsActionsFlush() {
-        // The row draws its own surface inside the sliding content; that must not keep a rounded corner against the tile.
-        val env = TestEnvironment("swipe_row_shape")
+    /**
+     * A transaction row held part of the way across, and the colour (as ARGB) behind it 4 dp in from the edge it was pulled away
+     * from: the strip the row has left bare. [farPull] pulls it far enough that letting go would do the action.
+     */
+    private fun backdrop(toTheLeft: Boolean, farPull: Boolean): Pair<Int, ColorScheme> {
+        val env = TestEnvironment("swipe_row_backdrop")
         val at = java.time.LocalDateTime.of(2026, 10, 5, 9, 0)
         val transaction = FinanceTransaction(
             id = 7, type = TransactionType.Expense, amount = 12_500, accountId = 1, payee = "Corner Cafe",
             occurredAt = at, createdAt = at, updatedAt = at,
         )
+        var scheme: ColorScheme? = null
         compose.setContent {
             CompositionLocalProvider(LocalReducedMotionOverride provides true) {
                 env.Content {
+                    scheme = MaterialTheme.colorScheme
                     Box(Modifier.fillMaxSize().padding(16.dp)) {
-                        SwipeRevealHost {
-                            SwipeableTransactionRow(
-                                transaction = transaction,
-                                shape = RoundedCornerShape(20.dp),
-                                swipe = TransactionSwipeActions.EditAndDelete,
-                                onOpen = {}, onEdit = {}, onDelete = {},
-                            )
-                        }
+                        SwipeableTransactionRow(
+                            transaction = transaction,
+                            shape = RoundedCornerShape(20.dp),
+                            swipe = TransactionSwipeActions.EditAndDelete,
+                            onOpen = {}, onEdit = {}, onDelete = {},
+                        )
                     }
                 }
             }
         }
         val rowNode = compose.onNode(hasContentDescription("Corner Cafe", substring = true))
-        rowNode.performTouchInput { swipeLeft(startX = right - 8f, endX = left + 8f) }
-        compose.waitForIdle()
-
         val bounds = rowNode.getUnclippedBoundsInRoot()
-        val pixels = pixels()
-        fun at(x: Float, y: Float) = pixels[(x * density).toInt(), (y * density).toInt()]
-        // The row colour, read well clear of any text and of the corner.
-        val body = at(bounds.right.value - 40f, bounds.top.value + 3f)
-        assertEquals(body, at(bounds.right.value - 1f, bounds.top.value + 1f), "the row's top corner at the junction is as square as its body")
-        assertEquals(body, at(bounds.right.value - 1f, bounds.bottom.value - 1f), "and so is the bottom one")
+        val pull = (if (farPull) 600f else 120f) * (if (toTheLeft) -1f else 1f)
+        rowNode.performTouchInput {
+            down(center)
+            moveBy(Offset(pull / 2, 0f))
+            moveBy(Offset(pull / 2, 0f))
+        }
+        compose.waitForIdle()
+        val x = if (toTheLeft) bounds.right.value - 4f else bounds.left.value + 4f
+        val seen = pixels()[(x * density).toInt(), (((bounds.top.value + bounds.bottom.value) / 2) * density).toInt()].toArgb()
+        val colours = scheme!!
+        rowNode.performTouchInput { cancel() }
         env.close()
+        return seen to colours
+    }
+
+    @Test
+    fun aRowPulledToTheRightShowsDeleteInRedBehindIt() {
+        val (seen, scheme) = backdrop(toTheLeft = false, farPull = false)
+        assertEquals(scheme.errorContainer.toArgb(), seen, "the strip it leaves bare is Delete's colour")
+    }
+
+    @Test
+    fun aRowPulledToTheLeftShowsEditBehindIt() {
+        val (seen, scheme) = backdrop(toTheLeft = true, farPull = false)
+        assertEquals(scheme.secondaryContainer.toArgb(), seen, "the strip it leaves bare is Edit's colour")
+    }
+
+    @Test
+    fun theColourFirmsUpOnceLettingGoWouldDoIt() {
+        val (seen, scheme) = backdrop(toTheLeft = false, farPull = true)
+        assertEquals(scheme.error.toArgb(), seen, "far enough, Delete's colour is the strong one")
     }
 }

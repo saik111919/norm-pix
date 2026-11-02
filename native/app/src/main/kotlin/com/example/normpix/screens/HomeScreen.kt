@@ -58,6 +58,7 @@ import com.example.normpix.finance.domain.settledCutoff
 import com.example.normpix.finance.domain.shareOf
 import com.example.normpix.finance.domain.upcomingOccurrences
 import com.example.normpix.finance.ui.AsyncValue
+import com.example.normpix.finance.ui.heroWeatherFor
 import com.example.normpix.finance.ui.CategoryAvatar
 import com.example.normpix.finance.ui.CategorySpend
 import com.example.normpix.finance.ui.CategorySpendSheet
@@ -329,6 +330,8 @@ private fun MonthOverview(data: HomeData, onClick: () -> Unit) {
 
     Hero(
         onClick = onClick,
+        // The month's weather on the card (Settings > Appearance > Effects > Hero weather): see HeroWeather.
+        weather = heroWeatherFor(s.expense, budget?.health, change),
         tiles = listOf(
             { slot ->
                 if (budget != null) {

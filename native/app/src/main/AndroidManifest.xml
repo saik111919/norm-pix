@@ -9,7 +9,11 @@
 
     <uses-permission android:name="android.permission.NFC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Exact alarms, for reminders on the minute and the watch dial's rings. From Android 13 USE_EXACT_ALARM is granted at install
+         and cannot be switched off, so neither depends on the "Alarms & reminders" switch being found and turned on (which it
+         had to be, and the dial's seconds ring was out by half a minute when it was not); on Android 12 the switch is the way. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
 

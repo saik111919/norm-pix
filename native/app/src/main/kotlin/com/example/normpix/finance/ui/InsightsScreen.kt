@@ -27,10 +27,12 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -66,7 +68,9 @@ import com.example.normpix.finance.domain.settledBy
 import com.example.normpix.finance.domain.shareOf
 import com.example.normpix.navigation.AmountsVisibilityButton
 import com.example.normpix.navigation.AppNavigator
+import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
+import com.example.normpix.settings.InsightsCategoriesLayout
 import com.example.normpix.ui.components.AdaptiveColumns
 import com.example.normpix.ui.components.AppEmptyState
 import com.example.normpix.ui.components.AppErrorState
@@ -75,13 +79,16 @@ import com.example.normpix.ui.components.AppPage
 import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
+import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.RevealVisibility
+import com.example.normpix.ui.components.SectionSubheader
 import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppSpacing
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import kotlin.math.abs
+import kotlinx.coroutines.launch
 
 /** What Insights shows: one month (the default), or days the user picked. */
 private sealed interface InsightsPeriod {
@@ -554,9 +561,77 @@ private fun WhatChanged(data: InsightsData) {
 
 private const val COLLAPSED_ROWS = 5
 
-/** Where it went: the biggest spend named in a sentence, then the categories ranked, each with its share. */
+/**
+ * Where it went: the biggest spend named in a sentence, then the categories - ranked, each with its share, or (Settings >
+ * Appearance > Layouts > Categories in Insights) as a carousel of every category. The carousel is for a month, which its panel
+ * compares with the one before; days that were picked are shown as the list whatever the choice.
+ */
 @Composable
 private fun WhereMoneyWent(data: InsightsData) {
+    val layout = LocalAppContainer.current.preferences.state.collectAsState().value.insightsCategoriesLayout
+    val month = data.month
+    if (layout == InsightsCategoriesLayout.Carousel && month != null) {
+        WhereMoneyWentCarousel(data, month)
+    } else {
+        WhereMoneyWentList(data)
+    }
+}
+
+/** Every category of the month as a carousel: the biggest in front, its share, comparison and budget on the panel under it. */
+@Composable
+private fun WhereMoneyWentCarousel(data: InsightsData, month: MonthKey) {
+    val finance = rememberFinanceState()
+    val navigator = LocalNavigator.current
+    val overlays = LocalOverlays.current
+    val scope = rememberCoroutineScope()
+    val total = data.summary.expense
+    val spends = remember(data, finance.categories) {
+        data.expenses.map { t ->
+            CategorySpend(
+                categoryId = t.categoryId,
+                category = finance.category(t.categoryId),
+                month = month,
+                amount = t.amount,
+                count = t.count,
+                share = shareOf(t.amount, total),
+                previous = data.previousExpenses.firstOrNull { it.categoryId == t.categoryId }?.amount ?: 0L,
+                budget = null,
+            )
+        }
+    }
+    val biggest = spends.first()
+    Column(Modifier.fillMaxWidth()) {
+        SectionSubheader("Where your money went")
+        Text(
+            "${biggest.name} is your biggest spend: ${percentLabel(biggest.share)} of ${monthLabel(month)}.",
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(start = AppSpacing.lg, end = AppSpacing.lg, bottom = AppSpacing.sm),
+        )
+        CategoryCarousel(
+            spends = spends,
+            onOpen = { spend ->
+                scope.launch {
+                    // The sheet sits above the navigation graph: it closes, and this does the navigating.
+                    val seeAll = overlays.sheet<Boolean>(expandable = true) { dismiss ->
+                        CategorySpendSheet(spend, onSeeAll = { dismiss(true) })
+                    }
+                    if (seeAll == true) data.openCategory(navigator, spend.categoryId)
+                }
+            },
+            onSeeAll = { spend -> data.openCategory(navigator, spend.categoryId) },
+        )
+        Text(
+            "Swipe across to change category. Tap the card for its month.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = AppSpacing.lg, top = AppSpacing.sm, end = AppSpacing.lg),
+        )
+    }
+}
+
+/** Where it went as the ranked list: each category a row with its share. */
+@Composable
+private fun WhereMoneyWentList(data: InsightsData) {
     val finance = rememberFinanceState()
     val navigator = LocalNavigator.current
     val money = finance.money

@@ -47,6 +47,8 @@ import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.pathName
 import com.example.normpix.navigation.LocalNavigator
+import com.example.normpix.settings.ui.BanksAndCategoriesPage
+import com.example.normpix.settings.ui.BanksAndCategoriesTab
 import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
@@ -55,6 +57,10 @@ import com.example.normpix.ui.theme.AppLayout
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
+
+/** Settings > Banks & Categories, opened on Categories: the legacy page name kept as a shell. */
+@Composable
+fun CategoriesPage() = BanksAndCategoriesPage(BanksAndCategoriesTab.Categories)
 
 private val categoryTypeOptions = listOf(
     ChoiceOption(CategoryType.Expense, "Expense", TransactionType.Expense.icon),
@@ -65,12 +71,15 @@ private val categoryTypeOptions = listOf(
 private class Family(val category: Category, val subs: List<Category>)
 
 /**
- * Settings > Finance > Categories: add, rename, recolor, archive and delete expense and income categories. Each top-level
- * category is one card; the ones with sub-categories fold them away (tap to open or close, or all at once), so a long,
- * ready-made tree stays as quick to scan as a short list.
+ * The Categories side of Settings > Banks & Categories: add, rename, recolor, archive and delete expense and income
+ * categories. Each top-level category is one card; the ones with sub-categories fold them away (tap to open or close, or all
+ * at once), so a long, ready-made tree stays as quick to scan as a short list.
+ *
+ * [title] is the page's name and [tabBar] its own switch between its two sides, at the top of the list; the page around it is
+ * `BanksAndCategoriesPage` in the Settings pages.
  */
 @Composable
-fun CategoriesPage() {
+fun CategoriesContent(title: String, tabBar: @Composable () -> Unit) {
     val finance = rememberFinanceState()
     val actions = rememberFinanceActions()
     val navigator = LocalNavigator.current
@@ -92,7 +101,8 @@ fun CategoriesPage() {
     val allOpen = withSubs.isNotEmpty() && withSubs.all { it.category.id in expanded }
     val suggestions = missingSuggestions(finance.categories).size
 
-    AppSubPage(title = "Categories", onBack = navigator::back, maxWidth = AppLayout.maxListWidth) {
+    AppSubPage(title = title, onBack = navigator::back, maxWidth = AppLayout.maxListWidth) {
+        item(key = "tabs") { tabBar() }
         item {
             Column(Modifier.padding(AppSpacing.page)) {
                 // The same Expense | Income control (and primary tonal pill) as the transaction editor.

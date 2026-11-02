@@ -22,6 +22,8 @@ import androidx.compose.ui.test.performTextReplacement
 import com.example.normpix.finance.domain.Category
 import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.emojiIcon
+import com.example.normpix.settings.ui.BanksAndCategoriesPage
+import com.example.normpix.settings.ui.BanksAndCategoriesTab
 import com.example.normpix.testing.TestEnvironment
 import java.time.LocalDateTime
 import kotlin.test.assertEquals
@@ -246,7 +248,7 @@ class CategoryFormTest {
         category("Pizzeria", parent = food)
         category("Burgers", parent = food)
         loaded
-        compose.setContent { env.Content { CategoriesPage() } }
+        compose.setContent { env.Content { BanksAndCategoriesPage(BanksAndCategoriesTab.Categories) } }
         compose.waitForIdle()
 
         compose.onNodeWithText("2 sub-categories").assertExists()
@@ -264,7 +266,7 @@ class CategoryFormTest {
         val food = category("Eating out")
         category("Pizzeria", parent = food)
         loaded
-        compose.setContent { env.Content { CategoriesPage() } }
+        compose.setContent { env.Content { BanksAndCategoriesPage(BanksAndCategoriesTab.Categories) } }
         compose.waitForIdle()
 
         openFamily("Eating out", last = "Pizzeria")
@@ -279,10 +281,11 @@ class CategoryFormTest {
     fun aParentOffersAddSubCategory_whichOpensTheFormUnderIt() {
         val food = category("Eating out")
         loaded
-        compose.setContent { env.Content { CategoriesPage() } }
+        compose.setContent { env.Content { BanksAndCategoriesPage(BanksAndCategoriesTab.Categories) } }
         compose.waitForIdle()
 
-        compose.onNodeWithContentDescription("Options for ${food.name}").performClick()
+        // Under the page's Banks | Categories switch the row starts lower: brought into view before it is pressed.
+        compose.onNodeWithContentDescription("Options for ${food.name}").performScrollTo().performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Add sub-category").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Add sub-category").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("New sub-category").fetchSemanticsNodes().isNotEmpty() }

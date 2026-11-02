@@ -52,8 +52,14 @@ object WatchDialFace {
     /** Where the pill is: three o'clock. */
     const val PILL_ANGLE = 90f
 
-    /** Where the minute [value] sits on the inner ring when it is [minute] past the hour: at the pill when it is the minute. */
-    fun innerAngle(value: Int, minute: Int): Float = normalized(PILL_ANGLE - 6f * (value - minute))
+    /**
+     * Where the minute [value] sits on the inner ring when it is [minute] past the hour: at the pill when it is the minute. [minute] may
+     * be a fraction (the minute and the seconds into it as a share of one): the ring creeps round as the seconds pass, as a watch's
+     * minute track does, and does not wait to jump a whole step when the minute changes.
+     */
+    fun innerAngle(value: Int, minute: Float): Float = normalized(PILL_ANGLE - 6f * (value - minute))
+
+    fun innerAngle(value: Int, minute: Int): Float = innerAngle(value, minute.toFloat())
 
     /** Where [value] sits on the outer ring, which doesn't turn. */
     fun outerAngle(value: Int): Float = normalized(PILL_ANGLE - 6f * value)

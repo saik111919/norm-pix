@@ -45,8 +45,13 @@ object WatchDialRenderer {
     /** A digit's height in GS Flex, as a share of the text size (the same number [ClockFace] uses). */
     private const val DIGIT_HEIGHT_EM = ClockFace.DIGIT_HEIGHT_EM
 
-    fun render(context: Context, minute: Int, sizePx: Int, transparent: Boolean = false): Bitmap {
-        val m = ((minute % 60) + 60) % 60
+    /**
+     * [backdropAlpha] (0 to 255) is the tint of the face colour a transparent dial keeps behind it; 0 leaves the wallpaper bare.
+     * [second] is how far into [minute] it is: the inner ring is drawn that far on from the minute's own place, so drawn again every
+     * few seconds it turns a little at a time instead of waiting to step a whole minute.
+     */
+    fun render(context: Context, minute: Int, sizePx: Int, transparent: Boolean = false, backdropAlpha: Int = 0, second: Int = 0): Bitmap {
+        val m = ((minute % 60) + 60) % 60 + second.coerceIn(0, 59) / 60f
         val face = context.getColor(R.color.widget_clock_face)
         val secondary = context.getColor(R.color.widget_clock_secondary)
         val tick = context.getColor(R.color.widget_clock_tick)
@@ -70,8 +75,11 @@ object WatchDialRenderer {
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 
         // The face; what is drawn after it is clipped to it, which is what leaves the pill open at the right.
-        if (!transparent) {
-            fill.color = face
+        // A transparent dial may keep a tint of the face behind it (the numbers are made to read on that colour, so this is what
+        // keeps them readable on a bright wallpaper).
+        val tint = if (transparent) backdropAlpha.coerceIn(0, 255) else 255
+        if (tint > 0) {
+            fill.color = ColorUtils.setAlphaComponent(face, tint)
             canvas.drawCircle(MIDDLE, MIDDLE, UNITS / 2, fill)
         }
         canvas.clipPath(Path().apply { addCircle(MIDDLE, MIDDLE, UNITS / 2, Path.Direction.CW) })
@@ -95,9 +103,14 @@ object WatchDialRenderer {
         // the right, where the face clips it.
         val pill = RectF(PILL_LEFT, MIDDLE - PILL_HALF_HEIGHT, MIDDLE + UNITS / 2 + PILL_HALF_HEIGHT + 2, MIDDLE + PILL_HALF_HEIGHT)
         if (transparent) {
+            // Cleared first (the ticks and the tint under it go), then given back the same tint as the rest of the face.
             fill.xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
             canvas.drawRoundRect(pill, PILL_HALF_HEIGHT, PILL_HALF_HEIGHT, fill)
             fill.xfermode = null
+            if (tint > 0) {
+                fill.color = ColorUtils.setAlphaComponent(face, tint)
+                canvas.drawRoundRect(pill, PILL_HALF_HEIGHT, PILL_HALF_HEIGHT, fill)
+            }
         } else {
             fill.color = face
             canvas.drawRoundRect(pill, PILL_HALF_HEIGHT, PILL_HALF_HEIGHT, fill)

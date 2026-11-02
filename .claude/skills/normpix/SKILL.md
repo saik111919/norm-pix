@@ -5,7 +5,7 @@ description: "Everything about the NormPix project - a private, offline-first An
 
 # NormPix project skill
 
-Stamp: verified against commit `763cc08f` (v1.5.0 in the working tree; v1.4.1 is the last release) on 2026-10-27. If `git log` shows newer commits on source paths, or
+Stamp: verified against commit `5ee89b6d` (v1.5.0 in the working tree; v1.4.1 is the last release) on 2026-11-02. If `git log` shows newer commits on source paths, or
 `bash .claude/skills/normpix/scripts/verify.sh` reports drift, trust the code and fix the skill (`references/maintenance.md`).
 
 ## 1. The 60-second picture
@@ -94,19 +94,20 @@ reference rather than exploring. For the history or reasoning behind a feature, 
 | `reminders/` | Model, `RemindersDatabase` (v2), alarms, notifications, alert screen, links |
 | `screens/` | The tabs' screens: `HomeScreen`, `HomeBanners`, `PlansAndTransactionsScreen`, `WalletScreen` |
 | `navigation/` | `NormPixRoot` (`Routes`, `ShellState`, locals), `AppShell`, `AppNavigator`, `FloatingNavBar`, `ActionMenu` (the "+" bento panel), `PageTransitions`, `LinuxWindowMotion`, `AppSearch`, `AppearanceSection`, splash |
-| `settings/` | `AppPreferences` (`AppPrefsState`, all choice enums), app icons, notifications, custom font, profile photos |
+| `settings/` | `AppPreferences` (`AppPrefsState`, all choice enums), app icons, notifications, custom font (`CustomFont`, `FontFile`: zip and variable fonts), profile photos (GIFs, avatar presets) |
+| `onboarding/` | `OnboardingTour`: the welcome tour of a new install (four steps in a pager) |
 | `settings/ui/` | Settings pages, `SettingsCatalog` (search), `SettingsTwoPane`, Appearance sections, backup UI, ledger-check UI |
 | `ui/` | The design system, nothing app-specific - |
-| `ui/components/` | Design-system components: `Overlays` (sheets/confirm/loading/snackbars), `Sheets`, `Pages`, `Lists`, `DeckCarousel`, `SwipeReveal`, `Progress`, `SplitButton`, `BottomControls`, glass/blur (`FrostedBackdrop`, `FooterBlur`) |
+| `ui/components/` | Design-system components: `Overlays` (sheets/confirm/loading/snackbars), `Sheets`, `Pages`, `Lists`, `DeckCarousel`, `SwipeReveal`, `SwipeActionRow`, `Progress`, `SplitButton`, `BottomControls`, glass/blur (`FrostedBackdrop`, `FooterBlur`) |
 | `ui/theme/` | `Theme` (palettes), `Tokens`, `Typography`, `StatusColors`, `AppIcons` |
 | `updates/` | `AppUpdater`, `ReleaseMetadata`, downloader/installer/background job/foreground service, `Changelog` |
 | `updates/ui/` | Update page, changelog page, Home update banner |
 | `banks/` | `BankCatalog` (built-in + custom banks, shared by accounts and cards; the directory with categories is `wallet/BankDirectory`) |
-| `banks/ui/` | `BankSelector`, `BankBadge` (the Settings > Banks page is `settings/ui/BanksSettingsPage`) |
+| `banks/ui/` | `BankSelector`, `BankBadge` (Settings > Banks & Categories is `settings/ui/BanksAndCategoriesPage`: `AppPrimaryTabs` over `BanksContent` / `CategoriesContent`) |
 | `availability/` | `ScheduledFeature` + weekly schedule rules (NFC exchange), settings widgets |
 | `backup/` | App backup zip: archive, manifest, reader, restorer, settings codec |
 | `widgets/` | Watch-dial and cookie clocks (`ClockWidgets`, `ClockOptions` + Widget settings activity, `SimpleClock`), Recent, Add widgets, `HomeWidget` (the Settings > Widgets list, previews, pinning), `WidgetIntents`/`WidgetRequest` |
-| `about/` | About page and the in-app guide (`GuideTopic`, `GuideArt` drawn in code) |
+| `about/` | About page, its Feature guide pill and page (`GuideIndexPage`) and the topics (`GuideTopic`, `GuideArt`: real screenshots `GuideShots`, drawings as fallback) |
 
 Outside it: tests mirror these packages in `native/app/src/test/kotlin/...` (`testing/TestEnvironment.kt` is the harness);
 `native/app/src/qa/` is the qa build's manifest label; `native/design/` generates icons and widget art (`clock-widget/` Python, `cookie-clock/` Java: `java CookieFace.java`); `.github/workflows/`

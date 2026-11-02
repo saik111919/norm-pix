@@ -29,6 +29,15 @@ class ClockFace(widthDp: Float, heightDp: Float) {
      */
     val minuteBoxPaddingDp: Float = 2 * minuteOffsetDp
 
+    /** The second's text size: a little smaller than the minute's, so the minute stays the number the pill is for. */
+    val secondTextDp: Float = SECOND_DIGIT_UNITS * unit / DIGIT_HEIGHT_EM
+
+    /** How far right of the middle the second's middle is: where the ring's number for it passes the pointer. */
+    val secondOffsetDp: Float = (SECOND_MIDDLE_UNITS - FACE_UNITS / 2) * unit
+
+    /** The left padding of the box the second is centred in (see [minuteBoxPaddingDp]). */
+    val secondBoxPaddingDp: Float = 2 * secondOffsetDp
+
     /**
      * The top padding that puts a text's digits, rather than its line, in the middle: GS Flex's line sits a little low for
      * digits (0.026 em), and a centred view moves its content down by half its top padding.
@@ -41,6 +50,10 @@ class ClockFace(widthDp: Float, heightDp: Float) {
         const val HOUR_DIGIT_UNITS = 30f
         const val MINUTE_DIGIT_UNITS = 11f
         const val PILL_MIDDLE_UNITS = 151f
+        const val SECOND_DIGIT_UNITS = 9f
+
+        /** The seconds ring's numbers' radius out from the middle ([WatchDialFace.OUTER_NUMBER_RADIUS]), at three o'clock. */
+        const val SECOND_MIDDLE_UNITS = FACE_UNITS / 2 + WatchDialFace.OUTER_NUMBER_RADIUS
 
         /** A digit's height in GS Flex, as a share of the text size. */
         const val DIGIT_HEIGHT_EM = 0.7326f

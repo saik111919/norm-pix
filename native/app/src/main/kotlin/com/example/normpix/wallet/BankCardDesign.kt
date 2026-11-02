@@ -154,6 +154,38 @@ object BankCardDesign {
         }
     }
 
+    /**
+     * The theme of a saved [card]: its product's own look when it was given the name of one ([CardLooks]: the colours of that card,
+     * with the bank's chip, mark and quiet pattern), else its bank's, as before. The product's name is the label of its tier.
+     */
+    fun forCard(card: StoredCard): BankBrandTheme {
+        val base = themeFor(card.bankName)
+        val bankKey = card.bankKey ?: BankLogoResolver.bankFor(card.bankName)?.id
+        val look = CardLooks.forProduct(bankKey, card.cardName) ?: return base
+        val colors = if (look.stops.size == 1) listOf(look.stops[0], look.stops[0]) else look.stops
+        // The main colour holds the first part of the face - it is most of the picture - and the others come in toward the far corner.
+        val painted = listOf(colors.first()) + colors
+        val positions = when (colors.size) {
+            2 -> listOf(0f, 0.45f, 1f)
+            else -> listOf(0f, 0.4f, 0.75f, 1f)
+        }
+        return BankBrandTheme(
+            id = "${base.id}:${CardLooks.key(card.cardName)}",
+            displayName = base.displayName,
+            gradientColors = colors,
+            gradient = GradientSpec.Linear(Anchor(-1f, -1f), Anchor(1f, 1f), painted, positions),
+            patternType = BankPatternType.MinimalGeometric,
+            chipFinish = base.chipFinish,
+            tierName = card.cardName.trim(),
+            // The kind pill is a dark glass here, not the translucent white of the bank themes: a product's colours are brighter than
+            // theirs, and a white fill would lift the face under its white word.
+            badgeColor = Color(0x47000000),
+            badgeBorderColor = Color(0x59FFFFFF),
+            accentColor = look.accent,
+            logo = base.logo,
+        )
+    }
+
     // ----------------------------------------------------------------------------------------
     // Deterministic fallback for custom banks
     // ----------------------------------------------------------------------------------------

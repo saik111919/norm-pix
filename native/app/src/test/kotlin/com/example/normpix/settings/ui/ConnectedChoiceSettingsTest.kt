@@ -9,7 +9,6 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import com.example.normpix.finance.ui.CategoriesPage
 import com.example.normpix.settings.ThemeMode
 import com.example.normpix.testing.TestEnvironment
 import java.util.Locale
@@ -86,7 +85,7 @@ class ConnectedChoiceSettingsTest {
 
     @Test
     fun categoriesChooseExpenseOrIncomeTheSameWay() {
-        compose.setContent { env.Content { CategoriesPage() } }
+        compose.setContent { env.Content { BanksAndCategoriesPage(BanksAndCategoriesTab.Categories) } }
         compose.waitForIdle()
 
         assertEquals(2, compose.onAllNodes(radio).fetchSemanticsNodes().size, "Expense and Income")

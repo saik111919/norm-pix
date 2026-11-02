@@ -68,6 +68,25 @@ class WatchDialRendererTest {
     }
 
     @Test
+    fun `a transparent dial can keep a tint of its face behind it, in the pill as well`() {
+        val face = context.getColor(R.color.widget_clock_face)
+        val unit = size / WatchDialFace.UNITS
+        val inPill = ((WatchDialFace.PILL_LEFT + 25) * unit).toInt() to (WatchDialFace.MIDDLE * unit).toInt()
+        for (alpha in listOf(77, 140, 204)) {
+            val bitmap = WatchDialRenderer.render(context, 45, size, transparent = true, backdropAlpha = alpha)
+            val middle = bitmap.getPixel(size / 2, size / 2)
+            assertEquals(alpha, Color.alpha(middle), "the tint's strength in the middle")
+            // Stored premultiplied, so a colour at partial alpha is off by a unit or two once read back.
+            assertTrue(kotlin.math.abs(Color.red(face) - Color.red(middle)) <= 2, "in the face's own colour: ${Color.red(middle)}")
+            assertEquals(0, Color.alpha(bitmap.getPixel(2, 2)), "nothing outside the face")
+            // The pill matches the tint around it: the ring's ticks do not show through it.
+            assertEquals(alpha, Color.alpha(bitmap.getPixel(inPill.first, inPill.second)), "inside the pill")
+        }
+        // Opaque is untouched by it: the tint is for a transparent dial.
+        assertEquals(face, WatchDialRenderer.render(context, 45, size, transparent = false, backdropAlpha = 40).getPixel(size / 2, size / 2))
+    }
+
+    @Test
     fun `the same minute is drawn the same, and a minute later it has turned`() {
         fun pixels(minute: Int): IntArray = render(minute).let { bitmap -> IntArray(size * size) { bitmap.getPixel(it % size, it / size) } }
         assertTrue(pixels(7).contentEquals(pixels(7)))
@@ -103,5 +122,25 @@ class WatchDialRendererTest {
         val a = render(59)
         val b = render(-1)
         assertTrue((0 until size).all { y -> (0 until size).all { x -> a.getPixel(x, y) == b.getPixel(x, y) } })
+    }
+
+    @Test
+    fun `the inner ring creeps through the minute instead of waiting to jump at its end`() {
+        fun pixels(minute: Int, second: Int): IntArray = WatchDialRenderer.render(context, minute, size, second = second)
+            .let { bitmap -> IntArray(size * size) { bitmap.getPixel(it % size, it / size) } }
+
+        fun differing(a: IntArray, b: IntArray) = a.indices.count { a[it] != b[it] }
+        val start = pixels(10, 0)
+        val half = pixels(10, 30)
+        val end = pixels(10, 59)
+        val next = pixels(11, 0)
+        assertTrue(!start.contentEquals(half), "half a minute on, the ring has turned")
+        assertTrue(!half.contentEquals(end), "and goes on turning")
+        // Just before the minute ends the ring is nearly where the next minute puts it: the step at the change is a sliver of a
+        // minute's turn, not the whole of it.
+        assertTrue(differing(end, next) * 3 < differing(start, next), "${differing(end, next)} vs ${differing(start, next)}")
+        // The same moment is drawn the same, and the default is the minute's own place.
+        assertTrue(pixels(10, 30).contentEquals(pixels(10, 30)))
+        assertTrue(pixels(10, 0).contentEquals(render(10).let { bitmap -> IntArray(size * size) { bitmap.getPixel(it % size, it / size) } }))
     }
 }

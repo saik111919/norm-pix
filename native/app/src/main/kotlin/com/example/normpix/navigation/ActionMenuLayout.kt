@@ -8,13 +8,13 @@ import androidx.compose.runtime.Immutable
  *
  * Follows the Pixel Quick Settings editor (verified 2026-10-28, see references/verified-facts.md): tiles come in two sizes - the
  * icon-only square and the wide one that carries the name - and are put in order by dragging. The menu has one more rule of its
- * own, from its design: the first tile is the *featured* one, the tall capsule down the left edge, whatever action it is.
+ * own, from its design: the first tile is the *featured* one, the wide capsule that starts the top row, whatever action it is.
  */
 
 /** The two sizes of a tile, as on Pixel: a square with the icon and a short name, or twice as wide. */
 enum class ActionTileSize { Small, Wide }
 
-/** One tile: which action ([FooterAction.id]) and its size. The featured (first) tile is always tall; its size is not used. */
+/** One tile: which action ([FooterAction.id]) and its size. The featured (first) tile is always the wide capsule of the top row; its size is not used. */
 data class ActionMenuEntry(val id: String, val size: ActionTileSize = ActionTileSize.Small)
 
 /** An action as the menu shows it: in its place, at its size. */
@@ -107,49 +107,48 @@ internal fun List<ArrangedAction>.toLayout(): ActionMenuLayout = ActionMenuLayou
 
 /* ---- Packing into the grid ---- */
 
-/** The grid has five columns of equal cells: the featured tile's, then four for the rest. */
-internal const val BentoColumns = 5
+/** The grid has four columns of equal cells: roomy enough for an icon over a word at a comfortable size. */
+internal const val BentoColumns = 4
 
-internal enum class BentoShape { Hero, Wide, Squircle, Circle }
+/** The featured tile is this many cells wide, so with a wide second tile (Income) the top row is two capsules side by side. */
+internal const val FeaturedSpan = 2
+
+internal enum class BentoShape { Hero, Wide, Squircle }
 
 /** Where a tile sits on the grid, in cells. */
 internal data class BentoSlot(val row: Int, val col: Int, val rowSpan: Int, val colSpan: Int, val shape: BentoShape)
 
-/** The tiles' slots (same order as the arranged actions), the Edit button's, and how many rows the grid has. */
-internal data class BentoPlan(val tiles: List<BentoSlot>, val trailing: BentoSlot?, val rows: Int)
-
-/** Small tiles of these actions are circles, as in the design; every other small tile is a squircle. */
-private val RoundActionIds = setOf("reminder", "budgets")
+/** The tiles' slots (same order as the arranged actions) and how many rows the grid has. */
+internal data class BentoPlan(val tiles: List<BentoSlot>, val rows: Int)
 
 /**
- * Packs [arranged] into the grid: the first tile is the featured one, a tall capsule in the first column as high as the grid;
- * the others flow left to right in the four columns beside it, a small tile taking one cell and a wide one two, moving on to
- * the next row when a wide one does not fit in what is left of this one (that leaves a cell empty, as on Pixel). The Edit
- * button, when offered ([withEditButton]), is the last tile of the flow - at the design's free corner when the grid is full.
+ * Packs [arranged] into the grid: the first tile is the featured one, a wide capsule at the start of the top row; the others flow
+ * left to right from beside it, a small tile taking one cell and a wide one two, moving on to the next row when a wide one does
+ * not fit in what is left of this one (that leaves a cell empty, as on Pixel). Every small tile is the same squircle, so the
+ * grid reads as one set rather than a mix of shapes. The grid ends with the last action: the Edit button lives in the dock row.
  */
-internal fun bentoPlan(arranged: List<ArrangedAction>, withEditButton: Boolean): BentoPlan {
+internal fun bentoPlan(arranged: List<ArrangedAction>): BentoPlan {
     val tiles = ArrayList<BentoSlot>(arranged.size)
     var row = 0
-    var col = 1
+    var col = 0
     fun place(span: Int, shape: BentoShape): BentoSlot {
         if (col + span > BentoColumns) {
             row++
-            col = 1
+            col = 0
         }
         return BentoSlot(row, col, 1, span, shape).also { col += span }
     }
     arranged.forEachIndexed { i, tile ->
         tiles += if (i == 0) {
-            BentoSlot(0, 0, 1, 1, BentoShape.Hero)
+            place(FeaturedSpan, BentoShape.Hero)
         } else if (tile.size == ActionTileSize.Wide) {
             place(2, BentoShape.Wide)
         } else {
-            place(1, if (tile.action.id in RoundActionIds) BentoShape.Circle else BentoShape.Squircle)
+            place(1, BentoShape.Squircle)
         }
     }
-    val trailing = if (withEditButton) place(1, BentoShape.Circle) else null
-    val rows = ((tiles.drop(1) + listOfNotNull(trailing)).maxOfOrNull { it.row + 1 } ?: 1)
-    return BentoPlan(tiles.mapIndexed { i, s -> if (i == 0 && s.shape == BentoShape.Hero) s.copy(rowSpan = rows) else s }, trailing, rows)
+    val rows = tiles.maxOfOrNull { it.row + it.rowSpan } ?: 1
+    return BentoPlan(tiles, rows)
 }
 
 /** How many beats a tile waits to arrive: its distance, in cells, from the bottom-right corner where the "+" button is. */

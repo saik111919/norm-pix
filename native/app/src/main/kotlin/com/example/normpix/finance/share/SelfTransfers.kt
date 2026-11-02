@@ -84,10 +84,23 @@ internal class SelfTransfer(
 
 internal object SelfTransfers {
     /**
+     * The apps whose receipts are taken for a self transfer: only Google Pay's, the one a real receipt of one has been seen for
+     * (the owner, 2026-10-31: "keep this off, we don't have a proper receipt for this except Gpay"). Every other app's payment
+     * stays an expense or an income as it was read - the cues are still read from the message, and the ledger check can still
+     * offer to combine two entries that are the two halves of one - but a share is not turned into a transfer on a guess.
+     * Add an app here once there is a real receipt of its own to build and test it on.
+     */
+    val DEFAULT_TRUSTED: Set<String> = setOf("Google Pay")
+
+    /** The apps taken for a self transfer; null is every app (and a message with no app), which the tests of the logic itself use. */
+    @Volatile
+    internal var trustedApps: Set<String>? = DEFAULT_TRUSTED
+
+    /**
      * The transfer [draft] is between the user's own accounts, or null when it isn't one: [own] is the account its own side was
      * found to be (null when that couldn't be told), and the other side is looked for among the rest of [accounts] - by the
      * numbers it shows, and by its bank only when the message says it is the user's (see the top of this file). A request
-     * moves nothing, so it is never one.
+     * moves nothing, so it is never one. Only a receipt of a [trustedApps] app is ever one.
      */
     fun find(
         draft: ParsedTransactionDraft,
@@ -96,6 +109,8 @@ internal object SelfTransfers {
         catalog: BankCatalog,
         cards: List<StoredCard>,
     ): SelfTransfer? {
+        val trusted = trustedApps
+        if (trusted != null && draft.app !in trusted) return null
         if (draft.status == SharedStatus.Requested) return null
         val said = draft.selfTransfer
         val others = accounts.filter { it.id != null && it.id != own?.id }

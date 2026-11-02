@@ -68,4 +68,14 @@ class WatchDialFaceTest {
         // The seconds ring's 00 is inside the pill too, beyond the minute.
         assertTrue(WatchDialFace.MIDDLE + WatchDialFace.OUTER_NUMBER_RADIUS > ClockFace.PILL_MIDDLE_UNITS + 10)
     }
+
+    @Test
+    fun `the inner ring is at the pill for the minute, and turns by a tenth of a degree a second`() {
+        assertEquals(WatchDialFace.PILL_ANGLE, WatchDialFace.innerAngle(10, 10), 0.001f)
+        // Half way through the minute 10 the ring has turned 3 degrees on, toward the next minute.
+        assertEquals(WatchDialFace.PILL_ANGLE - 6f * (10 - 10.5f), WatchDialFace.innerAngle(10, 10.5f), 0.001f)
+        assertEquals(WatchDialFace.innerAngle(10, 10) + 3f, WatchDialFace.innerAngle(10, 10.5f), 0.001f)
+        // A whole minute on it is where the next minute puts it.
+        assertEquals(WatchDialFace.innerAngle(10, 11), WatchDialFace.innerAngle(10, 10f + 60f / 60f), 0.001f)
+    }
 }

@@ -11,6 +11,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
+import com.example.normpix.finance.data.TransactionQuery
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.Category
@@ -25,6 +27,7 @@ import com.example.normpix.ui.theme.LocalReducedMotionOverride
 import java.time.LocalDateTime
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -33,8 +36,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * An expense can be swiped to Edit or Delete wherever it is listed - the history, Home's Recent, search results - and
- * every list obeys the one swipe setting.
+ * An expense can be swiped wherever it is listed - the history, Home's Recent, search results - the way Gmail's rows are: to the
+ * left it opens the editor, to the right it is deleted (with an Undo), and every list obeys the one swipe setting.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
@@ -83,14 +86,18 @@ class SwipeOnEveryTransactionListTest {
     }
 
     // The tile reads as one phrase for screen readers ("Expense, ₹125.00, Corner Cafe, ..."), so find it by that.
-    private fun row() = compose.onNode(hasContentDescription("Corner Cafe", substring = true))
+    private fun rowMatcher() = hasContentDescription("Corner Cafe", substring = true)
+
+    private fun row() = compose.onNode(rowMatcher())
+
+    private fun rowShown() = compose.onAllNodes(rowMatcher()).fetchSemanticsNodes().isNotEmpty()
 
     private fun waitForRow() {
         try {
             compose.waitUntil(timeoutMillis = 30_000) {
                 // Home reads in several steps; idle on every check so each one's result reaches the screen before looking.
                 compose.waitForIdle()
-                compose.onAllNodes(hasContentDescription("Corner Cafe", substring = true)).fetchSemanticsNodes().isNotEmpty()
+                rowShown()
             }
         } catch (e: ComposeTimeoutException) {
             // Say what the screen was showing, so a load that never finished can be told from a row that isn't there.
@@ -103,53 +110,107 @@ class SwipeOnEveryTransactionListTest {
         "\"$text\" ×${compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes(atLeastOneRootRequired = false).size}"
     }
 
-    // Ends well outside the row: a drag that stops inside a clickable still counts as its tap, and the tap opens the
+    // Both swipes end well outside the row: a drag that stops inside a clickable still counts as its tap, and the tap opens the
     // details sheet (which has an Edit button of its own).
-    private fun swipeRow() {
+    private fun swipeToEdit() {
         row().performTouchInput { swipeLeft(startX = right - 8f, endX = -width / 2f) }
         compose.waitForIdle()
     }
 
+    private fun swipeToDelete() {
+        row().performTouchInput { swipeRight(startX = left + 8f, endX = width * 1.5f) }
+        compose.waitForIdle()
+    }
+
+    private fun stored(): List<FinanceTransaction> = runBlocking { env.container.finance.repository.transactions(TransactionQuery(), limit = 10).items }
+
+    // The editor's own button; nothing else on Home, in search or in the details sheet says it.
+    private fun editorShown() = compose.onAllNodes(hasText("Save changes")).fetchSemanticsNodes().isNotEmpty()
+
+    private fun waitForEditor() = compose.waitUntil(timeoutMillis = 10_000) { compose.waitForIdle(); editorShown() }
+
+    private fun waitForRowToGo() = compose.waitUntil(timeoutMillis = 10_000) { compose.waitForIdle(); !rowShown() }
+
     @Test
-    fun homesRecentRowsSwipeToEditAndDelete() {
+    fun homesRecentRowsSwipeLeftToEdit() {
         showHome()
-        swipeRow()
-        compose.onNodeWithText("Edit").assertIsDisplayed()
-        compose.onNodeWithText("Delete").assertIsDisplayed()
+        swipeToEdit()
+        waitForEditor()
+        compose.onNodeWithText("Save changes").assertIsDisplayed()
     }
 
     @Test
-    fun searchResultsSwipeToEditAndDelete() {
+    fun searchResultsSwipeLeftToEdit() {
         showSearch()
-        swipeRow()
-        compose.onNodeWithText("Edit").assertIsDisplayed()
-        compose.onNodeWithText("Delete").assertIsDisplayed()
+        swipeToEdit()
+        waitForEditor()
+        compose.onNodeWithText("Save changes").assertIsDisplayed()
+    }
+
+    @Test
+    fun homesRecentRowsSwipeRightToDelete() {
+        showHome()
+        swipeToDelete()
+        waitForRowToGo()
+        assertEquals(emptyList<FinanceTransaction>(), stored())
+    }
+
+    @Test
+    fun searchResultsSwipeRightToDelete() {
+        showSearch()
+        swipeToDelete()
+        waitForRowToGo()
+        assertEquals(emptyList<FinanceTransaction>(), stored())
+    }
+
+    @Test
+    fun aShortSwipeDoesNothing() {
+        showHome()
+        row().performTouchInput { swipeRight(startX = left + 8f, endX = left + 40f) }
+        compose.waitForIdle()
+        assertEquals(1, stored().size)
+        assert(rowShown())
     }
 
     @Test
     fun theChosenActionsApplyToHomeAndSearchAlike() {
         env.container.preferences.setTransactionSwipeActions(TransactionSwipeActions.DeleteOnly)
         showHome()
-        swipeRow()
-        compose.onNodeWithText("Delete").assertIsDisplayed()
-        compose.onNodeWithText("Edit").assertDoesNotExist()
+        // Edit is not chosen, so that side does not move and nothing opens.
+        swipeToEdit()
+        assert(!editorShown())
+        assertEquals(1, stored().size)
+        swipeToDelete()
+        waitForRowToGo()
+        assertEquals(emptyList<FinanceTransaction>(), stored())
     }
 
     @Test
-    fun withSwipingOffNeitherListRevealsAnything() {
+    fun withEditOnlyTheDeleteSideDoesNotMove() {
+        env.container.preferences.setTransactionSwipeActions(TransactionSwipeActions.EditOnly)
+        showHome()
+        swipeToDelete()
+        assertEquals(1, stored().size)
+        assert(rowShown())
+    }
+
+    @Test
+    fun withSwipingOffNeitherListDoesAnything() {
         env.container.preferences.setSwipeActionsEnabled(false)
         showHome()
-        swipeRow()
-        compose.onNodeWithText("Edit").assertDoesNotExist()
-        compose.onNodeWithText("Delete").assertDoesNotExist()
+        swipeToEdit()
+        swipeToDelete()
+        assert(!editorShown())
+        assertEquals(1, stored().size)
     }
 
     @Test
-    fun withSwipingOffSearchRevealsNothingEither() {
+    fun withSwipingOffSearchDoesNothingEither() {
         env.container.preferences.setSwipeActionsEnabled(false)
         showSearch()
-        swipeRow()
-        compose.onNodeWithText("Edit").assertDoesNotExist()
-        compose.onNodeWithText("Delete").assertDoesNotExist()
+        swipeToEdit()
+        swipeToDelete()
+        assert(!editorShown())
+        assertEquals(1, stored().size)
     }
 }
