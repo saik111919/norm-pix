@@ -28,16 +28,6 @@
         android:layout_height="match_parent"
         android:importantForAccessibility="no" />
 
-    <!-- The pill at three o'clock again, over the ring, so the ring passes behind it and the second's number in it is never crossed
-         by the ring's. Fitted to the face as the picture is. -->
-    <ImageView
-        android:id="@+id/widget_clock_pill"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:importantForAccessibility="no"
-        android:scaleType="fitCenter"
-        android:src="@drawable/widget_dial_pill" />
-
     <TextClock
         android:id="@+id/widget_clock_hour"
         tools:ignore="SpUsage,UnusedAttribute"
@@ -76,8 +66,8 @@
             android:textSize="15dp" />
     </FrameLayout>
 
-    <!-- The second, in the pill where the ring's number for it passes the pointer: a TextClock, so the platform keeps it exact.
-         Its left padding moves it there, as the minute's does. Not read out: it changes every second. -->
+    <!-- The second, in the pill beside the minute and left of the ring's numbers (ClockFace): a TextClock, so the platform keeps it
+         exact. Its left padding moves it there, as the minute's does. Not read out: it changes every second. -->
     <FrameLayout
         android:id="@+id/widget_clock_second_box"
         android:layout_width="match_parent"

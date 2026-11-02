@@ -133,14 +133,13 @@ public class CookieFace {
             concat(cookieFill(), hands(HOUR_PLAIN, MINUTE_PLAIN, SECOND_PLAIN, false)));
         write(res, "widget_cookie_digital_preview", "The cookie digital clock in the widget picker, at 10:09.", 200, digitalPreview());
         write(res, "widget_clock_preview", "The watch dial widget in the widget picker, at 12:45 - the picture ClockWidget draws every minute.", 200,
-            watchDial(45, "12", "45"));
+            watchDial(45, "12", "45", "30"));
 
         writeSecondsRing(res);
 
-        // Android 12 and later: the seconds ring as a bezel the system turns, and the pill over it with the second in it.
+        // Android 12 and later: the seconds ring as a bezel the system turns.
         write(res, "widget_dial_bezel", "The watch dial's seconds ring as a bezel: AnalogClock's second hand (Android 12 and later), at :00.", BEZEL_DP, bezel());
         write(res, "widget_dial_bezel_frame", "Nothing, as large as the bezel: the bezel AnalogClock's dial and its hour and minute hands, so it fits the bezel to the face.", BEZEL_DP, List.of());
-        write(res, "widget_dial_pill", "The watch dial's pill at three o'clock, over the seconds ring: the minute and the second are text on it.", 200, pillCap());
 
         sheet(png);
         System.out.println("wrote drawables to " + res + " and " + png);
@@ -259,6 +258,7 @@ public class CookieFace {
     // ---- the watch dial (WatchDialFace.kt has the same numbers: keep them in step) ----------------------------------
     static final double W_OUTER_OUT = 99.5, W_OUTER_MINOR = 94.5, W_OUTER_MAJOR = 90.5, W_OUTER_R = 82.4, W_OUTER_SIZE = 11.7;
     static final double W_INNER_OUT = 69, W_INNER_MINOR = 64.5, W_INNER_MAJOR = 61, W_INNER_R = 54, W_INNER_SIZE = 12.8;
+    static final double W_DASH_FROM = 56.6, W_DASH_TO = 60.6, W_MINUTE_X = 144.3, W_SECOND_X = 170.3;
     static final double W_PILL_LEFT = 128.6, W_PILL_H = 15.2, W_CLEARANCE = 22, W_FADE = 6, DIGIT_EM = 0.7326;
 
     static double wrap(double deg) { return ((deg % 360) + 360) % 360; }
@@ -266,7 +266,7 @@ public class CookieFace {
     static double wOuter(int value) { return wrap(90 - 6.0 * value); }
 
     /** The watch dial with its minute ring turned to [minute], and [hour] and [min] as the text over it. */
-    static List<Item> watchDial(int minute, String hour, String min) {
+    static List<Item> watchDial(int minute, String hour, String min, String sec) {
         List<Item> items = new ArrayList<>();
         items.add(fill(new Ellipse2D.Double(0, 0, 200, 200), "face"));
         Path2D innerMinor = new Path2D.Double(), innerMajor = new Path2D.Double();
@@ -307,10 +307,12 @@ public class CookieFace {
             Point2D p = at(wOuter(v), W_OUTER_R);
             items.add(bold(text(String.format("%02d", v), p.getX(), p.getY(), W_OUTER_SIZE * DIGIT_EM), "secondary", 0.3));
         }
-        items.add(stroke(new Line2D.Double(at(90, W_INNER_MAJOR), at(90, W_INNER_OUT)), "accent", 1.9));
-        // The text the launcher keeps, here as outlines: the hour in the middle, the minute in the pill.
+        // The accent dash between the minute and the second, which sit left of the seconds ring's numbers (ClockFace.kt reads these).
+        items.add(stroke(new Line2D.Double(at(90, W_DASH_FROM), at(90, W_DASH_TO)), "accent", 1.9));
+        // The text the launcher keeps, here as outlines: the hour in the middle, the minute and the second in the pill.
         items.add(bold(text(hour, C, C, 30), "ink", 0.9));
-        items.add(bold(text(min, 151, C, 11), "ink", 0.5));
+        items.add(bold(text(min, W_MINUTE_X, C, 11), "ink", 0.5));
+        items.add(bold(text(sec, W_SECOND_X, C, 8), "ink", 0.4));
         return items;
     }
 
@@ -482,26 +484,6 @@ public class CookieFace {
         return items;
     }
 
-    /**
-     * The pill at three o'clock as its own layer over the seconds ring: the face's colour, its rim, and the accent dash of the minute,
-     * open at the right where the face's edge clips it. The ring passes behind it, so the number in it is never crossed by the ring's.
-     */
-    static List<Item> pillCap() {
-        List<Item> items = new ArrayList<>();
-        double edgeX = C + Math.sqrt(100 * 100 - W_PILL_H * W_PILL_H);
-        java.awt.geom.Area pill = new java.awt.geom.Area(new java.awt.geom.RoundRectangle2D.Double(W_PILL_LEFT, C - W_PILL_H, 200, 2 * W_PILL_H, 2 * W_PILL_H, 2 * W_PILL_H));
-        pill.intersect(new java.awt.geom.Area(new Ellipse2D.Double(0, 0, 200, 200)));
-        items.add(fill(pill, "face"));
-        Path2D rim = new Path2D.Double();
-        rim.moveTo(edgeX, C - W_PILL_H);
-        rim.lineTo(W_PILL_LEFT + W_PILL_H, C - W_PILL_H);
-        rim.append(new java.awt.geom.Arc2D.Double(W_PILL_LEFT, C - W_PILL_H, 2 * W_PILL_H, 2 * W_PILL_H, 90, 180, java.awt.geom.Arc2D.OPEN), true);
-        rim.lineTo(edgeX, C + W_PILL_H);
-        items.add(faded(stroke(rim, "secondary", 1.3), 150 / 255.0));
-        items.add(stroke(new Line2D.Double(at(90, W_INNER_MAJOR), at(90, W_INNER_OUT)), "accent", 1.9));
-        return items;
-    }
-
     static void writeSecondsRing(File res) throws IOException {
         File root = res.getParentFile();
         File animators = new File(root, "animator"), layouts = new File(root, "layout");
@@ -584,7 +566,7 @@ public class CookieFace {
             concat(cookieFill(), dial(true), hands(HOUR_NUMBERS, MINUTE_NUMBERS, SECOND_NUMBERS, true)),
             concat(cookieFill(), hands(HOUR_PLAIN, MINUTE_PLAIN, SECOND_PLAIN, false)),
             digitalPreview(),
-            watchDial(45, "12", "45"));
+            watchDial(45, "12", "45", "30"));
         int[][][] themes = {DARK, LIGHT};
         int[] grounds = {0x2B2D33, 0xCFCFD6};
         BufferedImage img = new BufferedImage(pad + (cell + pad) * faces.size(), pad + (cell + pad) * 2, BufferedImage.TYPE_INT_RGB);

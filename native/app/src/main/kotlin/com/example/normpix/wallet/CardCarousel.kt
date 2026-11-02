@@ -22,6 +22,8 @@ import com.example.normpix.ui.components.DeckMarkerInset
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.wallet.clipboard.CardField
 import com.example.normpix.wallet.motion.CardTiltState
+import com.example.normpix.wallet.motion.ifFocused
+import com.example.normpix.wallet.motion.tiltFocusCandidate
 
 /**
  * The saved cards as a 3D carousel ([DeckCarousel]) with the card in front's details in the panel the cards stand in.
@@ -70,7 +72,8 @@ fun CardCarousel(
                 onShareNfc = onShareNfc?.let { share -> { share(card) } },
                 onEdit = { onEdit(card) },
                 onDelete = { onDelete(card) },
-                tilt = tilt.takeIf { inFront },
+                tilt = tilt.takeIf { inFront }.ifFocused("card-${card.id}"),
+                modifier = Modifier.tiltFocusCandidate("card-${card.id}", enabled = inFront),
                 onCopy = { field -> onCopy(card, field) },
                 deck = space,
             )

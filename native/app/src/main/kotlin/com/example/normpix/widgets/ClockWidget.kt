@@ -197,8 +197,6 @@ class ClockWidget : AppWidgetProvider() {
                 removeAllViews(R.id.widget_clock_seconds)
                 val ring = if (bezel) R.layout.widget_dial_bezel else WatchDialSecondsLayouts[Math.floorMod(second, 60)]
                 addView(R.id.widget_clock_seconds, RemoteViews(context.packageName, ring))
-                // The pill over the ring (widget_clock_pill) stays solid even on a transparent clock: at 84% the ring's number showed
-                // through it under the second's, so it is a label on the wallpaper, as the hour and the minute are.
                 setTextViewTextSize(R.id.widget_clock_hour, TypedValue.COMPLEX_UNIT_DIP, face.hourTextDp)
                 setTextViewTextSize(R.id.widget_clock_minute, TypedValue.COMPLEX_UNIT_DIP, face.minuteTextDp)
                 setTextViewTextSize(R.id.widget_clock_second, TypedValue.COMPLEX_UNIT_DIP, face.secondTextDp)

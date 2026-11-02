@@ -211,33 +211,27 @@ class ClockWidgetOptionsTest {
     }
 
     @Test
-    fun `the second is in the pill, kept by the platform, and the pill is over the ring`() {
+    fun `the second is in the pill beside the minute, kept by the platform, and nothing covers the ring`() {
         for (size in listOf(160, 280)) {
             val root = shown(ClockWidget.views(context, options(size, size)))
             val face = ClockFace(size - 12f, size - 12f)
+            val density = context.resources.displayMetrics.density
             val second = root.findViewById<android.widget.TextClock>(R.id.widget_clock_second)
             assertEquals("ss", second.format24Hour.toString())
             assertEquals("ss", second.format12Hour.toString())
-            assertEquals(face.secondTextDp, second.textSize / context.resources.displayMetrics.density, 0.5f, "sized with the face at $size")
+            assertEquals(face.secondTextDp, second.textSize / density, 0.5f, "sized with the face at $size")
+            assertTrue(face.secondTextDp < face.minuteTextDp, "the minute stays the larger")
             val box = root.findViewById<View>(R.id.widget_clock_second_box)
-            val density = context.resources.displayMetrics.density
             assertEquals((face.secondBoxPaddingDp * density).roundToInt(), box.paddingLeft, "moved into the pill at $size")
-            assertTrue(face.secondOffsetDp > face.minuteOffsetDp, "after the minute, where the ring passes the pointer")
-            // The pill is a layer above the ring, so the ring's numbers pass behind the second's.
+            assertTrue(face.secondOffsetDp > face.minuteOffsetDp, "after the minute")
+            // Ring, then the two numbers over it: no layer between them hides the ring's lines (the owner found the cap that did too big).
             val parent = root as android.view.ViewGroup
-            val ringAt = (0 until parent.childCount).first { parent.getChildAt(it).id == R.id.widget_clock_seconds }
-            val pillAt = (0 until parent.childCount).first { parent.getChildAt(it).id == R.id.widget_clock_pill }
-            val secondAt = (0 until parent.childCount).first { parent.getChildAt(it).id == R.id.widget_clock_second_box }
-            assertTrue(ringAt < pillAt && pillAt < secondAt, "ring, then the pill over it, then the second on the pill")
+            val order = (0 until parent.childCount).map { parent.getChildAt(it).id }
+            val ringAt = order.indexOf(R.id.widget_clock_seconds)
+            assertTrue(ringAt in 0 until order.indexOf(R.id.widget_clock_minute_box), "the ring is under the minute")
+            assertTrue(order.indexOf(R.id.widget_clock_minute_box) < order.indexOf(R.id.widget_clock_second_box), "the minute, then the second")
+            assertEquals(ringAt + 1, order.indexOf(R.id.widget_clock_hour), "nothing between the ring and the text")
         }
-    }
-
-    @Test
-    fun `the pill is solid on a transparent clock too, so the ring never shows through under the second`() {
-        fun pillAlpha(clock: ClockOptions) =
-            shown(ClockWidget.views(context, options(180, 180), clock = clock)).findViewById<android.widget.ImageView>(R.id.widget_clock_pill).imageAlpha
-        assertEquals(255, pillAlpha(ClockOptions(transparent = true)), "clear: still a whole pill to read the second on")
-        assertEquals(255, pillAlpha(ClockOptions()), "an opaque clock: whole")
     }
 
     @Test

@@ -320,8 +320,7 @@ data class AppPrefsState(
     val walletCardActionStyle: WalletCardActionStyle = WalletCardActionStyle.Bar,
     val bankIconStyle: BankIconStyle = BankIconStyle.Full,
     val accountsLayout: AccountsLayout = AccountsLayout.Stack,
-    /** Stacked by default since 2026-11-02 (the owner's choice, with its new filed look); a layout someone picked is kept. */
-    val cardsLayout: CardsLayout = CardsLayout.Stack,
+    val cardsLayout: CardsLayout = CardsLayout.Cards,
     val nfcTagRevealEnabled: Boolean = false,
     /** Revealing a card asks for one of the tags the user registered, not just any tag or phone. */
     val nfcRevealRegisteredOnly: Boolean = false,

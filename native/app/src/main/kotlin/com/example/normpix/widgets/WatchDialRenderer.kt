@@ -19,6 +19,8 @@ import com.example.normpix.widgets.WatchDialFace.INNER_MAJOR_STROKE
 import com.example.normpix.widgets.WatchDialFace.INNER_MINOR_STROKE
 import com.example.normpix.widgets.WatchDialFace.INNER_NUMBER_RADIUS
 import com.example.normpix.widgets.WatchDialFace.INNER_NUMBER_SIZE
+import com.example.normpix.widgets.WatchDialFace.DASH_FROM
+import com.example.normpix.widgets.WatchDialFace.DASH_TO
 import com.example.normpix.widgets.WatchDialFace.INNER_TICK_IN_MAJOR
 import com.example.normpix.widgets.WatchDialFace.INNER_TICK_IN_MINOR
 import com.example.normpix.widgets.WatchDialFace.INNER_TICK_OUT
@@ -119,10 +121,10 @@ object WatchDialRenderer {
         lines.strokeWidth = PILL_STROKE
         canvas.drawRoundRect(pill, PILL_HALF_HEIGHT, PILL_HALF_HEIGHT, lines)
 
-        // The tick of the minute that is in the pill, in the accent: the dash between its number and the seconds ring's number.
+        // The accent dash at the pointer: between the minute and the second, which are text on the pill.
         lines.color = accent
         lines.strokeWidth = ACTIVE_STROKE
-        canvas.line(lines, PILL_ANGLE, INNER_TICK_IN_MAJOR, INNER_TICK_OUT)
+        canvas.line(lines, PILL_ANGLE, DASH_FROM, DASH_TO)
         return bitmap
     }
 

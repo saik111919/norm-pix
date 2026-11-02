@@ -107,11 +107,11 @@ class WatchDialRendererTest {
     }
 
     @Test
-    fun `the minute's tick is in the accent`() {
+    fun `the accent dash is at the pointer, between the minute and the second`() {
         val bitmap = render(12)
         val accent = context.getColor(R.color.widget_clock_accent)
         val unit = size / WatchDialFace.UNITS
-        val x = ((WatchDialFace.MIDDLE + (WatchDialFace.INNER_TICK_IN_MAJOR + WatchDialFace.INNER_TICK_OUT) / 2) * unit).toInt()
+        val x = ((WatchDialFace.MIDDLE + (WatchDialFace.DASH_FROM + WatchDialFace.DASH_TO) / 2) * unit).toInt()
         val y = (WatchDialFace.MIDDLE * unit).toInt()
         assertEquals(accent, bitmap.getPixel(x, y))
     }

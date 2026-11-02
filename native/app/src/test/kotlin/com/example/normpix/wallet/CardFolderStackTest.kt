@@ -13,6 +13,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.unit.dp
 import com.example.normpix.settings.AppPrefsState
 import com.example.normpix.settings.CardsLayout
@@ -100,9 +102,13 @@ class CardFolderStackTest {
         assertEquals(listOf("b"), opened)
     }
 
-
     @Test
-    fun `stacked is the cards' layout until one is picked`() {
-        assertEquals(CardsLayout.Stack, AppPrefsState().cardsLayout)
+    fun `swiping the front card brings the next one forward`() {
+        show()
+        val frontNode = compose.onNodeWithContentDescription("ending in 1111, expires 08/29, in front", substring = true)
+        frontNode.assertExists()
+        frontNode.performTouchInput { swipeLeft() }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("ending in 1881, expires 08/29, in front", substring = true).assertExists()
     }
 }

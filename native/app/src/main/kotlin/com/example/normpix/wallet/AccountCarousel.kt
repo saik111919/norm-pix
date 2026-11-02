@@ -28,6 +28,8 @@ import com.example.normpix.ui.components.DeckDivider
 import com.example.normpix.ui.components.DeckHero
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.wallet.motion.CardTiltState
+import com.example.normpix.wallet.motion.ifFocused
+import com.example.normpix.wallet.motion.tiltFocusCandidate
 
 /**
  * The accounts as a 3D carousel ([DeckCarousel]), as the saved cards are: the account in front facing you, the others turned
@@ -59,7 +61,15 @@ fun AccountCarousel(
         modifier = modifier,
         card = { account, inFront, _ ->
             if (inFront) {
-                AccountCardView(account, onOpen = { onOpen(account) }, onManage = { onManage(account) }, bankIconStyle = bankIconStyle, compact = true, tilt = tilt)
+                AccountCardView(
+                    account,
+                    onOpen = { onOpen(account) },
+                    onManage = { onManage(account) },
+                    bankIconStyle = bankIconStyle,
+                    compact = true,
+                    tilt = tilt.ifFocused("account-${account.id}"),
+                    modifier = Modifier.tiltFocusCandidate("account-${account.id}", enabled = true),
+                )
             } else {
                 AccountCardFacePreview(account, bankIconStyle = bankIconStyle, compact = true)
             }

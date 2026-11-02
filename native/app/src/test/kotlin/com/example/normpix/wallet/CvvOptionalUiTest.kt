@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performSemanticsAction
 import com.example.normpix.screens.CardsOnHome
 import com.example.normpix.settings.ClipboardTimeout
 import com.example.normpix.testing.InMemoryVault
@@ -157,6 +158,9 @@ class CvvOptionalUiTest {
 
         compose.onNodeWithText("3–4 digits").assertIsDisplayed()
         assertNull(saved)
+
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.waitForIdle()
 
         compose.onNodeWithText("CVV").performTextInput("3")
         compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)

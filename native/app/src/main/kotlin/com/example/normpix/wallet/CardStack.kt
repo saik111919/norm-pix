@@ -1,11 +1,17 @@
 package com.example.normpix.wallet
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
 import com.example.normpix.settings.BankIconStyle
 import com.example.normpix.ui.components.DeckStack
 import com.example.normpix.ui.components.DeckStackState
 import com.example.normpix.ui.theme.AppRadius
+import com.example.normpix.wallet.motion.CardTiltState
+import com.example.normpix.wallet.motion.ifFocused
+import com.example.normpix.wallet.motion.tiltFocusCandidate
 
 /**
  * The saved cards as a stack: the front one printed in full, the others a hair of colour above it, each a little
@@ -22,6 +28,7 @@ fun CardStack(
     state: DeckStackState,
     modifier: Modifier = Modifier,
     bankIconStyle: BankIconStyle = BankIconStyle.Full,
+    tilt: CardTiltState? = null,
 ) {
     DeckStack(
         items = cards,
@@ -36,6 +43,21 @@ fun CardStack(
         state = state,
         modifier = modifier,
         plate = { WalletCardPlate(it) },
-        face = { WalletCardFacePreview(it, revealed = false, bankIconStyle = bankIconStyle) },
+        face = { card ->
+            val cardTilt = tilt?.ifFocused("card-${card.id}")
+            Box(
+                Modifier
+                    .tiltFocusCandidate("card-${card.id}", enabled = true)
+                    .graphicsLayer {
+                        if (cardTilt != null) {
+                            rotationX = -cardTilt.pitch
+                            rotationY = cardTilt.roll
+                        }
+                    }
+                    .then(if (cardTilt != null) Modifier.drawWithContent { drawContent(); drawSheen(cardTilt) } else Modifier)
+            ) {
+                WalletCardFacePreview(card, revealed = false, bankIconStyle = bankIconStyle)
+            }
+        },
     )
 }

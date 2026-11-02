@@ -1,7 +1,12 @@
 package com.example.normpix.wallet
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
@@ -20,21 +25,30 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
@@ -46,6 +60,11 @@ import androidx.compose.ui.zIndex
 import com.example.normpix.settings.BankIconStyle
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppMotion
+import com.example.normpix.wallet.motion.CardTiltState
+import com.example.normpix.wallet.motion.ifFocused
+import com.example.normpix.wallet.motion.tiltFocusCandidate
+import kotlin.math.abs
+import kotlinx.coroutines.launch
 
 /** How much of each card behind the front one shows: its header strip, with its network, last digits and contactless mark. */
 internal val FolderStep = 58.dp
@@ -60,13 +79,13 @@ private const val FolderTab = 0.64f
 private val FolderCorner = 16.dp
 
 /**
- * The saved cards as a stack of folders (owner, 2026-11-02, after a reference of a wallet whose cards are filed one behind another):
+ * The saved cards as a stack of folders:
  * every card behind the front one shows its header strip - a tab on the left with its network, its last four digits and the
  * contactless mark, the edge stepping down to the right of it so the card behind shows there - and the front card is printed in
- * full at the foot. Tapping a card behind brings it to the front, every card moving on the app's spring; tapping the front card
- * calls [onOpen]. Each card is one button for a screen reader, which says which card it is and what a tap does.
+ * full at the foot.
  *
- * The Wallet's "Stack" layout. Home's cards keep the older stack ([CardStack], a hair of colour behind the front card).
+ * Cards can be swiped horizontally left or right to cycle through the stack; tapping a card behind brings it to the front;
+ * tapping the front card calls [onOpen].
  */
 @Composable
 fun CardFolderStack(
@@ -74,15 +93,21 @@ fun CardFolderStack(
     onOpen: (StoredCard) -> Unit,
     modifier: Modifier = Modifier,
     bankIconStyle: BankIconStyle = BankIconStyle.Full,
+    tilt: CardTiltState? = null,
 ) {
     if (cards.isEmpty()) return
     val haptics = rememberAppHaptics()
-    // Which card is in front: the last by default, the one tapped once one is; kept across a rotation, and back to the last
+    val scope = rememberCoroutineScope()
+    // Which card is in front: the last by default, the one tapped or swiped once one is; kept across a rotation, and back to the last
     // when that card goes (deleted, filtered out).
     var frontId by rememberSaveable { mutableStateOf<String?>(null) }
     val front = cards.firstOrNull { it.id == frontId } ?: cards.last()
     val order = remember(cards, front.id) { cards.filter { it.id != front.id } + front }
     val spring = AppMotion.spatial<Dp>()
+    val settle = AppMotion.spatial<Float>()
+
+    val drag = remember(front.id) { Animatable(0f) }
+    var widthPx by remember { mutableIntStateOf(0) }
 
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val cardHeight = maxWidth / CARD_ASPECT
@@ -92,12 +117,49 @@ fun CardFolderStack(
                     val inFront = index == order.lastIndex
                     val top by animateDpAsState(FolderStep * index, spring, label = "folder_card_top")
                     val spoken = folderDescription(card, index, order.size)
+
+                    val swipeModifier = if (inFront && order.size > 1) {
+                        Modifier
+                            .onSizeChanged { widthPx = it.width }
+                            .graphicsLayer {
+                                translationX = drag.value
+                                rotationZ = if (widthPx > 0) (drag.value / widthPx) * 12f else 0f
+                            }
+                            .draggable(
+                                orientation = Orientation.Horizontal,
+                                state = rememberDraggableState { delta ->
+                                    scope.launch { drag.snapTo(drag.value + delta) }
+                                },
+                                onDragStopped = { velocity ->
+                                    val moved = drag.value
+                                    val far = abs(moved) > widthPx * 0.22f || abs(velocity) > 800f
+                                    val toward = if (abs(moved) > 1f) moved else velocity
+                                    if (far && toward != 0f) {
+                                        haptics.selection()
+                                        val currentIdx = cards.indexOfFirst { it.id == front.id }
+                                        if (currentIdx >= 0) {
+                                            val nextIdx = if (toward < 0f) {
+                                                (currentIdx + 1).mod(cards.size)
+                                            } else {
+                                                (currentIdx - 1 + cards.size).mod(cards.size)
+                                            }
+                                            frontId = cards[nextIdx].id
+                                        }
+                                    }
+                                    scope.launch { drag.animateTo(0f, settle) }
+                                },
+                            )
+                    } else {
+                        Modifier
+                    }
+
                     Box(
                         Modifier
                             .zIndex(index.toFloat())
                             .offset { IntOffset(0, top.roundToPx()) }
                             .fillMaxWidth()
                             .height(cardHeight)
+                            .then(swipeModifier)
                             .clip(if (inFront) FrontShape else FolderTabShape)
                             .clickable(onClickLabel = if (inFront) "Open card" else "Bring to the front", role = Role.Button) {
                                 if (inFront) {
@@ -107,12 +169,51 @@ fun CardFolderStack(
                                     frontId = card.id
                                 }
                             }
-                            // One node for a screen reader: the card in words (its tab's digits are not read on their own),
-                            // with the tap's own label ("Open card", "Bring to the front") and role from clickable.
-                            .clearAndSetSemantics { contentDescription = spoken },
+                            .clearAndSetSemantics {
+                                contentDescription = spoken
+                                role = Role.Button
+                                onClick(label = if (inFront) "Open card" else "Bring to the front") {
+                                    if (inFront) onOpen(card) else {
+                                        haptics.selection()
+                                        frontId = card.id
+                                    }
+                                    true
+                                }
+                                if (inFront && order.size > 1) {
+                                    customActions = listOf(
+                                        CustomAccessibilityAction("Show next card") {
+                                            val currentIdx = cards.indexOfFirst { it.id == front.id }
+                                            if (currentIdx >= 0) {
+                                                frontId = cards[(currentIdx + 1).mod(cards.size)].id
+                                            }
+                                            true
+                                        },
+                                        CustomAccessibilityAction("Show previous card") {
+                                            val currentIdx = cards.indexOfFirst { it.id == front.id }
+                                            if (currentIdx >= 0) {
+                                                frontId = cards[(currentIdx - 1 + cards.size).mod(cards.size)].id
+                                            }
+                                            true
+                                        },
+                                    )
+                                }
+                            },
                     ) {
                         if (inFront) {
-                            WalletCardFacePreview(card, revealed = false, bankIconStyle = bankIconStyle)
+                            val cardTilt = tilt?.ifFocused("folder-card-${card.id}")
+                            Box(
+                                Modifier
+                                    .tiltFocusCandidate("folder-card-${card.id}", enabled = true)
+                                    .graphicsLayer {
+                                        if (cardTilt != null) {
+                                            rotationX = -cardTilt.pitch
+                                            rotationY = cardTilt.roll
+                                        }
+                                    }
+                                    .then(if (cardTilt != null) Modifier.drawWithContent { drawContent(); drawSheen(cardTilt) } else Modifier)
+                            ) {
+                                WalletCardFacePreview(card, revealed = false, bankIconStyle = bankIconStyle)
+                            }
                         } else {
                             FolderCard(card)
                         }

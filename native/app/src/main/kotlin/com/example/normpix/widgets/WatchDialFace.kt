@@ -53,6 +53,14 @@ object WatchDialFace {
     const val PILL_ANGLE = 90f
 
     /**
+     * The accent dash at the pointer, between the minute and the second in the pill (radii from the middle; the pill's text is laid out
+     * in [ClockFace]). Both numbers sit left of the seconds ring's numbers, which pass at [OUTER_NUMBER_RADIUS], so nothing has to
+     * cover the ring to keep them readable.
+     */
+    const val DASH_FROM = 56.6f
+    const val DASH_TO = 60.6f
+
+    /**
      * Where the minute [value] sits on the inner ring when it is [minute] past the hour: at the pill when it is the minute. [minute] may
      * be a fraction (the minute and the seconds into it as a share of one): the ring creeps round as the seconds pass, as a watch's
      * minute track does, and does not wait to jump a whole step when the minute changes.
