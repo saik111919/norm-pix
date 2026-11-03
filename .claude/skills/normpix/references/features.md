@@ -37,7 +37,9 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
   Stack/Cards/Rows/Carousel; **Stack is the cards' default since 2026-11-02 and is filed like folders** - `wallet/CardFolderStack.kt`, after
   the owner's reference: each card behind shows a tab strip (`FolderTabShape`, 64% wide, the edge stepping 16 dp down beside it) with its
   network, `•••• last4` and the contactless mark, 58 dp apart (`FolderStep`), the front card printed in full; tapping a strip brings that
-  card forward on the spatial spring, tapping the front one opens it; one screen-reader node per card. Home's cards keep the older
+  card forward on the spatial spring, tapping the front one opens it; **swiping the front card sideways** (past 22% of the width, or a
+  fling) brings the next card forward, the other way the previous one, round and round (TalkBack: "Show next card" / "Show previous
+  card"); one screen-reader node per card. Home's cards keep the older
   `CardStack`), each with its own **"+ Add"** beside its heading (no dashed add tiles). NFC buttons show only
   while NFC is usable (section 4).
 - **People** (`PeoplePage`, `PersonDetailPage`): label expenses with who they were for; totals per person. **Categories**
@@ -136,8 +138,12 @@ transaction and read again to fill the form.
   availability scheduler supports Always / Scheduled weekly windows / Off). `nfcExchangeOffered` is followed live.
 - **Card tilt** (`wallet/motion/CardTilt.kt`): gyro/accelerometer lean (6 degree limit, dead zone, one shared listener, off under
   reduced motion). It leans the saved cards **and the accounts drawn as cards** (`AccountCardView(tilt)`: the carousel's front card and
-  the list's cards; the stack stays flat as the cards' stack does), with the sheen `drawSheen`; Wallet feeds one `rememberCardTilt` to both and
-  the accounts lean even where *Store cards* is off (the setting is under Effects either way). **Card shadow** is painted from the card's rounded outline, not the hardware shadow.
+  the list's cards; the accounts' stack stays flat; the cards' stacks, `CardStack` and `CardFolderStack`, lean their front card), with the
+  sheen `drawSheen`; Wallet feeds one `rememberCardTilt` to both and
+  the accounts lean even where *Store cards* is off (the setting is under Effects either way). **Only one card leans at a time**
+  (`wallet/motion/TiltFocus.kt`, since 2026-11-02): each candidate (the front card of a stack or carousel, a card in a list) reports where
+  it is (`tiltFocusCandidate`), Wallet provides one `LocalTiltFocus`, and `CardTiltState?.ifFocused(key)` hands the tilt only to the one
+  nearest the window's vertical centre; with no provider (Home) a card keeps its tilt. **Card shadow** is painted from the card's rounded outline, not the hardware shadow.
 - Bank card faces use shared pattern-and-colour themes (`BankCardDesign`, `AccountCardDesign.themeFor`). A per-bank redesign is
   **blocked on the owner supplying the designs - do not start it from a guess**.
 - Privacy posture to preserve: no SMS or notification access; the only network host family is GitHub; ML Kit telemetry removed;

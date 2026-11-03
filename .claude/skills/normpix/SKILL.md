@@ -5,7 +5,7 @@ description: "Everything about the NormPix project - a private, offline-first An
 
 # NormPix project skill
 
-Stamp: verified against commit `5ee89b6d` (v1.5.0 in the working tree; v1.4.1 is the last release) on 2026-11-02. If `git log` shows newer commits on source paths, or
+Stamp: verified against commit `ec8a9cb3` (v1.5.0 in the working tree; v1.4.1 is the last release) on 2026-11-03. If `git log` shows newer commits on source paths, or
 `bash .claude/skills/normpix/scripts/verify.sh` reports drift, trust the code and fix the skill (`references/maintenance.md`).
 
 ## 1. The 60-second picture
@@ -90,7 +90,7 @@ reference rather than exploring. For the history or reasoning behind a feature, 
 | `wallet/nfc/` | `NfcTagReader` (add by tap), `NfcCardExchange` + HCE `NfcCardOutletService`, tag registration, tap guide/sheets |
 | `wallet/clipboard/` | `SecureClipboard` (per-copy token, timed clear), copy sheet |
 | `wallet/expiry/` | Card expiry tracker, alarms, notices |
-| `wallet/motion/` | `CardTilt` |
+| `wallet/motion/` | `CardTilt`, `TiltFocus` (only the card nearest the window's vertical centre leans) |
 | `reminders/` | Model, `RemindersDatabase` (v2), alarms, notifications, alert screen, links |
 | `screens/` | The tabs' screens: `HomeScreen`, `HomeBanners`, `PlansAndTransactionsScreen`, `WalletScreen` |
 | `navigation/` | `NormPixRoot` (`Routes`, `ShellState`, locals), `AppShell`, `AppNavigator`, `FloatingNavBar`, `ActionMenu` (the "+" bento panel), `PageTransitions`, `LinuxWindowMotion`, `AppSearch`, `AppearanceSection`, splash |

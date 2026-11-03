@@ -105,36 +105,40 @@ fun WalletOverview(
     }
 }
 
-/** One of the figures under the total: an icon in a disc, what it is called and the amount. */
+/**
+ * One of the figures under the total: what it is called, with an icon in a disc, and under them the amount. The amount has the
+ * whole width of the tile rather than what is left of it beside the icon: a lakh figure with its paise is a dozen characters,
+ * and half a row less the icon is not enough for it on a 360dp phone.
+ */
 @Composable
 private fun FigureTile(icon: ImageVector, label: String, value: String, modifier: Modifier = Modifier, tone: Color = Color.Unspecified) {
     val scheme = MaterialTheme.colorScheme
     val accent = if (tone == Color.Unspecified) scheme.onSurfaceVariant else tone
-    Row(
+    Column(
         modifier
             .clip(AppRadius.rLg)
             .background(scheme.surface.copy(alpha = 0.55f))
             .padding(horizontal = AppSpacing.md, vertical = AppSpacing.md),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.xs),
     ) {
-        Box(Modifier.size(36.dp).clip(CircleShape).background(accent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(28.dp).clip(CircleShape).background(accent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.width(AppSpacing.sm))
+            Text(label, style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant, maxLines = 2, modifier = Modifier.weight(1f, fill = false))
         }
-        Spacer(Modifier.width(AppSpacing.md))
-        Column(Modifier.weight(1f, fill = false)) {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant, maxLines = 2)
-            // The figure is never cut: it shrinks to fit its half of the row, down to a size still easy to read.
-            val style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = TABULAR_FIGURES)
-            Text(
-                value,
-                style = style,
-                fontWeight = FontWeight.SemiBold,
-                color = if (tone == Color.Unspecified) scheme.onSurface else tone,
-                maxLines = 1,
-                softWrap = false,
-                autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = style.fontSize),
-            )
-        }
+        // The figure is never cut: it shrinks to fit the tile, down to a size still easy to read.
+        val style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = TABULAR_FIGURES)
+        Text(
+            value,
+            style = style,
+            fontWeight = FontWeight.SemiBold,
+            color = if (tone == Color.Unspecified) scheme.onSurface else tone,
+            maxLines = 1,
+            softWrap = false,
+            autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = style.fontSize),
+        )
     }
 }
 
