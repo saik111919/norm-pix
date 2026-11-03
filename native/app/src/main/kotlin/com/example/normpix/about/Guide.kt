@@ -204,10 +204,11 @@ enum class GuideTopic(
         steps = listOf(
             "Open Settings > Data & Backup.",
             "Choose Everything for a .zip with your data, pictures, settings and reminders, or Full backup, with pictures for your finance data and the bills and receipts attached to it.",
-            "Keep the file somewhere safe. It is saved only where you choose.",
-            "On the new phone, install NormPix and choose Restore from backup. It checks the file first and asks before replacing anything.",
+            "Lock it with a password when asked: nothing in the file can be read or restored without it. Keep the file somewhere safe; it is saved only where you choose.",
+            "On the new phone, install NormPix and choose Restore from backup. It asks for the password of a locked backup, checks the file first and asks before replacing anything.",
         ),
         tips = listOf(
+            "NormPix can't recover a forgotten backup password, so keep it somewhere safe.",
             "Saved cards are left out unless you choose to include them, and then they are locked with a password.",
             "Check and recalculate works every balance out again from your entries.",
             "Sample data lets you explore NormPix without entering your own.",
@@ -225,7 +226,7 @@ enum class GuideTopic(
             "NormPix connects only to GitHub, to check for and download its own updates.",
         ),
         tips = listOf(
-            "Card details are encrypted, and the app's screen is protected from screenshots.",
+            "Card details are encrypted, backups can be locked with a password, and the app's screen is protected from screenshots.",
             "There is no account and no analytics.",
         ),
         link = GuideLink.Security,

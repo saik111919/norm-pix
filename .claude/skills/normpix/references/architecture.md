@@ -112,7 +112,10 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
   full finance backup `FinanceBackupCodec.FORMAT_VERSION = 2` (`.json`, or `.zip` with pictures); app backup
   `AppBackupManifest.VERSION = 1` (zip: finance json, pictures, `app/manifest.json`, `app/settings.json`,
   `app/reminders.json`, `app/profile/`, `app/fonts/`, `app/cards.json`); cards file `CardsTransfer.VERSION = 1`
-  (AES-256-GCM, PBKDF2 password, min 8 chars); CSV export. Reading validates first, nothing is written until a snapshot
+  (AES-256-GCM, PBKDF2 password, min 8 chars); locked backup `LockedFile.VERSION = 1` (`backup/LockedFile.kt`: any of the
+  restorable backups wrapped whole - line `normpix-locked`, a JSON header line, then 64 KB blocks each sealed with AES-256-GCM
+  under a PBKDF2-HMAC-SHA256 key (310,000 rounds, per-file salt), nonce = block number + last-block flag, both lines bound as AAD;
+  a `Locker` locks one file only); CSV export. Reading validates first, nothing is written until a snapshot
   validated cleanly, entry names must be plain relative paths, sizes are capped. Restore asks before replacing.
   `update.json` (published by CI) has `schema: 1`.
 - Threads: finance and reminders DB work run on dedicated single threads (`normpix-finance-db`, `normpix-reminders-db`);

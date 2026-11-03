@@ -9,9 +9,11 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import com.example.normpix.backup.AppBackupArchive
 import com.example.normpix.backup.AppBackupExporter
 import com.example.normpix.backup.AppBackupManifest
+import com.example.normpix.backup.LockedFile
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.CategoryType
@@ -22,7 +24,10 @@ import com.example.normpix.reminders.ReminderCategory
 import com.example.normpix.reminders.RepeatRule
 import com.example.normpix.settings.ui.AppBackupFlows
 import com.example.normpix.settings.ui.BackupFiles
+import com.example.normpix.settings.ui.BackupSource
+import com.example.normpix.settings.ui.openBackup
 import com.example.normpix.testing.TestEnvironment
+import com.example.normpix.ui.components.AppOverlays
 import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
@@ -38,8 +43,12 @@ import java.io.OutputStream
 import java.nio.file.Files
 import java.time.LocalDateTime
 import java.util.Locale
+import kotlin.random.Random
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -107,6 +116,7 @@ class AppBackupFlowsTest {
     /** The phone a backup was made on. */
     private lateinit var oldPhone: TestEnvironment
     private var flows: AppBackupFlows? = null
+    private var overlays: AppOverlays? = null
     private var finished = false
     private var reads = 0
 
@@ -135,7 +145,10 @@ class AppBackupFlowsTest {
                 val scope = LocalAppScope.current
                 val haptics = rememberAppHaptics()
                 val made = remember { AppBackupFlows(phone.context, phone.container, overlays, snackbars, files, scope, haptics) }
-                SideEffect { flows = made }
+                SideEffect {
+                    flows = made
+                    this@AppBackupFlowsTest.overlays = overlays
+                }
             }
         }
         compose.waitForIdle()
@@ -160,6 +173,26 @@ class AppBackupFlowsTest {
     private fun shown(text: String, substring: Boolean = false) = compose.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty()
 
     private fun waitFor(text: String, substring: Boolean = false) = compose.waitUntil(15_000) { shown(text, substring) }
+
+    /** Answers "Lock the backup?": locked with [password], or - null - saved as it is. */
+    private fun answerLock(password: String? = null) {
+        waitFor("Lock the backup?")
+        if (password == null) {
+            compose.onNodeWithText("Don't lock").performClick()
+            compose.onNodeWithText("Save").performClick()
+        } else {
+            compose.onNodeWithText("Password").performTextInput(password)
+            compose.onNodeWithText("Password again").performTextInput(password)
+            compose.onNodeWithText("Lock and save").performClick()
+        }
+    }
+
+    /** What a locked backup holds, unlocked with [password]. */
+    private fun unlocked(bytes: ByteArray, password: String): ByteArray {
+        assertTrue(LockedFile.isLocked(bytes))
+        val opening = assertIs<LockedFile.Opening.Locked>(LockedFile.open(ByteArrayInputStream(bytes)))
+        return assertNotNull(opening.unlock(password.toCharArray()), "the password opens it").readBytes()
+    }
 
     private fun reminder(title: String) = Reminder(
         title = title,
@@ -218,12 +251,13 @@ class AppBackupFlowsTest {
     // ------------------------------------------------------------------ export
 
     @Test
-    fun `a backup without cards asks nothing, is saved as a zip and says what went in`() {
+    fun `a backup without cards, not locked, asks nothing more, is saved as a zip and says what went in`() {
         fill(phone, "Cafe", ThemeMode.Dark, "Rent")
         runBlocking { phone.container.reminders.addReminder(reminder("Gym")) }
         host()
 
         start { flows!!.export() }
+        answerLock(null)
         await()
 
         assertTrue(Regex("normpix-app-backup-\\d{4}-\\d{2}-\\d{2}\\.zip").matches(assertNotNull(files.fileName)), files.fileName)
@@ -244,6 +278,7 @@ class AppBackupFlowsTest {
         host()
 
         start { flows!!.export() }
+        answerLock(null)
         await()
 
         assertEquals(1, files.asked)
@@ -258,6 +293,7 @@ class AppBackupFlowsTest {
         host()
 
         start { flows!!.export() }
+        answerLock(null)
         waitFor("Include saved cards?")
         assertEquals(0, files.asked, "nothing is saved before the question is answered")
         compose.onNodeWithText("Leave out").performClick()
@@ -275,6 +311,7 @@ class AppBackupFlowsTest {
         host()
 
         start { flows!!.export() }
+        answerLock(null)
         await()
 
         assertEquals(1, files.asked)
@@ -290,10 +327,72 @@ class AppBackupFlowsTest {
         host()
 
         start { flows!!.export() }
+        answerLock(null)
         await()
 
         waitFor("Couldn't save the backup there. Try another location.")
         compose.onAllNodesWithText("App backup saved", substring = true).assertCountEquals(0)
+    }
+
+    // ------------------------------------------------------------ locked export
+
+    @Test
+    fun `a backup locked with a password is saved locked, and that password opens it to the same backup`() {
+        fill(phone, "Cafe", ThemeMode.Dark, "Rent")
+        host()
+
+        start { flows!!.export() }
+        answerLock("long enough")
+        await()
+
+        assertTrue(Regex("normpix-app-backup-\\d{4}-\\d{2}-\\d{2}\\.zip\\.locked").matches(assertNotNull(files.fileName)), files.fileName)
+        assertEquals(LockedFile.MIME_TYPE, files.mimeType)
+        val bytes = assertNotNull(files.bytes)
+        assertNull(assertIs<LockedFile.Opening.Locked>(LockedFile.open(ByteArrayInputStream(bytes))).unlock("wrong password".toCharArray()))
+        val app = assertNotNull(AppBackupArchive.read(ByteArrayInputStream(unlocked(bytes, "long enough")), File(scratch, "locked")).app)
+        assertEquals(listOf("finance", "settings", "reminders"), app.manifest.contents)
+        waitFor("App backup saved, locked with your password: finance data, settings and 1 reminder")
+    }
+
+    @Test
+    fun `the lock sheet refuses a short password or two that differ, and nothing is saved until they are right`() {
+        host()
+
+        start { flows!!.export() }
+        waitFor("Lock the backup?")
+        compose.onNodeWithText("Password").performTextInput("short")
+        compose.onNodeWithText("Password again").performTextInput("short")
+        compose.onNodeWithText("Lock and save").performClick()
+        waitFor("Use at least 8 characters")
+        compose.onNodeWithText("Password").performTextInput(" and longer")
+        compose.onNodeWithText("Lock and save").performClick()
+        waitFor("The two passwords don't match")
+        assertEquals(0, files.asked)
+
+        compose.onNodeWithText("Password again").performTextInput(" and longer")
+        compose.onNodeWithText("Lock and save").performClick()
+        await()
+        assertEquals(1, files.asked)
+        assertNotNull(unlocked(assertNotNull(files.bytes), "short and longer"))
+    }
+
+    @Test
+    fun `the saved cards in a locked backup are locked with its password, and no other password is asked for`() {
+        phone.vault.cards = listOf(card())
+        runBlocking { phone.container.cards.load() }
+        host()
+
+        start { flows!!.export() }
+        answerLock("long enough")
+        waitFor("They are locked with the backup's password.", substring = true)
+        compose.onNodeWithText("Include").performClick()
+        await()
+
+        assertFalse(shown("Lock the cards file"))
+        val app = assertNotNull(AppBackupArchive.read(ByteArrayInputStream(unlocked(assertNotNull(files.bytes), "long enough")), File(scratch, "cards")).app)
+        val opened = assertIs<CardsTransfer.Result.Cards>(CardsTransfer.decode(assertNotNull(app.cards), "long enough".toCharArray()))
+        assertEquals(listOf("4111111111111111"), opened.cards.map { it.cardNumber })
+        waitFor("App backup saved, locked with your password: finance data, settings and 1 card")
     }
 
     // ----------------------------------------------------------------- restore
@@ -387,5 +486,114 @@ class AppBackupFlowsTest {
         compose.onNodeWithText("OK").performClick()
         await()
         assertFalse(shown("Restore this backup?"))
+    }
+
+    @Test
+    fun `the saved cards of a locked backup open with the backup's password, without asking`() {
+        fill(oldPhone, "Cafe", ThemeMode.Dark, "Rent")
+        val cardsFile = CardsTransfer.encode(listOf(card()), "long enough".toCharArray(), exportedAt = now, iterations = 10_000)
+        val read = backupOf(oldPhone, cardsFile)
+        host()
+
+        start { flows!!.restore(read.finance.json, read.finance.pictures, assertNotNull(read.app), password = "long enough") }
+        waitFor("Restore this backup?")
+        compose.onNodeWithText("Restore").performClick()
+        await()
+
+        assertFalse(shown("Open the cards file"))
+        assertEquals(listOf("4111111111111111"), phone.vault.cards.map { it.cardNumber })
+        waitFor("1 card added to Wallet", substring = true)
+    }
+
+    @Test
+    fun `saved cards locked with another password than the backup's are asked for`() {
+        fill(oldPhone, "Cafe", ThemeMode.Dark, "Rent")
+        val cardsFile = CardsTransfer.encode(listOf(card()), "cards password".toCharArray(), exportedAt = now, iterations = 10_000)
+        val read = backupOf(oldPhone, cardsFile)
+        host()
+
+        start { flows!!.restore(read.finance.json, read.finance.pictures, assertNotNull(read.app), password = "backup password") }
+        waitFor("Restore this backup?")
+        compose.onNodeWithText("Restore").performClick()
+        waitFor("Open the cards file")
+        compose.onNodeWithText("Password").performTextInput("cards password")
+        compose.onNodeWithText("Open").performClick()
+        await()
+
+        assertEquals(listOf("4111111111111111"), phone.vault.cards.map { it.cardNumber })
+    }
+
+    // ------------------------------------------------------------ opening a file
+
+    @Test
+    fun `a backup that isn't locked is read as it is, and nothing is asked`() {
+        val plain = "{\"format\":\"normpix-finance-backup\"}".toByteArray()
+        host()
+        var source: BackupSource? = null
+
+        start { source = overlays!!.openBackup(ByteArrayInputStream(plain)) }
+        await()
+
+        val opened = assertNotNull(source)
+        assertNull(opened.password)
+        assertContentEquals(plain, opened.stream.readBytes())
+        assertFalse(shown("Open the locked backup"))
+    }
+
+    @Test
+    fun `a locked backup asks for its password, again after a wrong one, and opens to exactly what was locked`() {
+        val inner = Random(7).nextBytes(2 * LockedFile.CHUNK + 300)
+        val file = LockedFile.locker("long enough".toCharArray(), iterations = 10_000).lock(inner)
+        host()
+        var source: BackupSource? = null
+
+        start { source = overlays!!.openBackup(ByteArrayInputStream(file)) }
+        waitFor("Open the locked backup")
+        compose.onNodeWithText("Password").performTextInput("wrong password")
+        compose.onNodeWithText("Open").performClick()
+        waitFor("That password doesn't open this backup. Try again.")
+        compose.onNodeWithText("Password").performTextInput("long enough")
+        compose.onNodeWithText("Open").performClick()
+        await()
+
+        val opened = assertNotNull(source)
+        assertEquals("long enough", opened.password)
+        assertContentEquals(inner, opened.stream.readBytes())
+    }
+
+    @Test
+    fun `a locked backup cut short opens, but finishing reading it refuses it as damaged`() {
+        val inner = Random(8).nextBytes(2 * LockedFile.CHUNK + 300)
+        val file = LockedFile.locker("long enough".toCharArray(), iterations = 10_000).lock(inner)
+        // Its last block gone: what is left ends where the second block ends.
+        val cut = file.copyOf(file.size - (300 + 16))
+        host()
+        var source: BackupSource? = null
+
+        start { source = overlays!!.openBackup(ByteArrayInputStream(cut)) }
+        waitFor("Open the locked backup")
+        compose.onNodeWithText("Password").performTextInput("long enough")
+        compose.onNodeWithText("Open").performClick()
+        await()
+
+        val opened = assertNotNull(source)
+        assertFailsWith<LockedFile.DamagedException> { opened.finish() }
+    }
+
+    @Test
+    fun `a locked backup NormPix can't open says why, and asks no password`() {
+        val file = LockedFile.locker("long enough".toCharArray(), iterations = 10_000).lock(ByteArray(10))
+        val newer = String(file, Charsets.ISO_8859_1).replace("\"version\":1", "\"version\":9").toByteArray(Charsets.ISO_8859_1)
+        host()
+        var source: BackupSource? = null
+
+        start { source = overlays!!.openBackup(ByteArrayInputStream(newer)) }
+        waitFor("Can't use this file")
+        assertTrue(shown("This backup was locked by a newer NormPix. Update NormPix, then restore it.", substring = true))
+        compose.onNodeWithText("OK").performClick()
+        await()
+
+        assertNull(source)
+        assertFalse(shown("Open the locked backup"))
     }
 }

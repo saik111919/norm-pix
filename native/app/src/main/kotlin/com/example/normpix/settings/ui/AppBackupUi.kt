@@ -78,16 +78,20 @@ internal class AppBackupFlows(
     private val restorer = AppRestorer(context, container)
     private val cards = CardsTransferFlows(container, overlays, snackbars, files)
 
-    /** Asks about the cards, reads everything and saves it as `normpix-app-backup-<date>.zip` where the user chooses. */
+    /**
+     * Asks whether to lock the backup and about the cards, reads everything and saves it as `normpix-app-backup-<date>.zip` where the
+     * user chooses (with `.locked` after it, locked). The cards in a locked backup are locked with its password, not asked for another.
+     */
     suspend fun export() {
+        val lock = overlays.askBackupLock("Your finance data and pictures, settings, reminders, profile and font") ?: return
         val now = LocalDateTime.now()
-        val withCards = cards.forBackup(now) ?: return
+        val withCards = cards.forBackup(now, lock.password) ?: return
         val locked = withCards as? CardsForBackup.Locked
         val source = exporter.gather(now, locked?.file)
         var pictures = 0
         val saved = try {
-            files.saveStreaming("normpix-app-backup-${appBackupDate.format(now)}.zip", "application/zip") { out ->
-                pictures = withContext(Dispatchers.IO) { exporter.write(out, source) }
+            files.saveStreaming(lock.fileName("normpix-app-backup-${appBackupDate.format(now)}.zip"), lock.mimeType("application/zip")) { out ->
+                pictures = withContext(Dispatchers.IO) { lock.write(out) { into -> exporter.write(into, source) } }
             }
         } catch (e: CancellationException) {
             throw e
@@ -103,18 +107,18 @@ internal class AppBackupFlows(
             if (source.reminderCount > 0) add(count(source.reminderCount, "reminder"))
             if (source.hasPhoto) add("your profile picture")
             if (source.hasFont) add("your font")
-            if (locked != null) add("${count(locked.count, "card")}, locked with your password")
+            if (locked != null) add(if (lock.locked) count(locked.count, "card") else "${count(locked.count, "card")}, locked with your password")
         }
         val prefix = if (container.preferences.state.value.dummyDataEnabled) "Sample app backup saved" else "App backup saved"
-        snackbars.show("$prefix: ${contents.joinWords()}")
+        snackbars.show("$prefix${lock.said}: ${contents.joinWords()}")
     }
 
     /**
      * Restores from an app backup that was read: [financeText] and [pictures] are its finance part, [app] the rest. Says so when
      * the backup is damaged or holds nothing to restore. Otherwise the user picks what to restore, and what they pick is restored
-     * with an Undo for a few seconds.
+     * with an Undo for a few seconds. [password] opened the backup, if it was locked: the saved cards in it are tried with it first.
      */
-    suspend fun restore(financeText: String?, pictures: Map<String, File>, app: AppBackupArchive.App) {
+    suspend fun restore(financeText: String?, pictures: Map<String, File>, app: AppBackupArchive.App, password: String? = null) {
         if (container.preferences.state.value.dummyDataEnabled) {
             overlays.alert(
                 "Sample data is on",
@@ -151,7 +155,7 @@ internal class AppBackupFlows(
         var opened: List<StoredCard>? = null
         if (BackupPart.Cards in chosen) {
             val file = plan.cardsFile
-            val unlocked = if (file != null) cards.unlock(file, alone = false) else null
+            val unlocked = if (file != null) cards.unlock(file, alone = false, password = password) else null
             if (unlocked != null) {
                 opened = unlocked.cards
             } else {

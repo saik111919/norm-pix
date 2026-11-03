@@ -62,6 +62,29 @@ Format: `claim - applies to - source - status/date`.
 - `am start -a SEND` with a MediaStore URI fails (MediaProvider permission); share a picture to the qa app by opening it in Google
   Photos with `-p com.google.android.apps.photos -f 0x10008000` and using its Share sheet - Android 14-17 devices - NOTES (2026-10-13).
 
+## Encryption at rest (whole-app encryption assessment, 2026-11-03; nothing built)
+
+- SQLCipher community edition: `net.zetetic:sqlcipher-android:4.20.0@aar` + `androidx.sqlite:sqlite:2.7.0`, Android API 23 and up, ABIs
+  armeabi-v7a/x86/x86_64/arm64-v8a, `System.loadLibrary("sqlcipher")` before any database call, classes in `net.zetetic.database.sqlcipher`,
+  `SupportOpenHelperFactory` for androidx.sqlite/Room. The AAR is 4,050,842 bytes (all four ABIs) - github.com/sqlcipher/sqlcipher-android
+  README + repo1.maven.org `net/zetetic/sqlcipher-android/4.20.0/` (latest = release = 4.20.0) - **RE-CHECKED 2026-11-03**. Not stated
+  anywhere checked: the 16 KB page-size alignment, the per-ABI size, the licence text. The zetetic.net Android page describes the
+  *commercial* edition (that one needs `PRAGMA cipher_license`).
+- A plaintext SQLite file is encrypted with `ATTACH DATABASE 'enc.db' AS encrypted KEY '...'; SELECT sqlcipher_export('encrypted');
+  DETACH DATABASE encrypted;`. `PRAGMA rekey` cannot encrypt a plain database; `sqlcipher_export` does not copy `user_version` or
+  `auto_vacuum` (set them on the target). Defaults: PBKDF2_HMAC_SHA512, 256,000 iterations, page size 4096; `cipher_memory_security` is
+  off by default - zetetic.net/sqlcipher/sqlcipher-api - **RE-CHECKED 2026-11-03**.
+- `androidx.security:security-crypto` (EncryptedSharedPreferences, EncryptedFile, MasterKey): every API is deprecated since 1.1.0-alpha07 /
+  1.1.0 (2025) "in favour of existing platform APIs and direct use of Android Keystore". Don't add it; use Keystore directly, as
+  `CardVault` does - developer.android.com/jetpack/androidx/releases/security - **RE-CHECKED 2026-11-03**.
+- Keystore: key material never enters the app process, but "if the app's process is compromised, the attacker might be able to use the
+  app's keys". User-auth-bound keys work for a set time or for each operation (`BiometricPrompt` + CryptoObject). A biometric-only key is
+  invalidated by a new biometric enrolment unless `setInvalidatedByBiometricEnrollment(false)` - developer.android.com/privacy-and-security/keystore
+  - **RE-CHECKED 2026-11-03**. NormPix's vault/NFC keys are *not* auth-bound: the app lock (`AppLockService`) is session state in memory.
+- File-based encryption is required on every device that launches with Android 10 or later. Credential-encrypted storage (the default,
+  where `filesDir`/databases live) opens only after the user unlocks the device - source.android.com/docs/security/features/encryption/file-based
+  - **RE-CHECKED 2026-11-03**.
+
 ## OCR and receipts
 
 - ML Kit returns **scrambled line order** and reads the rupee sign as `7`, `Z` or nothing; per-symbol confidence for a misread rupee

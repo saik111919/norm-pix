@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.normpix.backup.AppBackupArchive
+import com.example.normpix.backup.LockedFile
 import com.example.normpix.finance.data.FinanceBackupArchive
 import com.example.normpix.finance.data.FinanceBackupCodec
 import com.example.normpix.finance.data.FinanceSnapshot
@@ -115,11 +116,13 @@ fun DataSettingsPage() {
     fun check() = run("check") { runLedgerCheck(finance, overlays, snackbars, financeActions, scope) }
 
     fun exportBackup() = run("backup") {
+        val lock = overlays.askBackupLock("Your finance data, without the pictures attached to it") ?: return@run
         val now = LocalDateTime.now()
         val snapshot = finance.repository.snapshot()
         val text = FinanceBackupCodec.encode(snapshot, exportedAt = now)
+        val bytes = withContext(Dispatchers.Default) { lock.seal(text.toByteArray(Charsets.UTF_8)) }
         val saved = try {
-            files.save("normpix-backup-${fileDate.format(now)}.json", "application/json", text.toByteArray(Charsets.UTF_8))
+            files.save(lock.fileName("normpix-backup-${fileDate.format(now)}.json"), lock.mimeType("application/json"), bytes)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -129,11 +132,12 @@ fun DataSettingsPage() {
         if (saved) {
             haptics.success()
             val prefix = if (prefs.dummyDataEnabled) "Sample data backup saved" else "Backup saved"
-            snackbars.show("$prefix: ${describe(snapshot)}")
+            snackbars.show("$prefix${lock.said}: ${describe(snapshot)}")
         }
     }
 
     fun exportFullBackup() = run("full") {
+        val lock = overlays.askBackupLock("Your finance data, with the bills and receipts attached to it") ?: return@run
         val now = LocalDateTime.now()
         val snapshot = finance.repository.snapshot()
         val text = FinanceBackupCodec.encode(snapshot, exportedAt = now)
@@ -141,8 +145,10 @@ fun DataSettingsPage() {
         val store = finance.pictures
         var pictures = 0
         val saved = try {
-            files.saveStreaming("normpix-backup-${fileDate.format(now)}.zip", "application/zip") { out ->
-                pictures = withContext(Dispatchers.IO) { FinanceBackupArchive.write(out, text, names) { store?.file(it) } }
+            files.saveStreaming(lock.fileName("normpix-backup-${fileDate.format(now)}.zip"), lock.mimeType("application/zip")) { out ->
+                pictures = withContext(Dispatchers.IO) {
+                    lock.write(out) { into -> FinanceBackupArchive.write(into, text, names) { store?.file(it) } }
+                }
             }
         } catch (e: CancellationException) {
             throw e
@@ -153,7 +159,7 @@ fun DataSettingsPage() {
         if (saved) {
             haptics.success()
             val prefix = if (prefs.dummyDataEnabled) "Sample data backup saved" else "Backup saved"
-            snackbars.show("$prefix with ${if (pictures == 1) "1 picture" else "$pictures pictures"}: ${describe(snapshot)}")
+            snackbars.show("$prefix with ${if (pictures == 1) "1 picture" else "$pictures pictures"}${lock.said}: ${describe(snapshot)}")
         }
     }
 
@@ -197,12 +203,15 @@ fun DataSettingsPage() {
         val store = finance.pictures
         val staging = store?.newRestoreFolder() ?: kotlin.io.path.createTempDirectory("restore").toFile()
         try {
-            val read = try {
+            val (read, password) = try {
                 files.openStreaming { input ->
-                    // Picked: read under a loading sheet, since a backup with pictures can take a while to unpack.
+                    // A locked backup is unlocked first: its password is asked for before anything is read.
+                    val backup = overlays.openBackup(input) ?: return@openStreaming null
+                    // Picked: read under a loading sheet, since a backup with pictures can take a while to unpack. A locked one is read
+                    // to its end before it is used, so a file cut short or added to is refused here.
                     overlays.loading("Reading the backup", "Checking the file before anything is changed.") {
-                        withContext(Dispatchers.IO) { readBackup(input, staging, keepPictures = store != null) }
-                    }
+                        withContext(Dispatchers.IO) { readBackup(backup.stream, staging, keepPictures = store != null).also { backup.finish() } }
+                    }?.let { it to backup.password }
                 } ?: return@run
             } catch (e: CancellationException) {
                 throw e
@@ -212,14 +221,18 @@ fun DataSettingsPage() {
             } catch (e: BackupRejectedException) {
                 problem(listOf(e.reason))
                 return@run
+            } catch (_: LockedFile.DamagedException) {
+                problem(listOf(LockedFile.DAMAGED))
+                return@run
             } catch (_: Exception) {
                 problem(listOf("The file couldn't be read."))
                 return@run
             }
             val app = read.app
             if (app != null) {
-                // A backup of everything: what to restore is the user's to pick (see AppBackupFlows.restore).
-                appBackup.restore(read.text, read.pictures, app)
+                // A backup of everything: what to restore is the user's to pick (see AppBackupFlows.restore). Saved cards in it may be
+                // locked with the password that opened the backup, which is tried on them first.
+                appBackup.restore(read.text, read.pictures, app, password)
                 return@run
             }
             val text = read.text
@@ -346,8 +359,8 @@ fun DataSettingsPage() {
                     } else {
                         "The finance backups hold accounts, categories, transactions, budgets, recurring payments and " +
                             "people. The one with everything also holds your settings, reminders, profile and font, and your saved " +
-                            "cards if you choose - those are locked with a password. Nothing else in a file is encrypted, so keep " +
-                            "files somewhere safe. They are saved only where you choose."
+                            "cards if you choose. Lock a backup with a password and nothing in the file can be read without it; " +
+                            "saved cards are always locked. The spreadsheet is never locked. Files are saved only where you choose."
                     },
                 ) {
                     item {
@@ -390,7 +403,7 @@ fun DataSettingsPage() {
                             if (prefs.dummyDataEnabled) {
                                 "Sample data is on. Turn it off to restore a backup to your actual data."
                             } else {
-                                "A backup of everything or a full backup (.zip), or one without pictures (.json). It's checked first, and you confirm what is replaced before anything is."
+                                "A backup of everything or a full backup (.zip), or one without pictures (.json), locked or not. It's checked first, and you confirm what is replaced before anything is."
                             },
                             ::restore,
                         )
