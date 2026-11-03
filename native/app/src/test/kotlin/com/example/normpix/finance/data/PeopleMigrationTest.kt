@@ -4,8 +4,11 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.test.core.app.ApplicationProvider
 import com.example.normpix.finance.domain.Person
+import com.example.normpix.storage.insertOrThrow
+import com.example.normpix.storage.rawQuery
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import kotlin.test.AfterTest
@@ -141,7 +144,7 @@ class PeopleMigrationTest {
         }
     }
 
-    private fun SQLiteDatabase.count(table: String, where: String = "1 = 1"): Long =
+    private fun SupportSQLiteDatabase.count(table: String, where: String = "1 = 1"): Long =
         rawQuery("SELECT COUNT(*) FROM $table WHERE $where", null).use { it.moveToFirst(); it.getLong(0) }
 
     @Test

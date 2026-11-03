@@ -62,18 +62,34 @@ Format: `claim - applies to - source - status/date`.
 - `am start -a SEND` with a MediaStore URI fails (MediaProvider permission); share a picture to the qa app by opening it in Google
   Photos with `-p com.google.android.apps.photos -f 0x10008000` and using its Share sheet - Android 14-17 devices - NOTES (2026-10-13).
 
-## Encryption at rest (whole-app encryption assessment, 2026-11-03; nothing built)
+## Encryption at rest (2026-11-03: stage 1 locked backups and stage 2 SQLCipher databases built; pictures and strict mode not)
 
 - SQLCipher community edition: `net.zetetic:sqlcipher-android:4.20.0@aar` + `androidx.sqlite:sqlite:2.7.0`, Android API 23 and up, ABIs
   armeabi-v7a/x86/x86_64/arm64-v8a, `System.loadLibrary("sqlcipher")` before any database call, classes in `net.zetetic.database.sqlcipher`,
   `SupportOpenHelperFactory` for androidx.sqlite/Room. The AAR is 4,050,842 bytes (all four ABIs) - github.com/sqlcipher/sqlcipher-android
-  README + repo1.maven.org `net/zetetic/sqlcipher-android/4.20.0/` (latest = release = 4.20.0) - **RE-CHECKED 2026-11-03**. Not stated
-  anywhere checked: the 16 KB page-size alignment, the per-ABI size, the licence text. The zetetic.net Android page describes the
-  *commercial* edition (that one needs `PRAGMA cipher_license`).
+  README + repo1.maven.org `net/zetetic/sqlcipher-android/4.20.0/` (latest = release = 4.20.0) - **RE-CHECKED 2026-11-03**. Measured
+  in our qa APK, 2026-11-03: `libsqlcipher.so` is 2,110,992 bytes for arm64-v8a (~1.03 MB deflated, which is what the release's
+  compressed native libraries add to the download) and 1,057,676 for armeabi-v7a (~0.67 MB deflated); every LOAD segment of the
+  arm64 and x86_64 libraries is aligned `0x4000` (NDK 28 `llvm-readelf -lW`), so it is **16 KB page-size ready**. The zetetic.net
+  Android page describes the *commercial* edition (that one needs `PRAGMA cipher_license`).
 - A plaintext SQLite file is encrypted with `ATTACH DATABASE 'enc.db' AS encrypted KEY '...'; SELECT sqlcipher_export('encrypted');
   DETACH DATABASE encrypted;`. `PRAGMA rekey` cannot encrypt a plain database; `sqlcipher_export` does not copy `user_version` or
   `auto_vacuum` (set them on the target). Defaults: PBKDF2_HMAC_SHA512, 256,000 iterations, page size 4096; `cipher_memory_security` is
   off by default - zetetic.net/sqlcipher/sqlcipher-api - **RE-CHECKED 2026-11-03**.
+- Read in the 4.20.0 sources jar (repo1.maven.org `...-4.20.0-sources.jar`), **RE-CHECKED 2026-11-03**, the basis of `storage/`:
+  `net.zetetic.database.sqlcipher.SQLiteDatabase` **implements** androidx `SupportSQLiteDatabase`; `insert(table, conflict, values)`
+  = `insertWithOnConflict` (throws), `insert(table, nullHack, values)` swallows and returns -1. `SupportOpenHelperFactory(password,
+  hook, enableWal)` -> `SupportHelper`, which passes a **null** error handler and does not call the androidx callback's
+  `onCorruption`; SQLCipher's `DefaultDatabaseErrorHandler.onCorruption` returns without deleting when `SQLiteDatabase.hasCodec()`
+  (native, true in SQLCipher builds) - so a wrong key never deletes the file (androidx's framework helper *does* delete on
+  corruption: never point it at an encrypted file). The key is applied with `nativeKey` (sqlite3_key) only when the password is
+  non-empty: an empty password opens a plain SQLite file. Nothing in Java calls `System.loadLibrary("sqlcipher")` - the app must.
+  The password array is kept by reference, never wiped. `SQLiteOpenHelper` mkdirs the databases folder. `rawExecSQL(sql)` runs
+  ATTACH / `SELECT sqlcipher_export(...)` statements. Licence: BSD 3-clause (`LICENSE` in github.com/sqlcipher/sqlcipher-android),
+  attribution in the app's interface or materials - bundled as `assets/licenses/sqlcipher.txt`, shown from About.
+- Robolectric on this Windows PC names each test's data folder after the test method; long test names plus long database file
+  names pass the 260-character path limit and SQLite fails with `SQLITE_CANTOPEN` (code 14) - use short database names in tests
+  (`EncryptedDatabasesTest` uses `fin.db`). Not an issue on phones or Linux CI - **seen 2026-11-03**.
 - `androidx.security:security-crypto` (EncryptedSharedPreferences, EncryptedFile, MasterKey): every API is deprecated since 1.1.0-alpha07 /
   1.1.0 (2025) "in favour of existing platform APIs and direct use of Android Keystore". Don't add it; use Keystore directly, as
   `CardVault` does - developer.android.com/jetpack/androidx/releases/security - **RE-CHECKED 2026-11-03**.

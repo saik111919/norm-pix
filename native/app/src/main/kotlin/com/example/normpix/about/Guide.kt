@@ -226,7 +226,8 @@ enum class GuideTopic(
             "NormPix connects only to GitHub, to check for and download its own updates.",
         ),
         tips = listOf(
-            "Card details are encrypted, backups can be locked with a password, and the app's screen is protected from screenshots.",
+            "Your data and card details are encrypted on this phone, backups can be locked with a password, and the app's screen " +
+                "is protected from screenshots.",
             "There is no account and no analytics.",
         ),
         link = GuideLink.Security,

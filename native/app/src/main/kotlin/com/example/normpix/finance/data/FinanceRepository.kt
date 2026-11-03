@@ -1,8 +1,7 @@
 package com.example.normpix.finance.data
 
 import android.content.ContentValues
-import android.database.sqlite.SQLiteDatabase
-import androidx.core.database.sqlite.transaction
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.normpix.banks.BankCatalog
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountFlows
@@ -53,6 +52,13 @@ import com.example.normpix.finance.domain.resolveBudgets
 import com.example.normpix.finance.domain.settledBy
 import com.example.normpix.finance.domain.startOfDay
 import com.example.normpix.wallet.BankLogoResolver
+import com.example.normpix.storage.insert
+import com.example.normpix.storage.insertOrThrow
+import com.example.normpix.storage.query
+import com.example.normpix.storage.rawQuery
+import com.example.normpix.storage.replaceOrThrow
+import com.example.normpix.storage.transaction
+import com.example.normpix.storage.update
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -131,7 +137,7 @@ class FinanceRepository(
     /** Where the database work runs: the one dedicated thread, unless a test runs it in place. The sample set uses the same. */
     internal val dispatcher: CoroutineDispatcher = defaultDispatcher,
 ) {
-    private suspend fun <T> io(block: SQLiteDatabase.() -> T): T =
+    private suspend fun <T> io(block: SupportSQLiteDatabase.() -> T): T =
         withContext(dispatcher) { database.writableDatabase.block() }
 
     // ------------------------------------------------------------ settings
@@ -159,7 +165,7 @@ class FinanceRepository(
 
     suspend fun setDefaultAccountId(id: Long?) = io { storeDefaultAccount(id) }
 
-    private fun SQLiteDatabase.storeDefaultAccount(id: Long?) {
+    private fun SupportSQLiteDatabase.storeDefaultAccount(id: Long?) {
         if (id == null) {
             delete(FinanceDatabase.META, "key = ?", arrayOf("default_account_id"))
         } else {
@@ -167,12 +173,12 @@ class FinanceRepository(
         }
     }
 
-    private fun SQLiteDatabase.meta(key: String): String? =
+    private fun SupportSQLiteDatabase.meta(key: String): String? =
         query(FinanceDatabase.META, arrayOf("value"), "key = ?", arrayOf(key), null, null, null).use {
             if (it.moveToFirst()) it.getString(0) else null
         }
 
-    private fun SQLiteDatabase.setMeta(key: String, value: String) {
+    private fun SupportSQLiteDatabase.setMeta(key: String, value: String) {
         replaceOrThrow(
             FinanceDatabase.META,
             null,
@@ -183,7 +189,7 @@ class FinanceRepository(
         )
     }
 
-    private fun SQLiteDatabase.hasAmounts(): Boolean = scalarLong(
+    private fun SupportSQLiteDatabase.hasAmounts(): Boolean = scalarLong(
         """
         SELECT
           (SELECT COUNT(*) FROM ${FinanceDatabase.TRANSACTIONS}) +
@@ -305,10 +311,10 @@ class FinanceRepository(
     /** The banks the user added (the built-in ones live in [BankCatalog] and are not stored). */
     suspend fun customBanks(): List<CustomBank> = io { readBanks() }
 
-    private fun SQLiteDatabase.readBanks(): List<CustomBank> =
+    private fun SupportSQLiteDatabase.readBanks(): List<CustomBank> =
         query(FinanceDatabase.BANKS, null, null, null, null, null, "name COLLATE NOCASE ASC").map(FinanceRows::toBank)
 
-    private fun SQLiteDatabase.bankCatalog() = BankCatalog(readBanks())
+    private fun SupportSQLiteDatabase.bankCatalog() = BankCatalog(readBanks())
 
     /**
      * The key of the bank called [name], adding it first if the app doesn't know it yet. "hdfc bank ltd" finds the built-in
@@ -419,15 +425,15 @@ class FinanceRepository(
         ).map(FinanceRows::toCategory)
     }
 
-    private fun SQLiteDatabase.readCategory(id: Long): Category? =
+    private fun SupportSQLiteDatabase.readCategory(id: Long): Category? =
         query(FinanceDatabase.CATEGORIES, null, "id = ?", arrayOf(id.toString()), null, null, null)
             .use { if (it.moveToFirst()) FinanceRows.toCategory(it) else null }
 
-    private fun SQLiteDatabase.hasSubCategories(id: Long): Boolean =
+    private fun SupportSQLiteDatabase.hasSubCategories(id: Long): Boolean =
         (scalarLong("SELECT COUNT(*) FROM ${FinanceDatabase.CATEGORIES} WHERE parent_id = $id") ?: 0) > 0
 
     /** Child id to parent id for every sub-category. */
-    private fun SQLiteDatabase.parentIds(): Map<Long, Long> =
+    private fun SupportSQLiteDatabase.parentIds(): Map<Long, Long> =
         rawQuery("SELECT id, parent_id FROM ${FinanceDatabase.CATEGORIES} WHERE parent_id IS NOT NULL", null)
             .map { it.long("id") to it.long("parent_id") }
             .toMap()
@@ -568,11 +574,11 @@ class FinanceRepository(
     /** Everyone, the ones in use first (then by name); archived people come last. */
     suspend fun people(): List<Person> = io { readPeople() }
 
-    private fun SQLiteDatabase.readPeople(): List<Person> =
+    private fun SupportSQLiteDatabase.readPeople(): List<Person> =
         query(FinanceDatabase.PEOPLE, null, null, null, null, null, "archived ASC, name COLLATE NOCASE ASC, id ASC")
             .map(FinanceRows::toPerson)
 
-    private fun SQLiteDatabase.readPerson(id: Long): Person? =
+    private fun SupportSQLiteDatabase.readPerson(id: Long): Person? =
         query(FinanceDatabase.PEOPLE, null, "id = ?", arrayOf(id.toString()), null, null, null)
             .use { if (it.moveToFirst()) FinanceRows.toPerson(it) else null }
 
@@ -669,20 +675,20 @@ class FinanceRepository(
     }
 
     /** The person an expense may name: an expense only, someone who exists, and - for a new link - not archived. */
-    private fun SQLiteDatabase.validatePerson(type: TransactionType, personId: Long?, transactionId: Long?) =
+    private fun SupportSQLiteDatabase.validatePerson(type: TransactionType, personId: Long?, transactionId: Long?) =
         validatePersonLink(type, personId) {
             transactionId != null &&
                 scalarLong("SELECT person_id FROM ${FinanceDatabase.TRANSACTIONS} WHERE id = $transactionId") == personId
         }
 
     /** The same rules for a recurring payment's person: what it records is spent on them. */
-    private fun SQLiteDatabase.validateRulePerson(rule: RecurringRule) =
+    private fun SupportSQLiteDatabase.validateRulePerson(rule: RecurringRule) =
         validatePersonLink(rule.type, rule.personId) {
             rule.id != null &&
                 scalarLong("SELECT person_id FROM ${FinanceDatabase.RECURRING_RULES} WHERE id = ${rule.id}") == rule.personId
         }
 
-    private fun SQLiteDatabase.validatePersonLink(type: TransactionType, personId: Long?, alreadyLinked: () -> Boolean) {
+    private fun SupportSQLiteDatabase.validatePersonLink(type: TransactionType, personId: Long?, alreadyLinked: () -> Boolean) {
         if (personId == null) return
         if (type != TransactionType.Expense) throw FinanceValidationException("Only an expense can be spent on a person.")
         val person = readPerson(personId) ?: throw FinanceValidationException("Choose a person from the list, or add them first.")
@@ -692,10 +698,10 @@ class FinanceRepository(
 
     // -------------------------------------------------------- transactions
 
-    private fun SQLiteDatabase.exists(table: String, id: Long): Boolean =
+    private fun SupportSQLiteDatabase.exists(table: String, id: Long): Boolean =
         query(table, arrayOf("id"), "id = ?", arrayOf(id.toString()), null, null, null).use { it.moveToFirst() }
 
-    private fun SQLiteDatabase.validateShape(
+    private fun SupportSQLiteDatabase.validateShape(
         type: TransactionType,
         amount: Long,
         accountId: Long,
@@ -1024,7 +1030,7 @@ class FinanceRepository(
 
     suspend fun budgetRows(): List<Budget> = io { readBudgets() }
 
-    private fun SQLiteDatabase.readBudgets(): List<Budget> =
+    private fun SupportSQLiteDatabase.readBudgets(): List<Budget> =
         query(FinanceDatabase.BUDGETS, null, null, null, null, null, "effective_month ASC").map(FinanceRows::toBudget)
 
     /**
@@ -1168,7 +1174,7 @@ class FinanceRepository(
 
     suspend fun recurringRules(): List<RecurringRule> = io { readRules() }
 
-    private fun SQLiteDatabase.readRules(): List<RecurringRule> = query(
+    private fun SupportSQLiteDatabase.readRules(): List<RecurringRule> = query(
         FinanceDatabase.RECURRING_RULES,
         null,
         null,
@@ -1472,7 +1478,7 @@ class FinanceRepository(
         }
     }
 
-    private fun SQLiteDatabase.clearAll() {
+    private fun SupportSQLiteDatabase.clearAll() {
         // Children before parents (foreign keys are enforced).
         for (table in listOf(
             FinanceDatabase.TRANSACTIONS,
@@ -1508,7 +1514,7 @@ class FinanceRepository(
     }
 }
 
-private fun SQLiteDatabase.scalarLong(sql: String): Long? =
+private fun SupportSQLiteDatabase.scalarLong(sql: String): Long? =
     rawQuery(sql, null).use { if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else null }
 
 private fun marks(n: Int): String = List(n) { "?" }.joinToString(", ")

@@ -2,8 +2,10 @@ package com.example.normpix.finance.data
 
 import android.content.ContentValues
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
+import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.test.core.app.ApplicationProvider
+import com.example.normpix.storage.insertOrThrow
+import com.example.normpix.storage.rawQuery
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import kotlin.test.Test
@@ -27,7 +29,7 @@ class CategoryCatalogMigrationTest {
 
     private fun stamp(at: LocalDateTime) = at.toInstant(ZoneOffset.UTC).toEpochMilli()
 
-    private fun SQLiteDatabase.add(name: String, at: LocalDateTime, parent: Long? = null, type: String = "expense"): Long =
+    private fun SupportSQLiteDatabase.add(name: String, at: LocalDateTime, parent: Long? = null, type: String = "expense"): Long =
         insertOrThrow(
             FinanceDatabase.CATEGORIES,
             null,
@@ -41,17 +43,17 @@ class CategoryCatalogMigrationTest {
             },
         )
 
-    private fun SQLiteDatabase.count(where: String, vararg args: String): Long =
+    private fun SupportSQLiteDatabase.count(where: String, vararg args: String): Long =
         rawQuery("SELECT COUNT(*) FROM ${FinanceDatabase.CATEGORIES} WHERE $where", args).use { it.moveToFirst(); it.getLong(0) }
 
-    private fun SQLiteDatabase.parentOf(name: String): String? =
+    private fun SupportSQLiteDatabase.parentOf(name: String): String? =
         rawQuery(
             "SELECT p.name FROM ${FinanceDatabase.CATEGORIES} c LEFT JOIN ${FinanceDatabase.CATEGORIES} p ON p.id = c.parent_id WHERE c.name = ?",
             arrayOf(name),
         ).use { if (it.moveToFirst()) it.getString(0) else null }
 
     /** A database as the first release seeded it - a few of its rows - plus an Insurance category the user made later. */
-    private fun SQLiteDatabase.firstCatalog() {
+    private fun SupportSQLiteDatabase.firstCatalog() {
         execSQL("DELETE FROM ${FinanceDatabase.CATEGORIES}")
         add("Food & dining", seeded)
         val groceries = add("Groceries", seeded)

@@ -17,7 +17,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -25,12 +27,16 @@ import com.example.normpix.BuildConfig
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.ui.components.AppSubPage
+import com.example.normpix.ui.components.EditorSheet
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
+import com.example.normpix.ui.components.LocalAppScope
+import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import com.example.normpix.ui.components.PagePill
+import kotlinx.coroutines.launch
 
 /**
  * Settings > About NormPix: what the app is, the way to the Feature guide, and the small print.
@@ -43,6 +49,8 @@ import com.example.normpix.ui.components.PagePill
 fun AboutPage() {
     val navigator = LocalNavigator.current
     val container = LocalAppContainer.current
+    val overlays = LocalOverlays.current
+    val scope = LocalAppScope.current
     val updater = container.updates
     AppSubPage(title = "About NormPix", onBack = navigator::back) {
         item(key = "body") {
@@ -67,7 +75,8 @@ fun AboutPage() {
                     item {
                         ListRow(
                             headline = "Locked and encrypted",
-                            supporting = "Card details are encrypted, and you choose what asks for your fingerprint, face or screen lock.",
+                            supporting = "Your data and card details are encrypted on this phone, and you choose what asks for your " +
+                                "fingerprint, face or screen lock.",
                             leading = { Icon(Icons.Outlined.Lock, contentDescription = null) },
                             supportingMaxLines = 4,
                         )
@@ -124,11 +133,50 @@ fun AboutPage() {
                             supportingMaxLines = 4,
                         )
                     }
+                    item {
+                        // Its licence asks for its notice to be shown in the app: the row opens it in full.
+                        ListRow(
+                            headline = "SQLCipher",
+                            supporting = "Encrypts your data on this phone. By Zetetic LLC, under a BSD licence.",
+                            trailing = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
+                            supportingMaxLines = 4,
+                            onClick = {
+                                scope.launch {
+                                    overlays.sheet<Unit>(expandable = true) { done -> LicenceSheet("SQLCipher", SQLCIPHER_LICENCE) { done(Unit) } }
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
     }
 }
+
+/** SQLCipher's licence, as its repository gives it (`assets/licenses/sqlcipher.txt`). */
+private const val SQLCIPHER_LICENCE = "licenses/sqlcipher.txt"
+
+/** A licence in full, read from the app's [asset] and laid out for the phone's width. */
+@Composable
+private fun LicenceSheet(title: String, asset: String, onClose: () -> Unit) {
+    val context = LocalContext.current
+    val text = remember(asset) { runCatching { context.assets.open(asset).bufferedReader().use { reflow(it.readText()) } }.getOrDefault("") }
+    EditorSheet(title = title, subtitle = "Licence", saveLabel = "Close", onSave = onClose) {
+        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/**
+ * A licence file's text with its hard line breaks (made for 80 columns) taken out, so it wraps to the screen: the lines of each
+ * paragraph are joined, and a list item (a line starting with `*`) starts a line of its own.
+ */
+internal fun reflow(text: String): String =
+    text.trim().split(Regex("\\n\\s*\\n")).joinToString("\n\n") { paragraph ->
+        paragraph.lines().map(String::trim).filter(String::isNotEmpty).fold(mutableListOf<String>()) { lines, line ->
+            if (lines.isEmpty() || line.startsWith("*")) lines += line else lines[lines.lastIndex] = lines.last() + " " + line
+            lines
+        }.joinToString("\n")
+    }
 
 /** The app's name and what it is, on the primary container: the first thing on the page. */
 @Composable

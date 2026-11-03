@@ -11,6 +11,7 @@ import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.RecurrenceFrequency
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.storage.rawQuery
 import java.time.LocalDateTime
 import java.time.ZoneId
 import kotlin.test.AfterTest

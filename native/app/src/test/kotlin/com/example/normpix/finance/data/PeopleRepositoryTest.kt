@@ -12,6 +12,7 @@ import com.example.normpix.finance.domain.PeopleSpending
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.rankedBy
+import com.example.normpix.storage.insertOrThrow
 import java.time.LocalDateTime
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
