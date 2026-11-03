@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.update
  */
 enum class InterfaceFont(val label: String, val description: String) {
     GsFlex("GS Flex", "A variable font with adjustable weight, width and roundness"),
+    Nunito("Nunito", "A friendly, rounded sans serif"),
     System("System", "Your phone's own font"),
     Custom("Your font", "A .ttf or .otf file from your phone"),
 }
@@ -207,6 +208,12 @@ enum class TopSpendingLayout(val label: String, val description: String) {
     Carousel("Carousel", "The biggest in the middle, the next ones turned away either side. Swipe across to change category; what it came to is underneath"),
 }
 
+/** How Insights shows where the month's money went, category by category. */
+enum class InsightsCategoriesLayout(val label: String, val description: String) {
+    List("Ranked list", "Every category as a row with its share, the biggest first. Tap one to see its transactions"),
+    Carousel("Carousel", "One category in the middle, the next ones turned away either side. Swipe across to change category; its share, comparison and budget are underneath"),
+}
+
 /** How the Wallet lays out the accounts. */
 enum class AccountsLayout(val label: String, val description: String) {
     Stack("Stacked cards", "One account in front as a card, the others tucked behind it. Swipe to bring the next one forward, hold to spread them out"),
@@ -217,7 +224,7 @@ enum class AccountsLayout(val label: String, val description: String) {
 
 /** How the Wallet lays out the saved cards. */
 enum class CardsLayout(val label: String, val description: String) {
-    Stack("Stacked cards", "One card in front, the others tucked behind it. Swipe to bring the next one forward, hold to spread them out"),
+    Stack("Stacked cards", "Filed one behind another: each card behind shows its strip with its last digits, the front one in full. Tap a strip to bring that card forward"),
     Cards("Card list", "Every card in full, one under another, with its own actions"),
     Rows("Compact list", "One line for each card: bank, kind and expiry. Tap one to open it"),
     Carousel("Carousel", "One card in the middle, the next ones peeking in from the sides. Swipe across to change card; its details and buttons are underneath, whichever Card actions style is chosen"),
@@ -328,6 +335,11 @@ data class AppPrefsState(
     /** Cards tilt a few degrees with the phone's motion. Off, or with animations removed system-wide, they stay flat. */
     val cardTiltEnabled: Boolean = true,
     /**
+     * Home's month card wears the month's weather (`HeroWeather`): sun while on track, heat as the budget runs low, rain once it is
+     * over, snow before anything is spent. Off: the still card it always was.
+     */
+    val heroWeather: Boolean = true,
+    /**
      * Settings > Wallet & Cards > Save CVV. Off, no card keeps a CVV: the field is gone from the card form, and a card from a
      * scan, an NFC tap or a cards file is kept without one. Turning it off deletes the CVVs already saved, after asking.
      */
@@ -368,12 +380,24 @@ data class AppPrefsState(
     val progressStyle: ProgressStyle = ProgressStyle.Wavy,
     /** Settings > Appearance > Layouts: Home's biggest categories as a stack or a carousel. */
     val topSpendingLayout: TopSpendingLayout = TopSpendingLayout.Stack,
+    /** How Insights lists its categories; the ranked list unless chosen otherwise. */
+    val insightsCategoriesLayout: InsightsCategoriesLayout = InsightsCategoriesLayout.List,
+    /**
+     * Whether the welcome tour has been seen. True unless it was marked as still to come ([AppPreferences.startOnboarding], done
+     * once on a new install), so nothing is ever shown to someone who already has NormPix.
+     */
+    val onboardingDone: Boolean = true,
     /** How the month a page shows is switched: one tonal track, or the earlier separate buttons. */
     val monthControlStyle: MonthControlStyle = MonthControlStyle.Track,
     /** The window each [ScheduledFeature] may be used in; a feature missing here has its default rule ([ScheduledFeature.defaultRule]). */
     val availability: Map<ScheduledFeature, AvailabilityRule> = emptyMap(),
     /** How the built-in category icons are drawn, wherever a category shows. */
     val categoryIconStyle: CategoryIconStyle = CategoryIconStyle.ThreeD,
+    /**
+     * Settings' own icons (the groups on the main Settings list) follow [categoryIconStyle] when it is 3D: a 3D picture on each
+     * group's tinted tile. Off keeps them the flat Material icons there, whatever the style.
+     */
+    val settingsIcons3d: Boolean = true,
     /** The shape behind those icons (and the people's avatars): a circle, as they have always been, unless the user picks another. */
     /** The shape behind icons: none until the user picks one - the icon on its own, drawn larger. */
     val categoryIconShape: CategoryIconShape = CategoryIconShape.None,
@@ -478,6 +502,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
             transactionSwipeActions = prefs.enum(K_TRANSACTION_SWIPE, defaults.transactionSwipeActions),
             clipboardTimeout = prefs.enum(K_CLIPBOARD_TIMEOUT, defaults.clipboardTimeout),
             cardTiltEnabled = prefs.getBoolean(K_CARD_TILT, defaults.cardTiltEnabled),
+            heroWeather = prefs.getBoolean(K_HERO_WEATHER, defaults.heroWeather),
             cardCvvEnabled = prefs.getBoolean(K_CARD_CVV, defaults.cardCvvEnabled),
             walletCardsEnabled = prefs.getBoolean(K_WALLET_CARDS, defaults.walletCardsEnabled),
             sheetBlurEnabled = prefs.getBoolean(K_SHEET_BLUR, defaults.sheetBlurEnabled),
@@ -489,8 +514,11 @@ class AppPreferences(private val prefs: SharedPreferences) {
             showFooterLabels = prefs.getBoolean(K_FOOTER_LABELS, defaults.showFooterLabels),
             progressStyle = prefs.enum(K_PROGRESS_STYLE, defaults.progressStyle),
             topSpendingLayout = prefs.enum(K_TOP_SPENDING_LAYOUT, defaults.topSpendingLayout),
+            insightsCategoriesLayout = prefs.enum(K_INSIGHTS_CATEGORIES_LAYOUT, defaults.insightsCategoriesLayout),
+            onboardingDone = prefs.getBoolean(K_ONBOARDING_DONE, defaults.onboardingDone),
             monthControlStyle = prefs.enum(K_MONTH_CONTROL, defaults.monthControlStyle),
             categoryIconStyle = prefs.enum(K_CATEGORY_ICON_STYLE, defaults.categoryIconStyle),
+            settingsIcons3d = prefs.getBoolean(K_SETTINGS_ICONS_3D, defaults.settingsIcons3d),
             categoryIconShape = prefs.enum(K_CATEGORY_ICON_SHAPE, defaults.categoryIconShape),
             profileName = prefs.getString(K_PROFILE_NAME, defaults.profileName).orEmpty(),
             profileEmoji = prefs.getString(K_PROFILE_EMOJI, defaults.profileEmoji).orEmpty(),
@@ -599,6 +627,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
     fun setCardTiltEnabled(enabled: Boolean) =
         change({ copy(cardTiltEnabled = enabled) }) { putBoolean(K_CARD_TILT, enabled) }
 
+    fun setHeroWeather(enabled: Boolean) = change({ copy(heroWeather = enabled) }) { putBoolean(K_HERO_WEATHER, enabled) }
+
     /** Only the settings flow that has dealt with the CVVs already saved should call this (see `CardsSettingsFlows`). */
     fun setCardCvvEnabled(enabled: Boolean) =
         change({ copy(cardCvvEnabled = enabled) }) { putBoolean(K_CARD_CVV, enabled) }
@@ -635,11 +665,26 @@ class AppPreferences(private val prefs: SharedPreferences) {
     fun setTopSpendingLayout(layout: TopSpendingLayout) =
         change({ copy(topSpendingLayout = layout) }) { putString(K_TOP_SPENDING_LAYOUT, layout.name) }
 
+    fun setInsightsCategoriesLayout(layout: InsightsCategoriesLayout) =
+        change({ copy(insightsCategoriesLayout = layout) }) { putString(K_INSIGHTS_CATEGORIES_LAYOUT, layout.name) }
+
+    /** Whether it has been settled, one way or the other, that the welcome tour is to be shown (a new install) or not. */
+    fun onboardingDecided(): Boolean = prefs.contains(K_ONBOARDING_DONE)
+
+    /** Marks the welcome tour as still to come: called once, on a new install, and from About's "Welcome tour". */
+    fun startOnboarding() = change({ copy(onboardingDone = false) }) { putBoolean(K_ONBOARDING_DONE, false) }
+
+    /** The welcome tour has been seen (finished or left): it does not come again by itself. */
+    fun finishOnboarding() = change({ copy(onboardingDone = true) }) { putBoolean(K_ONBOARDING_DONE, true) }
+
     fun setMonthControlStyle(style: MonthControlStyle) =
         change({ copy(monthControlStyle = style) }) { putString(K_MONTH_CONTROL, style.name) }
 
     fun setCategoryIconStyle(style: CategoryIconStyle) =
         change({ copy(categoryIconStyle = style) }) { putString(K_CATEGORY_ICON_STYLE, style.name) }
+
+    fun setSettingsIcons3d(enabled: Boolean) =
+        change({ copy(settingsIcons3d = enabled) }) { putBoolean(K_SETTINGS_ICONS_3D, enabled) }
 
     fun setCategoryIconShape(shape: CategoryIconShape) =
         change({ copy(categoryIconShape = shape) }) { putString(K_CATEGORY_ICON_SHAPE, shape.name) }
@@ -778,8 +823,11 @@ class AppPreferences(private val prefs: SharedPreferences) {
      * and neither is the profile: a name and a picture are who the user is, not a setting.
      */
     fun resetToDefaults() {
-        val keep = setOf(K_EXACT_ALARM_PROMPTED, K_PROFILE_NAME, K_PROFILE_EMOJI, K_PROFILE_PHOTO)
-        _state.update { AppPrefsState(profileName = it.profileName, profileEmoji = it.profileEmoji, profilePhoto = it.profilePhoto) }
+        // The welcome tour is not a setting either: resetting settings must not bring it back, or take it away mid-way.
+        val keep = setOf(K_EXACT_ALARM_PROMPTED, K_PROFILE_NAME, K_PROFILE_EMOJI, K_PROFILE_PHOTO, K_ONBOARDING_DONE)
+        _state.update {
+            AppPrefsState(profileName = it.profileName, profileEmoji = it.profileEmoji, profilePhoto = it.profilePhoto, onboardingDone = it.onboardingDone)
+        }
         prefs.edit {
             // Everything except the one-time system-prompt marker and the profile.
             prefs.all.keys.filter { it !in keep }.forEach { remove(it) }
@@ -871,6 +919,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_TRANSACTION_SWIPE = "transaction_swipe_actions"
         const val K_CLIPBOARD_TIMEOUT = "clipboard_timeout"
         const val K_CARD_TILT = "card_tilt_enabled"
+        const val K_HERO_WEATHER = "hero_weather"
         const val K_CARD_CVV = "card_cvv_enabled"
         const val K_WALLET_CARDS = "wallet_cards_enabled"
         const val K_SHEET_BLUR = "sheet_blur_enabled"
@@ -882,8 +931,11 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_FOOTER_LABELS = "show_footer_labels"
         const val K_PROGRESS_STYLE = "progress_style"
         const val K_TOP_SPENDING_LAYOUT = "top_spending_layout"
+        const val K_INSIGHTS_CATEGORIES_LAYOUT = "insights_categories_layout"
+        const val K_ONBOARDING_DONE = "onboarding_done"
         const val K_MONTH_CONTROL = "month_control_style"
         const val K_CATEGORY_ICON_STYLE = "category_icon_style"
+        const val K_SETTINGS_ICONS_3D = "settings_icons_3d"
         const val K_CATEGORY_ICON_SHAPE = "category_icon_shape"
         const val K_PROFILE_NAME = "profile_name"
         const val K_PROFILE_EMOJI = "profile_emoji"
@@ -924,6 +976,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
          */
         val BACKUP_EXCLUDED: Set<String> = setOf(
             K_EXACT_ALARM_PROMPTED,
+            // Whether this phone has had its welcome is about this phone, not about the data a backup carries.
+            K_ONBOARDING_DONE,
             K_DUMMY_DATA,
             K_WALLET_LOCK,
             K_LOCK_SCOPE,

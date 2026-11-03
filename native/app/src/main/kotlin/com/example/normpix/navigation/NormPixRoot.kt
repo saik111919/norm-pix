@@ -4,7 +4,11 @@ import com.example.normpix.widgets.ReceiveWidgetRequests
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -57,7 +61,6 @@ import com.example.normpix.finance.domain.DateRange
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.ui.AccountHistoryPage
 import com.example.normpix.finance.ui.BudgetHistoryPage
-import com.example.normpix.finance.ui.CategoriesPage
 import com.example.normpix.finance.ui.CategoryHistoryPage
 import com.example.normpix.finance.ui.FinanceStatus
 import com.example.normpix.finance.ui.LocalCategoryIconShape
@@ -72,6 +75,10 @@ import com.example.normpix.finance.ui.rememberFinanceState
 import com.example.normpix.finance.share.ReceiveSharedTransactions
 import com.example.normpix.updates.ui.OfferAppUpdates
 import com.example.normpix.settings.PageAnimationType
+import com.example.normpix.settings.ui.BanksAndCategoriesPage
+import com.example.normpix.settings.ui.BanksAndCategoriesTab
+import com.example.normpix.settings.ui.LocalSettingsIcons3d
+import com.example.normpix.settings.CategoryIconStyle
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -91,13 +98,15 @@ import com.example.normpix.ui.components.SnackbarOverlay
 import com.example.normpix.ui.components.rememberWindowBlurAvailable
 import com.example.normpix.ui.components.rememberEasedBlur
 import com.example.normpix.ui.components.blurredBy
+import com.example.normpix.onboarding.OnboardingTour
 import com.example.normpix.ui.theme.AppFont
+import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.Appearance
 import com.example.normpix.ui.theme.LocalRailCollapsed
 import com.example.normpix.ui.theme.LocalSystemReducedMotion
 import com.example.normpix.ui.theme.NormPixTheme
 import com.example.normpix.ui.theme.isDark
-import com.example.normpix.ui.theme.rememberCustomFontFile
+import com.example.normpix.ui.theme.rememberCustomFontFiles
 import com.example.normpix.ui.theme.rememberReducedMotion
 import com.example.normpix.ui.theme.rememberSystemReducedMotion
 
@@ -123,6 +132,9 @@ object Routes {
     const val UPDATE = "update"
     const val CHANGELOG = "changelog"
     const val ABOUT = "about"
+
+    /** The Feature guide: the About guide's topics, as cards. */
+    const val GUIDE_INDEX = "guide"
 
     /** One topic of the About guide, named by a [GuideTopic]. */
     const val GUIDE = "about/{topic}"
@@ -202,8 +214,8 @@ fun NormPixRoot(container: AppContainer, showSplash: Boolean = false, onDarkChan
     val splashLeaving = remember { Animatable(0f) }
     val finance by data.finance.state.collectAsStateWithLifecycle()
     // The user's own font file (Settings > Appearance > Interface font), made ready off the main thread; null for any other font.
-    val customFontFile = rememberCustomFontFile(prefs.interfaceFont, prefs.customFontRevision)
-    NormPixTheme(Appearance(prefs.mode, prefs.colorSource, prefs.accent, AppFont(prefs.interfaceFont, prefs.fontShape, customFontFile), prefs.wallpaperPalette)) {
+    val customFont = rememberCustomFontFiles(prefs.interfaceFont, prefs.customFontRevision)
+    NormPixTheme(Appearance(prefs.mode, prefs.colorSource, prefs.accent, AppFont(prefs.interfaceFont, prefs.fontShape, customFont?.file, customFont?.faces.orEmpty()), prefs.wallpaperPalette)) {
         val dark = MaterialTheme.colorScheme.isDark
         LaunchedEffect(dark) { onDarkChanged(dark) }
         Box(Modifier.fillMaxSize()) {
@@ -231,6 +243,14 @@ fun NormPixRoot(container: AppContainer, showSplash: Boolean = false, onDarkChan
                             splashing = splashing,
                             holdBack = !splashWritten,
                         )
+                    }
+                    // A new install's welcome tour covers the app, ready beneath it, until it is finished: it fades away onto the app.
+                    AnimatedVisibility(
+                        visible = !prefs.onboardingDone && !splashing,
+                        enter = fadeIn(tween(AppMotion.duration(AppMotion.MEDIUM_MS))),
+                        exit = fadeOut(tween(AppMotion.duration(AppMotion.MEDIUM_MS))),
+                    ) {
+                        OnboardingTour(container.preferences, onFinished = { container.preferences.finishOnboarding() })
                     }
                 }
             }
@@ -344,6 +364,7 @@ fun ProvideAppEnvironment(container: AppContainer, content: @Composable () -> Un
         LocalSnackbars provides snackbars,
         LocalAppScope provides scope,
         LocalCategoryIconStyle provides prefs.categoryIconStyle,
+        LocalSettingsIcons3d provides (prefs.categoryIconStyle == CategoryIconStyle.ThreeD && prefs.settingsIcons3d),
         LocalCategoryIconShape provides prefs.categoryIconShape,
         LocalRailCollapsed provides prefs.railCollapsed,
     ) {
@@ -479,7 +500,7 @@ private fun AppNavigation(
             popExitTransition = transitions.popExit,
         ) {
             page(Routes.MAIN) { AppShell(container, shell) }
-            page(Routes.CATEGORIES) { CategoriesPage() }
+            page(Routes.CATEGORIES) { BanksAndCategoriesPage(BanksAndCategoriesTab.Categories) }
             page(Routes.BUDGET_HISTORY) { BudgetHistoryPage() }
             page(Routes.PEOPLE) { PeoplePage() }
             page(
@@ -540,6 +561,7 @@ private fun AppNavigation(
             page(Routes.UPDATE) { SettingsRoute(SettingsDetail.Update) }
             page(Routes.CHANGELOG) { SettingsRoute(SettingsDetail.Changelog) }
             page(Routes.ABOUT) { SettingsRoute(SettingsDetail.About) }
+            page(Routes.GUIDE_INDEX) { SettingsRoute(SettingsDetail.GuideIndex) }
             page(
                 Routes.GUIDE,
                 arguments = listOf(navArgument("topic") { type = NavType.StringType }),
@@ -658,6 +680,10 @@ class NavControllerNavigator(private val nav: NavHostController, private val she
 
     override fun openAbout() {
         nav.navigate(Routes.ABOUT) { launchSingleTop = true }
+    }
+
+    override fun openGuideIndex() {
+        nav.navigate(Routes.GUIDE_INDEX) { launchSingleTop = true }
     }
 
     override fun openGuide(topic: GuideTopic) {

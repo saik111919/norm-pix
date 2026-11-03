@@ -1,12 +1,15 @@
 package com.example.normpix.ui
 
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
@@ -69,7 +72,7 @@ class CreditLimitUiTest {
         showForm(card) { saved = it }
 
         compose.onNodeWithText("Credit limit (optional)").performTextInput("50000")
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
 
         assertEquals(50_000_00L, assertNotNull(saved).creditLimit)
@@ -81,7 +84,7 @@ class CreditLimitUiTest {
         var saved: Account? = null
         showForm(card) { saved = it }
 
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
 
         assertNull(assertNotNull(saved).creditLimit)
@@ -94,7 +97,7 @@ class CreditLimitUiTest {
         showForm(card) { saved = it }
 
         compose.onNodeWithText("Credit limit (optional)").performTextInput("0")
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitForIdle()
 
         compose.onNodeWithText("Enter a limit above zero").assertIsDisplayed()

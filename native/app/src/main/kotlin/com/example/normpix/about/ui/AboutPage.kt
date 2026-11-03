@@ -2,12 +2,12 @@ package com.example.normpix.about.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Celebration
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.SystemUpdate
@@ -21,52 +21,40 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import com.example.normpix.BuildConfig
-import com.example.normpix.about.GuideTopic
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
-import com.example.normpix.ui.components.SectionSubheader
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
-
-/** How many topic cards sit side by side on the About page. */
-internal const val GUIDE_CARDS_PER_ROW = 2
-
-/** What the About page's guide is headed. */
-internal const val GUIDE_HEADING = "How NormPix works"
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import com.example.normpix.ui.components.PagePill
 
 /**
- * Settings > About NormPix: what the app is, a guide to how each of its features works, and the small print.
+ * Settings > About NormPix: what the app is, the way to the Feature guide, and the small print.
  *
- * The guide is a grid of cards, each a picture of a feature with its name ([GuideCard]); a card opens that topic's page
- * ([GuidePage]) with the steps. The pictures are drawn in the app's own colors ([GuideArt]), so the page follows the theme, and
- * the guide follows the app as it changes rather than going out of date as screenshots would.
+ * The guide - a card for each feature, each opening its steps - is a page of its own behind a pill under the header
+ * ([GuideIndexPage]): until 2026-11-01 its twelve cards filled this page, and the owner asked for them behind a pill with a better
+ * name than "How NormPix works".
  */
 @Composable
 fun AboutPage() {
     val navigator = LocalNavigator.current
-    val updater = LocalAppContainer.current.updates
+    val container = LocalAppContainer.current
+    val updater = container.updates
     AppSubPage(title = "About NormPix", onBack = navigator::back) {
         item(key = "body") {
             Column(Modifier.padding(AppSpacing.page)) {
                 AboutHeader()
-                SectionSubheader(GUIDE_HEADING)
-                Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.md)) {
-                    for (row in GuideTopic.entries.chunked(GUIDE_CARDS_PER_ROW)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)) {
-                            for (topic in row) {
-                                GuideCard(topic, onClick = { navigator.openGuide(topic) }, modifier = Modifier.weight(1f))
-                            }
-                            // A last, lone card is as wide as the others rather than stretched across the row.
-                            repeat(GUIDE_CARDS_PER_ROW - row.size) { Spacer(Modifier.weight(1f)) }
-                        }
-                    }
-                }
-                Spacer(Modifier.height(AppSpacing.lg))
+                PagePill(
+                    icon = Icons.AutoMirrored.Outlined.MenuBook,
+                    label = GUIDE_TITLE,
+                    onClick = navigator::openGuideIndex,
+                    modifier = Modifier.padding(top = AppSpacing.lg, start = AppSpacing.xs),
+                )
+                Spacer(Modifier.height(AppSpacing.xl))
                 ListSection(title = "Your data") {
                     item {
                         ListRow(
@@ -82,6 +70,19 @@ fun AboutPage() {
                             supporting = "Card details are encrypted, and you choose what asks for your fingerprint, face or screen lock.",
                             leading = { Icon(Icons.Outlined.Lock, contentDescription = null) },
                             supportingMaxLines = 4,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(AppSpacing.lg))
+                ListSection(title = "Welcome") {
+                    item {
+                        ListRow(
+                            headline = "Welcome tour",
+                            supporting = "Play the introduction a new install begins with: how NormPix looks, your name and picture, reminders.",
+                            leading = { Icon(Icons.Outlined.Celebration, contentDescription = null) },
+                            trailing = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
+                            supportingMaxLines = 3,
+                            onClick = container.preferences::startOnboarding,
                         )
                     }
                 }
@@ -116,6 +117,13 @@ fun AboutPage() {
                             supportingMaxLines = 6,
                         )
                     }
+                    item {
+                        ListRow(
+                            headline = "Nunito font",
+                            supporting = "By Vernon Adams, Cyreal and Jacques Le Bailly, under the SIL Open Font License 1.1.",
+                            supportingMaxLines = 4,
+                        )
+                    }
                 }
             }
         }
@@ -142,32 +150,8 @@ private fun AboutHeader() {
             Text("Version ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.labelLarge)
             Spacer(Modifier.height(AppSpacing.sm))
             Text(
-                "Modern finance, cards & reminders on Android. Everything below is how to get the most out of it.",
+                "Modern finance, cards & reminders on Android. The Feature guide shows how to get the most out of it.",
                 style = MaterialTheme.typography.bodyLarge,
-            )
-        }
-    }
-}
-
-/** A topic on the About page: its picture above its name. The whole card opens the topic. */
-@Composable
-private fun GuideCard(topic: GuideTopic, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier,
-        shape = AppRadius.rXl,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-    ) {
-        Column {
-            GuideArt(topic, shape = androidx.compose.ui.graphics.RectangleShape)
-            Text(
-                topic.title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                minLines = 2,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = AppSpacing.md, vertical = AppSpacing.md),
             )
         }
     }

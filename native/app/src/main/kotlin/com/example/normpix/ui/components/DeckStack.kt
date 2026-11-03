@@ -153,6 +153,8 @@ fun <T> DeckStack(
     onItemLongPress: ((T) -> Unit)? = null,
     itemLongPressLabel: String = "Shows more options",
     extraActions: (T) -> List<CustomAccessibilityAction> = { emptyList() },
+    /** How much darker each step back is (black over the item): cards are deep colours and take a lot, a pale banner very little. */
+    behindDim: Float = STEP_DIM,
     plate: @Composable (T) -> Unit,
     face: @Composable (T) -> Unit,
 ) {
@@ -237,6 +239,7 @@ fun <T> DeckStack(
                                 position = (index - front).mod(count),
                                 count = count,
                                 shape = shape,
+                                behindDim = behindDim,
                                 spoken = description(item, index, count),
                                 onOpen = { onOpen(item) },
                                 onLongPress = hold?.let { press -> { press(item) } },
@@ -314,6 +317,7 @@ private fun DeckItem(
     position: Int,
     count: Int,
     shape: Shape,
+    behindDim: Float,
     spoken: String,
     onOpen: () -> Unit,
     onLongPress: (() -> Unit)?,
@@ -356,7 +360,7 @@ private fun DeckItem(
             }
             .drawWithContent {
                 drawContent()
-                val dim = STEP_DIM * minOf(depth, BEHIND.toFloat())
+                val dim = behindDim * minOf(depth, BEHIND.toFloat())
                 if (dim > 0f) drawOutline(shape.createOutline(size, layoutDirection, this), Color.Black, alpha = dim)
             },
     ) {

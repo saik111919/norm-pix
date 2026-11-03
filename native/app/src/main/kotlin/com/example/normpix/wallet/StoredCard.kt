@@ -34,6 +34,8 @@ data class StoredCard(
      * the card shows; cards saved before banks were shared have no key until they are linked.
      */
     val bankKey: String? = null,
+    /** The card's own name ("Regalia Gold"), shown on its face; empty when none was given (see [CardNames]). Cards saved before this have none. */
+    val cardName: String = "",
 ) {
     val last4: String get() = if (cardNumber.length >= 4) cardNumber.takeLast(4) else cardNumber
 
@@ -54,6 +56,7 @@ data class StoredCard(
         put("kind", kind.key)
         put("createdAt", createdAt.toString())
         bankKey?.let { put("bankKey", it) }
+        if (cardName.isNotEmpty()) put("cardName", cardName)
     }
 
     companion object {
@@ -72,6 +75,8 @@ data class StoredCard(
                 createdAt = parseDateTime(text("createdAt")) ?: LocalDateTime.now(),
                 // Absent in vaults written before banks were shared.
                 bankKey = (json["bankKey"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotEmpty() },
+                // Absent in vaults, exports and backups written before cards had names: they read as having none.
+                cardName = (json["cardName"] as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty(),
             )
         }
     }

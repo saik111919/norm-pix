@@ -219,7 +219,7 @@ class CardsLayoutTest {
         val button = compose.onNodeWithText("Add card").getUnclippedBoundsInRoot()
         assertTrue(button.top < heading.bottom + 24.dp && button.left > heading.right, "beside the heading: $heading, $button")
         compose.onNodeWithText("Add card").performScrollTo().performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("Save card").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Slide to save card").fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

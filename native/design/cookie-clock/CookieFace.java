@@ -133,9 +133,13 @@ public class CookieFace {
             concat(cookieFill(), hands(HOUR_PLAIN, MINUTE_PLAIN, SECOND_PLAIN, false)));
         write(res, "widget_cookie_digital_preview", "The cookie digital clock in the widget picker, at 10:09.", 200, digitalPreview());
         write(res, "widget_clock_preview", "The watch dial widget in the widget picker, at 12:45 - the picture ClockWidget draws every minute.", 200,
-            watchDial(45, "12", "45"));
+            watchDial(45, "12", "45", "30"));
 
         writeSecondsRing(res);
+
+        // Android 12 and later: the seconds ring as a bezel the system turns.
+        write(res, "widget_dial_bezel", "The watch dial's seconds ring as a bezel: AnalogClock's second hand (Android 12 and later), at :00.", BEZEL_DP, bezel());
+        write(res, "widget_dial_bezel_frame", "Nothing, as large as the bezel: the bezel AnalogClock's dial and its hour and minute hands, so it fits the bezel to the face.", BEZEL_DP, List.of());
 
         sheet(png);
         System.out.println("wrote drawables to " + res + " and " + png);
@@ -254,6 +258,7 @@ public class CookieFace {
     // ---- the watch dial (WatchDialFace.kt has the same numbers: keep them in step) ----------------------------------
     static final double W_OUTER_OUT = 99.5, W_OUTER_MINOR = 94.5, W_OUTER_MAJOR = 90.5, W_OUTER_R = 82.4, W_OUTER_SIZE = 11.7;
     static final double W_INNER_OUT = 69, W_INNER_MINOR = 64.5, W_INNER_MAJOR = 61, W_INNER_R = 54, W_INNER_SIZE = 12.8;
+    static final double W_DASH_FROM = 56.6, W_DASH_TO = 60.6, W_MINUTE_X = 144.3, W_SECOND_X = 170.3;
     static final double W_PILL_LEFT = 128.6, W_PILL_H = 15.2, W_CLEARANCE = 22, W_FADE = 6, DIGIT_EM = 0.7326;
 
     static double wrap(double deg) { return ((deg % 360) + 360) % 360; }
@@ -261,7 +266,7 @@ public class CookieFace {
     static double wOuter(int value) { return wrap(90 - 6.0 * value); }
 
     /** The watch dial with its minute ring turned to [minute], and [hour] and [min] as the text over it. */
-    static List<Item> watchDial(int minute, String hour, String min) {
+    static List<Item> watchDial(int minute, String hour, String min, String sec) {
         List<Item> items = new ArrayList<>();
         items.add(fill(new Ellipse2D.Double(0, 0, 200, 200), "face"));
         Path2D innerMinor = new Path2D.Double(), innerMajor = new Path2D.Double();
@@ -302,10 +307,12 @@ public class CookieFace {
             Point2D p = at(wOuter(v), W_OUTER_R);
             items.add(bold(text(String.format("%02d", v), p.getX(), p.getY(), W_OUTER_SIZE * DIGIT_EM), "secondary", 0.3));
         }
-        items.add(stroke(new Line2D.Double(at(90, W_INNER_MAJOR), at(90, W_INNER_OUT)), "accent", 1.9));
-        // The text the launcher keeps, here as outlines: the hour in the middle, the minute in the pill.
+        // The accent dash between the minute and the second, which sit left of the seconds ring's numbers (ClockFace.kt reads these).
+        items.add(stroke(new Line2D.Double(at(90, W_DASH_FROM), at(90, W_DASH_TO)), "accent", 1.9));
+        // The text the launcher keeps, here as outlines: the hour in the middle, the minute and the second in the pill.
         items.add(bold(text(hour, C, C, 30), "ink", 0.9));
-        items.add(bold(text(min, 151, C, 11), "ink", 0.5));
+        items.add(bold(text(min, W_MINUTE_X, C, 11), "ink", 0.5));
+        items.add(bold(text(sec, W_SECOND_X, C, 8), "ink", 0.4));
         return items;
     }
 
@@ -449,6 +456,34 @@ public class CookieFace {
     // widget is drawn with the one for the second it is, and the ring then keeps time on its own until it is drawn again.
     static String two(int n) { return String.format("%02d", n); }
 
+    // ---- the watch dial's seconds ring on Android 12 and later: a bezel the system turns --------------------------------
+    //
+    // From Android 12 an AnalogClock takes a second hand, which the system turns by the real time: nothing to restart, so the ring
+    // is never out and never nudged (the animated ring is restarted every few seconds, and each restart can nudge it - the owner
+    // saw it, 2026-11-01, and chose an exact ring that steps once a second). The whole ring is that hand, ticks and numbers; the
+    // numbers turn with it, so they are set along the ring as a watch's bezel's are. As large as the widget can be, because
+    // AnalogClock only ever scales its drawables down: it then fits the bezel to the face just as the picture under it is fitted.
+    static final int BEZEL_DP = 1200;
+
+    static List<Item> bezel() {
+        List<Item> items = new ArrayList<>();
+        Path2D minor = new Path2D.Double(), major = new Path2D.Double();
+        for (int i = 0; i < 60; i++) {
+            boolean big = i % 5 == 0;
+            (big ? major : minor).append(new Line2D.Double(at(wOuter(i), big ? W_OUTER_MAJOR : W_OUTER_MINOR), at(wOuter(i), W_OUTER_OUT)), false);
+        }
+        items.add(stroke(minor, "tick", 0.9));
+        items.add(faded(stroke(major, "secondary", 1.6), 190 / 255.0));
+        for (int value = 0; value < 60; value += 5) {
+            double a = wOuter(value);
+            Point2D p = at(a, W_OUTER_R);
+            Shape number = text(two(value), p.getX(), p.getY(), W_OUTER_SIZE * DIGIT_EM);
+            // Along the ring: upright at twelve, its foot towards the middle everywhere else.
+            items.add(bold(AffineTransform.getRotateInstance(Math.toRadians(a), p.getX(), p.getY()).createTransformedShape(number), "secondary", 0.3));
+        }
+        return items;
+    }
+
     static void writeSecondsRing(File res) throws IOException {
         File root = res.getParentFile();
         File animators = new File(root, "animator"), layouts = new File(root, "layout");
@@ -531,7 +566,7 @@ public class CookieFace {
             concat(cookieFill(), dial(true), hands(HOUR_NUMBERS, MINUTE_NUMBERS, SECOND_NUMBERS, true)),
             concat(cookieFill(), hands(HOUR_PLAIN, MINUTE_PLAIN, SECOND_PLAIN, false)),
             digitalPreview(),
-            watchDial(45, "12", "45"));
+            watchDial(45, "12", "45", "30"));
         int[][][] themes = {DARK, LIGHT};
         int[] grounds = {0x2B2D33, 0xCFCFD6};
         BufferedImage img = new BufferedImage(pad + (cell + pad) * faces.size(), pad + (cell + pad) * 2, BufferedImage.TYPE_INT_RGB);

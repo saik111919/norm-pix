@@ -20,6 +20,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.Test
+import kotlin.math.roundToInt
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -123,6 +124,40 @@ class ClockWidgetOptionsTest {
     }
 
     @Test
+    fun `a transparent cookie clock can keep a tint of its cookie`() {
+        for ((widget, id) in listOf(
+            HomeWidget.CookieAnalog to R.id.widget_cookie_fill,
+            HomeWidget.CookieNumbers to R.id.widget_cookie_fill,
+            HomeWidget.CookiePlain to R.id.widget_cookie_fill,
+            HomeWidget.CookieDigital to R.id.widget_cookie_face,
+        )) {
+            val tinted = shown(ClockWidgets.views(context, widget, options(160, 160), ClockOptions(transparent = true, backdropPercent = ClockBackdrop.Medium.percent)))
+            val cookie = tinted.findViewById<ImageView>(id)
+            assertEquals(View.VISIBLE, cookie.visibility, "${widget.name} keeps its cookie")
+            assertEquals(ClockBackdrop.Medium.alpha, cookie.imageAlpha, "${widget.name} at the strength chosen")
+        }
+    }
+
+    @Test
+    fun `a transparent watch dial keeps a tint of its face at the strength chosen`() {
+        fun middle(clock: ClockOptions): Int {
+            val rings = shown(ClockWidgets.views(context, HomeWidget.WatchDial, options(180, 180), clock)).findViewById<ImageView>(R.id.widget_clock_rings)
+            val bitmap = (rings.drawable as BitmapDrawable).bitmap
+            return Color.alpha(bitmap.getPixel(bitmap.width / 2, bitmap.height / 2))
+        }
+        val faint = middle(ClockOptions(transparent = true, backdropPercent = ClockBackdrop.Soft.percent))
+        val strong = middle(ClockOptions(transparent = true, backdropPercent = ClockBackdrop.Strong.percent))
+        assertAbout(ClockBackdrop.Soft.alpha, faint)
+        assertAbout(ClockBackdrop.Strong.alpha, strong)
+        assertTrue(faint < strong)
+        // A new strength is drawn at once: the picture is not reused from the one before.
+        assertEquals(0, middle(ClockOptions(transparent = true)))
+    }
+
+    private fun assertAbout(expected: Int, actual: Int) =
+        assertTrue(kotlin.math.abs(expected - actual) <= 2, "expected about $expected but was $actual")
+
+    @Test
     fun `a transparent watch dial is drawn without its face`() {
         fun middle(clock: ClockOptions): Int {
             val rings = shown(ClockWidgets.views(context, HomeWidget.WatchDial, options(180, 180), clock)).findViewById<ImageView>(R.id.widget_clock_rings)
@@ -145,13 +180,58 @@ class ClockWidgetOptionsTest {
     // ---- the seconds ring ----
 
     @Test
-    fun `the watch dial has a seconds ring that turns by itself`() {
+    fun `from Android 12 the seconds ring is a bezel the system turns by the real time`() {
         val root = shown(ClockWidget.views(context, options(180, 180)))
+        val host = root.findViewById<FrameLayout>(R.id.widget_clock_seconds)
+        assertEquals(1, host.childCount, "one ring")
+        // An AnalogClock whose second hand is the whole ring: nothing to restart, so nothing to nudge (owner's choice, 2026-11-01).
+        assertTrue(host.getChildAt(0) is AnalogClock, "the platform's clock turns it")
+        val layout = File("src/main/res/layout/widget_dial_bezel.xml").readText()
+        assertTrue("android:hand_second=\"@drawable/widget_dial_bezel\"" in layout, "the ring is its second hand")
+        assertTrue("android:dial=\"@drawable/widget_dial_bezel_frame\"" in layout, "a dial as large as the bezel, so it is fitted to the face")
+    }
+
+    @Test
+    fun `the bezel is the ring at naught, as large as a widget can be, its numbers set along it`() {
+        val bezel = File("src/main/res/drawable/widget_dial_bezel.xml").readText()
+        val frame = File("src/main/res/drawable/widget_dial_bezel_frame.xml").readText()
+        assertTrue("android:width=\"1200dp\"" in bezel && "android:width=\"1200dp\"" in frame, "AnalogClock only scales down")
+        assertTrue("#00000000" in frame, "the frame draws nothing")
+        assertTrue("widget_clock_tick" in bezel && "widget_clock_secondary" in bezel, "the ring's ticks and numbers, in the dial's colours")
+    }
+
+    @Test
+    fun `before Android 12 the seconds ring is the animation started at the second it is`() {
+        val root = shown(ClockWidget.views(context, options(180, 180), bezel = false))
         val host = root.findViewById<FrameLayout>(R.id.widget_clock_seconds)
         assertEquals(1, host.childCount, "one ring")
         val ring = host.getChildAt(0) as ProgressBar
         assertTrue(ring.isIndeterminate, "a progress bar is what runs the animation")
         assertTrue(ring.indeterminateDrawable is android.graphics.drawable.Animatable, "an animated vector")
+    }
+
+    @Test
+    fun `the second is in the pill beside the minute, kept by the platform, and nothing covers the ring`() {
+        for (size in listOf(160, 280)) {
+            val root = shown(ClockWidget.views(context, options(size, size)))
+            val face = ClockFace(size - 12f, size - 12f)
+            val density = context.resources.displayMetrics.density
+            val second = root.findViewById<android.widget.TextClock>(R.id.widget_clock_second)
+            assertEquals("ss", second.format24Hour.toString())
+            assertEquals("ss", second.format12Hour.toString())
+            assertEquals(face.secondTextDp, second.textSize / density, 0.5f, "sized with the face at $size")
+            assertTrue(face.secondTextDp < face.minuteTextDp, "the minute stays the larger")
+            val box = root.findViewById<View>(R.id.widget_clock_second_box)
+            assertEquals((face.secondBoxPaddingDp * density).roundToInt(), box.paddingLeft, "moved into the pill at $size")
+            assertTrue(face.secondOffsetDp > face.minuteOffsetDp, "after the minute")
+            // Ring, then the two numbers over it: no layer between them hides the ring's lines (the owner found the cap that did too big).
+            val parent = root as android.view.ViewGroup
+            val order = (0 until parent.childCount).map { parent.getChildAt(it).id }
+            val ringAt = order.indexOf(R.id.widget_clock_seconds)
+            assertTrue(ringAt in 0 until order.indexOf(R.id.widget_clock_minute_box), "the ring is under the minute")
+            assertTrue(order.indexOf(R.id.widget_clock_minute_box) < order.indexOf(R.id.widget_clock_second_box), "the minute, then the second")
+            assertEquals(ringAt + 1, order.indexOf(R.id.widget_clock_hour), "nothing between the ring and the text")
+        }
     }
 
     @Test
@@ -168,9 +248,9 @@ class ClockWidgetOptionsTest {
     fun `every second of the minute has its own ring, started there`() {
         assertEquals(60, WatchDialSecondsLayouts.size)
         assertEquals(60, WatchDialSecondsLayouts.toSet().size)
-        for (second in listOf(0, 17, 59)) assertNotNull(shown(ClockWidget.views(context, options(180, 180), second = second)), "at $second")
+        for (second in listOf(0, 17, 59)) assertNotNull(shown(ClockWidget.views(context, options(180, 180), second = second, bezel = false)), "at $second")
         // A second out of range is read round the minute.
-        assertNotNull(shown(ClockWidget.views(context, options(180, 180), second = 75)))
+        assertNotNull(shown(ClockWidget.views(context, options(180, 180), second = 75, bezel = false)))
     }
 
     @Test
@@ -196,11 +276,12 @@ class ClockWidgetOptionsTest {
     }
 
     @Test
-    fun `the ticker draws the dial every quarter of a minute, a moment past it`() {
-        assertEquals(15_150L, WatchDialTicker.millisToNextTick(0L) + 0)
-        assertEquals(15_150L - 1_000L, WatchDialTicker.millisToNextTick(1_000L))
-        assertEquals(150L + 1L, WatchDialTicker.millisToNextTick(14_999L))
-        assertEquals(15_000L + 150L, WatchDialTicker.millisToNextTick(30_000L))
+    fun `the ticker draws the dial every five seconds, a moment past it`() {
+        assertEquals(5_000L, WatchDialTicker.TICK_MS)
+        assertEquals(5_150L, WatchDialTicker.millisToNextTick(0L))
+        assertEquals(5_150L - 1_000L, WatchDialTicker.millisToNextTick(1_000L))
+        assertEquals(150L + 1L, WatchDialTicker.millisToNextTick(4_999L))
+        assertEquals(5_000L + 150L, WatchDialTicker.millisToNextTick(30_000L))
         val seconds = (0..59).map { WatchDialTicker.secondNow() }
         assertTrue(seconds.all { it in 0..59 })
     }

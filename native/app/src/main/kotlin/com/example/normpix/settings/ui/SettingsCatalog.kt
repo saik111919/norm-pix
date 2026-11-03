@@ -6,6 +6,7 @@ import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.ColorLens
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Celebration
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
@@ -52,11 +53,17 @@ data class SettingsEntry(
 ) {
     val group: SettingsPage? get() = page
     val location: String
-        get() = if (appearance != null) "${page?.name} > ${appearance.title}" else page?.name ?: "Settings"
+        get() = when {
+            appearance != null -> "${page?.name} > ${appearance.title}"
+            // The page's own name, not the route name it has kept since it was the Banks page alone.
+            page == SettingsPage.Banks -> BANKS_AND_CATEGORIES_TITLE
+            special == SettingsSpecial.Categories -> BANKS_AND_CATEGORIES_TITLE
+            else -> page?.name ?: "Settings"
+        }
     val icon: ImageVector get() = if (special != null) SettingsCatalog.iconFor(special) else SettingsCatalog.iconFor(page)
 }
 
-enum class SettingsSpecial { Profile, Categories, People, Reset, Updates, About }
+enum class SettingsSpecial { Profile, Categories, People, Reset, Updates, About, WelcomeTour }
 
 object SettingsCatalog {
     val entries: List<SettingsEntry> = listOf(
@@ -73,9 +80,10 @@ object SettingsCatalog {
         SettingsEntry("Progress indicators", SettingsPage.Appearance, listOf("progress", "loading", "wavy", "flat", "bar", "spinner", "loader", "indicator", "expressive"), appearance = AppearanceSection.ProgressIndicators),
         SettingsEntry("Background blur", SettingsPage.Appearance, listOf("sheet", "dialog", "blur", "frosted", "glass", "background", "overlay", "dock", "footer"), appearance = AppearanceSection.Effects),
         SettingsEntry("Category icons", SettingsPage.Appearance, listOf("category", "icons", "emoji", "outline", "outlined", "glyph", "avatar", "style"), appearance = AppearanceSection.CategoryIcons),
+        SettingsEntry("3D icons in Settings", SettingsPage.Appearance, listOf("3d", "three d", "settings icons", "icons", "pictures", "emoji", "flat", "settings list"), appearance = AppearanceSection.CategoryIcons),
         SettingsEntry("Icon background", SettingsPage.Appearance, listOf("icon background", "shape", "radius", "circle", "rounded", "square", "avatar", "corners", "disc", "tile", "category", "logo", "round", "bank", "account"), appearance = AppearanceSection.CategoryIcons),
-        SettingsEntry("Interface font", SettingsPage.Appearance, listOf("font", "typeface", "text", "gs flex", "google sans", "weight", "width", "roundness", "zenith", "neo", "impact", "airy"), appearance = AppearanceSection.InterfaceFont),
-        SettingsEntry("Your font", SettingsPage.Appearance, listOf("custom font", "upload font", "ttf", "otf", "font file", "import font", "own font", "my font", "typeface", "text"), appearance = AppearanceSection.InterfaceFont),
+        SettingsEntry("Interface font", SettingsPage.Appearance, listOf("font", "typeface", "text", "gs flex", "google sans", "nunito", "rounded", "weight", "width", "roundness", "zenith", "neo", "impact", "airy"), appearance = AppearanceSection.InterfaceFont),
+        SettingsEntry("Your font", SettingsPage.Appearance, listOf("custom font", "upload font", "ttf", "otf", "zip", "google fonts", "font file", "import font", "own font", "my font", "typeface", "text"), appearance = AppearanceSection.InterfaceFont),
         SettingsEntry("Back button style", SettingsPage.Appearance, listOf("back", "button", "floating", "circle", "header", "dock", "top bar"), appearance = AppearanceSection.Controls),
         SettingsEntry("Bottom controls", SettingsPage.Appearance, listOf("bottom", "thumb", "reach", "one hand", "search bar", "filter", "filters", "back", "actions", "footer", "controls", "layout"), appearance = AppearanceSection.Controls),
         SettingsEntry("Footer labels", SettingsPage.Appearance, listOf("footer", "labels", "dock", "bottom bar", "navigation", "tabs", "icons", "show labels", "hide labels"), appearance = AppearanceSection.Controls),
@@ -84,9 +92,11 @@ object SettingsCatalog {
         SettingsEntry("Sheet & dialog transitions", SettingsPage.Appearance, listOf("sheet", "dialog", "bottom sheet", "decision", "popup", "overlay", "animation", "motion", "transition", "window", "linux", "desktop", "gnome", "slide", "fade", "scale"), appearance = AppearanceSection.Transitions),
         SettingsEntry("Top spending", SettingsPage.Appearance, listOf("top spending", "categories", "carousel", "stack", "home", "biggest", "spending cards", "layout"), appearance = AppearanceSection.Layouts),
         SettingsEntry("Month control", SettingsPage.Appearance, listOf("month", "switcher", "picker", "steps", "track", "split", "buttons", "classic", "earlier", "previous", "old", "date", "dates", "all time", "by month", "style"), appearance = AppearanceSection.Controls),
+        SettingsEntry("Categories in Insights", SettingsPage.Appearance, listOf("insights", "categories", "carousel", "list", "ranked", "where your money went", "spending", "layout"), appearance = AppearanceSection.Layouts),
         SettingsEntry("Accounts layout", SettingsPage.Appearance, listOf("accounts", "stack", "stacked", "cards", "list", "rows", "compact", "carousel", "swipe", "layout", "wallet"), appearance = AppearanceSection.Layouts),
         SettingsEntry("Cards layout", SettingsPage.Appearance, listOf("cards", "stack", "stacked", "list", "rows", "compact", "carousel", "swipe", "layout", "wallet"), appearance = AppearanceSection.Layouts, cardsOnly = true),
         SettingsEntry("Bank logo style", SettingsPage.Appearance, listOf("logo", "brand", "icon", "compact", "full", "bank", "wallet"), appearance = AppearanceSection.CategoryIcons),
+        SettingsEntry("Hero weather", SettingsPage.Appearance, listOf("weather", "hero", "animation", "rain", "snow", "sun", "heat", "home", "month card", "overcast", "motion", "effects"), appearance = AppearanceSection.Effects),
         SettingsEntry("Card tilt", SettingsPage.Appearance, listOf("tilt", "motion", "gyroscope", "sensor", "parallax", "animation", "accounts", "cards"), appearance = AppearanceSection.Effects),
         SettingsEntry("Footer blur", SettingsPage.Appearance, listOf("footer", "blur", "dock", "bottom bar", "fade", "frosted", "glass", "navigation", "progressive"), appearance = AppearanceSection.Effects),
 
@@ -95,8 +105,8 @@ object SettingsCatalog {
         SettingsEntry("Add a widget to the home screen", SettingsPage.Widgets, listOf("add widget", "add to home screen", "put on home screen", "install widget")),
         SettingsEntry("Cookie clock widgets", SettingsPage.Widgets, listOf("cookie", "clock", "analog", "analogue", "digital", "numerals", "watch dial")),
 
-        // Banks
-        SettingsEntry("Banks and their logos", SettingsPage.Banks, listOf("bank", "banks", "logo", "logos", "icons", "directory", "list of banks", "find a bank", "sbi", "hdfc", "icici", "axis", "kotak", "gramin", "co-operative", "cooperative", "small finance", "payments bank", "foreign bank", "ifsc")),
+        // Banks & categories
+        SettingsEntry("Banks and their logos", SettingsPage.Banks, listOf("bank", "banks", "categories", "category", "labels", "tags", "logo", "logos", "icons", "directory", "list of banks", "find a bank", "sbi", "hdfc", "icici", "axis", "kotak", "gramin", "co-operative", "cooperative", "small finance", "payments bank", "foreign bank", "ifsc")),
         SettingsEntry("Add a bank", SettingsPage.Banks, listOf("add bank", "new bank", "missing bank", "my bank", "custom bank")),
 
         // Finance
@@ -144,6 +154,12 @@ object SettingsCatalog {
         SettingsEntry("Update check time", SettingsPage.Updates, listOf("check time", "set time", "at a set time", "time of day", "when to check", "any time", "update time")),
         SettingsEntry("Check when NormPix opens", SettingsPage.Updates, listOf("check when opened", "check on open", "check at launch", "when i open", "open the app", "launch", "startup")),
         SettingsEntry(
+            "Welcome tour",
+            null,
+            listOf("welcome", "tour", "onboarding", "intro", "introduction", "retake", "replay", "again", "walkthrough", "get started", "first run", "setup"),
+            special = SettingsSpecial.WelcomeTour,
+        ),
+        SettingsEntry(
             "About NormPix",
             null,
             listOf("about", "guide", "help", "how to", "how it works", "tips", "tutorial", "features", "licenses", "licences", "credits", "version", "privacy"),
@@ -186,6 +202,7 @@ object SettingsCatalog {
         SettingsSpecial.Reset -> Icons.Outlined.DeleteOutline
         SettingsSpecial.Updates -> Icons.Outlined.SystemUpdate
         SettingsSpecial.About -> Icons.Outlined.Info
+        SettingsSpecial.WelcomeTour -> Icons.Outlined.Celebration
         null -> Icons.Outlined.Tune
     }
 }
@@ -199,8 +216,9 @@ class SettingsActivator(val activate: (SettingsEntry) -> Unit)
 fun rememberSettingsActivator(): SettingsActivator {
     val navigator = LocalNavigator.current
     val system = rememberSettingsSystemActions()
+    val preferences = LocalAppContainer.current.preferences
 
-    return remember(navigator, system) {
+    return remember(navigator, system, preferences) {
         SettingsActivator { entry ->
             when {
                 entry.appearance != null -> navigator.openAppearance(entry.appearance)
@@ -211,6 +229,7 @@ fun rememberSettingsActivator(): SettingsActivator {
                 entry.special == SettingsSpecial.Reset -> system.resetSettings()
                 entry.special == SettingsSpecial.Updates -> system.checkForUpdates()
                 entry.special == SettingsSpecial.About -> navigator.openAbout()
+                entry.special == SettingsSpecial.WelcomeTour -> preferences.startOnboarding()
                 else -> navigator.openSettings()
             }
         }

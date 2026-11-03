@@ -5,6 +5,7 @@
      the minute are TextClocks, which the platform keeps on time between those draws.
      ClockWidget sizes the text and puts the minute in its pill for the widget's size. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/widget_clock_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -18,8 +19,9 @@
         android:importantForAccessibility="no"
         android:scaleType="fitCenter" />
 
-    <!-- The seconds ring, over the picture: ClockWidget adds the view that turns it (widget_dial_seconds_NN, a progress bar that
-         runs the ring's animation), started at the second it is. It is empty until then. -->
+    <!-- The seconds ring, over the picture: ClockWidget adds the view that turns it - from Android 12 an AnalogClock the system turns
+         (widget_dial_bezel), before that a progress bar running the ring's animation from the second it is (widget_dial_seconds_NN).
+         It is empty until then. -->
     <FrameLayout
         android:id="@+id/widget_clock_seconds"
         android:layout_width="match_parent"
@@ -28,6 +30,7 @@
 
     <TextClock
         android:id="@+id/widget_clock_hour"
+        tools:ignore="SpUsage,UnusedAttribute"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
@@ -40,7 +43,8 @@
         android:textFontWeight="560"
         android:textSize="40dp" />
 
-    <!-- Its left padding moves the minute from the middle to the pill (ClockWidget sets it for the size). -->
+    <!-- Its left padding moves the minute from the middle to the pill (ClockWidget sets it for the size). The TextClocks' sizes are
+         in dp on purpose - the face, not the phone's text size, decides them - and their weight is GS Flex's from Android 9. -->
     <FrameLayout
         android:id="@+id/widget_clock_minute_box"
         android:layout_width="match_parent"
@@ -48,6 +52,7 @@
 
         <TextClock
             android:id="@+id/widget_clock_minute"
+            tools:ignore="SpUsage,UnusedAttribute"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
@@ -59,5 +64,30 @@
             android:textColor="@color/widget_clock_ink"
             android:textFontWeight="560"
             android:textSize="15dp" />
+    </FrameLayout>
+
+    <!-- The second, in the pill beside the minute and left of the ring's numbers (ClockFace): a TextClock, so the platform keeps it
+         exact. Its left padding moves it there, as the minute's does. Not read out: it changes every second. -->
+    <FrameLayout
+        android:id="@+id/widget_clock_second_box"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no">
+
+        <TextClock
+            android:id="@+id/widget_clock_second"
+            tools:ignore="SpUsage,UnusedAttribute"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:fontFamily="@font/gs_flex"
+            android:format12Hour="ss"
+            android:format24Hour="ss"
+            android:importantForAccessibility="no"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="@color/widget_clock_ink"
+            android:textFontWeight="560"
+            android:textSize="12dp" />
     </FrameLayout>
 </FrameLayout>

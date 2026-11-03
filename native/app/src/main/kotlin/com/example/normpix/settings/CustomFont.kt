@@ -8,6 +8,7 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.zip.ZipInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -24,10 +25,16 @@ enum class FontInstall {
 
     /** The file could not be read, or the copy could not be written. */
     Failed,
+
+    /** The file is a zip with no font in it that NormPix can use (no .ttf or .otf, or none that Android can load). */
+    NoFonts,
 }
 
 /** [install]'s outcome for the file the user picked, and what to call it ([name], as the file manager showed it). */
 class FontImport(val install: FontInstall, val name: String)
+
+/** One weight of the user's font: the file the text system draws with, and the weight (100 to 900) it stands for. */
+data class CustomFontFace(val file: File, val weight: Int)
 
 /**
  * The font file the user picked for the interface (Settings > Appearance > Interface font > Your font), kept in the app's own
@@ -47,16 +54,59 @@ object CustomFont {
     /** The saved font's file name; whatever type the file was, it is kept as this. */
     const val FILE_NAME = "custom-interface-font.ttf"
 
+    /**
+     * A family that comes as several static files (a download's Regular, Medium, Bold ...) keeps the one that draws regular text as
+     * [FILE_NAME] and each other weight beside it as `custom-interface-font-w<weight>.ttf` (see [extraName]). A variable font is
+     * one file, and so is a font picked as a single file: neither has extras.
+     */
+    private const val EXTRA_PREFIX = "custom-interface-font-w"
+    private val EXTRA_NAME = Regex("custom-interface-font-w([1-9]00)\\.ttf")
+
+    /** The most one zip may hold in all, and the most entries looked at: a stray pick cannot fill the storage. */
+    const val MAX_ZIP_BYTES = 40L * 1024 * 1024
+    private const val MAX_ZIP_ENTRIES = 200
+
     private const val HEADER_BYTES = 4
     private val TRUETYPE = byteArrayOf(0x00, 0x01, 0x00, 0x00)
     private val OPENTYPE = "OTTO".toByteArray(Charsets.US_ASCII)
     private val APPLE_TRUETYPE = "true".toByteArray(Charsets.US_ASCII)
+    private val ZIP = byteArrayOf(0x50, 0x4B, 0x03, 0x04)
 
     /** Where the saved font is (it may not exist). */
     fun file(context: Context): File = File(File(context.filesDir, FOLDER), FILE_NAME)
 
     /** Whether a font has been saved. */
     fun exists(context: Context): Boolean = file(context).isFile
+
+    /** The name the file of [weight] (a multiple of 100, 100 to 900) is kept under beside the main one. */
+    fun extraName(weight: Int): String = "$EXTRA_PREFIX$weight.ttf"
+
+    /** Whether [name] is a name the app keeps a font file under: the main one or an extra weight. The only names a backup carries. */
+    fun isSavedName(name: String): Boolean = name == FILE_NAME || EXTRA_NAME.matches(name)
+
+    /** The saved extra weights, lightest first (none for a variable font or one picked as a single file). */
+    fun extras(context: Context): List<File> =
+        file(context).parentFile?.listFiles()?.filter { it.isFile && EXTRA_NAME.matches(it.name) }?.sortedBy { it.name }.orEmpty()
+
+    /** Every saved font file: the main one, then the extra weights. */
+    fun savedFiles(context: Context): List<File> = listOfNotNull(file(context).takeIf { it.isFile }) + extras(context)
+
+    /** Whether [head], the first bytes of a file, begin a zip. */
+    fun hasZipHeader(head: ByteArray): Boolean = head.size >= ZIP.size && head.copyOfRange(0, ZIP.size).contentEquals(ZIP)
+
+    /**
+     * What the saved font gives, in words for the Interface font page: "All weights" for a variable font, "5 weights" for a
+     * family kept as several files, nothing for a single static file (or one that can't be read).
+     */
+    fun describe(context: Context): String? {
+        val info = FontFileInfo.read(file(context)) ?: return null
+        val extra = extras(context).size
+        return when {
+            info.isVariable -> "All weights"
+            extra > 0 -> "${extra + 1} weights"
+            else -> null
+        }
+    }
 
     /** Whether [head], the first bytes of a file, begin a TrueType (`00 01 00 00` or `true`) or OpenType (`OTTO`) font. */
     fun hasFontHeader(head: ByteArray): Boolean {
@@ -101,12 +151,89 @@ object CustomFont {
             if (!hasFontHeader(staged) || !canLoad(staged)) return FontInstall.NotAFont
             // A rename replaces the old file in one step; where that fails the copy is the fallback.
             if (!staged.renameTo(target)) staged.copyTo(target, overwrite = true)
+            // A single file stands alone: the weights of a family picked before are not its.
+            clearExtras(folder)
             return FontInstall.Saved
         } catch (_: IOException) {
             return FontInstall.Failed
         } finally {
             staged.delete()
         }
+    }
+
+    private fun clearExtras(folder: File) {
+        folder.listFiles()?.forEach { if (EXTRA_NAME.matches(it.name)) it.delete() }
+    }
+
+    /** A font file read out of a zip, waiting in the staging folder to be chosen or thrown away. */
+    private class Staged(val file: File, val info: FontFileInfo)
+
+    /**
+     * Takes the fonts out of the zip in [source] - a download from Google Fonts, say - and saves the family's: one variable file
+     * that holds every weight, else a file for each weight ([FontSets.choose]), the regular as [FILE_NAME] in [folder] and the
+     * others beside it as extras. Only the .ttf and .otf entries are looked at, and none of the zip's own paths is ever used as a
+     * path: what is kept is written under this object's names. Like [install], nothing is touched until what is kept has passed
+     * the checks, so a zip that is refused never replaces the font in use. Blocks: call it off the main thread.
+     */
+    fun installZip(source: InputStream, folder: File, canLoad: (File) -> Boolean = { loads(it) }): FontInstall {
+        val staging = File(folder, "incoming")
+        try {
+            staging.deleteRecursively()
+            staging.mkdirs()
+            if (!staging.isDirectory) return FontInstall.Failed
+            val staged = ArrayList<Staged>()
+            var oversize = false
+            var total = 0L
+            ZipInputStream(source).use { zip ->
+                var entries = 0
+                while (entries++ < MAX_ZIP_ENTRIES) {
+                    val entry = zip.nextEntry ?: break
+                    if (entry.isDirectory || !isFontEntry(entry.name)) continue
+                    val target = File(staging, "font-${staged.size + 1}")
+                    val fits = target.outputStream().buffered().use { out -> copyAtMost(zip, out, MAX_BYTES) }
+                    if (!fits) {
+                        oversize = true
+                        target.delete()
+                        continue
+                    }
+                    total += target.length()
+                    if (total > MAX_ZIP_BYTES) return FontInstall.TooLarge
+                    if (!hasFontHeader(target)) {
+                        target.delete()
+                        continue
+                    }
+                    staged += Staged(target, FontFileInfo.read(target) ?: FontFileInfo(400, false, 5, null))
+                }
+            }
+            val kept = FontSets.choose(staged) { it.info }.filter { canLoad(it.file) }
+            if (kept.isEmpty()) return if (staged.isEmpty()) (if (oversize) FontInstall.TooLarge else FontInstall.NoFonts) else FontInstall.NotAFont
+
+            val main = kept.first()
+            // The extras are named by their weight, so two files of one weight cannot both be kept (choose gives one each).
+            val others = kept.drop(1).associateBy { FontSets.nearestWeight(it.info.weight) }
+            folder.mkdirs()
+            val target = File(folder, FILE_NAME)
+            if (!main.file.renameTo(target)) main.file.copyTo(target, overwrite = true)
+            clearExtras(folder)
+            for ((weight, face) in others) {
+                val extra = File(folder, extraName(weight))
+                if (!face.file.renameTo(extra)) face.file.copyTo(extra, overwrite = true)
+            }
+            return FontInstall.Saved
+        } catch (_: IOException) {
+            // Including a zip that is damaged: it could not be read, which is not the same as having no font in it.
+            return FontInstall.Failed
+        } finally {
+            staging.deleteRecursively()
+        }
+    }
+
+    /** Whether the zip entry called [name] is a font file worth reading: .ttf or .otf, not a folder's resource fork or hidden file. */
+    private fun isFontEntry(name: String): Boolean {
+        val base = name.substringAfterLast('/')
+        if (base.startsWith(".") || name.split('/').any { it == "__MACOSX" }) return false
+        val lower = base.lowercase()
+        return lower.endsWith(".ttf") || lower.endsWith(".otf")
     }
 
     /** Copies [input] to [out], unless it runs past [max] bytes: then false, and what was written is not a whole file. */
@@ -131,11 +258,25 @@ object CustomFont {
             val resolver = context.contentResolver
             val name = displayName(context, uri)
             val declared = query(context, uri, OpenableColumns.SIZE)?.toLongOrNull()
-            if (declared != null && declared > MAX_BYTES) return@withContext FontImport(FontInstall.TooLarge, name)
             val stream = runCatching { resolver.openInputStream(uri) }.getOrNull()
                 ?: return@withContext FontImport(FontInstall.Failed, name)
             val result = try {
-                stream.use { install(it, file(context), canLoad) }
+                stream.use { raw ->
+                    // A zip - Google Fonts hands out a family as one - is told by its first bytes, not by what it is called.
+                    val input = raw.buffered()
+                    input.mark(ZIP.size)
+                    val head = ByteArray(ZIP.size)
+                    val read = input.read(head)
+                    input.reset()
+                    val folder = file(context).parentFile
+                    if (read == ZIP.size && hasZipHeader(head) && folder != null) {
+                        if (declared != null && declared > MAX_ZIP_BYTES) FontInstall.TooLarge else installZip(input, folder, canLoad)
+                    } else if (declared != null && declared > MAX_BYTES) {
+                        FontInstall.TooLarge
+                    } else {
+                        install(input, file(context), canLoad)
+                    }
+                }
             } catch (_: IOException) {
                 FontInstall.Failed
             }
@@ -176,7 +317,9 @@ object CustomFont {
         val staged = File(folder, copy.name + ".part")
         return try {
             folder.mkdirs()
-            folder.listFiles()?.forEach { it.delete() }
+            // Older copies go; the copies of this version's extra weights ([faces]) stay.
+            val keep = stampedCopy(folder, source, size).name.removeSuffix(".ttf") + "-w"
+            folder.listFiles()?.forEach { if (!it.name.startsWith(keep)) it.delete() }
             source.copyTo(staged, overwrite = true)
             if (staged.renameTo(copy)) copy else null
         } catch (_: IOException) {
@@ -196,6 +339,45 @@ object CustomFont {
         if (!source.isFile || size <= 0L || size > MAX_BYTES) return null
         val copy = stampedCopy(File(context.cacheDir, FOLDER), source, size)
         return copy.takeIf { it.isFile && it.length() == size }
+    }
+
+    /**
+     * The extra weights of the saved font as the app draws with them: copies in the cache named like the main one's (by its size and
+     * its last change, then the weight), for the same reason - a different set is a different path. Made now if they are not
+     * there; call it after [loadable]. Empty for a font with no extras.
+     */
+    fun faces(context: Context): List<CustomFontFace> {
+        val source = file(context)
+        if (!source.isFile) return emptyList()
+        val folder = File(context.cacheDir, FOLDER)
+        val base = stampedCopy(folder, source, source.length()).name.removeSuffix(".ttf")
+        return extras(context).mapNotNull { extra ->
+            val weight = EXTRA_NAME.matchEntire(extra.name)?.groupValues?.get(1)?.toIntOrNull() ?: return@mapNotNull null
+            val copy = File(folder, "$base-w$weight.ttf")
+            if (!(copy.isFile && copy.length() == extra.length())) {
+                try {
+                    folder.mkdirs()
+                    extra.copyTo(copy, overwrite = true)
+                } catch (_: IOException) {
+                    return@mapNotNull null
+                }
+            }
+            CustomFontFace(copy, weight)
+        }
+    }
+
+    /** [faces] as they already are, or null when any is not made yet (then [faces] makes them, off the main thread). */
+    fun readyFaces(context: Context): List<CustomFontFace>? {
+        val source = file(context)
+        if (!source.isFile) return emptyList()
+        val folder = File(context.cacheDir, FOLDER)
+        val base = stampedCopy(folder, source, source.length()).name.removeSuffix(".ttf")
+        val made = extras(context).mapNotNull { extra ->
+            val weight = EXTRA_NAME.matchEntire(extra.name)?.groupValues?.get(1)?.toIntOrNull() ?: return@mapNotNull null
+            val copy = File(folder, "$base-w$weight.ttf")
+            if (copy.isFile && copy.length() == extra.length()) CustomFontFace(copy, weight) else null
+        }
+        return made.takeIf { it.size == extras(context).size }
     }
 
     /** The cache copy of [source] as it is now: named by its size and its last change, so a different file is a different path. */

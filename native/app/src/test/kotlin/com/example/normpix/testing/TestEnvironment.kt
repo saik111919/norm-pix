@@ -104,6 +104,12 @@ class RecordingNavigator : AppNavigator {
         aboutOpened++
     }
 
+    var guideIndexOpened = 0
+
+    override fun openGuideIndex() {
+        guideIndexOpened++
+    }
+
     override fun openGuide(topic: GuideTopic) {
         guides += topic
     }

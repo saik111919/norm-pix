@@ -110,7 +110,11 @@ class DummyData private constructor(
         financeDatabase.close()
         remindersDatabase.close()
         synchronized(openSets) { openSets -= picturesDir.name }
-        CoroutineScope(Dispatchers.IO).launch { picturesDir.deleteRecursively() }
+        val sampleParent = picturesDir.parentFile
+        CoroutineScope(Dispatchers.IO).launch {
+            picturesDir.deleteRecursively()
+            if (sampleParent != null) cleanLeftoverSamplePictures(sampleParent)
+        }
     }
 
     companion object {
@@ -125,6 +129,12 @@ class DummyData private constructor(
         /** The sample sets open in this process, by the name of their pictures' folder. */
         private val openSets = mutableSetOf<String>()
 
+        private fun cleanLeftoverSamplePictures(samplePicturesDir: File) {
+            samplePicturesDir.listFiles()
+                ?.filter { synchronized(openSets) { it.name !in openSets } }
+                ?.forEach { it.deleteRecursively() }
+        }
+
         /** Builds and loads a fresh sample set, dated so that it ends at [clock]. */
         suspend fun open(context: Context, real: AppContainer, clock: () -> LocalDateTime = { LocalDateTime.now() }): DummyData {
             val now = clock()
@@ -132,9 +142,7 @@ class DummyData private constructor(
             try {
                 // Pictures of a set that was never closed (the app was stopped while it showed) go now.
                 withContext(Dispatchers.IO) {
-                    File(context.applicationContext.cacheDir, SAMPLE_PICTURES_DIR).listFiles()
-                        ?.filter { synchronized(openSets) { it.name !in openSets } }
-                        ?.forEach { it.deleteRecursively() }
+                    cleanLeftoverSamplePictures(File(context.applicationContext.cacheDir, SAMPLE_PICTURES_DIR))
                 }
                 try {
                     SampleSet(now).writeTo(data)
@@ -167,10 +175,10 @@ class DummyData private constructor(
     }
 
     /**
-     * One consistent household: a salary into HDFC Savings pays the rent, the
-     * ICICI credit card is settled each month for exactly what was spent on
-     * it, cash and the Paytm wallet are topped up from the bank, and every
-     * amount comes from a fixed seed, so the set looks the same each time.
+     * One consistent household: a salary into HDFC Savings pays the rent, credit
+     * cards are settled each month for exactly what was spent on them, cash and
+     * wallets are topped up from the bank, and every amount comes from a fixed
+     * seed, so the set looks the same each time.
      */
     private class SampleSet(private val now: LocalDateTime) {
         private val random = Random(SEED)
@@ -186,17 +194,21 @@ class DummyData private constructor(
         private suspend fun writeFinance(repo: FinanceRepository) {
             // The database seeds a Cash account and the default categories on creation.
             val cash = repo.accounts().first()
-            repo.saveAccount(cash.copy(openingBalance = rupees(2_500)))
-            val bank = repo.account("HDFC Savings", AccountKind.Bank, opening = rupees(1_48_000), order = 1)
+            repo.saveAccount(cash.copy(openingBalance = rupees(3_000)))
+            val bank = repo.account("HDFC Savings", AccountKind.Bank, opening = rupees(1_50_000), order = 1)
             val card = repo.account("ICICI Credit Card", AccountKind.Card, opening = -rupees(8_450), order = 2, statementDay = 5, dueDay = 20)
-            val upi = repo.account("Paytm Wallet", AccountKind.Wallet, opening = rupees(1_200), order = 3)
+            val upi = repo.account("Paytm Wallet", AccountKind.Wallet, opening = rupees(2_000), order = 3)
+            val bank2 = repo.account("SBI Savings", AccountKind.Bank, opening = rupees(45_000), order = 4)
+            val card2 = repo.account("Axis Credit Card", AccountKind.Card, opening = -rupees(4_200), order = 5, statementDay = 12, dueDay = 28)
             repo.setDefaultAccountId(bank)
 
             // The people the household spends on, so the People page and the per-person totals have something to show.
             val mom = repo.person("Mom", "👩", 6)
             val dad = repo.person("Dad", "👨", 2)
-            val riya = repo.person("Riya", "💞", 0)
+            val riya = repo.person("Riya", "💖", 0)
             val arjun = repo.person("Arjun", null, 5)
+            val kavya = repo.person("Kavya", "✨", 3)
+            val rohit = repo.person("Rohit", "🎮", 1)
 
             val categories = repo.categories().associate { it.name to it.id!! }
             fun category(name: String) = checkNotNull(categories[name]) { "No default category \"$name\"" }
@@ -207,29 +219,73 @@ class DummyData private constructor(
             val bills = category("Bills & utilities")
             val rent = category("Rent & housing")
             val health = category("Health")
+            val personalCare = category("Personal care")
+            val fitness = category("Fitness")
             val entertainment = category("Entertainment")
             val salary = category("Salary")
             val freelance = category("Freelance")
             val interest = category("Interest")
 
+            // Sub-categories from CategorySuggestions seed list
+            val restaurants = category("Restaurants")
+            val coffeeTea = category("Coffee & tea")
+            val deliveryApps = category("Delivery apps")
+            val fruitsVeg = category("Fruits & vegetables")
+            val staplesGrains = category("Staples & grains")
+            val dairyEggs = category("Dairy & eggs")
+            val packagedSnacks = category("Packaged snacks")
+            val petrolDiesel = category("Petrol & diesel")
+            val busMetro = category("Bus & metro")
+            val cabsRideshare = category("Cabs & rideshare")
+            val autoRickshaw = category("Auto rickshaw")
+            val clothing = category("Clothing")
+            val onlineOrders = category("Online orders")
+            val electricity = category("Electricity")
+            val mobileRecharge = category("Mobile recharge")
+            val broadband = category("Broadband")
+            val rentSub = category("Rent")
+            val cleaningMaid = category("Cleaning & maid")
+            val doctor = category("Doctor")
+            val pharmacy = category("Pharmacy")
+            val salonHaircut = category("Salon & haircut")
+            val gymMembership = category("Gym membership")
+            val movies = category("Movies")
+            val netflixSub = category("Netflix")
+            val spotifySub = category("Spotify")
+            val mutualFunds = category("Mutual funds")
+            val monthlySalary = category("Monthly salary")
+            val clientProjects = category("Client projects")
+            val savingsInterest = category("Savings account")
+
             // Fixed monthly payments become real transactions through the normal recurring
             // engine when the controller loads (FinanceRepository.processRecurring).
-            repo.monthly("Acme Technologies Pvt Ltd", TransactionType.Income, rupees(92_000), bank, salary, day = 1, hour = 9, note = "Salary")
-            repo.monthly("Ramesh Iyer", TransactionType.Expense, rupees(24_000), bank, rent, day = 5, hour = 10, note = "Rent - Flat 304")
-            repo.monthly("Airtel Xstream Fiber", TransactionType.Expense, rupees(999), bank, bills, day = 8, hour = 8)
-            repo.monthly("Netflix", TransactionType.Expense, rupees(649), card, entertainment, day = 12, hour = 6)
-            repo.monthly("Cult.fit", TransactionType.Expense, rupees(1_499), card, health, day = 15, hour = 7, note = "Gym membership")
-            val recurringOnCard = rupees(649) + rupees(1_499)
+            repo.monthly("Acme Technologies Pvt Ltd", TransactionType.Income, rupees(95_000), bank, monthlySalary, day = 1, hour = 9, note = "Salary")
+            repo.monthly("Ramesh Iyer", TransactionType.Expense, rupees(24_000), bank, rentSub, day = 5, hour = 10, note = "Rent - Flat 304")
+            repo.monthly("Airtel Xstream Fiber", TransactionType.Expense, rupees(999), bank, broadband, day = 8, hour = 8)
+            repo.monthly("Cult.fit", TransactionType.Expense, rupees(2_500), card, gymMembership, day = 1, hour = 7, note = "Cult Pass Elite")
+            repo.monthly("Netflix", TransactionType.Expense, rupees(649), card, netflixSub, day = 12, hour = 6)
+            repo.monthly("Spotify", TransactionType.Expense, rupees(119), card2, spotifySub, day = 3, hour = 7)
+            repo.monthly("House Maid & Cook", TransactionType.Expense, rupees(4_500), bank2, cleaningMaid, day = 1, hour = 11, note = "Monthly maid & cook")
+            repo.monthly("SIP - Index Fund", TransactionType.Expense, rupees(10_000), bank, mutualFunds, day = 7, hour = 9, note = "Mutual fund SIP")
+
+            val recurringOnIcici = rupees(2_500) + rupees(649)
+            val recurringOnAxis = rupees(119)
 
             // Monthly budgets, set from the first month so history has something to compare.
-            repo.setBudget(null, firstMonth, rupees(70_000))
-            repo.setBudget(food, firstMonth, rupees(8_000))
-            repo.setBudget(groceries, firstMonth, rupees(10_000))
-            repo.setBudget(transport, firstMonth, rupees(8_000))
-            repo.setBudget(shopping, firstMonth, rupees(6_000))
-            repo.setBudget(entertainment, firstMonth, rupees(2_500))
+            // In the current month:
+            //  - Shopping is exceeded (> 100%) due to early clothing purchases;
+            //  - Fitness is approaching (>= 80%) with Cult.fit gym membership at ₹2,500 / ₹3,000 (83.3%);
+            //  - Groceries, Food & dining, Transport are well under (Healthy, < 65%);
+            //  - Overall budget (₹85,000) stays safely on track (Healthy).
+            repo.setBudget(null, firstMonth, rupees(85_000))
+            repo.setBudget(groceries, firstMonth, rupees(15_000))
+            repo.setBudget(food, firstMonth, rupees(12_000))
+            repo.setBudget(transport, firstMonth, rupees(9_000))
+            repo.setBudget(shopping, firstMonth, rupees(5_000))
+            repo.setBudget(fitness, firstMonth, rupees(3_000))
 
-            val cardSpend = mutableMapOf<MonthKey, Long>()
+            val iciciSpend = mutableMapOf<MonthKey, Long>()
+            val axisSpend = mutableMapOf<MonthKey, Long>()
             val transactions = mutableListOf<FinanceTransaction>()
 
             fun spend(account: Long, category: Long, amount: Long, payee: String, at: LocalDateTime, note: String? = null, person: Long? = null) {
@@ -246,7 +302,8 @@ class DummyData private constructor(
                     updatedAt = at,
                     personId = person,
                 )
-                if (account == card) cardSpend.merge(MonthKey.of(at), amount, Long::plus)
+                if (account == card) iciciSpend.merge(MonthKey.of(at), amount, Long::plus)
+                if (account == card2) axisSpend.merge(MonthKey.of(at), amount, Long::plus)
             }
 
             fun transfer(amount: Long, from: Long, to: Long, note: String, at: LocalDateTime) {
@@ -286,44 +343,64 @@ class DummyData private constructor(
                 val month = MonthKey.of(day)
 
                 if (index % 5 == 2) {
-                    val (payee, account) = listOf("BigBasket" to bank, "DMart" to card, "Reliance Fresh" to bank, "Nature's Basket" to card)[index / 5 % 4]
-                    spend(account, groceries, pick(900, 2_600), payee, day.at(18, 40))
+                    val (payee, account) = listOf("BigBasket" to bank, "DMart" to card, "Reliance Fresh" to bank, "Nature's Basket" to card2)[index / 5 % 4]
+                    val subcat = listOf(fruitsVeg, staplesGrains, dairyEggs, packagedSnacks)[index / 5 % 4]
+                    spend(account, subcat, pick(900, 2_600), payee, day.at(18, 40))
                 }
-                if (index % 7 == 4) spend(cash.id!!, groceries, pick(120, 320), "Vegetable market", day.at(8, 15))
+                if (index % 7 == 4) spend(cash.id!!, fruitsVeg, pick(120, 320), "Vegetable market", day.at(8, 15))
                 when (index % 7) {
-                    1 -> spend(upi, food, pick(90, 280), listOf("Chai Point", "Third Wave Coffee").random(random), day.at(11, 5))
-                    3 -> spend(card, food, pick(380, 1_100), listOf("Swiggy", "Zomato").random(random), day.at(20, 45))
-                    5 -> spend(card, food, pick(650, 1_400), listOf("Meghana Foods", "Truffles", "Toit").random(random), day.at(13, 30), person = if (index / 7 % 2 == 0) riya else null)
+                    1 -> spend(upi, coffeeTea, pick(90, 280), listOf("Chai Point", "Third Wave Coffee").random(random), day.at(11, 5))
+                    3 -> spend(card, deliveryApps, pick(380, 1_100), listOf("Swiggy", "Zomato").random(random), day.at(20, 45))
+                    5 -> spend(card2, restaurants, pick(650, 1_400), listOf("Meghana Foods", "Truffles", "Toit").random(random), day.at(13, 30), person = if (index / 7 % 2 == 0) riya else rohit)
                 }
                 if (weekday && index % 2 == 0) {
                     if (index % 4 == 0) {
-                        spend(upi, transport, pick(40, 80), "Namma Metro", day.at(9, 10))
+                        spend(upi, busMetro, pick(40, 80), "Namma Metro", day.at(9, 10))
                     } else {
-                        spend(bank, transport, pick(180, 420), listOf("Uber", "Ola", "Rapido").random(random), day.at(9, 25))
+                        spend(bank, cabsRideshare, pick(180, 420), listOf("Uber", "Ola", "Rapido").random(random), day.at(9, 25))
                     }
                 }
                 when (dom) {
-                    1 -> transfer(rupees(1_500), bank, upi, "Paytm top-up", day.at(9, 30))
-                    3, 17 -> spend(card, transport, pick(2_000, 2_800) + random.nextLong(0, 100), "Indian Oil", day.at(19, 0), note = "Fuel")
-                    6 -> if (!weekday || index % 2 == 1) spend(card, entertainment, pick(520, 980), "PVR INOX", day.at(21, 15), person = riya)
-                    9 -> spend(card, shopping, pick(1_200, 3_500), "Amazon", day.at(22, 10), person = if (month.toInt() % 2 == 0) mom else arjun)
-                    10 -> transfer(rupees(3_000), bank, cash.id!!, "ATM withdrawal", day.at(17, 20))
-                    13 -> spend(bank, health, pick(260, 890), "Apollo Pharmacy", day.at(19, 50), person = mom)
-                    18 -> spend(bank, bills, pick(1_450, 1_950), "BESCOM", day.at(10, 0), note = "Electricity")
+                    1 -> transfer(rupees(2_000), bank, upi, "Paytm top-up", day.at(9, 30))
+                    2 -> {
+                        transfer(rupees(15_000), bank, bank2, "Monthly savings", day.at(10, 30))
+                        // A stylish wardrobe purchase early in the month pushes Shopping over budget (₹5,600 spent vs ₹5,000 limit).
+                        spend(card, clothing, rupees(5_600), "Zara", day.at(14, 0), person = riya)
+                    }
+                    3 -> spend(card, petrolDiesel, pick(1_800, 2_400), "Indian Oil", day.at(19, 0), note = "Fuel")
+                    6 -> if (!weekday || index % 2 == 1) spend(card, movies, pick(650, 1_100), "PVR INOX", day.at(21, 15), person = riya)
+                    9 -> spend(card2, onlineOrders, pick(1_200, 2_800), "Amazon", day.at(22, 10), person = if (month.toInt() % 2 == 0) mom else arjun)
+                    10 -> transfer(rupees(3_500), bank, cash.id!!, "ATM withdrawal", day.at(17, 20))
+                    13 -> spend(bank, pharmacy, pick(260, 950), "Apollo Pharmacy", day.at(19, 50), person = mom)
+                    16 -> spend(card2, salonHaircut, pick(400, 850), "Looks Salon", day.at(15, 30), person = kavya)
+                    17 -> spend(card2, petrolDiesel, pick(1_800, 2_500), "Shell", day.at(19, 30), note = "Fuel")
+                    18 -> spend(bank, electricity, pick(1_450, 1_950), "BESCOM", day.at(10, 0), note = "Electricity")
                     20 -> {
-                        // Settle the card: last month's statement (or, in the first month, the balance carried in).
-                        val owed = if (month == firstMonth) rupees(8_450) else (cardSpend[month.previous] ?: 0) + recurringOnCard
+                        // Settle the ICICI credit card: last month's statement (or, in the first month, the opening balance carried in).
+                        val owed = if (month == firstMonth) rupees(8_450) else (iciciSpend[month.previous] ?: 0) + recurringOnIcici
                         transfer(owed, bank, card, "ICICI card bill", day.at(11, 0))
                     }
-                    21 -> spend(card, entertainment, pick(450, 900), "BookMyShow", day.at(18, 0), person = riya)
-                    22 -> spend(upi, bills, rupees(299), "Jio prepaid", day.at(12, 0), note = "Mobile recharge")
-                    24 -> spend(card, shopping, pick(1_500, 4_500), listOf("Myntra", "Decathlon", "IKEA").random(random), day.at(16, 30), person = if (month.toInt() % 2 == 0) dad else riya)
+                    21 -> spend(card2, movies, pick(450, 950), "BookMyShow", day.at(18, 0), person = rohit)
+                    22 -> spend(upi, mobileRecharge, rupees(299), "Jio prepaid", day.at(12, 0), note = "Mobile recharge")
+                    24 -> spend(card, clothing, pick(1_500, 3_500), listOf("Myntra", "Fabindia").random(random), day.at(16, 30), person = if (month.toInt() % 2 == 0) dad else kavya)
+                    26 -> spend(bank, doctor, pick(600, 1_200), "Dr. Sharma Clinic", day.at(11, 0), person = dad)
+                    28 -> {
+                        // Settle the Axis credit card: last month's statement (or, in the first month, the opening balance carried in).
+                        val owedAxis = if (month == firstMonth) rupees(4_200) else (axisSpend[month.previous] ?: 0) + recurringOnAxis
+                        transfer(owedAxis, bank2, card2, "Axis card bill", day.at(11, 30))
+                    }
                 }
                 if (month == firstMonth && dom == day.lengthOfMonth()) {
-                    income(rupees(1_186), bank, interest, "HDFC Bank", day.at(23, 0), note = "Savings interest")
+                    income(rupees(1_186), bank, savingsInterest, "HDFC Bank", day.at(23, 0), note = "Savings interest")
                 }
-                if (month == firstMonth.next && dom == 14) {
-                    income(rupees(18_500), bank, freelance, "Upwork", day.at(15, 0), note = "Logo design project")
+                if (month == firstMonth.addMonths(1) && dom == 14) {
+                    income(rupees(18_500), bank2, clientProjects, "Upwork", day.at(15, 0), note = "Logo design project")
+                }
+                if (month == firstMonth.addMonths(3) && dom == 19) {
+                    income(rupees(24_000), bank2, clientProjects, "Upwork", day.at(16, 0), note = "Mobile app redesign")
+                }
+                if (month == firstMonth.addMonths(4) && dom == day.lengthOfMonth()) {
+                    income(rupees(1_240), bank, savingsInterest, "HDFC Bank", day.at(23, 0), note = "Savings interest")
                 }
                 day = day.plusDays(1)
                 index++
@@ -352,7 +429,6 @@ class DummyData private constructor(
                     dueDay = dueDay,
                     createdAt = start,
                     updatedAt = start,
-                    // "HDFC Savings" belongs to HDFC Bank, as the app's own migration would link it.
                     bankKey = BankCatalog.BuiltIn.leading(name)?.key,
                 ),
             ).id!!
@@ -397,7 +473,7 @@ class DummyData private constructor(
                     updatedAt = start,
                 )
 
-            // Already due: shows how an overdue reminder is flagged across the app.
+            // Overdue reminders: clearly visible across the app and on Home banners
             val yesterday = now.toLocalDate().minusDays(1)
             dao.insert(
                 reminder(
@@ -410,19 +486,41 @@ class DummyData private constructor(
             )
             dao.insert(
                 reminder(
-                    "Keep ₹10,000 for the SIP",
-                    "Mutual fund SIP debits from HDFC Savings on the 7th",
-                    ReminderCategory.Accounts,
-                    nextDayOfMonth(7),
-                    RepeatRule(RepeatKind.Monthly, dayOfMonth = 7),
+                    "Submit medical insurance claim",
+                    "Apollo Pharmacy bills for reimbursement",
+                    ReminderCategory.Personal,
+                    now.toLocalDate().minusDays(3).at(16, 30),
+                    RepeatRule.Once,
                 ),
             )
+
+            // Upcoming in the next 7 days
+            dao.insert(
+                reminder(
+                    "Keep ₹10,000 for the SIP",
+                    "Mutual fund SIP debits from HDFC Savings",
+                    ReminderCategory.Accounts,
+                    now.toLocalDate().plusDays(3).at(9, 0),
+                    RepeatRule(RepeatKind.Monthly, dayOfMonth = now.toLocalDate().plusDays(3).dayOfMonth),
+                ),
+            )
+            dao.insert(
+                reminder(
+                    "Pay BESCOM electricity bill",
+                    "Consumer No. 4482109 - ₹1,850",
+                    ReminderCategory.Payments,
+                    now.toLocalDate().plusDays(5).at(11, 0),
+                    RepeatRule.Once,
+                ),
+            )
+
+            // Due later
             dao.insert(
                 reminder(
                     "Pay ICICI credit card bill",
                     "Pay the full statement amount to avoid interest",
                     ReminderCategory.Cards,
-                    nextDayOfMonth(20),
+                    now.toLocalDate().plusDays(16).at(10, 0),
                     RepeatRule(RepeatKind.Monthly, dayOfMonth = 20),
                 ),
             )
@@ -431,15 +529,27 @@ class DummyData private constructor(
                     "Renew car insurance",
                     "HDFC ERGO policy ending 8821",
                     ReminderCategory.Payments,
-                    now.toLocalDate().plusDays(12).at(11, 0),
+                    now.toLocalDate().plusDays(20).at(11, 0),
                     RepeatRule.Once,
+                ),
+            )
+            dao.insert(
+                reminder(
+                    "Pay Axis credit card bill",
+                    "Pay Axis Bank credit card outstanding",
+                    ReminderCategory.Cards,
+                    now.toLocalDate().plusDays(24).at(10, 0),
+                    RepeatRule(RepeatKind.Monthly, dayOfMonth = 28),
                 ),
             )
         }
 
-        /** Public test card numbers - they pass validation but belong to no real account. */
+        /** Public synthetic test card numbers from different issuers; one expiring next month to trigger the expiry banner. */
         private fun cards(): List<StoredCard> {
-            val expiry = ((now.year + 3) % 100).toString().padStart(2, '0')
+            val expiryFuture = ((now.year + 3) % 100).toString().padStart(2, '0')
+            val expiring = now.toLocalDate().plusMonths(1)
+            val expiringMonth = expiring.monthValue.toString().padStart(2, '0')
+            val expiringYear = (expiring.year % 100).toString().padStart(2, '0')
             return listOf(
                 StoredCard(
                     id = "dummy-hdfc-debit",
@@ -448,7 +558,7 @@ class DummyData private constructor(
                     bankKey = "hdfc",
                     cardNumber = "4012888888881881",
                     expiryMonth = "08",
-                    expiryYear = expiry,
+                    expiryYear = expiryFuture,
                     cvv = "123",
                     kind = CardKind.Debit,
                     createdAt = start,
@@ -460,18 +570,36 @@ class DummyData private constructor(
                     bankKey = "icici",
                     cardNumber = "5555555555554444",
                     expiryMonth = "11",
-                    expiryYear = expiry,
+                    expiryYear = expiryFuture,
                     cvv = "456",
                     kind = CardKind.Credit,
                     createdAt = start,
                 ),
+                StoredCard(
+                    id = "dummy-sbi-credit",
+                    bankName = "State Bank of India",
+                    cardholderName = "ANANYA RAO",
+                    bankKey = "sbi",
+                    cardNumber = "4000056655665556", // a published test number (Stripe's Visa debit), as the others are: never a real card
+                    expiryMonth = "09",
+                    expiryYear = ((now.year + 4) % 100).toString().padStart(2, '0'),
+                    cvv = "789",
+                    kind = CardKind.Credit,
+                    createdAt = start,
+                ),
+                StoredCard(
+                    id = "dummy-axis-debit",
+                    bankName = "Axis Bank",
+                    cardholderName = "ANANYA RAO",
+                    bankKey = "axis",
+                    cardNumber = "4111111111111111",
+                    expiryMonth = expiringMonth,
+                    expiryYear = expiringYear,
+                    cvv = "321",
+                    kind = CardKind.Debit,
+                    createdAt = start,
+                ),
             )
-        }
-
-        /** The next [day] of the month at [hour], from today on. */
-        private fun nextDayOfMonth(day: Int, hour: Int = 9): LocalDateTime {
-            val thisMonth = now.toLocalDate().withDayOfMonth(day).at(hour, 0)
-            return if (thisMonth.isAfter(now)) thisMonth else thisMonth.plusMonths(1)
         }
 
         private fun pick(min: Int, max: Int): Long = rupees(random.nextInt(min, max + 1))
@@ -482,7 +610,7 @@ class DummyData private constructor(
 
         companion object {
             private const val SEED = 20_26L
-            private const val MONTHS = 3
+            private const val MONTHS = 6
         }
     }
 }

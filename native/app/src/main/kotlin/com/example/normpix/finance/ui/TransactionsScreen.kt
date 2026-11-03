@@ -95,7 +95,6 @@ import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.SearchFilterBar
-import com.example.normpix.ui.components.SwipeRevealHost
 import com.example.normpix.ui.components.rememberBottomControls
 import com.example.normpix.ui.components.segmentShape
 import com.example.normpix.ui.theme.AppLayout
@@ -263,11 +262,12 @@ fun TransactionHistory(
     }
     // The same search and filters over what is dated after today. Days that are all over by then have none; this month has
     // whatever is still to come, in later months too, as no month after this one can be shown; dates picked keep their bounds.
-    val upcomingQuery = remember(query, cutoff, filters.range) {
+    // On a month's last day the month ends exactly at the cutoff: it is still this month, whose later months' entries wait here.
+    val upcomingQuery = remember(query, cutoff, filters.range, shownDay) {
         val range = query.range
         when {
             range == null || filters.range != null && range.end.isAfter(cutoff) -> query.copy(before = null, notBefore = cutoff)
-            !range.end.isAfter(cutoff) -> null
+            range.end.isBefore(cutoff) || range.end == cutoff && (shownDay != null || filters.range != null) -> null
             else -> query.copy(range = null, before = null, notBefore = cutoff)
         }
     }
@@ -443,6 +443,7 @@ fun TransactionHistory(
                     onOpen = financeActions::showDetails,
                     onEdit = financeActions::editTransaction,
                     onDelete = financeActions::deleteTransaction,
+                    onSwipeDelete = financeActions::deleteTransactionSwiped,
                     keyPrefix = "up-",
                     complete = true,
                     money = finance.money,
@@ -512,6 +513,7 @@ fun TransactionHistory(
                     onOpen = financeActions::showDetails,
                     onEdit = financeActions::editTransaction,
                     onDelete = financeActions::deleteTransaction,
+                    onSwipeDelete = financeActions::deleteTransactionSwiped,
                     // A day's total is only said once all of its entries are here: the last day of a page may go on in the next.
                     complete = next == null,
                     money = finance.money,
@@ -529,7 +531,7 @@ fun TransactionHistory(
         }
     }
 
-    SwipeRevealHost(modifier) {
+    Box(modifier) {
         if (bottomControls && onBack != null) {
             // Pushed over another page: the bottom dock's page, with the way back, the actions and the search at the bottom.
             AppSubPage(
@@ -571,6 +573,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.timeline(
     onOpen: (FinanceTransaction) -> Unit,
     onEdit: (FinanceTransaction) -> Unit,
     onDelete: (FinanceTransaction) -> Unit,
+    onSwipeDelete: (FinanceTransaction) -> Unit,
     money: MoneyFormatter,
     complete: Boolean,
     keyPrefix: String = "",
@@ -601,6 +604,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.timeline(
                         onOpen = { onOpen(t) },
                         onEdit = { onEdit(t) },
                         onDelete = { onDelete(t) },
+                        onSwipeDelete = { onSwipeDelete(t) },
                         perspectiveAccountId = perspectiveAccountId,
                         modifier = Modifier.fillMaxWidth(),
                     )

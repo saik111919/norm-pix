@@ -120,6 +120,7 @@ internal fun AppearanceSection.summary(prefs: AppPrefsState, appIcon: AppIcon): 
     AppearanceSection.AppIcon -> appIcon.label
     AppearanceSection.InterfaceFont -> when (prefs.interfaceFont) {
         InterfaceFont.GsFlex -> if (prefs.customFont) "GS Flex · Set by hand" else "GS Flex · ${prefs.fontPreset.label}"
+        InterfaceFont.Nunito -> "Nunito"
         InterfaceFont.System -> "System font"
         InterfaceFont.Custom -> prefs.customFontName.ifBlank { InterfaceFont.Custom.label }
     }
@@ -132,10 +133,11 @@ internal fun AppearanceSection.summary(prefs: AppPrefsState, appIcon: AppIcon): 
     }
     AppearanceSection.Controls ->
         if (prefs.bottomControls) "Bottom controls · ${prefs.monthControlStyle.label}" else "${prefs.backButtonStyle.label} · ${prefs.monthControlStyle.label}"
-    AppearanceSection.Layouts -> "Top spending: ${prefs.topSpendingLayout.label} · Accounts: ${prefs.accountsLayout.label}"
+    AppearanceSection.Layouts ->
+        "Top spending: ${prefs.topSpendingLayout.label} · Insights: ${prefs.insightsCategoriesLayout.label} · Accounts: ${prefs.accountsLayout.label}"
 }
 
-private val themeOptions = listOf(
+internal val themeOptions = listOf(
     ChoiceOption(ThemeMode.System, "System", Icons.Outlined.BrightnessAuto),
     ChoiceOption(ThemeMode.Light, "Light", Icons.Outlined.LightMode),
     ChoiceOption(ThemeMode.Dark, "Dark", Icons.Outlined.DarkMode),

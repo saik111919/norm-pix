@@ -1,5 +1,6 @@
 package com.example.normpix.navigation
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.ColorScheme
@@ -8,6 +9,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -71,6 +73,8 @@ class ActionMenuTest {
                         actions = actions(labels),
                         isMoreOpen = open,
                         onMoreToggle = { open = !open },
+                        // As in the app: the dock is pinned to the foot of the screen and the menu grows up from it.
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
             }
@@ -92,16 +96,20 @@ class ActionMenuTest {
         val reminder = compose.onNodeWithContentDescription("Reminder").getUnclippedBoundsInRoot()
         val settings = compose.onNodeWithContentDescription("Settings").getUnclippedBoundsInRoot()
         val cell = recurring.width.value
-        val gap = 6f
-        // The tall capsule is one cell wide and three tall; the wide one two cells wide and one tall; the circles round.
-        assertEquals(cell, expense.width.value, 1f)
-        assertEquals(3 * cell + 2 * gap, expense.height.value, 1.5f)
+        val gap = 8f
+        // The two main actions are capsules two cells wide and one tall, side by side; every other tile is one square cell.
+        assertEquals(2 * cell + gap, expense.width.value, 1.5f)
+        assertEquals(cell, expense.height.value, 1f)
         assertEquals(2 * cell + gap, income.width.value, 1.5f)
         assertEquals(cell, income.height.value, 1f)
         assertEquals(reminder.width.value, reminder.height.value, 1f)
-        // Read left to right: Expense, then Income, Recurring, Reminder along the top; Settings is below Recurring's column.
-        assertTrue(expense.left < income.left && income.left < recurring.left && recurring.left < reminder.left)
-        assertEquals(income.top.value, recurring.top.value, 1f)
+        // Read left to right and down: Expense, then Income along the top; Recurring, Reminder and the rest begin the row under
+        // them; Settings starts the row after the two that follow.
+        assertTrue(expense.left < income.left)
+        assertEquals(expense.top.value, income.top.value, 1f)
+        assertTrue(recurring.top > expense.top)
+        assertTrue(recurring.left < reminder.left)
+        assertEquals(recurring.top.value, reminder.top.value, 1f)
         assertTrue(settings.top > recurring.top)
         assertEquals(recurring.left.value, settings.left.value, 1f)
         // Every tile is a comfortable target.
@@ -188,7 +196,29 @@ class ActionMenuTest {
                 val tone = tileTone(index, scheme)
                 val ratio = contrastRatio(tone.container, tone.content)
                 assertTrue("$name tile $index reads at $ratio:1", ratio >= 4.5f)
+                val icon = contrastRatio(tone.container, tone.accent)
+                assertTrue("$name tile $index's icon reads at $icon:1", icon >= 4.5f)
             }
+        }
+    }
+
+    @Test
+    fun the_tiles_are_three_roles_not_a_patchwork_of_blues() {
+        val schemes = linkedMapOf<String, ColorScheme>()
+        compose.setContent {
+            for (mode in listOf(ThemeMode.Light, ThemeMode.Dark)) {
+                NormPixTheme(Appearance(mode, ColorSource.Custom, AccentColor.Blue)) { schemes["$mode"] = MaterialTheme.colorScheme }
+            }
+        }
+        compose.waitForIdle()
+        for ((name, scheme) in schemes) {
+            val main = tileTone(0, scheme)
+            val next = tileTone(1, scheme)
+            val rest = (2..12).map { tileTone(it, scheme) }
+            assertEquals("$name: the main action is the filled primary", scheme.primary, main.container)
+            assertEquals("$name: the next is the tonal primary container", scheme.primaryContainer, next.container)
+            assertTrue("$name: every other tile is the one neutral tonal surface", rest.all { it.container == scheme.surfaceContainerHighest })
+            assertTrue("$name: the three are three different fills", setOf(main.container, next.container, rest.first().container).size == 3)
         }
     }
 }

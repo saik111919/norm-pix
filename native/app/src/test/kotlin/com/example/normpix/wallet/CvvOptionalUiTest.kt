@@ -1,6 +1,7 @@
 package com.example.normpix.wallet
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performSemanticsAction
 import com.example.normpix.screens.CardsOnHome
 import com.example.normpix.settings.ClipboardTimeout
 import com.example.normpix.testing.InMemoryVault
@@ -126,7 +128,7 @@ class CvvOptionalUiTest {
         showForm(card("123")) { saved = it }
 
         compose.onNodeWithText("CVV").performTextClearance()
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
 
         val card = assertNotNull(saved)
@@ -140,7 +142,7 @@ class CvvOptionalUiTest {
         showForm(card("")) { saved = it }
 
         compose.onNodeWithText("Optional").assertIsDisplayed()
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
         assertEquals("", assertNotNull(saved).cvv)
     }
@@ -151,14 +153,17 @@ class CvvOptionalUiTest {
         showForm(card("")) { saved = it }
 
         compose.onNodeWithText("CVV").performTextInput("12")
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitForIdle()
 
         compose.onNodeWithText("3–4 digits").assertIsDisplayed()
         assertNull(saved)
 
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.waitForIdle()
+
         compose.onNodeWithText("CVV").performTextInput("3")
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
         assertEquals("123", assertNotNull(saved).cvv)
     }
@@ -172,7 +177,7 @@ class CvvOptionalUiTest {
 
         compose.onAllNodesWithText("CVV").assertCountEquals(0)
         compose.onAllNodesWithText("Optional").assertCountEquals(0)
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
 
         assertEquals("", assertNotNull(saved).cvv)

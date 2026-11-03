@@ -7,7 +7,7 @@
     android:description="@string/widget_cookie_digital_description"
     android:initialLayout="@layout/widget_cookie_digital"
     android:maxResizeHeight="320dp"
-    android:maxResizeWidth="320dp"
+    android:maxResizeWidth="1200dp"
     android:minHeight="110dp"
     android:minResizeHeight="40dp"
     android:minResizeWidth="40dp"

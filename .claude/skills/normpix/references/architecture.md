@@ -81,7 +81,8 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
   image/*); three widget receivers; `NfcCardOutletService` (host card emulation); reminder, card-expiry, clipboard-clear
   and update receivers/services (`UpdateDownloadService` is a foreground `dataSync` service, `UpdateJobService` the daily
   JobScheduler check).
-- Permissions: NFC, POST_NOTIFICATIONS, SCHEDULE_EXACT_ALARM, RECEIVE_BOOT_COMPLETED, VIBRATE, INTERNET +
+- Permissions: NFC, POST_NOTIFICATIONS, USE_EXACT_ALARM (auto-granted on 13+, the user cannot revoke it) + SCHEDULE_EXACT_ALARM
+  (`maxSdkVersion` 32), RECEIVE_BOOT_COMPLETED, VIBRATE, INTERNET +
   ACCESS_NETWORK_STATE (updates only), REQUEST_INSTALL_PACKAGES, UPDATE_PACKAGES_WITHOUT_USER_ACTION,
   FOREGROUND_SERVICE(+_DATA_SYNC). No SMS, no notification-listener, no contacts. `allowBackup=false` and
   `data_extraction_rules.xml` excludes everything from cloud backup and device transfer.
@@ -98,13 +99,15 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
 | Preferences | SharedPreferences `normpix_preferences` | One `AppPrefsState` flow; see section 6. Other files: `normpix_nfc_tags` (registered NFC tags, AES-GCM entries), `normpix_card_expiry`. |
 | Card vault | `filesDir/card_vault.bin` | AES-256-GCM, key in Android Keystore, written atomically (`FileCardVault`). Cards are never in the finance DB and never in a normal backup. |
 | Pictures | `TransactionPictures` (kept + drafts folders) | A transaction's attached picture; backed up in the full (.zip) backup. |
-| Profile photo / custom font | `settings/ProfilePhotos.kt`, `settings/CustomFont.kt` | Files in app storage. |
+| Profile photo / custom font | `settings/ProfilePhotos.kt`, `settings/CustomFont.kt` | Files in app storage: `profile/photo-<stamp>.jpg` (framed) or `.gif` (kept as it came); the font file (`CustomFont.FILE_NAME`) in the `fonts` folder plus one more file per extra weight (`CustomFont.extraName`) for a family. Both in the app backup. |
 
 - **Migrations are additive.** `FinanceDatabase.onUpgrade` is a chain of `if (oldVersion < N) { ... }` steps (v2 banks,
   v3 sub-categories, v4 credit limits, v5 people, v6 rule people, v7 brand icons, v8 transaction pictures, v9 billing days,
   v10 account numbers/card link, v11 later default categories, v12 account number start). `ALTER TABLE` / new tables only;
   never drop or recreate; existing rows stay exactly as they were. A new migration needs a test that opens a database
-  hand-built at the previous version (see `BankMigrationTest`, `PeopleMigrationTest`, `PictureMigrationTest`).
+  hand-built at the previous version (see `BankMigrationTest`, `PeopleMigrationTest`, `PictureMigrationTest`). `onOpen` also runs
+  `ensureAccountColumns` (adds any account column a database of the current version lacks, empty; `AccountColumnsGuardTest`): a
+  safety net so a mis-numbered database never refuses every account write.
 - Backup formats are versioned and **additive**; old files must still restore:
   full finance backup `FinanceBackupCodec.FORMAT_VERSION = 2` (`.json`, or `.zip` with pictures); app backup
   `AppBackupManifest.VERSION = 1` (zip: finance json, pictures, `app/manifest.json`, `app/settings.json`,
@@ -133,7 +136,8 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
   day and advance `next_date`.
 - **"As of today"** (`settledCutoff`, `settledBy` in `Period.kt`, `FinanceState.asOf`): an entry dated after today is
   *upcoming*; it is not in balances, "spent this month", budgets, Top spending, Insights or People until its own day, and
-  Activity folds such entries into an "Upcoming" row. Past months are untouched. Repository calls take `asOf`.
+  Activity folds such entries into an "Upcoming" row. Past months are untouched. Repository calls take `asOf`. A month's range ends
+  at the next month's first moment, which on the month's last day **equals** the cutoff: compare with `==`/`isBefore`, not `!isAfter`.
 - Banks: accounts and cards share one `BankCatalog` (built-in `BankDirectory` entries + the user's own, `banks` table;
   stable keys: directory id or `custom-<uuid>`). The bank is the relationship; an account may optionally name its Wallet
   card (`card_id`, one card per account), and may carry `number_ending` (last 4) and `number_start` (first 6) so a receipt's
@@ -175,7 +179,7 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
 `AccountsLayout`, `CardsLayout`, `AppLockScope`, `AppLockTimeout`, `ClipboardTimeout`, `AccentColor`, `InterfaceFont`,
 `FontPreset`, `ThemeMode`, ...). Defaults (as of 2026-10-26): theme follows the system; accent **Volt** (when wallpaper
 colours are off/unavailable); page animation **Linux window**; back button **Top floating circle**; bottom controls off;
-month control **Track**; progress **Wavy**; accounts layout **Stack**, cards layout **Cards**, Top spending **Stack**;
+month control **Track**; progress **Wavy**; accounts layout **Stack**, cards layout **Stack** (was Cards until 2026-11-02), Top spending **Stack**;
 category icons **3D** with shape **None**; font **GS Flex, Zenith preset**; sheet blur on; swipe actions on (edit + delete);
 NFC card exchange **Off** (`ScheduledFeature.defaultMode`); wallet lock off (scope Wallet only, timeout immediate);
 Save CVV and Store cards on; clipboard clears after **10 s**; amounts shown; notifications on; update checks on (daily,

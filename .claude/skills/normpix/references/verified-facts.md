@@ -71,11 +71,23 @@ Format: `claim - applies to - source - status/date`.
   `OpenableColumns.DISPLAY_NAME` returns it - Google Pay Android share - NOTES (2026-10-13).
 - UPI receipts show the receiving bank's KYC name, which for a self transfer is the user's own; no app prints a self-transfer-specific
   receipt, so the self-transfer fixtures are synthetic - NOTES (2026-10-25).
+- On the owner's phone (motorola edge 50 neo, Android 16, Lawnchair) the launcher re-sends a widget's last RemoteViews when it comes back to the front, which restarts the dial's seconds-ring animation at the second that picture was drawn for: ring :31 at true :55 with a 15 s inexact tick; `SCHEDULE_EXACT_ALARM` is denied by default there, `USE_EXACT_ALARM` gives `exactAllowReason=policy_permission` in `dumpsys alarm`; within ~1 s of the clock after the change - measured by screenshot against `date` (2026-10-31).
 - A `<vector>` drawable with no `<path>` does not inflate ("no path defined", `VectorDrawable.inflateChildElements`): an empty dial still needs one path drawn in no colour - Robolectric test failure on `widget_cookie_dial_plain` (2026-10-27).
+- An `AnalogClock` second hand (Android 12+) in a widget turns by the real time: on the owner's phone (Android 16, Lawnchair) the watch
+  dial's bezel stepped exactly 6.00 degrees once a second over 12 s with no drift between steps, and was at the right second 0.6 s after
+  returning to the home screen from an app (2026-11-02, screenrecord measured frame by frame). The restarted animated ring it replaces
+  could not do either: in the owner's own video it jumped 1.5 degrees while resized and 0.8 at rest.
 - `RemoteViews.addView` + `removeAllViews` replace a nested view on every `reapply`, so a widget's animated child restarts from its first frame each time the widget is drawn - Android source behaviour, used by the watch dial's seconds ring; **not yet seen on a launcher** (2026-10-27).
 
 - Pixel / stock Quick Settings edit mode (the design the "+" menu's Edit mode follows): since Android 16 QPR1 (the September 2025 Pixel Drop; first seen in QPR1 Beta 1, May 2025) tiles can be **resized between two sizes**, icon-only (1x1) and wide with the name (2x1); in edit mode a selected tile shows a handle on its right edge, dragged left for icon-only and right for the name; tiles are reordered by dragging; the editor lists available tiles in categories and has a Reset at the bottom - Google Pixel Help https://support.google.com/pixelphone/answer/6111329 ("tap and drag the right side of the icon to the left ... to the right", "tap and drag the settings to where you want them placed"; fetched 2026-10-28), 9to5Google and a web search for the QPR1 details; NOT verified: the exact long-press versus tap to start a drag, and any lift/scale numbers (Gemini's 1.2x came from old AOSP `TileAdapter`, not checked for QPR1) - researched by Haiku 5.5 xhigh + Gemini 3.8 Flash High, checked against the support page 2026-10-28.
 - Compose test of motion on a manual clock (`mainClock.autoAdvance = false`) needs `Snapshot.sendApplyNotifications()` after a state write, or the composition never sees it - found with `ActionMenuMotionTest` (2026-10-28).
+- sameerasw/essentials v20.3-beta.1 (the footer the owner points to; read through the GitHub API, 2026-10-31): its footer, the file named EssentialsFloatingToolbar under `ui/components` there, is
+  Material 3 Expressive's `HorizontalFloatingToolbar` (primary container, a FAB beside it, no scroll behaviour passed from `MainActivity`). Its motion: each tab's width
+  and the gap after it are `animateDpAsState(spring(DampingRatioMediumBouncy, StiffnessLow))`; the bar's modes (tabs, back + title, search) swap in an
+  `AnimatedContent` with `fadeIn + scaleIn(0.85)` against `fadeOut + scaleOut(0.85)` and `SizeTransform(clip = false)`, the selected pill kept by `sharedBounds`; the back
+  title's width collapses on `tween(380, CubicBezierEasing(0.2, 0, 0, 1))`; the FAB's icon swaps with fade + scale 0.6; a jump over more than one tab snaps the pager,
+  then a spring (LowBouncy, MediumLow) brings the content in from 48 dp, alpha 0 to 1 and scale 0.96 to 1; pushed pages slide on `spring(0.9, 500)` (`AppNavTransitions`).
+  Every press has a haptic (`HapticUtil`). Source: the repository at tag v20.3-beta.1 - verified by reading.
 
 ## How to add an entry
 

@@ -78,10 +78,42 @@ data class PhotoCrop(
 /** A square of a picture, in the picture's pixels. */
 data class CropWindow(val left: Float, val top: Float, val side: Float)
 
-/** Whether [name] is the name of a profile photo file ([ProfilePhotos.save] makes these) - and so safe to build a path from. */
+/**
+ * Whether [name] is the name of a profile photo file ([ProfilePhotos.save] and [ProfilePhotos.saveGif] make these) - and so safe
+ * to build a path from.
+ */
 fun isProfilePhotoName(name: String?): Boolean = name != null && PHOTO_NAME.matches(name)
 
-private val PHOTO_NAME = Regex("photo-\\d{1,19}\\.jpg")
+/** Whether the profile photo called [name] is an animated picture kept as it came (a GIF), not a framed square JPEG. */
+fun isAnimatedPhotoName(name: String?): Boolean = name != null && name.endsWith(".gif") && isProfilePhotoName(name)
+
+private val PHOTO_NAME = Regex("photo-\\d{1,19}\\.(jpg|gif)")
+
+/** Whether [head] - the first [count] bytes of a file - begin a GIF ("GIF87a" or "GIF89a"). */
+fun looksLikeGif(head: ByteArray, count: Int): Boolean =
+    count >= 6 && String(head, 0, 6, Charsets.US_ASCII).let { it == "GIF87a" || it == "GIF89a" }
+
+/**
+ * A picture that comes with NormPix to wear as the profile picture without picking one (the files are in `assets/avatars`).
+ * [crop] frames the square that shows - the robot's is high up, where its face is. Wearing one keeps a copy as any photo is kept
+ * ([ProfilePhotos.savePreset]), so it is backed up, replaced and removed like a photo and needs no setting of its own.
+ */
+enum class AvatarPreset(val label: String, val asset: String, val crop: PhotoCrop) {
+    Fox("Fox with goggles", "avatars/fox.jpg", PhotoCrop()),
+    Robot("Little robot", "avatars/robot.jpg", PhotoCrop(centerY = 0.40f)),
+    Mouse("Yellow mouse", "avatars/mouse.jpg", PhotoCrop()),
+}
+
+/** What came of keeping a picked GIF ([ProfilePhotos.saveGif]): its file [name], or why not ([problem]). */
+class GifSave(val name: String?, val problem: GifProblem?)
+
+enum class GifProblem {
+    /** Over [ProfilePhotos.MAX_GIF_BYTES]: an animation this big would sit in memory frame by frame. */
+    TooLarge,
+
+    /** Not a GIF after all, or one that could not be read. */
+    Unreadable,
+}
 
 /** The profile photo files, kept in a folder of their own in the app's files. */
 class ProfilePhotos(private val context: Context, private val clock: () -> Long = System::currentTimeMillis) {
@@ -142,6 +174,79 @@ class ProfilePhotos(private val context: Context, private val clock: () -> Long 
         name
     }
 
+    /** Keeps [preset]'s picture as the profile photo, framed as it says, and returns its file name. Throws [IOException] when it can't be read or written. */
+    suspend fun savePreset(preset: AvatarPreset): String {
+        val bitmap = withContext(Dispatchers.IO) {
+            try {
+                context.assets.open(preset.asset).use(BitmapFactory::decodeStream)
+            } catch (e: IOException) {
+                null
+            }
+        } ?: throw IOException("avatar not readable")
+        return save(bitmap, preset.crop)
+    }
+
+    /**
+     * Whether the picture at [source] is a GIF, by its first bytes (a picker's idea of its type is not always right): an animation
+     * cannot be framed like a photo (it would stop moving), so it is kept as it came and the circle crops it to fit ([saveGif]).
+     */
+    suspend fun isGif(source: Uri): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            context.contentResolver.openInputStream(source)?.use { input ->
+                val head = ByteArray(6)
+                looksLikeGif(head, input.read(head))
+            } ?: false
+        }.getOrDefault(false)
+    }
+
+    /**
+     * Keeps the GIF at [source] as it is, in a new file, up to [MAX_GIF_BYTES]. Checked by its first bytes, not by what it was
+     * called, and nothing is kept when it is refused. Unlike a photo it is not re-encoded, so whatever its metadata says travels
+     * with it - a GIF has no location or camera to give away.
+     */
+    suspend fun saveGif(source: Uri): GifSave = withContext(Dispatchers.IO) {
+        dir.mkdirs()
+        var stamp = clock()
+        while (File(dir, "photo-$stamp.gif").exists()) stamp++
+        val target = File(dir, "photo-$stamp.gif")
+        try {
+            val stream = context.contentResolver.openInputStream(source) ?: return@withContext GifSave(null, GifProblem.Unreadable)
+            val buffer = ByteArray(64 * 1024)
+            var total = 0L
+            var head = ByteArray(0)
+            val tooLarge = stream.use { input ->
+                target.outputStream().use { out ->
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        if (total == 0L) head = buffer.copyOf(minOf(read, 6))
+                        total += read
+                        if (total > MAX_GIF_BYTES) return@use true
+                        out.write(buffer, 0, read)
+                    }
+                    false
+                }
+            }
+            when {
+                tooLarge -> {
+                    target.delete()
+                    GifSave(null, GifProblem.TooLarge)
+                }
+                !looksLikeGif(head, head.size) -> {
+                    target.delete()
+                    GifSave(null, GifProblem.Unreadable)
+                }
+                else -> GifSave(target.name, null)
+            }
+        } catch (e: CancellationException) {
+            target.delete()
+            throw e
+        } catch (_: Exception) {
+            target.delete()
+            GifSave(null, GifProblem.Unreadable)
+        }
+    }
+
     /** Deletes every photo but [keep] (a new one has just replaced the others). */
     suspend fun keepOnly(keep: String?) = withContext(Dispatchers.IO) {
         dir.listFiles()?.forEach { if (it.name != keep) it.delete() }
@@ -179,6 +284,9 @@ class ProfilePhotos(private val context: Context, private val clock: () -> Long 
 
         /** The side of the kept square, in pixels: sharp at the largest the picture is shown (the Profile page's), a few tens of KB. */
         const val SIDE = 512
+
+        /** The most a kept GIF may be: its frames are drawn from it as they play, so a big one is a lot of memory. */
+        const val MAX_GIF_BYTES = 5L * 1024 * 1024
         private const val QUALITY = 90
     }
 }

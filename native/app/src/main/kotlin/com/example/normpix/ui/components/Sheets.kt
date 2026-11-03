@@ -185,6 +185,9 @@ fun EditorSheet(
     saving: Boolean = false,
     saveColors: ButtonColors? = null,
     titleTrailing: (@Composable () -> Unit)? = null,
+    /** Why the form could not be saved, said above Save where it cannot scroll out of sight; null says nothing. */
+    errorText: String? = null,
+    slideToSave: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(modifier.fillMaxWidth()) {
@@ -213,17 +216,37 @@ fun EditorSheet(
             Spacer(Modifier.height(AppSpacing.lg))
             content()
         }
+        if (errorText != null) {
+            Text(
+                errorText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = AppSpacing.xxl, top = AppSpacing.xs, end = AppSpacing.xxl)
+                    .politeLiveRegion(),
+            )
+        }
         Box(
             Modifier
                 .fillMaxWidth()
                 .padding(start = AppSpacing.xxl, top = AppSpacing.xs, end = AppSpacing.xxl, bottom = AppSpacing.md),
         ) {
-            Button(
-                onClick = onSave,
-                enabled = !saving,
-                colors = saveColors ?: ButtonDefaults.buttonColors(),
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-            ) { Text(saveLabel, style = SheetButtonText) }
+            if (slideToSave) {
+                SlideToConfirm(
+                    label = "Slide to " + saveLabel.replaceFirstChar { it.lowercase() },
+                    onConfirm = onSave,
+                    enabled = !saving,
+                    busy = saving,
+                )
+            } else {
+                Button(
+                    onClick = onSave,
+                    enabled = !saving,
+                    colors = saveColors ?: ButtonDefaults.buttonColors(),
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                ) { Text(saveLabel, style = SheetButtonText) }
+            }
         }
     }
 }

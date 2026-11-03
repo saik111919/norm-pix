@@ -1,8 +1,6 @@
 package com.example.normpix.widgets
 
 import android.content.Context
-import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.RemoteViews
@@ -11,7 +9,6 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.normpix.R
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -98,8 +95,25 @@ class SimpleClockTest {
     @Test
     fun `transparent drops the background, opaque keeps it`() {
         val opaque = shown(SimpleClock.views(context, 110f, 110f, ClockOptions()))
-        assertNotNull(opaque.findViewById<View>(R.id.widget_simple_root).background, "the face colour behind it")
-        val clear = shown(SimpleClock.views(context, 110f, 110f, ClockOptions(transparent = true))).findViewById<View>(R.id.widget_simple_root)
-        assertEquals(Color.TRANSPARENT, (clear.background as ColorDrawable).color)
+        assertEquals(View.VISIBLE, opaque.findViewById<View>(R.id.widget_simple_fill).visibility, "the face colour behind it")
+        assertEquals(255, opaque.findViewById<android.widget.ImageView>(R.id.widget_simple_fill).imageAlpha)
+        val clear = shown(SimpleClock.views(context, 110f, 110f, ClockOptions(transparent = true)))
+        assertEquals(View.GONE, clear.findViewById<View>(R.id.widget_simple_fill).visibility)
+    }
+
+    @Test
+    fun `a transparent clock can keep a tint of its background at the strength chosen`() {
+        var last = 0
+        for (backdrop in ClockBackdrop.entries.drop(1)) {
+            val root = shown(SimpleClock.views(context, 110f, 110f, ClockOptions(transparent = true, backdropPercent = backdrop.percent)))
+            val fill = root.findViewById<android.widget.ImageView>(R.id.widget_simple_fill)
+            assertEquals(View.VISIBLE, fill.visibility, backdrop.name)
+            assertEquals(backdrop.alpha, fill.imageAlpha, backdrop.name)
+            assertTrue(fill.imageAlpha > last, "each is stronger")
+            last = fill.imageAlpha
+        }
+        // The strength means nothing to a clock whose face is whole.
+        val whole = shown(SimpleClock.views(context, 110f, 110f, ClockOptions(transparent = false, backdropPercent = ClockBackdrop.Strong.percent)))
+        assertEquals(255, whole.findViewById<android.widget.ImageView>(R.id.widget_simple_fill).imageAlpha)
     }
 }

@@ -62,6 +62,11 @@ class AboutPageTest {
         compose.waitForIdle()
     }
 
+    private fun showGuideIndex() {
+        compose.setContent { env.Content { GuideIndexPage() } }
+        compose.waitForIdle()
+    }
+
     private fun showGuide(topic: GuideTopic) {
         shown = topic
         compose.setContent { env.Content { GuidePage(shown) } }
@@ -80,18 +85,28 @@ class AboutPageTest {
         showAbout()
         compose.onNodeWithText("NormPix").assertExists()
         compose.onNodeWithText("Version ${BuildConfig.VERSION_NAME}").assertExists()
-        compose.onNodeWithText(GUIDE_HEADING).assertExists()
+        compose.onNodeWithText(GUIDE_TITLE).assertExists()
+    }
+
+    @Test
+    fun theGuideIsBehindAPill_notOnTheAboutPage() {
+        showAbout()
+        // The topics are not on About any more (owner, 2026-11-01): one pill leads to them.
+        for (topic in GuideTopic.entries) compose.onAllNodesWithText(topic.title).assertCountEquals(0)
+        compose.onNodeWithText(GUIDE_TITLE).performClick()
+        assertEquals(1, env.navigator.guideIndexOpened)
     }
 
     @Test
     fun everyTopicHasACard() {
-        showAbout()
+        showGuideIndex()
+        compose.onNodeWithText(GUIDE_INTRO).assertExists()
         for (topic in GuideTopic.entries) compose.onAllNodesWithText(topic.title).assertCountEquals(1)
     }
 
     @Test
     fun aCardOpensItsTopic() {
-        showAbout()
+        showGuideIndex()
         val topic = GuideTopic.Insights
         compose.onNodeWithText(topic.title).performScrollTo().performClick()
         assertEquals(listOf(topic), env.navigator.guides)
@@ -99,14 +114,14 @@ class AboutPageTest {
 
     @Test
     fun everyCardOpensItsOwnTopic() {
-        showAbout()
+        showGuideIndex()
         for (topic in GuideTopic.entries) compose.onNodeWithText(topic.title).performScrollTo().performClick()
         assertEquals(GuideTopic.entries.toList(), env.navigator.guides)
     }
 
     @Test
     fun thePicturesArePicturesOnly_notReadOutAsText() {
-        showAbout()
+        showGuideIndex()
         // The drawings have words in them (a card's last digits, the names of a form's fields); a screen reader meets none of them.
         compose.onAllNodesWithText("•••• 4242").assertCountEquals(0)
         compose.onAllNodesWithText("Transfer").assertCountEquals(0)

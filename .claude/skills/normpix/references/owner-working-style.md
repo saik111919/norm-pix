@@ -91,6 +91,13 @@ Observed patterns, each with the working rule it implies:
   fact-check, then continue with the change. A complex or version-sensitive technical decision -> use **xhigh** effort when its
   extra reasoning is justified. Full procedure and ready-to-paste briefs: `research-protocol.md`.
 - A subagent starts cold: give it exact paths, the change, the constraints, ask for `file:line` citations, and verify its key claims.
+- **DeepSeek for implementation to save tokens (2026-11-01):** the owner asks for well-bounded tasks to go to DeepSeek
+  (`opencode/deepseek-v4.1-flash-free`, variant max) "instructed better" and "keeping the design as it is", and for every result to be
+  checked against the design and redone or re-briefed if it strays. What worked: name the exact files it may touch (others edit the same
+  checkout), the existing component to reuse, the values to copy, no Gradle (one builder at a time - the parent compiles and tests), no
+  git, CRLF rules, never rename persisted names; then compile, run its tests and the neighbours', and render it. Its free tier ran out
+  mid-task on 2026-11-01 and T3 retried on Gemini 3.8 Flash; say which model did the work. Review found real design slips (a
+  see-through button that vanished over a dark page), so the render is not optional.
 
 ## 5. The work log: `native/TASKS.md`
 

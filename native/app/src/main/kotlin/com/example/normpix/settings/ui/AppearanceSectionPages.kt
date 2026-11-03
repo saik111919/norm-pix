@@ -55,6 +55,7 @@ import com.example.normpix.settings.BankIconStyle
 import com.example.normpix.settings.CardsLayout
 import com.example.normpix.settings.CategoryIconShape
 import com.example.normpix.settings.CategoryIconStyle
+import com.example.normpix.settings.InsightsCategoriesLayout
 import com.example.normpix.settings.InterfaceFont
 import com.example.normpix.settings.MonthControlStyle
 import com.example.normpix.settings.TopSpendingLayout
@@ -110,6 +111,7 @@ fun AppearanceSectionPage(section: AppearanceSection) {
                     }
                     AppearanceSection.Layouts -> {
                         TopSpendingSection(prefs, preferences, haptics)
+                        InsightsCategoriesSection(prefs, preferences, haptics)
                         WalletLayoutSections(prefs, preferences, haptics)
                     }
                 }
@@ -157,11 +159,13 @@ private fun InterfaceFontSection(prefs: AppPrefsState, preferences: AppPreferenc
     ListSection(
         footer = when (prefs.interfaceFont) {
             InterfaceFont.GsFlex -> "Applies to all text in NormPix. GS Flex is Google Sans Flex, under the SIL Open Font License."
+            InterfaceFont.Nunito ->
+                "Applies to all text in NormPix. Nunito is by Vernon Adams, Cyreal and Jacques Le Bailly, under the SIL Open Font License."
             InterfaceFont.Custom ->
                 "Applies to all text in NormPix. Where your font has no letter for something, it is drawn in your phone's font."
             InterfaceFont.System ->
                 "NormPix uses your phone's font. Pick GS Flex to choose a style, or to set its weight, width and roundness " +
-                    "yourself - or Your font, for a font file of your own."
+                    "yourself - Nunito - or Your font, for a font file or a Google Fonts zip of your own."
         },
     ) {
         item { InterfaceFontCard(prefs, preferences, haptics, custom) }
@@ -189,6 +193,25 @@ private fun CategoryIconsSection(prefs: AppPrefsState, preferences: AppPreferenc
                     trailing = { CategoryIconStylePreview(style) },
                 )
             }
+        }
+    }
+    ListSection(
+        title = "Settings icons",
+        footer = "With the 3D style, the groups on the main Settings list wear 3D pictures too. Turn this off to keep them flat " +
+            "there and 3D everywhere else.",
+    ) {
+        item {
+            val threeD = prefs.categoryIconStyle == CategoryIconStyle.ThreeD
+            SwitchRow(
+                headline = "3D icons in Settings",
+                supporting = if (threeD) "Settings follows the 3D style" else "Only with the 3D style",
+                checked = threeD && prefs.settingsIcons3d,
+                enabled = threeD,
+                onCheckedChange = {
+                    haptics.selection()
+                    preferences.setSettingsIcons3d(it)
+                },
+            )
         }
     }
     ListSection(
@@ -300,6 +323,24 @@ private fun EffectsSection(prefs: AppPrefsState, preferences: AppPreferences, ha
                 onCheckedChange = { on ->
                     haptics.selection()
                     preferences.setCardTiltEnabled(on)
+                },
+            )
+        }
+    }
+    ListSection(
+        title = "Home",
+        footer = "Moves only while Home is on screen, and stays still when animations are turned off in system settings or " +
+            "Battery Saver is on.",
+    ) {
+        item {
+            SwitchRow(
+                headline = "Hero weather",
+                supporting = "The month card shows how the month is going: snow before anything is spent, sun while on track, " +
+                    "heat as the budget runs low, rain once it is over",
+                checked = prefs.heroWeather,
+                onCheckedChange = { on ->
+                    haptics.selection()
+                    preferences.setHeroWeather(on)
                 },
             )
         }
@@ -514,6 +555,31 @@ private fun TopSpendingSection(prefs: AppPrefsState, preferences: AppPreferences
                     onClick = {
                         haptics.selection()
                         preferences.setTopSpendingLayout(layout)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** Insights' categories: the ranked list, or a carousel as Home's top spending and the accounts can be. */
+@Composable
+private fun InsightsCategoriesSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
+    ListSection(
+        title = "Categories in Insights",
+        footer = "How Insights shows where the money went. The carousel is for a month; when days are picked instead, Insights " +
+            "shows the list.",
+        modifier = Modifier.selectableGroup(),
+    ) {
+        for (layout in InsightsCategoriesLayout.entries) {
+            item {
+                RadioRow(
+                    headline = layout.label,
+                    supporting = layout.description,
+                    selected = prefs.insightsCategoriesLayout == layout,
+                    onClick = {
+                        haptics.selection()
+                        preferences.setInsightsCategoriesLayout(layout)
                     },
                 )
             }

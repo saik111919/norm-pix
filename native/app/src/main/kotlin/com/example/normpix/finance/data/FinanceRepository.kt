@@ -328,6 +328,35 @@ class FinanceRepository(
     }
 
     /**
+     * Renames a bank the user added. Its key is what accounts and cards point at and it does not change, so every one of them
+     * follows the new name. Built-in banks are not stored and cannot be renamed; a name that is another bank's (built-in or the
+     * user's own) is refused, so a bank is only ever known by one name.
+     */
+    suspend fun renameBank(key: String, name: String) = io {
+        val wanted = name.trim().replace(Regex("\\s+"), " ")
+        if (wanted.isEmpty() || BankLogoResolver.normalize(wanted).isEmpty()) throw FinanceValidationException("Enter the bank's name.")
+        if (wanted.length > MAX_BANK_NAME) throw FinanceValidationException("Keep the bank's name under $MAX_BANK_NAME characters.")
+        val catalog = bankCatalog()
+        val bank = catalog.all.firstOrNull { it.key == key && !it.builtIn } ?: throw FinanceValidationException("That bank isn't one you added.")
+        catalog.exact(wanted)?.takeIf { it.key != bank.key }?.let {
+            throw FinanceValidationException("${it.name} is already in your list.")
+        }
+        update(FinanceDatabase.BANKS, ContentValues().apply { put("name", wanted) }, "key = ?", arrayOf(key))
+    }
+
+    /**
+     * Removes a bank the user added, only while none of their accounts name it: an account that pointed at a bank the app no
+     * longer knows would lose it, and nothing here removes what the user entered. (The caller checks the saved cards too, which
+     * live in the card vault and are not read here.)
+     */
+    suspend fun deleteBank(key: String) = io {
+        if (bankCatalog().all.none { it.key == key && !it.builtIn }) throw FinanceValidationException("That bank isn't one you added.")
+        val users = rawQuery("SELECT COUNT(*) FROM ${FinanceDatabase.ACCOUNTS} WHERE bank_key = ?", arrayOf(key)).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
+        if (users > 0) throw FinanceValidationException("${if (users == 1) "An account uses" else "$users accounts use"} this bank. Change theirs first.")
+        delete(FinanceDatabase.BANKS, "key = ?", arrayOf(key))
+    }
+
+    /**
      * The first moment after today by this repository's clock: what is dated before it has happened, what is dated from it on is
      * upcoming (see `settledCutoff`).
      */

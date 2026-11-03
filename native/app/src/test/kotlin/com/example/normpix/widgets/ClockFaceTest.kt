@@ -27,7 +27,8 @@ class ClockFaceTest {
     @Test
     fun `the minute sits in the pill, right of the middle, whatever the widget's shape`() {
         val face = ClockFace(200f, 200f)
-        assertEquals(51f, face.minuteOffsetDp, 0.01f)
+        // 144.3 units from the face's left edge, 44.3 right of its middle, at a face of 200 units.
+        assertEquals(44.3f, face.minuteOffsetDp, 0.01f)
         // Padding a centred box on its left by twice the offset moves its middle by the offset.
         assertEquals(2 * face.minuteOffsetDp, face.minuteBoxPaddingDp)
         assertEquals(ClockFace(200f, 200f).minuteOffsetDp, ClockFace(300f, 200f).minuteOffsetDp)

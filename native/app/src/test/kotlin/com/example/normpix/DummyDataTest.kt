@@ -9,6 +9,7 @@ import com.example.normpix.finance.data.FinanceDatabase
 import com.example.normpix.finance.data.FinanceRepository
 import com.example.normpix.finance.data.TransactionPictures
 import com.example.normpix.finance.data.TransactionQuery
+import com.example.normpix.finance.domain.BudgetHealth
 import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.MonthKey
@@ -29,6 +30,9 @@ import com.example.normpix.wallet.CardKind
 import com.example.normpix.wallet.CardVault
 import com.example.normpix.wallet.CardsState
 import com.example.normpix.wallet.StoredCard
+import com.example.normpix.wallet.expiry.alertStart
+import com.example.normpix.wallet.expiry.lastValidDay
+import com.example.normpix.wallet.expiry.parseExpiry
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -108,22 +112,25 @@ class DummyDataTest {
             val state = dummy.container.finance.state.value
             val repo = dummy.container.finance.repository
             assertEquals(FinanceStatus.Ready, state.status)
-            assertEquals(listOf("Cash", "HDFC Savings", "ICICI Credit Card", "Paytm Wallet"), state.accounts.map { it.name })
+            assertEquals(
+                listOf("Cash", "HDFC Savings", "ICICI Credit Card", "Paytm Wallet", "SBI Savings", "Axis Credit Card"),
+                state.accounts.map { it.name },
+            )
             assertEquals("HDFC Savings", state.defaultAccount?.name)
 
             val all = repo.transactions(TransactionQuery(), limit = 1_000).items
-            assertTrue(all.size > 100, "about three months of day-to-day spending, got ${all.size}")
+            assertTrue(all.size > 200, "about six months of day-to-day spending, got ${all.size}")
             assertTrue(all.none { it.occurredAt.isAfter(now) }, "nothing is dated in the future")
 
-            // Fixed payments come from the recurring engine: salary on the 1st of Aug, Sep and Oct,
-            // rent on the 5th of Aug and Sep (October's is still to come).
-            assertEquals(5, repo.recurringRules().size)
+            // Fixed payments come from the recurring engine: salary on the 1st of May, Jun, Jul, Aug, Sep and Oct,
+            // rent on the 5th of May, Jun, Jul, Aug and Sep (October's is still to come).
+            assertEquals(8, repo.recurringRules().size)
             val salary = all.filter { it.payee == "Acme Technologies Pvt Ltd" }
-            assertEquals(listOf(8, 9, 10), salary.map { it.occurredAt.monthValue }.sorted())
+            assertEquals(listOf(5, 6, 7, 8, 9, 10), salary.map { it.occurredAt.monthValue }.sorted())
             assertTrue(salary.all { it.recurringId != null && it.type == TransactionType.Income })
-            assertEquals(2, all.count { it.payee == "Ramesh Iyer" })
+            assertEquals(5, all.count { it.payee == "Ramesh Iyer" })
 
-            // The card is settled in September for exactly what was charged to it in August.
+            // The ICICI card is settled in September for exactly what was charged to it in August.
             val card = state.accounts.single { it.name == "ICICI Credit Card" }.id!!
             val augustCharges = all
                 .filter { it.accountId == card && it.type == TransactionType.Expense && MonthKey.of(it.occurredAt) == MonthKey(2026, 8) }
@@ -133,18 +140,47 @@ class DummyDataTest {
             }
             assertEquals(augustCharges, septemberBill.amount)
 
-            // Budgets apply to the current month, and the household stays within its overall limit.
+            // The Axis card is also settled in September for exactly what was charged to it in August.
+            val axisCard = state.accounts.single { it.name == "Axis Credit Card" }.id!!
+            val axisAugustCharges = all
+                .filter { it.accountId == axisCard && it.type == TransactionType.Expense && MonthKey.of(it.occurredAt) == MonthKey(2026, 8) }
+                .sumOf { it.amount }
+            val axisSeptemberBill = all.single {
+                it.type == TransactionType.Transfer && it.toAccountId == axisCard && MonthKey.of(it.occurredAt) == MonthKey(2026, 9)
+            }
+            assertEquals(axisAugustCharges, axisSeptemberBill.amount)
+
+            // Budgets apply to the current month, and demonstrate each health state:
+            //  - overall stays on track (Healthy);
+            //  - at least one category well under (Groceries, Food & dining, Transport);
+            //  - at least one nearly used (Fitness, at or above 80%);
+            //  - at least one over budget (Shopping, > 100%).
             val overview = repo.budgetOverview(MonthKey.of(now))
             assertTrue(overview.headline != null, "an overall budget is set")
+            assertEquals(BudgetHealth.Healthy, overview.overall?.health, "overall monthly budget stays on track")
+            assertTrue(overview.categories.values.any { it.health == BudgetHealth.Healthy }, "at least one category well under")
+            assertTrue(overview.categories.values.any { it.health == BudgetHealth.Approaching }, "at least one category nearly used")
+            assertTrue(overview.categories.values.any { it.health == BudgetHealth.Exceeded }, "at least one category over budget")
             val august = repo.budgetOverview(MonthKey(2026, 8))
             assertTrue(august.headline != null)
 
+            // Reminders: some overdue, some in the next 7 days, some later.
             val reminders = dummy.container.reminders.state.value
-            assertEquals(4, reminders.reminders.size)
-            assertEquals(listOf("Pay society maintenance"), reminders.overdue(now).map { it.title })
+            assertEquals(7, reminders.reminders.size)
+            assertEquals(
+                listOf("Pay society maintenance", "Submit medical insurance claim").sorted(),
+                reminders.overdue(now).map { it.title }.sorted(),
+            )
+            val upcoming = reminders.upcoming(now)
+            assertTrue(upcoming.any { !it.dueAt.isAfter(now.plusDays(7)) }, "some reminders due in next 7 days")
+            assertTrue(upcoming.any { it.dueAt.isAfter(now.plusDays(7)) }, "some reminders due later")
 
+            // Saved cards from different issuers, with one expiring next month to trigger the expiry banner.
             val cards = (dummy.container.cards.state.value as CardsState.Ready).cards
-            assertEquals(listOf("HDFC Bank", "ICICI Bank"), cards.map { it.bankName })
+            assertEquals(listOf("HDFC Bank", "ICICI Bank", "State Bank of India", "Axis Bank"), cards.map { it.bankName })
+            val expiringCard = cards.single { it.id == "dummy-axis-debit" }
+            val ym = checkNotNull(parseExpiry(expiringCard.expiryMonth, expiringCard.expiryYear))
+            assertTrue(now.toLocalDate() >= ym.alertStart && now.toLocalDate() <= ym.lastValidDay, "expiring card within alert window")
         } finally {
             dummy.close()
         }
@@ -210,6 +246,23 @@ class DummyDataTest {
         } finally {
             dummy.close()
         }
+    }
+
+    @Test
+    fun picturesLeftOverFromEarlierAreDeletedWhenClosed(): Unit = runBlocking {
+        val dummy = DummyData.open(context, real) { now }
+        val orphaned = File(context.cacheDir, "${DummyData.SAMPLE_PICTURES_DIR}/orphaned-run/pic-old.jpg").apply {
+            parentFile!!.mkdirs()
+            writeBytes(byteArrayOf(9))
+        }
+        try {
+            assertTrue(orphaned.exists())
+        } finally {
+            dummy.close()
+        }
+        val deadline = System.currentTimeMillis() + 5_000
+        while (orphaned.exists() && System.currentTimeMillis() < deadline) Thread.sleep(25)
+        assertFalse(orphaned.exists(), "orphaned sample folders are cleaned up on close")
     }
 
     @Test

@@ -221,12 +221,12 @@ object BankDirectory {
         BankDirectoryEntry("hsbc", "HSBC", BankCategory.Foreign, logo = picture("hsbcbank")),
         BankDirectoryEntry("citi", "Citibank", BankCategory.Foreign, listOf("Citi"), picture("citibank")),
         BankDirectoryEntry("dbs", "DBS Bank India", BankCategory.Foreign, listOf("DBS Bank", "DBS"), picture("dbsbank")),
-        BankDirectoryEntry("deutsche", "Deutsche Bank", BankCategory.Foreign, listOf("Deutsche"), bundled("deutsche")),
-        BankDirectoryEntry("barclays", "Barclays", BankCategory.Foreign, listOf("Barclays Bank"), bundled("barclays")),
-        BankDirectoryEntry("boa", "Bank of America", BankCategory.Foreign, listOf("BofA", "BOA"), bundled("boa")),
+        BankDirectoryEntry("deutsche", "Deutsche Bank", BankCategory.Foreign, listOf("Deutsche")),
+        BankDirectoryEntry("barclays", "Barclays", BankCategory.Foreign, listOf("Barclays Bank")),
+        BankDirectoryEntry("boa", "Bank of America", BankCategory.Foreign, listOf("BofA", "BOA")),
         BankDirectoryEntry("amex", "American Express", BankCategory.Foreign, listOf("Amex"), picture("amex")),
         BankDirectoryEntry("jpmorgan", "JPMorgan Chase Bank", BankCategory.Foreign, listOf("JPMorgan Chase", "JP Morgan", "Chase Bank"), picture("chasebank")),
-        BankDirectoryEntry("sbmindia", "SBM Bank India", BankCategory.Foreign, listOf("SBM Bank", "SBM"), bundled("sbm")),
+        BankDirectoryEntry("sbmindia", "SBM Bank India", BankCategory.Foreign, listOf("SBM Bank", "SBM")),
         BankDirectoryEntry("emiratesnbd", "Emirates NBD", BankCategory.Foreign, listOf("Emirates NBD Bank"), picture("emiratesnbd")),
         BankDirectoryEntry("fab", "First Abu Dhabi Bank", BankCategory.Foreign, listOf("FAB Bank"), picture("fabbank")),
         BankDirectoryEntry("adcb", "Abu Dhabi Commercial Bank", BankCategory.Foreign, listOf("ADCB"), picture("adcb")),
@@ -261,7 +261,7 @@ object BankDirectory {
     private val digital = listOf(
         BankDirectoryEntry("onecard", "OneCard", BankCategory.Digital, listOf("One Card", "OneCard Metal", "OneCard Credit Card"), picture("onecard")),
         BankDirectoryEntry("jupiter", "Jupiter", BankCategory.Digital, listOf("Jupiter Money", "Jupiter Bank", "Jupiter App"), picture("jupiterbank")),
-        BankDirectoryEntry("fimoney", "Fi Money", BankCategory.Digital, listOf("Fi", "epiFi", "Fi Bank"), bundled("fi")),
+        BankDirectoryEntry("fimoney", "Fi Money", BankCategory.Digital, listOf("Fi", "epiFi", "Fi Bank")),
         BankDirectoryEntry("slice", "Slice", BankCategory.Digital, listOf("Slice Card", "Slice Super Card", "Slice Pay"), picture("slice")),
         BankDirectoryEntry("lazypay", "LazyPay", BankCategory.Digital, listOf("Lazy Pay", "LazyPay Card"), picture("lazypay")),
         BankDirectoryEntry("cred", "CRED", BankCategory.Digital, listOf("CRED Pay", "CRED Cash", "CRED Garage"), picture("cred")),
@@ -272,9 +272,9 @@ object BankDirectory {
         BankDirectoryEntry("phonepe", "PhonePe", BankCategory.Digital, listOf("Phone Pe", "PhonePe Wallet"), picture("phonepe")),
         BankDirectoryEntry("bhim", "BHIM", BankCategory.Digital, listOf("BHIM UPI", "BHIM App"), picture("bhim")),
         BankDirectoryEntry("freecharge", "Freecharge", BankCategory.Digital, listOf("FreeCharge", "Freecharge Pay Later"), picture("freecharge")),
-        BankDirectoryEntry("unicards", "Uni Cards", BankCategory.Digital, listOf("Uni Card", "Uni NX Wave", "Uni Paycheck"), bundled("uni")),
-        BankDirectoryEntry("niyo", "Niyo", BankCategory.Digital, listOf("Niyo Global", "NiyoX", "Niyo Bank"), bundled("niyo")),
-        BankDirectoryEntry("freo", "Freo", BankCategory.Digital, listOf("Freo Save", "MoneyTap"), bundled("freo")),
+        BankDirectoryEntry("unicards", "Uni Cards", BankCategory.Digital, listOf("Uni Card", "Uni NX Wave", "Uni Paycheck")),
+        BankDirectoryEntry("niyo", "Niyo", BankCategory.Digital, listOf("Niyo Global", "NiyoX", "Niyo Bank")),
+        BankDirectoryEntry("freo", "Freo", BankCategory.Digital, listOf("Freo Save", "MoneyTap")),
     )
 
     private val earlier = listOf(

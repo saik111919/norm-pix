@@ -2,6 +2,7 @@ package com.example.normpix.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
@@ -12,8 +13,10 @@ import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import com.example.normpix.finance.domain.Account
@@ -215,7 +218,7 @@ class BankRelationshipTest {
         compose.onNodeWithText("Name").performTextInput("Co-op savings")
         addBankFromField("Bank (optional)", "My Credit Union")
         waitFor("My Credit Union")
-        compose.onNodeWithText("Save account").performClick()
+        compose.onNodeWithContentDescription("Slide to save account").performSemanticsAction(SemanticsActions.OnClick)
         waitGone("New account")
 
         val key = finance.state.value.customBanks.single().key
@@ -263,7 +266,7 @@ class BankRelationshipTest {
         compose.onNodeWithText("Name").performTextInput("Mystery")
         compose.onNodeWithText("Bank (optional)").performTextInput("Not A Real Bank")
         compose.waitForIdle()
-        compose.onNodeWithText("Save account").performClick()
+        compose.onNodeWithContentDescription("Slide to save account").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitForIdle()
         compose.onNodeWithText("Pick a bank from the list, or add it as a new bank").assertIsDisplayed()
         assertNull(finance.state.value.accounts.firstOrNull { it.name == "Mystery" })
@@ -274,8 +277,8 @@ class BankRelationshipTest {
         seed()
         openWallet()
         compose.onNodeWithText("Add card").performClick()
-        waitFor("Save card")
-        compose.onNodeWithText("Save card").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Slide to save card").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Slide to save card").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitForIdle()
         compose.onNodeWithText("Choose a bank").assertIsDisplayed()
         assertTrue(vault.cards.isEmpty())

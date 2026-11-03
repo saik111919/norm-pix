@@ -1,6 +1,12 @@
 package com.example.normpix.ui.components
 
+import android.graphics.ImageDecoder
+import android.graphics.drawable.AnimatedImageDrawable
+import android.graphics.drawable.Drawable
+import android.os.Build
 import android.util.LruCache
+import android.widget.ImageView
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -13,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
@@ -29,7 +36,14 @@ import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.example.normpix.settings.ProfilePhotos
+import com.example.normpix.settings.isAnimatedPhotoName
+import com.example.normpix.ui.theme.rememberReducedMotion
+import java.io.File
+import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * The letter the user is shown by when they have given a name and no emoji: the name's first letter or digit, in capitals.
@@ -80,7 +94,11 @@ fun ProfileAvatar(name: String, emoji: String, size: Dp, modifier: Modifier = Mo
         // Sized in dp whatever the user's font scale: an avatar is a picture, and does not grow with the text around it.
         val glyph = with(LocalDensity.current) { (size * if (emoji.isBlank()) INITIAL_FILL else EMOJI_FILL).toSp() }
         when {
-            picture != null -> Image(picture, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            picture != null -> {
+                // Its first frame at once; a GIF's animation is laid over it as soon as it is ready (and not at all where animations are off).
+                Image(picture, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                if (isAnimatedPhotoName(photo)) AnimatedPhoto(photo, Modifier.fillMaxSize())
+            }
             emoji.isNotBlank() -> Text(emoji, fontSize = glyph, lineHeight = glyph, maxLines = 1, softWrap = false)
             initial != null -> Text(
                 initial,
@@ -100,6 +118,53 @@ fun ProfileAvatar(name: String, emoji: String, size: Dp, modifier: Modifier = Mo
         }
     }
 }
+
+/** The longest side a GIF is decoded at: sharp at the largest the picture is shown, and light on memory frame by frame. */
+private const val GIF_DECODE_SIDE = 512
+
+/**
+ * The animation of a GIF [name] (see [ProfilePhotos.saveGif]), playing on and on over the still frame beneath it, filled into
+ * the circle like a photo. Nothing is drawn - the still frame stays - before Android 9 (which cannot play one this way), while it
+ * is being read, if it cannot be, and where the system has animations off.
+ */
+@Composable
+private fun AnimatedPhoto(name: String, modifier: Modifier) {
+    val context = LocalContext.current.applicationContext
+    val reduced = rememberReducedMotion()
+    val decoded by produceState<Drawable?>(null, name, reduced) {
+        value = if (!reduced && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            withContext(Dispatchers.IO) { ProfilePhotos(context).file(name)?.let { decodeAnimated(it) } }
+        } else {
+            null
+        }
+    }
+    val playing = decoded ?: return
+    DisposableEffect(playing) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && playing is AnimatedImageDrawable) {
+            playing.repeatCount = AnimatedImageDrawable.REPEAT_INFINITE
+            playing.start()
+        }
+        onDispose {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && playing is AnimatedImageDrawable) playing.stop()
+        }
+    }
+    AndroidView(
+        factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.CENTER_CROP } },
+        update = { it.setImageDrawable(playing) },
+        modifier = modifier,
+    )
+}
+
+@RequiresApi(Build.VERSION_CODES.P)
+private fun decodeAnimated(file: File): Drawable? = runCatching {
+    ImageDecoder.decodeDrawable(ImageDecoder.createSource(file)) { decoder, info, _ ->
+        val shorter = minOf(info.size.width, info.size.height)
+        if (shorter > GIF_DECODE_SIDE) {
+            val scale = GIF_DECODE_SIDE.toFloat() / shorter
+            decoder.setTargetSize((info.size.width * scale).roundToInt().coerceAtLeast(1), (info.size.height * scale).roundToInt().coerceAtLeast(1))
+        }
+    }.takeIf { it is AnimatedImageDrawable }
+}.getOrNull()
 
 /** How much of the circle an emoji, and an initial, fills. */
 private const val EMOJI_FILL = 0.52f

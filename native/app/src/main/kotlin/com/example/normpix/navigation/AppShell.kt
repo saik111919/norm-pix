@@ -566,6 +566,11 @@ fun AppShell(
     val goneFraction by goneState
     // For the tabs: a search card sitting on the dock goes down with it (see LocalDockGone). A function, so its motion recomposes nothing.
     val dockGone: () -> Float = remember(goneState) { { goneState.value } }
+    // A snackbar rides above the dock and comes down with it (phone only: the other layouts have no dock under it).
+    DisposableEffect(dockGone, compact) {
+        if (compact) snackbars.dockGone = dockGone
+        onDispose { snackbars.dockGone = { 0f } }
+    }
     var barHeightPx by remember { mutableIntStateOf(0) }
 
     // Keep tabs composed once visited so they remember scroll and sub-navigation state.

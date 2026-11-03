@@ -2,7 +2,9 @@ package com.example.normpix.backup
 
 import com.example.normpix.finance.data.FinanceBackupArchive
 import com.example.normpix.settings.CustomFont
+import com.example.normpix.settings.isAnimatedPhotoName
 import com.example.normpix.settings.isProfilePhotoName
+import com.example.normpix.settings.looksLikeGif
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -86,7 +88,7 @@ object AppBackupArchive {
     class Contents(val finance: FinanceBackupArchive.Contents, val app: App?)
 
     /** Whether [name] is the name the app keeps its font file under - the only font name a backup carries or a restore takes. */
-    fun isFontName(name: String): Boolean = name == CustomFont.FILE_NAME
+    fun isFontName(name: String): Boolean = CustomFont.isSavedName(name)
 
     /** Whether [name] is anything but a plain relative path: absolute, with a drive, a backslash, a NUL or a `..` in it. */
     fun isUnsafeName(name: String): Boolean =
@@ -148,7 +150,8 @@ object AppBackupArchive {
                 name.startsWith(PROFILE_PREFIX) -> take(
                     data, name.removePrefix(PROFILE_PREFIX), File(into, "profile"), photos, MAX_PHOTO_BYTES,
                     named = { isProfilePhotoName(it) },
-                    looksRight = { head, n -> looksLikeJpeg(head, n) },
+                    // A framed photo is a JPEG; a GIF kept as it came is a GIF - each is taken only if its bytes say so.
+                    looksRight = { head, n -> if (isAnimatedPhotoName(name.removePrefix(PROFILE_PREFIX))) looksLikeGif(head, n) else looksLikeJpeg(head, n) },
                 )
                 name.startsWith(FONTS_PREFIX) -> take(
                     data, name.removePrefix(FONTS_PREFIX), File(into, "fonts"), fonts, MAX_FONT_BYTES,

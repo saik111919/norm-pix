@@ -57,11 +57,37 @@ class FinanceDatabase(
     override fun onOpen(db: SQLiteDatabase) {
         super.onOpen(db)
         migrateBrandCategoryIcons(db)
+        // A safety net, not a migration: a database whose version says it has every column but which lacks one (a build that
+        // numbered its versions differently, a restore of an older file) would refuse every account write. Only ever adds.
+        runCatching { ensureAccountColumns(db) }
     }
 
     companion object {
         const val DB_NAME = "normpix_finance.db"
         const val VERSION = 12
+
+        /** The columns an account has beyond its first ones, as the migrations from version 2 on add them, with their types. */
+        private val ACCOUNT_EXTRA_COLUMNS = listOf(
+            "bank_key" to "TEXT",
+            "credit_limit" to "INTEGER",
+            "statement_day" to "INTEGER",
+            "due_day" to "INTEGER",
+            "number_ending" to "TEXT",
+            "card_id" to "TEXT",
+            "number_start" to "TEXT",
+        )
+
+        /** Adds any of [ACCOUNT_EXTRA_COLUMNS] the accounts table lacks (empty for every account, as the migrations leave them). */
+        fun ensureAccountColumns(db: SQLiteDatabase) {
+            if (db.isReadOnly) return
+            val have = db.rawQuery("PRAGMA table_info(accounts)", null).use { cursor ->
+                buildSet { while (cursor.moveToNext()) add(cursor.getString(cursor.getColumnIndexOrThrow("name"))) }
+            }
+            if (have.isEmpty()) return
+            for ((column, type) in ACCOUNT_EXTRA_COLUMNS) {
+                if (column !in have) db.execSQL("ALTER TABLE accounts ADD COLUMN $column $type")
+            }
+        }
 
         const val ACCOUNTS = "accounts"
         const val PEOPLE = "people"

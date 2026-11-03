@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Celebration
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.SystemUpdate
@@ -71,7 +72,7 @@ val SettingsPage.title: String
         SettingsPage.Appearance -> "Appearance"
         SettingsPage.Widgets -> "Widgets"
         SettingsPage.Finance -> "Finance"
-        SettingsPage.Banks -> "Banks"
+        SettingsPage.Banks -> BANKS_AND_CATEGORIES_TITLE
         SettingsPage.Data -> "Data & Backup"
         SettingsPage.Wallet -> "Wallet & Cards"
         SettingsPage.Availability -> "Availability & Schedules"
@@ -231,6 +232,7 @@ internal fun SettingsListContent(
                             supporting = summary(group, prefs, finance, is24Hour),
                             icon = group.icon,
                             hue = group.hue,
+                            emoji = group.emoji,
                             onClick = { navigator.openSettings(group) },
                             selected = selected?.let { it.group == group },
                         )
@@ -244,6 +246,7 @@ internal fun SettingsListContent(
                         supporting = "Back to defaults. Your data isn't touched.",
                         icon = Icons.Outlined.SettingsBackupRestore,
                         hue = 5,
+                        emoji = SettingsRowEmoji.RESET,
                         onClick = { system.resetSettings() },
                     )
                 }
@@ -257,6 +260,7 @@ internal fun SettingsListContent(
                             supporting = updateSummary(update, updater),
                             icon = Icons.Outlined.SystemUpdate,
                             hue = SettingsPageUpdatesHue,
+                            emoji = SettingsRowEmoji.UPDATES,
                             alert = update is UpdateState.Available || update is UpdateState.Ready,
                             onClick = { system.checkForUpdates() },
                             trailing = updateBadgeLabel(update)?.let { label -> { UpdateBadge(label) } },
@@ -266,10 +270,21 @@ internal fun SettingsListContent(
                 }
                 item {
                     SettingsRow(
+                        headline = "Welcome tour",
+                        supporting = "Play the introduction again",
+                        icon = Icons.Outlined.Celebration,
+                        hue = null,
+                        emoji = SettingsRowEmoji.WELCOME_TOUR,
+                        onClick = container.preferences::startOnboarding,
+                    )
+                }
+                item {
+                    SettingsRow(
                         headline = "About NormPix",
                         supporting = "How each feature works",
                         icon = Icons.Outlined.Info,
                         hue = null,
+                        emoji = SettingsRowEmoji.ABOUT,
                         onClick = navigator::openAbout,
                         selected = selected?.isAbout,
                     )
@@ -318,7 +333,7 @@ private fun summary(group: SettingsPage, prefs: AppPrefsState, finance: FinanceS
         finance.defaultAccount?.let { add("Default: ${it.name}") }
         add("Categories")
     }.joinToString(" · ")
-    SettingsPage.Banks -> "${finance.catalog.all.size} banks and their logos"
+    SettingsPage.Banks -> "${finance.catalog.all.size} banks · ${finance.categories.count { !it.archived }} categories"
     SettingsPage.Data -> if (prefs.dummyDataEnabled) "Sample data on · Export, restore, erase" else "Sample data, export, restore, erase"
     SettingsPage.Security ->
         if (prefs.walletLockEnabled) {

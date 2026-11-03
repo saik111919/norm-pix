@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
@@ -20,10 +21,12 @@ import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.settings.InsightsCategoriesLayout
 import com.example.normpix.testing.TestEnvironment
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.Locale
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -150,6 +153,30 @@ class InsightsScreenTest {
         compose.onNodeWithText("Food is your biggest spend: 67% of ${monthLabel(MonthKey.of(now))}.").assertIsDisplayed()
         compose.onNodeWithContentDescription("Food, ₹1,000.00, 67%, 1 transaction. Show transactions").assertHasClickAction()
         compose.onNodeWithContentDescription("Transport, ₹500.00, 33%, 1 transaction. Show transactions").assertHasClickAction()
+    }
+
+    @Test
+    fun theListStaysTheDefaultAndTheCarouselIsAChoice() {
+        val seed = seed()
+        record(seed, TransactionType.Expense, seed.food, 100_000, LocalDate.now().atStartOfDay().plusMinutes(1))
+        record(seed, TransactionType.Expense, seed.transport, 50_000, LocalDate.now().atStartOfDay().plusMinutes(2))
+        assertEquals(InsightsCategoriesLayout.List, env.preferences.state.value.insightsCategoriesLayout, "no change for anyone who never chose")
+        env.preferences.setInsightsCategoriesLayout(InsightsCategoriesLayout.Carousel)
+        show()
+        compose.waitForIdle()
+
+        // The carousel scrolls sideways inside the page: the page is the first scrollable.
+        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasText("Where your money went"))
+        compose.onNodeWithText("Food is your biggest spend: 67% of ${monthLabel(MonthKey.of(now))}.").assertIsDisplayed()
+        // The carousel's panel for the category in front (its button says how many transactions), and no ranked row.
+        assertTrue(compose.onAllNodesWithText("1 transaction").fetchSemanticsNodes().isNotEmpty(), "the panel's button")
+        assertTrue(
+            compose.onAllNodesWithContentDescription("Food, ₹1,000.00, 67%, 1 transaction. Show transactions").fetchSemanticsNodes().isEmpty(),
+            "not the list",
+        )
+        compose.onNodeWithText("1 transaction").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(seed.food.id!! to MonthKey.of(now)), env.navigator.categoryHistories, "opens the category's month")
     }
 
     @Test

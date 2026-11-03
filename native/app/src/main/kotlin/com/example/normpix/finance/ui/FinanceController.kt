@@ -245,6 +245,10 @@ class FinanceController(
     /** The key of the bank called [name] - an existing one if it matches, otherwise a new one the user adds. */
     suspend fun bankKeyFor(name: String): String = mutate { it.bankKeyFor(name) }
 
+    suspend fun renameBank(key: String, name: String) = mutate { it.renameBank(key, name) }
+
+    suspend fun deleteBank(key: String) = mutate { it.deleteBank(key) }
+
     suspend fun setAccountArchived(id: Long, archived: Boolean) = mutate { it.setAccountArchived(id, archived) }
 
     suspend fun deleteAccount(id: Long) = mutate { it.deleteAccount(id) }

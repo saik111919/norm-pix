@@ -2,6 +2,7 @@ package com.example.normpix.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -15,6 +16,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
@@ -252,7 +254,7 @@ class AccountsAndTransfersDisplayTest {
         compose.onNodeWithContentDescription("Starting balance in INR").performTextInput("5000")
         compose.onNodeWithText("Counts as ${money.format(-5_000_00)} in your total balance").assertIsDisplayed()
 
-        compose.onNodeWithText("Save account").performClick()
+        compose.onNodeWithContentDescription("Slide to save account").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { finance.state.value.accounts.any { it.name == "Test Card" } }
         val saved = finance.state.value.accounts.single { it.name == "Test Card" }
         assertEquals(-5_000_00L, saved.openingBalance, "owing the amount stores it as a negative opening balance")

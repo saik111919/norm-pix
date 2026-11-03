@@ -1,13 +1,16 @@
 package com.example.normpix.ui
 
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.nextBillDue
@@ -100,7 +103,7 @@ class BillingCycleUiTest {
         compose.onNodeWithText("5th of every month").performClick()
         compose.onNodeWithText("Payment due date (optional)").performClick()
         compose.onNodeWithText("20th of every month").performClick()
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
 
         assertEquals(5, assertNotNull(saved).statementDay)
@@ -118,7 +121,7 @@ class BillingCycleUiTest {
 
         compose.onNodeWithText("Statement date (optional)").assertIsDisplayed()
         compose.onNodeWithText("Payment due date (optional)").assertIsDisplayed()
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
 
         assertNull(assertNotNull(saved).statementDay)
@@ -136,7 +139,7 @@ class BillingCycleUiTest {
 
         compose.onNodeWithText("Statement date (optional)").performClick()
         compose.onNodeWithText("Not set").performClick()
-        compose.onNodeWithText("Save changes").performClick()
+        compose.onNodeWithContentDescription("Slide to save changes").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { saved != null }
 
         assertNull(assertNotNull(saved).statementDay)

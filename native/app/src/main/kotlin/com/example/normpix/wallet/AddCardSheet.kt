@@ -3,6 +3,7 @@ package com.example.normpix.wallet
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -23,6 +25,7 @@ import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.rounded.Contactless
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -40,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -138,6 +142,7 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
         )
     }
     var name by remember { mutableStateOf(initial?.cardholderName.orEmpty()) }
+    var cardName by remember { mutableStateOf(initial?.cardName.orEmpty()) }
     var number by remember { mutableStateOf(initial?.cardNumber.orEmpty()) }
     var month by remember { mutableStateOf(initial?.expiryMonth.orEmpty()) }
     var year by remember { mutableStateOf(initial?.expiryYear.orEmpty()) }
@@ -154,7 +159,7 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
     // Tapping fills a new card; a phone without NFC hardware doesn't offer it at all.
     val canTap = !isEditing && remember { container.nfc.availability() != NfcAvailability.Unsupported }
 
-    fun snapshot() = listOf(bank.key, bank.typed, name, number, month, year, cvv, kind).joinToString("|")
+    fun snapshot() = listOf(bank.key, bank.typed, name, cardName, number, month, year, cvv, kind).joinToString("|")
     val initialSnapshot = remember { snapshot() }
     DiscardChangesGuard(dirty = snapshot() != initialSnapshot, isEditing = isEditing, keptMessage = "The card stays as it was.")
 
@@ -285,6 +290,7 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
                 kind = kind,
                 createdAt = initial?.createdAt ?: LocalDateTime.now(),
                 bankKey = picked.key,
+                cardName = CardNames.clean(cardName),
             ),
         )
     }
@@ -301,7 +307,9 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
         cvv = if (keepCvv) cvv else "",
         kind = kind,
         createdAt = LocalDateTime.now(),
+        cardName = CardNames.clean(cardName),
     )
+    val suggestions = CardNames.suggestionsFor(bank.key)
     val kinds = remember {
         listOf(ChoiceOption(CardKind.Credit, CardKind.Credit.label, Icons.Outlined.CreditCard), ChoiceOption(CardKind.Debit, CardKind.Debit.label, Icons.Outlined.Payments))
     }
@@ -312,6 +320,7 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
         subtitle = "Stored encrypted, on this device only",
         saveLabel = if (isEditing) "Save changes" else "Save card",
         onSave = ::submit,
+        slideToSave = true,
     ) {
         if (scanner != null || canTap) {
             // Two ways to fill the form without typing it all.
@@ -369,6 +378,34 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
             colors = typedFieldColors(),
             shape = TonalFieldShape,
         )
+        Spacer(Modifier.height(AppSpacing.md))
+        OutlinedTextField(
+            value = cardName,
+            onValueChange = { cardName = it.take(CardNames.MAX_LENGTH) },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Card name") },
+            placeholder = { Text(if (suggestions.isEmpty()) "e.g. Platinum, Millennia" else "e.g. ${suggestions.first()}") },
+            supportingText = { Text("Optional. Shown on the card.") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Next, autoCorrectEnabled = false),
+            colors = typedFieldColors(),
+            shape = TonalFieldShape,
+        )
+        if (suggestions.isNotEmpty()) {
+            // This bank's cards by name: a tap fills the field (and a second tap on the chosen one clears it).
+            Spacer(Modifier.height(AppSpacing.sm))
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+                for (suggestion in suggestions) {
+                    val chosen = cardName.equals(suggestion, ignoreCase = true)
+                    FilterChip(
+                        selected = chosen,
+                        onClick = { cardName = if (chosen) "" else suggestion },
+                        label = { Text(suggestion) },
+                        modifier = Modifier.semantics { contentDescription = "Card name $suggestion" },
+                    )
+                }
+            }
+        }
         Spacer(Modifier.height(AppSpacing.md))
         OutlinedTextField(
             value = number,

@@ -12,12 +12,15 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ApplicationProvider
 import com.example.normpix.R
 import com.example.normpix.testing.TestEnvironment
@@ -86,6 +89,33 @@ class ClockWidgetSettingsTest {
         row.performClick()
         compose.waitForIdle()
         assertTrue(!options.transparent)
+    }
+
+    @Test
+    fun `the tint behind a transparent clock is offered only once it is transparent, and says plainly it is not a blur`() {
+        open()
+        compose.onNodeWithText("Behind the clock").assertDoesNotExist()
+        compose.onNodeWithText("Transparent").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Behind the clock").assertExists()
+        // One slider now, not four choices: none to begin with, said in words.
+        compose.onNodeWithText("None").performScrollTo().assertExists()
+        compose.onNodeWithText(ClockBackdrop.Clear.description).assertExists()
+        compose.onNodeWithText("can't blur the wallpaper", substring = true).performScrollTo().assertExists()
+
+        // Slid to 80%: the widget is told once, with the number, and the words follow.
+        compose.onNodeWithContentDescription("Tint behind the clock").performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(80f) }
+        compose.waitForIdle()
+        assertEquals(80, options.backdropPercent)
+        assertEquals(ClockBackdrop.Strong, options.backdrop)
+        compose.onNodeWithText("80%").assertExists()
+        compose.onNodeWithText(ClockBackdrop.Strong.description).assertExists()
+        // Turning transparency off takes the choice away again (and keeps what was chosen for next time).
+        compose.onNodeWithText("Transparent").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Behind the clock").assertDoesNotExist()
+        assertEquals(80, options.backdropPercent)
     }
 
     @Test

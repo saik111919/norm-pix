@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.example.normpix.about.GuideTopic
 import com.example.normpix.about.ui.AboutPage
+import com.example.normpix.about.ui.GuideIndexPage
 import com.example.normpix.about.ui.GuidePage
 import com.example.normpix.navigation.AppNavigator
 import com.example.normpix.navigation.AppearanceSection
@@ -89,9 +90,15 @@ sealed interface SettingsDetail {
         override val key = "about"
     }
 
-    /** One topic of the guide on the About page, a step inside About. */
-    data class Guide(val topic: GuideTopic) : SettingsDetail {
+    /** The Feature guide: the guide's topics as cards, a step inside About. */
+    data object GuideIndex : SettingsDetail {
         override val parent: SettingsDetail get() = About
+        override val key = "guide-index"
+    }
+
+    /** One topic of the guide, a step inside the Feature guide. */
+    data class Guide(val topic: GuideTopic) : SettingsDetail {
+        override val parent: SettingsDetail get() = GuideIndex
         override val key get() = "guide:${topic.name}"
     }
 
@@ -102,6 +109,7 @@ sealed interface SettingsDetail {
             key == Update.key -> Update
             key == Changelog.key -> Changelog
             key == About.key -> About
+            key == GuideIndex.key -> GuideIndex
             key.startsWith("guide:") -> GuideTopic.named(key.removePrefix("guide:"))?.let(::Guide)
             key.startsWith("page:") -> SettingsPage.entries.firstOrNull { it.name == key.removePrefix("page:") }?.let(::Page)
             key.startsWith("appearance:") -> AppearanceSection.named(key.removePrefix("appearance:"))?.let(::Appearance)
@@ -127,7 +135,7 @@ internal val SettingsDetail.isUpdates: Boolean
 
 /** Whether this detail is the one the "About NormPix" row stands for: the About page, and a topic of its guide. */
 internal val SettingsDetail.isAbout: Boolean
-    get() = this == SettingsDetail.About || this is SettingsDetail.Guide
+    get() = this == SettingsDetail.About || this == SettingsDetail.GuideIndex || this is SettingsDetail.Guide
 
 private val SettingsDetailSaver = Saver<SettingsDetail, String>(save = { it.key }, restore = { SettingsDetail.fromKey(it) })
 
@@ -138,7 +146,7 @@ fun SettingsPageContent(page: SettingsPage) {
         SettingsPage.Appearance -> AppearanceSettingsPage()
         SettingsPage.Widgets -> WidgetsSettingsPage()
         SettingsPage.Finance -> FinanceSettingsPage()
-        SettingsPage.Banks -> BanksSettingsPage()
+        SettingsPage.Banks -> BanksAndCategoriesPage(BanksAndCategoriesTab.Banks)
         SettingsPage.Data -> DataSettingsPage()
         SettingsPage.Security -> SecuritySettingsPage()
         SettingsPage.Wallet -> WalletSettingsPage()
@@ -167,6 +175,7 @@ fun SettingsRoute(opens: SettingsDetail? = null) {
         SettingsDetail.Update -> UpdatePage()
         SettingsDetail.Changelog -> ChangelogPage()
         SettingsDetail.About -> AboutPage()
+        SettingsDetail.GuideIndex -> GuideIndexPage()
         is SettingsDetail.Guide -> GuidePage(opens.topic)
     }
 }
@@ -241,6 +250,7 @@ private fun SettingsDetailPage(detail: SettingsDetail) {
         SettingsDetail.Update -> UpdatePage()
         SettingsDetail.Changelog -> ChangelogPage()
         SettingsDetail.About -> AboutPage()
+        SettingsDetail.GuideIndex -> GuideIndexPage()
         is SettingsDetail.Guide -> GuidePage(detail.topic)
     }
 }
@@ -270,6 +280,8 @@ private class PaneNavigator(
     override fun openChangelog() = show(SettingsDetail.Changelog)
 
     override fun openAbout() = show(SettingsDetail.About)
+
+    override fun openGuideIndex() = show(SettingsDetail.GuideIndex)
 
     override fun openGuide(topic: GuideTopic) = show(SettingsDetail.Guide(topic))
 }

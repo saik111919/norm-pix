@@ -96,10 +96,14 @@ class AppBackupExporter(private val context: Context, private val container: App
     fun write(out: OutputStream, source: Source): Int =
         AppBackupArchive.write(out, source.financeJson, source.pictureNames, source.parts) { name -> container.finance.pictures?.file(name) }
 
-    /** The font the user picked, if there is one that a restore would take back: a whole font file, no bigger than the app takes. */
+    /**
+     * The font the user picked, if there is one that a restore would take back: a whole font file, no bigger than the app takes -
+     * and the other weights of its family, each held to the same.
+     */
     private fun fontFiles(): List<File> {
+        fun takeable(file: File) = file.isFile && file.length() in 1L..AppBackupArchive.MAX_FONT_BYTES && CustomFont.hasFontHeader(file)
         val font = CustomFont.file(context)
-        val size = font.length()
-        return if (font.isFile && size in 1L..AppBackupArchive.MAX_FONT_BYTES && CustomFont.hasFontHeader(font)) listOf(font) else emptyList()
+        if (!takeable(font)) return emptyList()
+        return listOf(font) + CustomFont.extras(context).filter(::takeable).take(AppBackupArchive.MAX_FILES - 1)
     }
 }

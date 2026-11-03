@@ -5,6 +5,8 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.CompositionLocalProvider
+import com.example.normpix.ui.components.LocalLiveMotion
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
 import com.example.normpix.navigation.NormPixRoot
@@ -39,19 +41,22 @@ class MainActivity : FragmentActivity() {
         // After a configuration change or process restore the launch intent was already handled.
         if (savedInstanceState == null) handleIntent(intent)
         setContent {
-            NormPixRoot(
-                container = container,
-                // A fresh start writes the app's name out first; coming back to a restored activity doesn't.
-                showSplash = savedInstanceState == null,
-                onDarkChanged = { dark ->
-                    // The app's own light/dark choice can differ from the system's.
-                    val transparent = android.graphics.Color.TRANSPARENT
-                    enableEdgeToEdge(
-                        statusBarStyle = SystemBarStyle.auto(transparent, transparent) { dark },
-                        navigationBarStyle = SystemBarStyle.auto(transparent, transparent) { dark },
-                    )
-                },
-            )
+            // The real app, on a screen: the one place endless motion (the hero's weather) may run - see LocalLiveMotion.
+            CompositionLocalProvider(LocalLiveMotion provides true) {
+                NormPixRoot(
+                    container = container,
+                    // A fresh start writes the app's name out first; coming back to a restored activity doesn't.
+                    showSplash = savedInstanceState == null,
+                    onDarkChanged = { dark ->
+                        // The app's own light/dark choice can differ from the system's.
+                        val transparent = android.graphics.Color.TRANSPARENT
+                        enableEdgeToEdge(
+                            statusBarStyle = SystemBarStyle.auto(transparent, transparent) { dark },
+                            navigationBarStyle = SystemBarStyle.auto(transparent, transparent) { dark },
+                        )
+                    },
+                )
+            }
         }
     }
 

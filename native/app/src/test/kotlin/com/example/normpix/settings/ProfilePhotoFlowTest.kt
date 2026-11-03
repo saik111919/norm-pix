@@ -170,6 +170,70 @@ class ProfilePhotoFlowTest {
         assertEquals(kept.name, AppPreferences(env.prefsStore).state.value.profilePhoto)
     }
 
+    /** The smallest real GIF: one white pixel. */
+    private val gif = byteArrayOf(
+        0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80.toByte(), 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0x21, 0xF9.toByte(), 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x2C,
+        0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3B,
+    )
+
+    @Test
+    fun `a GIF is kept as it came, not framed, and the page says it is wearing one`() {
+        show()
+        pick(galleryPicture(bytes = gif))
+        waitForPhoto()
+
+        val kept = savedFiles().single()
+        assertTrue(kept.name.endsWith(".gif"), "kept as a GIF: ${kept.name}")
+        assertTrue(kept.readBytes().contentEquals(gif), "not re-encoded, so it still moves")
+        assertEquals(state.profilePhoto, kept.name)
+        compose.onAllNodesWithText("Position your photo").assertCountEquals(0)
+        waitFor("Showing your GIF")
+        compose.waitUntil(10_000) { wearsPhoto() }
+        waitFor("Remove photo")
+    }
+
+    @Test
+    fun `a GIF that is too big is refused and nothing is kept`() {
+        show()
+        pick(galleryPicture(bytes = gif + ByteArray(ProfilePhotos.MAX_GIF_BYTES.toInt())))
+        waitFor("That GIF is too big. NormPix keeps animated pictures up to 5 MB.")
+        assertTrue(savedFiles().isEmpty(), "the partial copy is gone")
+        assertEquals("", state.profilePhoto)
+    }
+
+    @Test
+    fun `a GIF is told by its bytes and a backup only takes one that is`() {
+        assertTrue(looksLikeGif(gif, gif.size))
+        assertTrue(!looksLikeGif("GIF9".toByteArray(), 4) && !looksLikeGif("ÿØÿà\u0000\u0010".toByteArray(Charsets.ISO_8859_1), 6))
+        assertTrue(isProfilePhotoName("photo-12.gif") && isProfilePhotoName("photo-12.jpg") && !isProfilePhotoName("photo-12.png"))
+        assertTrue(isAnimatedPhotoName("photo-12.gif") && !isAnimatedPhotoName("photo-12.jpg") && !isAnimatedPhotoName(null))
+    }
+
+    @Test
+    fun `an avatar that comes with the app is worn with one tap, framed and kept as a photo is`() {
+        show()
+        compose.onNodeWithContentDescription("Wear the Little robot avatar").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Wear the Fox with goggles avatar").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Wear the Yellow mouse avatar").assertIsDisplayed()
+
+        compose.onNodeWithContentDescription("Wear the Little robot avatar").performClick()
+        waitForPhoto()
+
+        val kept = savedFiles().single()
+        assertEquals(state.profilePhoto, kept.name)
+        val saved = assertNotNull(BitmapFactory.decodeFile(kept.path))
+        assertEquals(ProfilePhotos.SIDE, saved.width, "a square copy at the size photos are kept at")
+        assertEquals(saved.width, saved.height)
+        waitFor("Showing your photo")
+        compose.waitUntil(10_000) { wearsPhoto() }
+
+        // Another avatar replaces it, and the first copy goes.
+        compose.onNodeWithContentDescription("Wear the Yellow mouse avatar").performClick()
+        until { savedFiles().singleOrNull()?.name.let { it != null && it != kept.name } }
+        assertEquals(savedFiles().single().name, state.profilePhoto)
+    }
+
     @Test
     fun `zooming in the frame keeps less of the photo`() {
         show()

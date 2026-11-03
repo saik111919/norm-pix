@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -54,6 +55,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.example.normpix.settings.SheetAnimationType
 import com.example.normpix.ui.theme.rememberReducedMotion
@@ -67,6 +69,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 /** The least time a [AppOverlays.loading] sheet stays up, so a quick job doesn't flash it up and down. */
 internal const val LOADING_MIN_MS = 600L
@@ -487,6 +490,12 @@ class AppSnackbars(
     /** Space the current screen reserves at the bottom (e.g. the navigation bar). */
     var bottomInset: Dp by mutableStateOf(0.dp)
 
+    /**
+     * How far the dock has stepped out of the way, 0 in place to 1 gone; read while drawing. The snackbar rides [bottomInset]
+     * above the dock and comes down with it, so it never floats over an empty strip where the dock was.
+     */
+    var dockGone: () -> Float = { 0f }
+
     fun show(
         message: String,
         kind: SnackbarKind = SnackbarKind.Done,
@@ -524,9 +533,13 @@ fun SnackbarOverlay(snackbars: AppSnackbars, modifier: Modifier = Modifier) {
     if (snackbars.heldBack()) return
     // Full size so BottomCenter means the bottom of the screen (it has no input handlers, so touches pass through).
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+        val inset = with(LocalDensity.current) { snackbars.bottomInset.toPx() }
         SnackbarHost(
             hostState = snackbars.hostState,
-            modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars).padding(bottom = snackbars.bottomInset),
+            modifier = Modifier
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(bottom = snackbars.bottomInset)
+                .offset { IntOffset(0, (inset * snackbars.dockGone().coerceIn(0f, 1f)).roundToInt()) },
             snackbar = { data -> AppSnackbar(data) },
         )
     }
