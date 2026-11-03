@@ -229,6 +229,11 @@ dependencies {
     implementation(libs.androidsvg)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    // The finance and reminders databases, encrypted on the phone (SQLCipher), behind androidx.sqlite's interface; the
+    // framework flavour of that interface is the plain SQLite the tests (and a phone where SQLCipher won't load) run on.
+    implementation(libs.sqlcipher.android) { artifact { type = "aar" } }
+    implementation(libs.androidx.sqlite)
+    implementation(libs.androidx.sqlite.framework)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)

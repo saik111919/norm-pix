@@ -2,11 +2,15 @@ package com.example.normpix.finance.data
 
 import android.content.ContentValues
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
-import android.database.sqlite.SQLiteOpenHelper
+import androidx.sqlite.db.SupportSQLiteDatabase
+import androidx.sqlite.db.SupportSQLiteOpenHelper
 import com.example.normpix.banks.BankCatalog
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.ui.brandNamesToKey
+import com.example.normpix.storage.DatabaseEngine
+import com.example.normpix.storage.insertOrThrow
+import com.example.normpix.storage.rawQuery
+import java.io.Closeable
 import java.time.LocalDateTime
 
 /**
@@ -19,48 +23,60 @@ import java.time.LocalDateTime
  * as in the repository, so even a bug upstream can't write an impossible
  * ledger.
  *
- * Pass a null [name] for a private in-memory database (tests).
+ * Pass a null [name] for a private in-memory database (tests, the sample data). [engine] opens the file: plain SQLite unless
+ * another is given - the app gives the encrypted one (see `storage/EncryptedDatabases`).
  */
 class FinanceDatabase(
     context: Context,
     name: String? = DB_NAME,
     private val clock: () -> LocalDateTime = { LocalDateTime.now() },
-) : SQLiteOpenHelper(context.applicationContext, name, null, VERSION) {
+    engine: DatabaseEngine = DatabaseEngine.Plain,
+) : Closeable {
+    private val helper = engine.open(
+        context.applicationContext,
+        name,
+        object : SupportSQLiteOpenHelper.Callback(VERSION) {
+            override fun onConfigure(db: SupportSQLiteDatabase) {
+                db.setForeignKeyConstraintsEnabled(true)
+            }
 
-    override fun onConfigure(db: SQLiteDatabase) {
-        super.onConfigure(db)
-        db.setForeignKeyConstraintsEnabled(true)
-    }
+            override fun onCreate(db: SupportSQLiteDatabase) {
+                createSchema(db)
+                seedDefaults(db, clock())
+            }
 
-    override fun onCreate(db: SQLiteDatabase) {
-        createSchema(db)
-        seedDefaults(db, clock())
-    }
+            override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {
+                // Version 1 is the first schema. Migrations add `if (oldVersion < N) { ... }`
+                // steps here (ALTER TABLE / new tables), never drop-and-recreate, so users
+                // keep their financial history.
+                if (oldVersion < 2) addBanks(db)
+                if (oldVersion < 3) addSubCategories(db)
+                if (oldVersion < 4) addCreditLimits(db)
+                if (oldVersion < 5) addPeople(db)
+                if (oldVersion < 6) addRulePeople(db)
+                if (oldVersion < 7) migrateBrandCategoryIcons(db)
+                if (oldVersion < 8) addTransactionPictures(db)
+                if (oldVersion < 9) addBillingDays(db)
+                if (oldVersion < 10) addAccountNumbers(db)
+                if (oldVersion < 11) addNewDefaultCategories(db, clock())
+                if (oldVersion < 12) addAccountNumberStarts(db)
+            }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Version 1 is the first schema. Migrations add `if (oldVersion < N) { ... }`
-        // steps here (ALTER TABLE / new tables), never drop-and-recreate, so users
-        // keep their financial history.
-        if (oldVersion < 2) addBanks(db)
-        if (oldVersion < 3) addSubCategories(db)
-        if (oldVersion < 4) addCreditLimits(db)
-        if (oldVersion < 5) addPeople(db)
-        if (oldVersion < 6) addRulePeople(db)
-        if (oldVersion < 7) migrateBrandCategoryIcons(db)
-        if (oldVersion < 8) addTransactionPictures(db)
-        if (oldVersion < 9) addBillingDays(db)
-        if (oldVersion < 10) addAccountNumbers(db)
-        if (oldVersion < 11) addNewDefaultCategories(db, clock())
-        if (oldVersion < 12) addAccountNumberStarts(db)
-    }
+            override fun onOpen(db: SupportSQLiteDatabase) {
+                migrateBrandCategoryIcons(db)
+                // A safety net, not a migration: a database whose version says it has every column but which lacks one (a build that
+                // numbered its versions differently, a restore of an older file) would refuse every account write. Only ever adds.
+                runCatching { ensureAccountColumns(db) }
+            }
+        },
+    )
 
-    override fun onOpen(db: SQLiteDatabase) {
-        super.onOpen(db)
-        migrateBrandCategoryIcons(db)
-        // A safety net, not a migration: a database whose version says it has every column but which lacks one (a build that
-        // numbered its versions differently, a restore of an older file) would refuse every account write. Only ever adds.
-        runCatching { ensureAccountColumns(db) }
-    }
+    /** The database, opened - and made, or brought up to this version - the first time it is asked for. */
+    val writableDatabase: SupportSQLiteDatabase get() = helper.writableDatabase
+
+    val readableDatabase: SupportSQLiteDatabase get() = helper.readableDatabase
+
+    override fun close() = helper.close()
 
     companion object {
         const val DB_NAME = "normpix_finance.db"
@@ -78,7 +94,7 @@ class FinanceDatabase(
         )
 
         /** Adds any of [ACCOUNT_EXTRA_COLUMNS] the accounts table lacks (empty for every account, as the migrations leave them). */
-        fun ensureAccountColumns(db: SQLiteDatabase) {
+        fun ensureAccountColumns(db: SupportSQLiteDatabase) {
             if (db.isReadOnly) return
             val have = db.rawQuery("PRAGMA table_info(accounts)", null).use { cursor ->
                 buildSet { while (cursor.moveToNext()) add(cursor.getString(cursor.getColumnIndexOrThrow("name"))) }
@@ -98,7 +114,7 @@ class FinanceDatabase(
         const val RECURRING_RULES = "recurring_rules"
         const val META = "meta"
 
-        fun createSchema(db: SQLiteDatabase) {
+        fun createSchema(db: SupportSQLiteDatabase) {
             db.execSQL(
                 """
                 CREATE TABLE $ACCOUNTS (
@@ -224,7 +240,7 @@ class FinanceDatabase(
         }
 
         /** The banks the user added (built-in banks are not stored; accounts refer to them by directory id). */
-        private fun createBanksTable(db: SQLiteDatabase) {
+        private fun createBanksTable(db: SupportSQLiteDatabase) {
             db.execSQL("CREATE TABLE $BANKS (key TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL)")
         }
 
@@ -233,7 +249,7 @@ class FinanceDatabase(
          * accounts whose name *starts with* a known bank's ("HDFC Savings", "ICICI Credit Card", "Paytm Wallet") - the only
          * evidence there is. Everything else stays unlinked for the user to set when editing; nothing is removed or renamed.
          */
-        fun addBanks(db: SQLiteDatabase) {
+        fun addBanks(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE $ACCOUNTS ADD COLUMN bank_key TEXT")
             createBanksTable(db)
             val catalog = BankCatalog.BuiltIn
@@ -247,7 +263,7 @@ class FinanceDatabase(
         }
 
         /** The people expenses can be spent on. Names are unique whatever their case, so one person is never two. */
-        private fun createPeopleTable(db: SQLiteDatabase) {
+        private fun createPeopleTable(db: SupportSQLiteDatabase) {
             db.execSQL(
                 """
                 CREATE TABLE $PEOPLE (
@@ -269,7 +285,7 @@ class FinanceDatabase(
          * repository checks this first and says so kindly; the triggers keep a bug upstream from writing it anyway, and they
          * hold for a database that was migrated just as for a new one.
          */
-        private fun createPersonGuards(db: SQLiteDatabase, table: String = TRANSACTIONS, prefix: String = "tx") {
+        private fun createPersonGuards(db: SupportSQLiteDatabase, table: String = TRANSACTIONS, prefix: String = "tx") {
             for ((name, event) in listOf("insert" to "INSERT", "update" to "UPDATE OF type, person_id")) {
                 db.execSQL(
                     """
@@ -285,7 +301,7 @@ class FinanceDatabase(
          * Version 5: expenses can be spent on a person. Adds the people table and the (empty) link on transactions - every
          * existing transaction stays exactly as it was, with no one on it - and an index to find a person's expenses by.
          */
-        fun addPeople(db: SQLiteDatabase) {
+        fun addPeople(db: SupportSQLiteDatabase) {
             createPeopleTable(db)
             db.execSQL("ALTER TABLE $TRANSACTIONS ADD COLUMN person_id INTEGER REFERENCES $PEOPLE(id) ON DELETE SET NULL")
             db.execSQL("CREATE INDEX idx_tx_person ON $TRANSACTIONS(person_id, occurred_at)")
@@ -296,7 +312,7 @@ class FinanceDatabase(
          * Version 6: a recurring payment can be for a person, so what it records is too. Adds the (empty) link - every existing
          * rule stays as it was, for no one - and the same only-an-expense guard the transactions have.
          */
-        fun addRulePeople(db: SQLiteDatabase) {
+        fun addRulePeople(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE $RECURRING_RULES ADD COLUMN person_id INTEGER REFERENCES $PEOPLE(id) ON DELETE SET NULL")
             createPersonGuards(db, RECURRING_RULES, "rule")
         }
@@ -304,7 +320,7 @@ class FinanceDatabase(
         /**
          * Version 7: updates categories whose names match known services/brands to use their authentic brand icon key.
          */
-        fun migrateBrandCategoryIcons(db: SQLiteDatabase) {
+        fun migrateBrandCategoryIcons(db: SupportSQLiteDatabase) {
             for ((name, brandKey) in brandNamesToKey) {
                 db.execSQL(
                     "UPDATE $CATEGORIES SET icon = ? WHERE LOWER(TRIM(name)) = ? AND icon != ?",
@@ -323,7 +339,7 @@ class FinanceDatabase(
          * of its sub-categories likewise. A database first filled with them already is left alone, so one the user deleted
          * since doesn't come back.
          */
-        fun addNewDefaultCategories(db: SQLiteDatabase, now: LocalDateTime) {
+        fun addNewDefaultCategories(db: SupportSQLiteDatabase, now: LocalDateTime) {
             if (seededWithLaterDefaults(db)) return
             val stamp = now.toStorage()
             val taken = mutableSetOf<Pair<String, String>>()
@@ -373,7 +389,7 @@ class FinanceDatabase(
          * together with the first category of all (seeding stamps every row it writes alike). Only names no older release
          * seeded count - an older sub-category of the same name, moved to the top, would say so wrongly.
          */
-        private fun seededWithLaterDefaults(db: SQLiteDatabase): Boolean {
+        private fun seededWithLaterDefaults(db: SupportSQLiteDatabase): Boolean {
             val seeded = db.rawQuery("SELECT created_at FROM $CATEGORIES ORDER BY id LIMIT 1", null)
                 .use { if (it.moveToFirst()) it.getLong(0) else null } ?: return false
             val markers = (CategorySuggestions.addedLater - CategorySuggestions.formerSubCategories).map { it.lowercase() }.toSet()
@@ -391,7 +407,7 @@ class FinanceDatabase(
          * both ends of the number is told from another card's. Adds the (empty) column: every account stays as it was, with
          * none - nothing is worked out for an account that was never told.
          */
-        fun addAccountNumberStarts(db: SQLiteDatabase) {
+        fun addAccountNumberStarts(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE $ACCOUNTS ADD COLUMN number_start TEXT")
         }
 
@@ -400,7 +416,7 @@ class FinanceDatabase(
          * shows those digits is put on the right account. Adds the two (empty) columns: every account stays as it was, with
          * neither - nothing is worked out for an account that was never told.
          */
-        fun addAccountNumbers(db: SQLiteDatabase) {
+        fun addAccountNumbers(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE $ACCOUNTS ADD COLUMN number_ending TEXT")
             db.execSQL("ALTER TABLE $ACCOUNTS ADD COLUMN card_id TEXT")
         }
@@ -409,7 +425,7 @@ class FinanceDatabase(
          * Version 9: a credit card can have a statement day and a payment-due day. Adds the two (empty) columns: every account
          * stays as it was, with neither - no date is made up for a card that was never given one.
          */
-        fun addBillingDays(db: SQLiteDatabase) {
+        fun addBillingDays(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE $ACCOUNTS ADD COLUMN statement_day INTEGER")
             db.execSQL("ALTER TABLE $ACCOUNTS ADD COLUMN due_day INTEGER")
         }
@@ -418,12 +434,12 @@ class FinanceDatabase(
          * Version 8: a transaction can have a picture attached (a bill, a receipt, a payment screenshot). Adds the (empty)
          * column for its file name: every transaction stays as it was, with none.
          */
-        fun addTransactionPictures(db: SQLiteDatabase) {
+        fun addTransactionPictures(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE $TRANSACTIONS ADD COLUMN picture TEXT")
         }
 
         /** Version 4: a credit card can have a limit. Adds the (empty) column: every account stays as it was. */
-        fun addCreditLimits(db: SQLiteDatabase) {
+        fun addCreditLimits(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE $ACCOUNTS ADD COLUMN credit_limit INTEGER")
         }
 
@@ -431,7 +447,7 @@ class FinanceDatabase(
          * Version 3: a category can sit under another. Adds the (empty) parent column - every existing category stays
          * top-level, exactly as it was - and an index to find a category's sub-categories by.
          */
-        fun addSubCategories(db: SQLiteDatabase) {
+        fun addSubCategories(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE $CATEGORIES ADD COLUMN parent_id INTEGER REFERENCES $CATEGORIES(id)")
             db.execSQL("CREATE INDEX idx_category_parent ON $CATEGORIES(parent_id)")
         }
@@ -440,7 +456,7 @@ class FinanceDatabase(
          * First-run defaults: one Cash account and a small, editable set of
          * categories. These are starting points, not user data.
          */
-        fun seedDefaults(db: SQLiteDatabase, now: LocalDateTime) {
+        fun seedDefaults(db: SupportSQLiteDatabase, now: LocalDateTime) {
             val stamp = now.toStorage()
             db.insertOrThrow(
                 ACCOUNTS,

@@ -190,9 +190,23 @@ internal class CardsTransferFlows(
     /**
      * Opens the cards file [text] with the password the user enters, asked again - with a word on why - until it opens or they give
      * up. Null when they gave up, or when the file turned out to be unusable (which is said). [alone]: the file is being imported
-     * by itself, so "Nothing was changed" is true to say of it.
+     * by itself, so "Nothing was changed" is true to say of it. [password], when known (the one a locked backup around the file
+     * opened with), is tried first without asking.
      */
-    suspend fun unlock(text: String, alone: Boolean = true): CardsTransfer.Result.Cards? {
+    suspend fun unlock(text: String, alone: Boolean = true, password: String? = null): CardsTransfer.Result.Cards? {
+        if (password != null) {
+            val result = overlays.loading("Opening the saved cards") {
+                withContext(Dispatchers.Default) { CardsTransfer.decode(text, password.toCharArray()) }
+            } ?: return null
+            when (result) {
+                is CardsTransfer.Result.Cards -> return result
+                CardsTransfer.Result.WrongPassword -> Unit
+                is CardsTransfer.Result.Invalid -> {
+                    problem(result.reason, nothingChanged = alone)
+                    return null
+                }
+            }
+        }
         var error: String? = null
         while (true) {
             val shownError = error
@@ -216,10 +230,11 @@ internal class CardsTransferFlows(
     /**
      * Settles what an app backup does with the saved cards, before anything is written: asks "Include saved cards?" (cards are
      * a lot to put in a file, so they are only there when the user says so), unlocks with the biometric prompt while Wallet lock
-     * is on, and has the user set the password they are locked with. Nothing is asked where there is nothing to ask - Wallet keeps
-     * no cards, or has none. Null if the user backed out of the whole backup (closed a sheet, or couldn't unlock).
+     * is on, and has the user set the password they are locked with - or, in a backup locked with [backupPassword], locks them
+     * with that one. Nothing is asked where there is nothing to ask - Wallet keeps no cards, or has none. Null if the user backed
+     * out of the whole backup (closed a sheet, or couldn't unlock).
      */
-    suspend fun forBackup(now: LocalDateTime): CardsForBackup? {
+    suspend fun forBackup(now: LocalDateTime, backupPassword: String? = null): CardsForBackup? {
         if (!container.preferences.state.value.walletCardsEnabled) return CardsForBackup.LeftOut
         val cardsController = container.cards
         if (cardsController.state.value !is CardsState.Ready) cardsController.load()
@@ -238,8 +253,11 @@ internal class CardsTransferFlows(
         val include = overlays.sheet<Boolean> { dismiss ->
             ConfirmSheetContent(
                 title = "Include saved cards?",
-                message = "${count(cards.size)} with their full numbers, expiry and CVV where one is kept. They are locked with a " +
-                    "password you set next, and nothing else in the backup is.",
+                message = "${count(cards.size)} with their full numbers, expiry and CVV where one is kept. " + if (backupPassword != null) {
+                    "They are locked with the backup's password."
+                } else {
+                    "They are locked with a password you set next, and nothing else in the backup is."
+                },
                 confirmLabel = "Include",
                 cancelLabel = "Leave out",
                 destructive = false,
@@ -253,7 +271,13 @@ internal class CardsTransferFlows(
             snackbars.show("Couldn't unlock, so nothing was backed up.", SnackbarKind.Error)
             return null
         }
-        val file = lock(cards, now) ?: return null
+        val file = if (backupPassword != null) {
+            overlays.loading("Locking your cards") {
+                withContext(Dispatchers.Default) { CardsTransfer.encode(cards, backupPassword.toCharArray(), exportedAt = now) }
+            }
+        } else {
+            lock(cards, now)
+        } ?: return null
         return CardsForBackup.Locked(file, cards.size)
     }
 

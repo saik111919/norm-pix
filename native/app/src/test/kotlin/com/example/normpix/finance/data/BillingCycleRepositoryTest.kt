@@ -8,6 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.FinanceValidationException
+import com.example.normpix.storage.rawQuery
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import kotlin.test.AfterTest

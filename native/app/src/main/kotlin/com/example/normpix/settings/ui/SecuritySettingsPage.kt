@@ -8,6 +8,7 @@ import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.ScreenshotMonitor
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.VerifiedUser
@@ -20,15 +21,19 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import com.example.normpix.BuildConfig
+import com.example.normpix.finance.data.FinanceDatabase
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
+import com.example.normpix.reminders.RemindersDatabase
 import com.example.normpix.settings.AppLockScope
 import com.example.normpix.settings.AppLockTimeout
+import com.example.normpix.storage.EncryptedDatabases
 import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
@@ -309,6 +314,26 @@ fun SecuritySettingsPage() {
                             supporting = "No account and no sign-in, and nothing is sent anywhere. " +
                                 "NormPix never reads SMS or connects to your bank.",
                             leading = { Icon(Icons.Rounded.PhoneAndroid, contentDescription = null) },
+                            supportingMaxLines = 4,
+                        )
+                    }
+                    item {
+                        // What is on the phone, not what is meant to be: encrypted only once both databases are moved and no plain copy is left.
+                        val context = LocalContext.current
+                        val dataEncrypted = remember {
+                            EncryptedDatabases.isEncrypted(context, FinanceDatabase.DB_NAME) &&
+                                EncryptedDatabases.isEncrypted(context, RemindersDatabase.DB_NAME)
+                        }
+                        ListRow(
+                            headline = if (dataEncrypted) "Your data is encrypted" else "Your data isn't encrypted by NormPix yet",
+                            supporting = if (dataEncrypted) {
+                                "Accounts, transactions, budgets, people and reminders are encrypted with SQLCipher (AES-256), with " +
+                                    "the key kept in the Android Keystore."
+                            } else {
+                                "Android's own storage encryption still protects it. NormPix adds its own when it starts, and tries " +
+                                    "again each time until it can."
+                            },
+                            leading = { Icon(if (dataEncrypted) Icons.Outlined.Lock else Icons.Outlined.LockOpen, contentDescription = null) },
                             supportingMaxLines = 4,
                         )
                     }

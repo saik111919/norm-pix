@@ -28,7 +28,7 @@
 
 ## About
 
-NormPix is a personal finance tracker and card wallet for Android, built natively with **Kotlin**, **Jetpack Compose** and **Material 3 Expressive**. You record spending and income by hand, or by sharing a payment app's receipt with it. It keeps budgets, repeating payments and reminders, shows where the money went, and holds your cards in an encrypted vault. There is no account, no server and no tracking: the one connection the app makes is to GitHub, to check for its own updates.
+NormPix is a personal finance tracker and card wallet for Android, built natively with **Kotlin**, **Jetpack Compose** and **Material 3 Expressive**. You record spending and income by hand, or by sharing a payment app's receipt with it. It keeps budgets, repeating payments and reminders, shows where the money went, and holds your cards in an encrypted vault. Everything it keeps is encrypted on the phone. There is no account, no server and no tracking: the one connection the app makes is to GitHub, to check for its own updates.
 
 ## Screenshots
 
@@ -58,6 +58,7 @@ NormPix is a personal finance tracker and card wallet for Android, built nativel
 - **Add a transaction in seconds.** Share a receipt or payment screenshot from Google Pay, PhonePe or your bank app, and NormPix reads it on the device (ML Kit) and fills in the amount, payee, account and category for you to check.
 - **Plans that keep up.** Monthly budgets per category, repeating payments that record themselves, and reminders with snooze, all on the Plans & Activity tab.
 - **Insights that answer questions.** Where the money went, what changed from last month, spending per person, and any range of days you pick.
+- **Encrypted on your phone.** Accounts, transactions, budgets, people and reminders are kept encrypted with SQLCipher (AES-256), its key held by the Android Keystore; a backup can be locked with a password of your own.
 - **A wallet you can trust.** Card numbers are encrypted, hidden until you unlock (fingerprint, face or screen lock, or a tap on your own NFC tag), and cleared from the clipboard after copying. Screenshots of the app are blocked.
 - **On your home screen.** Six widgets: your recent transactions at a glance, one tap to add an expense, income or a transfer, and four clocks - one with turning rings after a watch face, and a cookie-shaped one in three styles (analog, analog with numbers, digital). Settings > Widgets has a pill for each with a preview and an **Add to home screen** button, so nothing needs hunting for in the launcher's picker. They follow your wallpaper's colours on Android 12 and later, and show nothing of your ledger while NormPix is locked.
 - **Made to feel native.** Material 3 Expressive throughout, your choice of accent and font (or a Pure black-and-white theme), ten app icons, and six page-transition styles, including a Linux-like window open and close.
@@ -90,7 +91,7 @@ NormPix is a personal finance tracker and card wallet for Android, built nativel
 - Linked to what they're about: a transaction, a repeating payment, an account or a card's bill
 
 **Your data**
-- Full backup with pictures (.zip), a small backup without them (.json), and a spreadsheet export (.csv)
+- Full backup with pictures (.zip), a small backup without them (.json), and a spreadsheet export (.csv); each backup can be locked with a password
 - Restore checks the file first and asks before replacing anything
 - Sample data to try everything without entering your own
 
@@ -135,7 +136,7 @@ NormPix is a personal finance tracker and card wallet for Android, built nativel
 > Yes. Turn on **Settings → Data & backup → Sample data**: about three months of accounts, transactions, budgets, repeating payments, reminders and cards appear. It lives in memory only, so turning it off brings your own data back, untouched.
 
 ### How do I move to a new phone?
-> Make a **Full backup, with pictures** (Settings → Data & backup), copy the `.zip` to the new phone, install NormPix there and **Restore from backup**. Card numbers are never put in a backup; add your cards again on the new phone.
+> Make a **Full backup, with pictures** (Settings → Data & backup), copy the `.zip` to the new phone, install NormPix there and **Restore from backup**. Lock the backup with a password when it asks, and keep the password safe: NormPix can't recover a forgotten one. Card numbers are only in the backup of everything, and only if you choose to include them.
 
 ### Does it read my SMS or notifications?
 > No. NormPix has no SMS or notification-listener permission. To add a transaction from a payment app, share its receipt or screenshot with NormPix.
@@ -150,6 +151,7 @@ native/                         The Android app (Kotlin, Jetpack Compose)
 ├── app/src/main/kotlin/com/example/normpix/
 │   ├── finance/                Money: data (SQLite, backups), domain (ledger, budgets), share (receipt reading), ui
 │   ├── wallet/                 Cards: encrypted vault, card faces, NFC, expiry reminders, secure clipboard
+│   ├── storage/                How the databases are opened: encrypted with SQLCipher, the key in the Android Keystore
 │   ├── reminders/              Reminders: model, alarms, notifications, screens
 │   ├── screens/                Home, Plans & Activity, Wallet tabs
 │   ├── navigation/             App shell, navigation bar, page transitions, splash, search

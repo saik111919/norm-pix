@@ -52,7 +52,7 @@ class SampleDataRestoreTest {
         compose.setContent { env.Content { DataSettingsPage() } }
         compose.waitForIdle()
 
-        compose.onNodeWithText("A backup of everything or a full backup (.zip), or one without pictures (.json). It's checked first, and you confirm what is replaced before anything is.")
+        compose.onNodeWithText("A backup of everything or a full backup (.zip), or one without pictures (.json), locked or not. It's checked first, and you confirm what is replaced before anything is.")
             .performScrollTo()
             .assertExists()
 

@@ -4,6 +4,8 @@ import android.content.ContentValues
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.normpix.finance.ui.brandKeyForName
+import com.example.normpix.storage.insert
+import com.example.normpix.storage.rawQuery
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith

@@ -20,6 +20,7 @@ import com.example.normpix.reminders.ReminderNotifications
 import com.example.normpix.reminders.RemindersController
 import com.example.normpix.reminders.RemindersDatabase
 import com.example.normpix.settings.AppPreferences
+import com.example.normpix.storage.EncryptedDatabases
 import com.example.normpix.wallet.ActivityHost
 import com.example.normpix.wallet.AppLockService
 import com.example.normpix.wallet.CardBankLinker
@@ -130,8 +131,8 @@ class NormPixApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         // Read before anything opens it: whether NormPix has kept a ledger on this phone yet (it is made on the first launch, with
-        // the Cash account in it). None: a new install, or one whose storage was cleared.
-        val hadData = getDatabasePath(FinanceDatabase.DB_NAME).exists()
+        // the Cash account in it), plain or encrypted. None: a new install, or one whose storage was cleared.
+        val hadData = EncryptedDatabases.exists(this, FinanceDatabase.DB_NAME)
         container = buildContainer(this)
         welcomeNewInstall(hadData)
         ReminderNotifications.createChannel(this)
@@ -229,10 +230,12 @@ class NormPixApplication : Application() {
             val alarms = AlarmReminderScheduler(app)
             val host = ActivityHost()
             val lock = AppLockService()
+            // The ledger and the reminders are encrypted on the phone (each moved over from its plain file the first time it opens).
+            val databases = EncryptedDatabases.forApp(app)
             return AppContainer(
                 preferences = AppPreferences(prefs),
-                finance = FinanceController(FinanceRepository(FinanceDatabase(app)), TransactionPictures(app)),
-                reminders = RemindersController(ReminderDao(RemindersDatabase(app)), alarms),
+                finance = FinanceController(FinanceRepository(FinanceDatabase(app, engine = databases)), TransactionPictures(app)),
+                reminders = RemindersController(ReminderDao(RemindersDatabase(app, engine = databases)), alarms),
                 vault = FileCardVault(File(app.filesDir, "card_vault.bin")),
                 lock = lock,
                 host = host,

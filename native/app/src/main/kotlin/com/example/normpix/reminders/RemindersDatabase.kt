@@ -3,8 +3,13 @@ package com.example.normpix.reminders
 import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
-import android.database.sqlite.SQLiteOpenHelper
+import androidx.sqlite.db.SupportSQLiteDatabase
+import androidx.sqlite.db.SupportSQLiteOpenHelper
+import com.example.normpix.storage.DatabaseEngine
+import com.example.normpix.storage.insertOrThrow
+import com.example.normpix.storage.query
+import com.example.normpix.storage.update
+import java.io.Closeable
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.concurrent.Executors
@@ -18,12 +23,28 @@ import kotlinx.serialization.json.JsonObject
 /**
  * Local SQLite database for [Reminder]s. Unlike the encrypted card vault,
  * reminders need real WHERE / ORDER BY queries as the list grows, so they live
- * in a proper table. Pass a null [name] for a private in-memory database (tests).
+ * in a proper table. Pass a null [name] for a private in-memory database (tests). [engine] opens the file: plain SQLite unless
+ * another is given - the app gives the encrypted one (see `storage/EncryptedDatabases`).
  */
-class RemindersDatabase(context: Context, name: String? = DB_NAME) :
-    SQLiteOpenHelper(context.applicationContext, name, null, VERSION) {
+class RemindersDatabase(context: Context, name: String? = DB_NAME, engine: DatabaseEngine = DatabaseEngine.Plain) : Closeable {
+    private val helper = engine.open(
+        context.applicationContext,
+        name,
+        object : SupportSQLiteOpenHelper.Callback(VERSION) {
+            override fun onCreate(db: SupportSQLiteDatabase) = create(db)
 
-    override fun onCreate(db: SQLiteDatabase) {
+            override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = upgrade(db, oldVersion)
+        },
+    )
+
+    /** The database, opened - and made, or brought up to this version - the first time it is asked for. */
+    val writableDatabase: SupportSQLiteDatabase get() = helper.writableDatabase
+
+    val readableDatabase: SupportSQLiteDatabase get() = helper.readableDatabase
+
+    override fun close() = helper.close()
+
+    private fun create(db: SupportSQLiteDatabase) {
         db.execSQL(
             """
             CREATE TABLE $TABLE (
@@ -50,7 +71,7 @@ class RemindersDatabase(context: Context, name: String? = DB_NAME) :
         db.execSQL("CREATE INDEX idx_reminders_category ON $TABLE(category)")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+    private fun upgrade(db: SupportSQLiteDatabase, oldVersion: Int) {
         // Schema changes add `if (oldVersion < N) { ALTER TABLE ... }` steps here so existing
         // reminders survive an app update.
         if (oldVersion < 2) addLinks(db)
@@ -66,7 +87,7 @@ class RemindersDatabase(context: Context, name: String? = DB_NAME) :
          * kind and the reference, and gives every reminder that was linked to a card (the only link there was) that link in
          * the new form. The old column stays, still written for a card, and is read when the new ones are empty.
          */
-        fun addLinks(db: SQLiteDatabase) {
+        fun addLinks(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE $TABLE ADD COLUMN link_kind TEXT")
             db.execSQL("ALTER TABLE $TABLE ADD COLUMN link_ref TEXT")
             db.execSQL(
@@ -88,7 +109,7 @@ class ReminderDao(
 
     private fun Long.moment(): LocalDateTime = java.time.Instant.ofEpochMilli(this).atZone(zone).toLocalDateTime()
 
-    private suspend fun <T> io(block: SQLiteDatabase.() -> T): T = withContext(dispatcher) { database.writableDatabase.block() }
+    private suspend fun <T> io(block: SupportSQLiteDatabase.() -> T): T = withContext(dispatcher) { database.writableDatabase.block() }
 
     private fun Reminder.toValues() = ContentValues().apply {
         id?.let { put("id", it) }

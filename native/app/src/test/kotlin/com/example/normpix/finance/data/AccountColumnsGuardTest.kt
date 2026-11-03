@@ -4,7 +4,9 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.test.core.app.ApplicationProvider
+import com.example.normpix.storage.rawQuery
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -60,7 +62,7 @@ class AccountColumnsGuardTest {
         context.deleteDatabase(dbName)
     }
 
-    private fun columnsOf(db: SQLiteDatabase): Set<String> =
+    private fun columnsOf(db: SupportSQLiteDatabase): Set<String> =
         db.rawQuery("PRAGMA table_info(accounts)", null).use { cursor ->
             buildSet { while (cursor.moveToNext()) add(cursor.getString(cursor.getColumnIndexOrThrow("name"))) }
         }

@@ -166,6 +166,20 @@ transaction and read again to fill the form.
 - Exports: **Full backup with pictures (.zip)**, **small backup (.json)**, **CSV**, **App backup** (zip with settings,
   reminders, profile, font, optional cards - chosen part by part when restoring; `backup/`). Restore validates first and asks
   before replacing anything; old backups still restore; a newer-format file is refused.
+- **Locked backups** (since 2026-11-03, whole-app encryption stage 1): each restorable export first asks "Lock the backup?"
+  (`BackupLockSheet` in `settings/ui/LockedBackupUi.kt`; **Lock it** is preselected, **Don't lock** saves the file exactly as before).
+  Locked, the whole file is wrapped by `backup/LockedFile` and saved as `<name>.locked` (`application/octet-stream`); unlocked it is
+  the old file byte for byte, so every reader and limit is unchanged. Restore sniffs the first 15 bytes (`openBackup`): a locked file
+  asks for its password (again after a wrong one), is read through the usual `readBackup`, then read to its end (`BackupSource.finish`)
+  so a cut or extended file is refused before anything changes. In a locked app backup the saved cards are locked with the backup's
+  password (no second sheet), and restoring tries that password on them first. The CSV is never locked (it is for spreadsheets).
+  No password is stored anywhere; a forgotten one can't be recovered.
+- **Encrypted on the phone** (since 2026-11-03, stage 2): the finance and reminders databases are SQLCipher files
+  (`*.encrypted.db`), key in the Keystore; an existing plain ledger is moved over on the first start of the new build and the plain
+  file deleted only after the copy is proven identical (see `architecture.md` section 3). Settings > Security & Lock > Your data says
+  "Your data is encrypted" only when both are moved with no plain copy left (read from the files), else "isn't encrypted by NormPix
+  yet". About > Credits > SQLCipher shows its BSD licence (required attribution). Not encrypted yet: transaction pictures, the
+  profile photo, the font and SharedPreferences (stages 3-4: pictures, an optional biometric-bound key - not started).
 - **Sample data** (Settings > Data & backup): in-memory only (`DummyData`), since 2026-11-01 **six months** (`MONTHS`, seeded `Random`):
   6 accounts (Cash, HDFC/SBI savings, ICICI/Axis cards, Paytm), 6 people, a few hundred transactions over real sub-categories, card bills
   paid as transfers, this month's budgets in all three states (Fitness nearly used, Shopping over from the 2nd, the overall on track), 8

@@ -94,13 +94,25 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
 
 | Store | Where | Notes |
 |---|---|---|
-| Finance DB | `normpix_finance.db`, `finance/data/FinanceDatabase.kt` | `VERSION` 12. Tables: accounts, people, banks, categories, transactions, budgets, recurring_rules, meta. FKs on. CHECK constraints and triggers enforce positive amounts, transfer shape, "only an expense names a person". |
-| Reminders DB | `RemindersDatabase.kt` | `VERSION` 2 (reminders can link to a card/account/transaction/recurring rule). |
+| Finance DB | `normpix_finance.encrypted.db` (SQLCipher; was `normpix_finance.db`), `finance/data/FinanceDatabase.kt` | `VERSION` 12. Tables: accounts, people, banks, categories, transactions, budgets, recurring_rules, meta. FKs on. CHECK constraints and triggers enforce positive amounts, transfer shape, "only an expense names a person". |
+| Reminders DB | `normpix_reminders.encrypted.db` (was `normpix_reminders.db`), `RemindersDatabase.kt` | `VERSION` 2 (reminders can link to a card/account/transaction/recurring rule). |
+| Database key | `noBackupFilesDir/database.key` | 32 random bytes sealed by Keystore alias `normpix_database_key_v1` (AES-256-GCM, not auth-bound). Shared by both DBs. Losing it (or the Keystore key) means the encrypted DBs can't open - they are then left untouched and the ledger shows `FinanceStatus.Failed`. |
 | Preferences | SharedPreferences `normpix_preferences` | One `AppPrefsState` flow; see section 6. Other files: `normpix_nfc_tags` (registered NFC tags, AES-GCM entries), `normpix_card_expiry`. |
 | Card vault | `filesDir/card_vault.bin` | AES-256-GCM, key in Android Keystore, written atomically (`FileCardVault`). Cards are never in the finance DB and never in a normal backup. |
 | Pictures | `TransactionPictures` (kept + drafts folders) | A transaction's attached picture; backed up in the full (.zip) backup. |
 | Profile photo / custom font | `settings/ProfilePhotos.kt`, `settings/CustomFont.kt` | Files in app storage: `profile/photo-<stamp>.jpg` (framed) or `.gif` (kept as it came); the font file (`CustomFont.FILE_NAME`) in the `fonts` folder plus one more file per extra weight (`CustomFont.extraName`) for a family. Both in the app backup. |
 
+- **Encryption at rest (since 2026-11-03, stage 2).** Both DBs are opened through a `storage/DatabaseEngine`; the app passes
+  `EncryptedDatabases.forApp(app)`, tests and the sample data use `DatabaseEngine.Plain` (the default; SQLCipher's native library
+  can't load on the JVM). Code is written against androidx `SupportSQLiteDatabase` (SQLCipher's `SQLiteDatabase` implements it);
+  `storage/Sql.kt` keeps the platform call names (`rawQuery`, `insertOrThrow`, `insert` = -1 on failure, `replaceOrThrow`,
+  `update(table, values, where, args)`, the `query(table, ...)` builder, `transaction {}`) - import them from `com.example.normpix.storage`.
+  On first open `EncryptedDatabases` decides the file: encrypted file if present (never falls back to plain; a plain file beside it
+  is deleted only if `DatabaseDigest` says it holds the same); else a new encrypted file on a new install; else **moves** the plain
+  one: `sqlcipher_export` into `<name>.encrypted.db.partial`, checks `integrity_check` + `cipher_integrity_check` + digest equality,
+  renames, then deletes the plain file and its sidecars. Any failure (library won't load, key unavailable, export/verify fails) keeps
+  the plain file as it was and retries next start. A **new database** must be opened the same way (pass the engine) and added to the
+  move. `EncryptedDatabases.exists(context, name)` is what "has this phone a ledger" checks now.
 - **Migrations are additive.** `FinanceDatabase.onUpgrade` is a chain of `if (oldVersion < N) { ... }` steps (v2 banks,
   v3 sub-categories, v4 credit limits, v5 people, v6 rule people, v7 brand icons, v8 transaction pictures, v9 billing days,
   v10 account numbers/card link, v11 later default categories, v12 account number start). `ALTER TABLE` / new tables only;
@@ -112,7 +124,10 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
   full finance backup `FinanceBackupCodec.FORMAT_VERSION = 2` (`.json`, or `.zip` with pictures); app backup
   `AppBackupManifest.VERSION = 1` (zip: finance json, pictures, `app/manifest.json`, `app/settings.json`,
   `app/reminders.json`, `app/profile/`, `app/fonts/`, `app/cards.json`); cards file `CardsTransfer.VERSION = 1`
-  (AES-256-GCM, PBKDF2 password, min 8 chars); CSV export. Reading validates first, nothing is written until a snapshot
+  (AES-256-GCM, PBKDF2 password, min 8 chars); locked backup `LockedFile.VERSION = 1` (`backup/LockedFile.kt`: any of the
+  restorable backups wrapped whole - line `normpix-locked`, a JSON header line, then 64 KB blocks each sealed with AES-256-GCM
+  under a PBKDF2-HMAC-SHA256 key (310,000 rounds, per-file salt), nonce = block number + last-block flag, both lines bound as AAD;
+  a `Locker` locks one file only); CSV export. Reading validates first, nothing is written until a snapshot
   validated cleanly, entry names must be plain relative paths, sizes are capped. Restore asks before replacing.
   `update.json` (published by CI) has `schema: 1`.
 - Threads: finance and reminders DB work run on dedicated single threads (`normpix-finance-db`, `normpix-reminders-db`);

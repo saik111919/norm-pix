@@ -5,7 +5,7 @@ description: "Everything about the NormPix project - a private, offline-first An
 
 # NormPix project skill
 
-Stamp: verified against commit `ec8a9cb3` (v1.5.0 in the working tree; v1.4.1 is the last release) on 2026-11-03. If `git log` shows newer commits on source paths, or
+Stamp: verified against commit `627fd6ff` (v1.5.0 in the working tree; v1.4.1 is the last release) on 2026-11-03. If `git log` shows newer commits on source paths, or
 `bash .claude/skills/normpix/scripts/verify.sh` reports drift, trust the code and fix the skill (`references/maintenance.md`).
 
 ## 1. The 60-second picture
@@ -105,7 +105,8 @@ reference rather than exploring. For the history or reasoning behind a feature, 
 | `banks/` | `BankCatalog` (built-in + custom banks, shared by accounts and cards; the directory with categories is `wallet/BankDirectory`) |
 | `banks/ui/` | `BankSelector`, `BankBadge` (Settings > Banks & Categories is `settings/ui/BanksAndCategoriesPage`: `AppPrimaryTabs` over `BanksContent` / `CategoriesContent`) |
 | `availability/` | `ScheduledFeature` + weekly schedule rules (NFC exchange), settings widgets |
-| `backup/` | App backup zip: archive, manifest, reader, restorer, settings codec |
+| `backup/` | App backup zip: archive, manifest, reader, restorer, settings codec; `LockedFile` (any backup locked with a password) |
+| `storage/` | How the databases are opened: `DatabaseEngine` (`Plain` = framework SQLite for tests/sample data/fallback), `EncryptedDatabases` (SQLCipher + the one-time move from a plain file), `SqlCipherEngine` (the only SQLCipher calls), `DatabaseKey` (Keystore-sealed key), `DatabaseDigest`, `Sql.kt` (`rawQuery`/`insertOrThrow`/... on `SupportSQLiteDatabase`) |
 | `widgets/` | Watch-dial and cookie clocks (`ClockWidgets`, `ClockOptions` + Widget settings activity, `SimpleClock`), Recent, Add widgets, `HomeWidget` (the Settings > Widgets list, previews, pinning), `WidgetIntents`/`WidgetRequest` |
 | `about/` | About page, its Feature guide pill and page (`GuideIndexPage`) and the topics (`GuideTopic`, `GuideArt`: real screenshots `GuideShots`, drawings as fallback) |
 
