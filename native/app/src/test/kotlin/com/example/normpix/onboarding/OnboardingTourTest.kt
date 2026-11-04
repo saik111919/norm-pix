@@ -1,19 +1,33 @@
 package com.example.normpix.onboarding
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.unit.Density
 import com.example.normpix.settings.AccentColor
 import com.example.normpix.settings.AppPreferences
 import com.example.normpix.settings.ColorSource
 import com.example.normpix.settings.ThemeMode
+import com.example.normpix.settings.WallpaperPalette
 import com.example.normpix.testing.TestEnvironment
+import com.example.normpix.ui.components.AssetBitmaps
+import com.example.normpix.ui.theme.LocalReducedMotionOverride
 import com.example.normpix.welcomeNewInstall
 import java.io.File
 import java.util.Locale
@@ -98,10 +112,21 @@ class OnboardingTourTest {
         compose.waitForIdle()
         assertEquals(ThemeMode.Dark, state.mode)
 
-        compose.onNodeWithContentDescription("Ocean colors").performClick()
+        // The colours are chosen as on Settings > Appearance > Colors: the wallpaper's palettes, or the app's own under "Other colors".
+        compose.onNodeWithContentDescription("Vibrant color").performClick()
+        compose.waitForIdle()
+        assertEquals(WallpaperPalette.Vibrant, state.wallpaperPalette)
+
+        compose.onNodeWithText("Other colors").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Ocean color").performClick()
         compose.waitForIdle()
         assertEquals(AccentColor.Blue, state.accent)
         assertEquals(ColorSource.Custom, state.colorSource)
+
+        compose.onNodeWithText("Wallpaper colors").performClick()
+        compose.waitForIdle()
+        assertEquals(ColorSource.System, state.colorSource)
     }
 
     @Test
@@ -123,6 +148,105 @@ class OnboardingTourTest {
         next()
         compose.onNodeWithText("Skip").performClick()
         assertTrue(finished)
+    }
+
+    @Test
+    fun `skip works on the first step too`() {
+        show()
+        compose.onNodeWithText("Skip").performClick()
+        assertTrue(finished)
+    }
+
+    // The pictures ----------------------------------------------------------------------------------------------
+
+    /**
+     * The art on screen: one node per step composed, each saying nothing and holding nothing a screen reader would reach. Looked up
+     * in the merged tree, the one TalkBack reads: the unmerged tree keeps what `clearAndSetSemantics` hides, for debugging.
+     */
+    private fun assertArtIsSilent() {
+        val arts = compose.onAllNodesWithTag(TOUR_ART_TAG).fetchSemanticsNodes()
+        assertTrue(arts.isNotEmpty(), "the step has its picture")
+        for (art in arts) {
+            assertTrue(art.children.isEmpty(), "nothing inside the picture is in the semantics tree")
+            assertFalse(SemanticsProperties.ContentDescription in art.config, "the picture is not described")
+            assertFalse(SemanticsProperties.Text in art.config)
+        }
+    }
+
+    @Test
+    fun `every step has a picture that TalkBack passes over`() {
+        show()
+        repeat(ONBOARDING_STEPS) { step ->
+            assertArtIsSilent()
+            if (step < ONBOARDING_STEPS - 1) next()
+        }
+    }
+
+    /** The first step's picture, [ms] further on, on a clock that only moves when told. */
+    private fun artAt(ms: Long): IntArray {
+        compose.mainClock.advanceTimeBy(ms)
+        val image = compose.onNodeWithTag(TOUR_ART_TAG, useUnmergedTree = true).captureToImage()
+        return IntArray(image.width * image.height).also { image.readPixels(it) }
+    }
+
+    private fun showStill(reduced: Boolean) {
+        // Decoded beforehand, so a picture arriving from the disk is not taken for motion.
+        tourPictures.forEach { AssetBitmaps.load(env.context, it) }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            env.Content {
+                CompositionLocalProvider(LocalReducedMotionOverride provides reduced) {
+                    Box(Modifier.fillMaxSize()) { OnboardingTour(env.preferences) { finished = true } }
+                }
+            }
+        }
+        compose.mainClock.advanceTimeByFrame()
+    }
+
+    @Test
+    fun `the stickers pop in when a step comes into view`() {
+        showStill(reduced = false)
+        val early = artAt(48)
+        val settled = artAt(3_000)
+        assertFalse(early.contentEquals(settled), "a few frames in, the stickers are still on their way")
+    }
+
+    @Test
+    fun `with animations off the stickers are simply there`() {
+        showStill(reduced = true)
+        val early = artAt(48)
+        val settled = artAt(3_000)
+        assertTrue(early.contentEquals(settled), "nothing moves: the first frame is the finished picture")
+    }
+
+    @Test
+    fun `the picture keeps its place above the title at large text`() {
+        compose.setContent {
+            env.Content {
+                val density = LocalDensity.current
+                CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1.6f)) {
+                    OnboardingTour(env.preferences) { finished = true }
+                }
+            }
+        }
+        compose.waitForIdle()
+        val titles = listOf("Welcome to NormPix", "What should we call you?", "Reminders that arrive", "You're all set")
+        titles.forEachIndexed { step, title ->
+            val art = compose.onNodeWithTag(TOUR_ART_TAG, useUnmergedTree = true).getUnclippedBoundsInRoot()
+            val heading = compose.onNodeWithText(title).getUnclippedBoundsInRoot()
+            assertTrue(heading.top >= art.bottom, "step ${step + 1}: the title starts below the picture ($heading vs $art)")
+            if (step < titles.size - 1) next()
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-xhdpi")
+    fun `on a wide window the picture stands beside the title`() {
+        show()
+        val art = compose.onNodeWithTag(TOUR_ART_TAG, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val heading = compose.onNodeWithText("Welcome to NormPix").getUnclippedBoundsInRoot()
+        assertTrue(art.left.value >= heading.right.value - 1f, "the picture is to the title's right ($art vs $heading)")
+        assertEquals(323f, (art.right - art.left).value, 1f, "at the size it has on a phone")
     }
 
     @Test

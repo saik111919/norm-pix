@@ -8,15 +8,12 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -39,10 +36,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.outlined.AddCircleOutline
-import androidx.compose.material.icons.outlined.Face
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.NotificationsActive
-import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material.icons.rounded.Check
@@ -55,6 +49,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -66,16 +62,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.paneTitle
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -86,22 +77,25 @@ import com.example.normpix.finance.ui.Hero
 import com.example.normpix.finance.ui.TonalFieldShape
 import com.example.normpix.finance.ui.typedFieldColors
 import com.example.normpix.reminders.ReminderNotifications
-import com.example.normpix.settings.AccentColor
-import com.example.normpix.settings.AppIcons
 import com.example.normpix.settings.AppPreferences
+import com.example.normpix.settings.AppPrefsState
 import com.example.normpix.settings.AvatarPreset
-import com.example.normpix.settings.ColorSource
 import com.example.normpix.settings.MAX_PROFILE_NAME
 import com.example.normpix.settings.ProfilePhotos
-import com.example.normpix.settings.ui.AppIconArt
 import com.example.normpix.settings.ui.AvatarThumb
+import com.example.normpix.settings.ui.ColorSourceChoice
+import com.example.normpix.settings.ui.PaletteChoices
 import com.example.normpix.settings.ui.themeOptions
+import com.example.normpix.ui.theme.AppTheme
+import com.example.normpix.ui.components.AssetBitmaps
 import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.ui.components.LocalPermissions
 import com.example.normpix.ui.components.ProfileAvatar
 import com.example.normpix.ui.components.politeLiveRegion
 import com.example.normpix.ui.components.rememberAppHaptics
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** How many steps the tour has. */
 internal const val ONBOARDING_STEPS = 4
@@ -118,8 +112,9 @@ private val BarRoom = 88.dp
  * tour is already in the colours the app will have. Nothing here is required: every step can be left as it is, and "Skip" goes
  * straight to the app. Settings > About > Welcome tour plays it again; what it sets is all in Settings too.
  *
- * Inspired by DropSauce's onboarding (a pager, a hero icon on each step, animated dots and one button that is an arrow until the
- * last step) and made of this app's own parts. It covers the app, and takes every touch, until [onFinished].
+ * Inspired by DropSauce's onboarding (a pager, a hero picture on each step, animated dots and one button that is an arrow until the
+ * last step) and made of this app's own parts; each step's picture is a little scene of 3D stickers ([TourArt]). It covers the app,
+ * and takes every touch, until [onFinished].
  */
 @Composable
 fun OnboardingTour(preferences: AppPreferences, onFinished: () -> Unit) {
@@ -128,9 +123,12 @@ fun OnboardingTour(preferences: AppPreferences, onFinished: () -> Unit) {
     val scope = rememberCoroutineScope()
     val haptics = rememberAppHaptics()
     val onLast by remember { derivedStateOf { pager.currentPage == ONBOARDING_STEPS - 1 } }
+    val context = LocalContext.current.applicationContext
 
     // Back goes to the step before; on the first step it is the app's own back, as on any screen.
     BackHandler(enabled = pager.currentPage > 0) { scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } }
+    // The steps' pictures, decoded now, so a step's stickers are there when it slides in.
+    LaunchedEffect(Unit) { withContext(Dispatchers.IO) { tourPictures.forEach { AssetBitmaps.load(context, it) } } }
 
     Box(
         Modifier
@@ -141,11 +139,14 @@ fun OnboardingTour(preferences: AppPreferences, onFinished: () -> Unit) {
             .semantics { paneTitle = "Welcome to NormPix" },
     ) {
         HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { step ->
-            when (step) {
-                0 -> LookStep(preferences, prefs.mode, prefs.colorSource, prefs.accent)
-                1 -> ProfileStep(preferences, prefs.profileName, prefs.profileEmoji, prefs.profilePhoto)
-                2 -> NotificationsStep()
-                else -> StartStep()
+            val place = StepPlace(offset = { (pager.currentPage - step) + pager.currentPageOffsetFraction }, current = pager.settledPage == step)
+            CompositionLocalProvider(LocalStepPlace provides place) {
+                when (step) {
+                    0 -> LookStep(preferences, prefs)
+                    1 -> ProfileStep(preferences, prefs.profileName, prefs.profileEmoji, prefs.profilePhoto)
+                    2 -> NotificationsStep()
+                    else -> StartStep()
+                }
             }
         }
         if (!onLast) {
@@ -207,14 +208,15 @@ private fun StepDots(current: Int) {
 
 /**
  * What every step shares, in the app's own language: Home's hero card (the primary colour with the cookie bleeding off its corner)
- * holds the step's picture and title, and its content stands below on the same tonal cards the app uses, scrolling when it is
- * taller than the room. The picture is [hero] where a step has something better than a glyph (the avatar, the app icon), else [icon].
+ * holds the step's picture ([art], see [TourArt]; [main] is put on its main pad) and title, and its content stands below on the
+ * same tonal cards the app uses, scrolling when it is taller than the room. On a phone the picture is above the title; where the
+ * card is wide (a tablet, a phone on its side) it stands beside it, at the phone's size.
  */
 @Composable
 private fun Step(
-    icon: ImageVector?,
+    art: TourScene,
     title: String,
-    hero: (@Composable () -> Unit)? = null,
+    main: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val onHero = MaterialTheme.colorScheme.onPrimary
@@ -226,28 +228,31 @@ private fun Step(
             .padding(start = ScreenPadding, end = ScreenPadding, top = 56.dp, bottom = BarRoom + 24.dp),
     ) {
         Hero {
-            if (hero != null) {
-                hero()
-            } else if (icon != null) {
-                Box(Modifier.size(64.dp).clip(RoundedCornerShape(20.dp)).background(onHero.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
-                    Icon(icon, contentDescription = null, tint = onHero, modifier = Modifier.size(32.dp))
+            BoxWithConstraints {
+                if (maxWidth >= WideHero) {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(title, style = MaterialTheme.typography.headlineMedium, color = onHero, modifier = Modifier.weight(1f).padding(end = 16.dp))
+                        TourArt(art, Modifier.width(PhoneArtWidth), main)
+                    }
+                } else {
+                    Column {
+                        TourArt(art, main = main)
+                        Spacer(Modifier.height(20.dp))
+                        Text(title, style = MaterialTheme.typography.headlineMedium, color = onHero)
+                    }
                 }
             }
-            Spacer(Modifier.height(20.dp))
-            Text(title, style = MaterialTheme.typography.headlineMedium, color = onHero)
         }
         Spacer(Modifier.height(16.dp))
         content()
     }
 }
 
-/** NormPix's own icon, the launcher icon the user has chosen, as the Welcome step's picture. */
-@Composable
-private fun AppLogo() {
-    val context = LocalContext.current
-    val icon = remember(context) { AppIcons.current(context) }
-    AppIconArt(icon, Modifier.size(80.dp))
-}
+/** From this width of the hero card's inside, the picture stands beside the title rather than above it. */
+private val WideHero = 560.dp
+
+/** The picture's width inside a phone's hero card (411 dp less the page's and the card's padding), kept on a wide card. */
+private val PhoneArtWidth = 323.dp
 
 @Composable
 private fun Body(text: String) {
@@ -272,21 +277,19 @@ private fun Card(heading: String, content: @Composable ColumnScope.() -> Unit) {
 
 // ----------------------------------------------------------------------------------------------------- 1: the look
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * The theme and the colours, chosen the way Settings > Appearance chooses them: the same System | Light | Dark row, and the Colors
+ * page's own palette tiles and its Wallpaper colors | Other colors choice ([PaletteChoices], [ColorSourceChoice]).
+ */
 @Composable
-private fun LookStep(
-    preferences: AppPreferences,
-    mode: com.example.normpix.settings.ThemeMode,
-    source: ColorSource,
-    accent: AccentColor,
-) {
+private fun LookStep(preferences: AppPreferences, prefs: AppPrefsState) {
     val haptics = rememberAppHaptics()
-    Step(null, "Welcome to NormPix", hero = { AppLogo() }) {
+    Step(TourScene.Look, "Welcome to NormPix") {
         Body("Track what you spend, plan what comes next and keep your cards safe. There is no account and no server: everything stays on this phone.")
         Card("Theme") {
             ConnectedChoiceRow(
                 options = themeOptions,
-                selected = mode,
+                selected = prefs.mode,
                 onSelect = {
                     haptics.selection()
                     preferences.setMode(it)
@@ -294,56 +297,8 @@ private fun LookStep(
             )
         }
         Card("Colors") {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    Swatch(
-                        label = "Wallpaper colors",
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        selected = source == ColorSource.System,
-                        icon = Icons.Outlined.Palette,
-                        onClick = {
-                            haptics.selection()
-                            preferences.setColorSource(ColorSource.System)
-                        },
-                    )
-                }
-                for (choice in AccentColor.entries) {
-                    Swatch(
-                        label = "${choice.label} colors",
-                        color = choice.seed,
-                        selected = source == ColorSource.Custom && accent == choice,
-                        onClick = {
-                            haptics.selection()
-                            preferences.setAccent(choice)
-                        },
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** One colour to choose: a 48 dp circle, ticked and ringed when it is the one in use. */
-@Composable
-private fun Swatch(label: String, color: Color, selected: Boolean, onClick: () -> Unit, icon: ImageVector? = null) {
-    val scheme = MaterialTheme.colorScheme
-    val ink = if (color.luminance() > 0.5f) Color.Black else Color.White
-    Box(
-        Modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .background(color)
-            .then(if (selected) Modifier.border(3.dp, scheme.primary, CircleShape) else Modifier.border(1.dp, scheme.outlineVariant, CircleShape))
-            .clickable(role = Role.RadioButton, onClick = onClick)
-            .semantics {
-                contentDescription = label
-                this.selected = selected
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        when {
-            selected -> Icon(Icons.Rounded.Check, contentDescription = null, tint = ink, modifier = Modifier.size(22.dp))
-            icon != null -> Icon(icon, contentDescription = null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+            PaletteChoices(prefs, preferences, haptics, wrap = true)
+            if (AppTheme.dynamicColorSupported) ColorSourceChoice(prefs, preferences)
         }
     }
 }
@@ -361,10 +316,10 @@ private fun ProfileStep(preferences: AppPreferences, savedName: String, emoji: S
     var problem by remember { mutableStateOf<String?>(null) }
 
     Step(
-        Icons.Outlined.Face,
+        TourScene.Profile,
         "What should we call you?",
-        // The picture itself is the step's hero: it changes as a name is typed and an avatar is picked.
-        hero = { ProfileAvatar(name = name, emoji = emoji, size = 96.dp, photo = photo) },
+        // The avatar itself is the main sticker: it changes as a name is typed and an avatar is picked.
+        main = { ProfileAvatar(name = name, emoji = emoji, size = 96.dp, photo = photo) },
     ) {
         Body("Your name and picture show at the top of every screen. Both stay on this phone, and you can change them in Settings > Profile.")
         OutlinedTextField(
@@ -418,7 +373,7 @@ private fun NotificationsStep() {
     val scope = rememberCoroutineScope()
     var allowed by remember { mutableStateOf(ReminderNotifications.hasPermission(context)) }
 
-    Step(Icons.Outlined.NotificationsActive, "Reminders that arrive") {
+    Step(TourScene.Reminders, "Reminders that arrive") {
         Body("NormPix can remind you about bills, repeating payments and cards about to expire. Reminders are made on your phone; nothing is sent anywhere.")
         Card("Notifications") {
             if (allowed) {
@@ -450,7 +405,7 @@ private fun NotificationsStep() {
 
 @Composable
 private fun StartStep() {
-    Step(Icons.Outlined.TaskAlt, "You're all set") {
+    Step(TourScene.Start, "You're all set") {
         Body("Here is where to begin. None of it has to be done today.")
         Card("Ways in") {
             Tip(Icons.Outlined.AddCircleOutline, "Add your first expense", "The + button at the bottom opens the actions: an expense, an income, a reminder and more.")

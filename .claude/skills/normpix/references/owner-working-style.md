@@ -68,6 +68,8 @@ Observed patterns, each with the working rule it implies:
 | "add an option / toggle" | New setting following `architecture.md` section 6 (field, key, setter, row, search entry, backup is automatic, tests). |
 | "keep it in todo" | Add a line to `native/TASKS.md` Backlog and say so; don't build it. |
 | "do it for tablets / wide screens" | Window-size branches only; phone untouched (`design-system.md` section 8). |
+| "X and Y are not consistent, follow the Y design here also" (2026-11-04: the welcome tour's colours vs Settings > Appearance > Colors) | Make X use Y's own component (extract it if it is private), not a look-alike; keep only the differences the place forces (the tour wraps the tiles because it sits in a pager) and say what they are. |
+| "not feeling fun, can we include illustrations" | Render what is there, show two or three directions on one screen before building all of it, let them pick; only art the app may ship (drawn in Compose, bundled vectors, the MIT Fluent 3D set). |
 
 ## 3. Replies
 

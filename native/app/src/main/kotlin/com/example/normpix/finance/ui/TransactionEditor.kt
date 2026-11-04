@@ -242,6 +242,7 @@ private fun TransactionEditor(
     DisposableEffect(Unit) { onDispose { pictureStore?.discard(draftPicture) } }
 
     var amountError by remember { mutableStateOf<String?>(null) }
+    val amountFocus = remember { FocusRequester() }
     var typeError by remember { mutableStateOf<String?>(null) }
     var categoryError by remember { mutableStateOf<String?>(null) }
     var accountError by remember { mutableStateOf<String?>(null) }
@@ -335,6 +336,8 @@ private fun TransactionEditor(
             else -> null
         }
         dateError = if (dateUnset) "Choose the date" else null
+        // The amount is the one thing typed: a missing one takes the cursor (and the keyboard) back to it.
+        if (amountError != null) runCatching { amountFocus.requestFocus() }
         if (amountError != null || typeError != null || categoryError != null || accountError != null || dateError != null || parsed == null) return
         // Saving what is already saved changes nothing: the sheet closes without announcing a change that never happened.
         if (isEditing && !dirty) {
@@ -624,7 +627,6 @@ private fun TransactionEditor(
         showDetails = true
     }
 
-    val amountFocus = remember { FocusRequester() }
     // A shared draft that already has its amount opens for reading, without the keyboard covering it.
     LaunchedEffect(Unit) { if (!isEditing && prefill?.amount == null) runCatching { amountFocus.requestFocus() } }
     val topOfForm = remember { BringIntoViewRequester() }

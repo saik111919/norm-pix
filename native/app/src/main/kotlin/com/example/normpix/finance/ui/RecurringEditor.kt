@@ -163,6 +163,7 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
     var pickingStart by remember { mutableStateOf(false) }
 
     var amountError by remember { mutableStateOf<String?>(null) }
+    val amountFocus = remember { FocusRequester() }
     var categoryError by remember { mutableStateOf<String?>(null) }
     var accountError by remember { mutableStateOf<String?>(null) }
     var formError by remember { mutableStateOf<String?>(null) }
@@ -237,6 +238,8 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
             isTransfer && toAccountId == accountId -> "Choose two different accounts"
             else -> null
         }
+        // The amount is the one thing typed: a missing one takes the cursor (and the keyboard) back to it.
+        if (amountError != null) runCatching { amountFocus.requestFocus() }
         if (amountError != null || categoryError != null || accountError != null || parsed == null) return
         // No shortcut for "nothing changed" here, unlike the transaction form: saving a rule again writes it the way the rule needs
         // (a last day stored as midnight takes the payment's time of day), so a save with no edits is still a change.
@@ -306,7 +309,6 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
     val preview = draft()
     val upcoming = if (active) upcomingOccurrences(preview, 3) else emptyList()
     val backfill = if (!isEditing && active) dueOccurrences(preview, now).dates.size else 0
-    val amountFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { if (!isEditing) runCatching { amountFocus.requestFocus() } }
     val reduced = rememberReducedMotion()
     val frequencies = remember { RecurrenceFrequency.entries.map { ChoiceOption(it, it.label, it.icon) } }

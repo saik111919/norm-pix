@@ -100,6 +100,7 @@ fun PayBillSheet(card: Account, onDone: (Boolean?) -> Unit) {
         formError = null
         amountError = if (parsed == null) "Enter an amount greater than zero" else null
         sourceError = if (sourceId == null) "Choose where the money comes from" else null
+        if (parsed == null) runCatching { amountFocus.requestFocus() }
         if (parsed == null || sourceId == null) return
         saving = true
         val now = LocalDateTime.now()

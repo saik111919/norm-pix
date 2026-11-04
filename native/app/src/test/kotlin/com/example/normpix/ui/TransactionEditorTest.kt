@@ -2,6 +2,7 @@ package com.example.normpix.ui
 
 import android.content.Context
 import androidx.activity.ComponentActivity
+import androidx.activity.ComponentDialog
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -9,7 +10,11 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -53,6 +58,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowDialog
 
 /**
  * The transaction editor as a bottom sheet: it saves, it asks before throwing work away, the type
@@ -125,6 +131,14 @@ class TransactionEditorTest {
         compose.waitForIdle()
     }
 
+    /** The system Back, handed to the window on top: the editor's own (each sheet is a dialog), or the question over it. */
+    private fun pressBack() {
+        compose.runOnUiThread {
+            (ShadowDialog.getShownDialogs().last { it.isShowing } as ComponentDialog).onBackPressedDispatcher.onBackPressed()
+        }
+        compose.waitForIdle()
+    }
+
     private fun typeAmount(text: String) {
         compose.onNodeWithContentDescription("Amount in INR").performTextInput(text)
         compose.waitForIdle()
@@ -154,6 +168,22 @@ class TransactionEditorTest {
         compose.waitUntil(timeoutMillis = 10_000) {
             compose.onAllNodes(hasContentDescription("Food & dining", substring = true)).fetchSemanticsNodes().isNotEmpty()
         }
+    }
+
+    @Test
+    fun saving_withoutAnAmount_saysSo_andTakesTheCursorBackToIt() {
+        openEditor()
+        val amount = compose.onNodeWithContentDescription("Amount in INR")
+        amount.assertIsFocused() // a new expense opens ready to type
+        amount.performImeAction() // Done: the keyboard goes, the rest of the form shows
+        compose.waitForIdle()
+        amount.assertIsNotFocused()
+
+        compose.onNodeWithText("Save expense").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Enter an amount greater than zero").assertExists()
+        amount.assertIsFocused()
+        assertEquals(0, runBlocking { container.finance.repository.transactions(TransactionQuery(), limit = 5).items.size })
     }
 
     @Test
@@ -297,6 +327,34 @@ class TransactionEditorTest {
 
         dismissSheet()
         compose.onNodeWithText("Discard").performClick()
+        compose.waitUntil(timeoutMillis = 5_000) { compose.onAllNodesWithText("New expense").fetchSemanticsNodes().isEmpty() }
+        assertEquals(0, compose.onAllNodesWithText("Discard this entry?").fetchSemanticsNodes().size)
+    }
+
+    // Back takes its own route out of a sheet, apart from the swipe and the scrim: on the phone it closed an editor with
+    // changes without asking (2026-11-04).
+    @Test
+    fun back_onAnEditorWithChanges_asksLikeASwipe_andKeepEditingKeepsWhatWasTyped() {
+        openEditor()
+        typeAmount("42")
+
+        pressBack()
+        compose.waitUntil(timeoutMillis = 5_000) { compose.onAllNodesWithText("Discard this entry?").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Keep editing").performClick()
+        compose.waitUntil(timeoutMillis = 5_000) { compose.onAllNodesWithText("Discard this entry?").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithText("New expense").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Amount in INR").assertTextContains("42", substring = true)
+
+        pressBack()
+        compose.waitUntil(timeoutMillis = 5_000) { compose.onAllNodesWithText("Discard this entry?").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Discard").performClick()
+        compose.waitUntil(timeoutMillis = 5_000) { compose.onAllNodesWithText("New expense").fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun back_onACleanEditor_justCloses() {
+        openEditor()
+        pressBack()
         compose.waitUntil(timeoutMillis = 5_000) { compose.onAllNodesWithText("New expense").fetchSemanticsNodes().isEmpty() }
         assertEquals(0, compose.onAllNodesWithText("Discard this entry?").fetchSemanticsNodes().size)
     }

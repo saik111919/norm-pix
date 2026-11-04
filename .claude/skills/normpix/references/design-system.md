@@ -34,7 +34,8 @@ Use these before writing anything new:
 - **Pages**: `AppPage` (tab pages), `AppSubPage` (pushed pages; owns the back button styles), `Pages.kt`. Lists: `Lists.kt`
   (`ListSection`, `SectionSubheader`, grouped segments with 4 dp inner / 20 dp outer corners).
 - **Sheets**: `EditorSheet` (every add/edit form: titled sheet, scrolling body, **pinned full-width Save**, no Cancel/close,
-  `DiscardChangesGuard` asks before dropping unsaved changes), `ConfirmSheetContent` (every confirm/alert), `SheetSurface.kt`.
+  `DiscardChangesGuard` asks before dropping unsaved changes, on Back too - section 3), `ConfirmSheetContent` (every confirm/alert),
+  `SheetSurface.kt`.
   Opened imperatively: `LocalOverlays.current.sheet<T> { dismiss -> ... }`, `.confirm(...)`, `.alert(...)`, `.loading(...)`.
 - **Choices**: `ConnectedChoiceRow` (`finance/ui/FormSelectors.kt`: the type selector, theme System|Light|Dark,
   Expense|Income - one pill track with the chosen choice as a pill inside; 2 dp gaps, radio semantics), `ButtonGroup.kt`,
@@ -61,10 +62,27 @@ Use these before writing anything new:
   Same layout and size as before; the banners behind the front one are only 6% darker, `DeckStack(behindDim)`, where cards take 20%). **Search**: `SearchField`, `SearchFilterBar`. **Reveal/LiveRegion** helpers for notices.
 - **Chrome**: `FloatingNavBar` (dock), `BottomControls.kt`, `Tabs.kt`, `FocusRing.kt`, `LockGate.kt`, `Snackbar.kt`.
 - **Fields**: tonal fill `surfaceContainerHighest`, `TonalFieldShape`, min 64 dp, `IconBadge`; typed fields (Paid to, Note,
-  names, numbers) get a soft outline, picking fields stay tonal; the amount is centred at Display size with no box (a soft
-  outline appears while typing, error colour when invalid).
+  names, numbers) get a soft outline, picking fields stay tonal.
+- **The amount** (`HeroAmountField` in `FormSelectors.kt`, drawn by `AmountTransformation` in `AmountInput.kt`; the transaction,
+  recurring, pay-bill, budget-limit and starting-balance forms) since 2026-11-03: centred tabular figures at **Display Large**
+  SemiBold (Home's hero size) with no box; a 2 dp outline in the type's colour while it is typed in; when invalid the outline,
+  the label and the message under it (centred) are all the error colour and the message is the field's `error` semantics. The
+  **₹ is 0.6 em on the baseline** in the type's colour, animating with the Expense / Income / Transfer choice (lifting it to the
+  figures' tops was tried: it rides each font's ascent, overshot and made the line taller). One line in every state: empty it is
+  **"₹ 0" with a faint 0 and the cursor in front of it** (a separate centred placeholder put the cursor through the middle of
+  "0.00"), a typed point brings the missing decimals in faintly ("₹ 480.50", what is saved), digits are grouped as typed, and a
+  long figure shrinks to fit (`rememberFittedAmountStyle`, measured with the smaller symbol). It holds a `TextFieldValue` whose
+  cursor starts after the digits: a `String` `BasicTextField` starts at 0, so a tap on the label while editing typed in front.
+  Keyboard Decimal, IME **Done** (clears focus; what follows the amount is picked, not typed). A new entry focuses it on open; a
+  Save without an amount focuses it again (`TransactionEditor`, `RecurringEditor`, `PayBillSheet`). Tests: `AmountInputTest`,
+  `EditorStyleTest`, `TransactionEditorTest`.
 - **Icons/art**: `ui/theme/AppIcons.kt` (app icon set; Wallet uses the supplied Google Wallet artwork), `finance/ui/CategoryArt`
-  / `CategoryVisuals` / `BrandLogos`, `banks/ui/BankBadge`, `AssetImage`, `SvgAsset`.
+  / `CategoryVisuals` / `BrandLogos`, `banks/ui/BankBadge`, `AssetImage`, `SvgAsset`. Illustrations (the welcome tour's,
+  `onboarding/TourArt.kt`) are Fluent 3D emoji from `assets/fluent3d` on pads of M3 Expressive shapes (`graphics-shapes`) in the theme's
+  containers; those pictures are 128 px, so keep one under ~80 dp or it goes soft on a 3x screen.
+- **Palette picker**: `PaletteChoices` + `ColorSourceChoice` (`settings/ui/AppearanceColors.kt`) are Settings > Appearance > Colors'
+  squircle palette tiles and Wallpaper colors | Other colors choice; anywhere else that picks the app's colours (the welcome tour) uses
+  them (`wrap = true` inside a pager, where a sideways-scrolling row would fight the swipe).
 
 ## 3. Sheets, messages and menus (rules the owner has corrected before)
 
@@ -73,6 +91,12 @@ Use these before writing anything new:
   names are old wrappers that open them). The destructive action wears the error colours. Swipe, scrim, back and locking the
   app all mean "no". Every sheet has a drag handle; a tall sheet that fits opens fully, otherwise half-way
   (`expandable = true`).
+- **A form with changes asks before any close - swipe, scrim and Back alike** (`DiscardChangesGuard` -> `SheetDismissConfirmation`);
+  a saving form can't be closed at all, a clean one closes at once. Back does not go through `confirmValueChange`: Material's back
+  handler hides the sheet and calls `onDismissRequest` whatever the guard said (material3 1.4.0, `verified-facts.md`), which lost
+  entries until 2026-11-04. So the guard registers a `BackHandler` in the sheet's own window while it needs asking (it runs before
+  Material's and keeps the sheet from shrinking for a predictive-back close that won't happen), and `OverlayHost` only counts a
+  sheet as dismissed once `!sheetState.isVisible`. A clean sheet keeps Material's predictive-back shrink. Tests: `SheetBackTest`.
 - **Say things inside the sheet, not in a snackbar.** The snackbar host lives in the activity window and every sheet is a
   window above it, so a snackbar fired mid-form shows faintly *behind* the sheet. Since 2026-10-14
   `AppSnackbars(heldBack = { overlays.isOpen })` holds every snackbar until no sheet is open. Do instead: a notice at the top
@@ -173,7 +197,9 @@ Use these before writing anything new:
 
 ## 6. Motion
 
-**Live motion** (endless, ambient): only the hero's weather today. It runs only where `LocalLiveMotion` is true - provided by
+**Live motion** (endless, ambient): the hero's weather, and the welcome tour's stickers bobbing on the step at rest (`onboarding/TourArt.kt`:
+the same live clock, only on the settled step, the app resumed and animations on; their pop-in and swipe parallax are finite or follow the
+finger, and also stop with reduced motion). It runs only where `LocalLiveMotion` is true - provided by
 `MainActivity` alone, so tests, previews and pages rendered on their own never have endless motion and every screen still settles (a
 Compose test's `waitForIdle` would hang on one) - and only while wanted and seen: its setting on, animations on, Battery Saver off, the
 screen resumed, the card on screen (`onGloballyPositioned` bounds). Its clock (`rememberLiveClock`) ticks at **30 fps** (`LIVE_FPS`), not

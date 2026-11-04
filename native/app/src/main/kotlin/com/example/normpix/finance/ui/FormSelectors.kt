@@ -3,11 +3,9 @@ package com.example.normpix.finance.ui
 import com.example.normpix.ui.components.solidColorScheme
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
@@ -46,6 +44,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
@@ -82,16 +81,20 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.onClick as semanticsOnClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.lerp
 import com.example.normpix.banks.ui.AccountBadge
 import com.example.normpix.banks.ui.BankBadge
@@ -463,13 +466,17 @@ fun AccountSelector(
 }
 
 /**
- * The amount as the editor's focal point: the currency symbol and big tabular figures (Display Medium), centred and floating
- * free of any box or underline. While it is typed in a soft outline appears in the type's [accent] colour, and in the error
- * colour when the amount is invalid. A tap anywhere in it starts typing.
+ * The amount as the editor's focal point: big tabular figures (Display Large, as Home's hero figure) after a smaller currency
+ * symbol in the type's [accent] colour, centred and floating free of any box or underline. While it is typed in a soft outline
+ * appears in the accent, and the outline, the label and the message under it turn the error colour when the amount is invalid.
+ * A tap anywhere in it starts typing, after the digits already there.
  *
  * The whole line - symbol, grouped digits, decimals - is one text the width of the field, so it is centred as one and shrinks
  * as one: a long amount gets a smaller font, never a sideways scroll. The digits are grouped as they are typed
- * ("12,34,567.50") while the text being edited stays plain digits.
+ * ("12,34,567.50") while the text being edited stays plain digits. With nothing typed the line is the symbol and a faint "0"
+ * with the cursor in front of it, and a typed point brings the decimals still to come in faintly, so what is drawn is always
+ * the amount that will be saved. The keyboard's action is Done by default: it puts the keyboard away to show the rest of the
+ * form, since what follows the amount is picked, not typed.
  */
 @Composable
 fun HeroAmountField(
@@ -479,27 +486,37 @@ fun HeroAmountField(
     accent: StatusColorRole,
     modifier: Modifier = Modifier,
     errorText: String? = null,
-    imeAction: ImeAction = ImeAction.Next,
+    imeAction: ImeAction = ImeAction.Done,
     label: String = "Amount",
 ) {
     val scheme = MaterialTheme.colorScheme
     val type = MaterialTheme.typography
     val density = LocalDensity.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     val typing = remember { FocusRequester() }
     var focused by remember { mutableStateOf(false) }
+    val colorMotion = tween<Color>(AppMotion.SHORT_MS, easing = AppMotion.standard)
+    // The type's colour follows the Expense / Income / Transfer choice instead of snapping to it.
+    val tint by animateColorAsState(accent.color, colorMotion, label = "amount_tint")
     val outline by animateColorAsState(
         when {
             errorText != null -> scheme.error
             focused -> accent.color
             else -> Color.Transparent
         },
-        tween(AppMotion.SHORT_MS, easing = AppMotion.standard),
+        colorMotion,
         label = "amount_outline",
     )
 
-    Column(modifier.fillMaxWidth()) {
+    // What is edited, with the cursor. It starts after the digits, so focusing the field by its label, around the figure or
+    // on opening goes on typing at the end (a plain String field starts its cursor in front of the first digit); a value set
+    // from outside (a bill chip, a picture read) puts the cursor after the new digits.
+    var editing by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
+    val current = if (editing.text == value) editing else TextFieldValue(value, TextRange(value.length))
+
+    Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -513,20 +530,31 @@ fun HeroAmountField(
                 .padding(horizontal = AppSpacing.lg, vertical = AppSpacing.lg),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(label, style = type.labelLarge, color = if (focused) accent.color else scheme.onSurfaceVariant)
+            Text(
+                label,
+                style = type.labelLarge,
+                color = when {
+                    errorText != null -> scheme.error
+                    focused -> tint
+                    else -> scheme.onSurfaceVariant
+                },
+            )
             BoxWithConstraints(Modifier.fillMaxWidth().padding(top = AppSpacing.xs)) {
-                val transformation = remember(currency, accent.color) {
+                val hint = scheme.onSurfaceVariant.copy(alpha = 0.4f)
+                val transformation = remember(currency, tint, hint) {
                     AmountTransformation(
                         prefix = currency.symbol.trim().let { if (it.isEmpty()) "" else "$it " },
                         indianGrouping = currency.indianGrouping,
-                        prefixColor = accent.color,
+                        prefixColor = tint,
+                        prefixSize = AmountSymbolSize,
+                        hintColor = hint,
+                        decimals = currency.decimals,
                     )
                 }
-                val placeholder = amountPlaceholder(transformation.prefix, currency.decimals)
-                val shown = if (value.isEmpty()) placeholder else transformation.filter(AnnotatedString(value)).text.text
+                val shown = transformation.filter(AnnotatedString(value)).text
                 // The cursor and a few dp of air beyond the digits, so the text never touches the field's edge.
                 val availablePx = constraints.maxWidth - with(density) { AmountEdgeAir.toPx() }
-                val base = type.displayMedium.copy(
+                val base = type.displayLarge.copy(
                     fontFeatureSettings = TABULAR_FIGURES,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center,
@@ -535,46 +563,49 @@ fun HeroAmountField(
                 val style = rememberFittedAmountStyle(shown, base, availablePx)
 
                 BasicTextField(
-                    value = value,
-                    onValueChange = { onValueChange(filterAmountInput(value, it, currency.decimals)) },
+                    value = current,
+                    onValueChange = { next ->
+                        val kept = filterAmountInput(value, next.text, currency.decimals)
+                        editing = when (kept) {
+                            next.text -> next
+                            value -> current // refused: stays as it was, cursor and all
+                            else -> TextFieldValue(kept, TextRange(kept.length)) // tidied (a pasted "1,250")
+                        }
+                        if (kept != value) onValueChange(kept)
+                    },
                     textStyle = style,
                     singleLine = true,
-                    cursorBrush = SolidColor(accent.color),
+                    cursorBrush = SolidColor(tint),
                     visualTransformation = transformation,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = if (currency.decimals > 0) KeyboardType.Decimal else KeyboardType.Number,
                         imeAction = imeAction,
                     ),
-                    decorationBox = { field ->
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            if (value.isEmpty()) {
-                                Text(
-                                    buildAnnotatedString {
-                                        withStyle(SpanStyle(color = accent.color.copy(alpha = 0.45f))) { append(transformation.prefix) }
-                                        append(placeholder.removePrefix(transformation.prefix))
-                                    },
-                                    style = style.copy(color = scheme.onSurfaceVariant.copy(alpha = 0.4f)),
-                                    maxLines = 1,
-                                    softWrap = false,
-                                )
-                            }
-                            field()
-                        }
-                    },
+                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(typing)
                         .onFocusChanged { focused = it.isFocused }
-                        .semantics { contentDescription = "$label in ${currency.code}" },
+                        .semantics {
+                            contentDescription = "$label in ${currency.code}"
+                            if (errorText != null) error(errorText)
+                        },
                 )
             }
         }
-        FieldError(errorText)
+        FieldError(errorText, textAlign = TextAlign.Center)
     }
 }
 
 /** Room kept clear at the end of the amount for the cursor, so the text never has to be scrolled to reveal it. */
 private val AmountEdgeAir = 12.dp
+
+/**
+ * The currency symbol beside the amount's figures, as a share of their size: there, but the figures lead. It sits on their
+ * baseline, which holds in every interface font (a symbol lifted to the figures' tops is placed by the font's ascent, which
+ * differs from font to font).
+ */
+private val AmountSymbolSize = 0.6.em
 
 /** A read-only tonal field that opens a picker (date, time); [shape] lets a pair read as one connected unit. */
 @Composable

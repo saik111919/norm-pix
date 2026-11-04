@@ -5,7 +5,7 @@ description: "Everything about the NormPix project - a private, offline-first An
 
 # NormPix project skill
 
-Stamp: verified against commit `627fd6ff` (v1.5.0 in the working tree; v1.4.1 is the last release) on 2026-11-03. If `git log` shows newer commits on source paths, or
+Stamp: verified against commit `04173067` (v1.5.0 in the working tree; v1.4.1 is the last release) on 2026-11-04. If `git log` shows newer commits on source paths, or
 `bash .claude/skills/normpix/scripts/verify.sh` reports drift, trust the code and fix the skill (`references/maintenance.md`).
 
 ## 1. The 60-second picture
@@ -95,7 +95,7 @@ reference rather than exploring. For the history or reasoning behind a feature, 
 | `screens/` | The tabs' screens: `HomeScreen`, `HomeBanners`, `PlansAndTransactionsScreen`, `WalletScreen` |
 | `navigation/` | `NormPixRoot` (`Routes`, `ShellState`, locals), `AppShell`, `AppNavigator`, `FloatingNavBar`, `ActionMenu` (the "+" bento panel), `PageTransitions`, `LinuxWindowMotion`, `AppSearch`, `AppearanceSection`, splash |
 | `settings/` | `AppPreferences` (`AppPrefsState`, all choice enums), app icons, notifications, custom font (`CustomFont`, `FontFile`: zip and variable fonts), profile photos (GIFs, avatar presets) |
-| `onboarding/` | `OnboardingTour`: the welcome tour of a new install (four steps in a pager) |
+| `onboarding/` | `OnboardingTour`: the welcome tour of a new install (four steps in a pager); `TourArt`: each step's 3D-sticker picture and its motion |
 | `settings/ui/` | Settings pages, `SettingsCatalog` (search), `SettingsTwoPane`, Appearance sections, backup UI, ledger-check UI |
 | `ui/` | The design system, nothing app-specific - |
 | `ui/components/` | Design-system components: `Overlays` (sheets/confirm/loading/snackbars), `Sheets`, `Pages`, `Lists`, `DeckCarousel`, `SwipeReveal`, `SwipeActionRow`, `Progress`, `SplitButton`, `BottomControls`, glass/blur (`FrostedBackdrop`, `FooterBlur`) |

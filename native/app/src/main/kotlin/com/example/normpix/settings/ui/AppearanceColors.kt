@@ -10,6 +10,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -92,7 +94,6 @@ private val sourceOptions = listOf(
  */
 @Composable
 internal fun ColorsSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
-    val context = LocalContext.current
     val dark = MaterialTheme.colorScheme.isDark
     val wallpaperColors = AppTheme.dynamicColorSupported
     val usingWallpaper = prefs.colorSource == ColorSource.System && wallpaperColors
@@ -127,57 +128,7 @@ internal fun ColorsSection(prefs: AppPrefsState, preferences: AppPreferences, ha
                     )
                     Spacer(Modifier.height(AppSpacing.lg))
 
-                    if (usingWallpaper) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .selectableGroup(),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            for (palette in WallpaperPalette.entries) {
-                                val swatch = remember(palette, dark, context) {
-                                    AppTheme.paletteSwatch(
-                                        AppTheme.scheme(context, ColorSource.System, prefs.accent, palette, dark),
-                                    )
-                                }
-                                CircularSwatchTile(
-                                    label = palette.label,
-                                    swatch = swatch,
-                                    selected = palette == prefs.wallpaperPalette,
-                                    onClick = {
-                                        haptics.selection()
-                                        preferences.setWallpaperPalette(palette)
-                                    },
-                                )
-                            }
-                        }
-                    } else {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState())
-                                .selectableGroup()
-                                .padding(horizontal = AppSpacing.xs),
-                            horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            for (accent in AccentColor.entries) {
-                                val swatch = remember(accent, dark) {
-                                    AppTheme.paletteSwatch(AppTheme.accentScheme(accent, dark))
-                                }
-                                CircularSwatchTile(
-                                    label = accent.label,
-                                    swatch = swatch,
-                                    selected = accent == prefs.accent,
-                                    onClick = {
-                                        haptics.selection()
-                                        preferences.setAccent(accent)
-                                    },
-                                )
-                            }
-                        }
-                    }
+                    PaletteChoices(prefs, preferences, haptics)
 
                     Spacer(Modifier.height(AppSpacing.lg))
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
@@ -225,12 +176,103 @@ internal fun ColorsSection(prefs: AppPrefsState, preferences: AppPreferences, ha
         // Segmented choice row at the bottom
         if (wallpaperColors) {
             Spacer(Modifier.height(AppSpacing.lg))
-            ConnectedChoiceRow(
-                options = sourceOptions,
-                selected = if (usingWallpaper) ColorSource.System else ColorSource.Custom,
-                onSelect = preferences::setColorSource,
+            ColorSourceChoice(prefs, preferences)
+        }
+    }
+}
+
+/** "Wallpaper colors" or "Other colors": which set of palettes [PaletteChoices] offers. Android 12+ only (check [AppTheme.dynamicColorSupported]). */
+@Composable
+internal fun ColorSourceChoice(prefs: AppPrefsState, preferences: AppPreferences) {
+    ConnectedChoiceRow(
+        options = sourceOptions,
+        selected = if (prefs.colorSource == ColorSource.System && AppTheme.dynamicColorSupported) ColorSource.System else ColorSource.Custom,
+        onSelect = preferences::setColorSource,
+    )
+}
+
+/**
+ * The palettes to pick from, one [CircularSwatchTile] each: the wallpaper's (Wallpaper, Neutral, Vibrant...) while the colors come
+ * from it, else the app's own (Emerald, Ocean...). One row - the app's own scroll sideways - or, with [wrap], as many rows as they
+ * need: the welcome tour's way, where a row that scrolls sideways would fight the pager it sits in. Settings > Appearance > Colors
+ * and the tour's first step both use it, so the two look the same.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun PaletteChoices(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics, wrap: Boolean = false) {
+    val usingWallpaper = prefs.colorSource == ColorSource.System && AppTheme.dynamicColorSupported
+    // Each set of tiles is its own composable, so what one remembers is never read as the other's when the set changes.
+    val tiles: @Composable () -> Unit = {
+        if (usingWallpaper) WallpaperTiles(prefs, preferences, haptics) else AccentTiles(prefs, preferences, haptics)
+    }
+    val count = if (usingWallpaper) WallpaperPalette.entries.size else AccentColor.entries.size
+    when {
+        // More than a row's worth go in two even rows (seven as four and three, not five and two).
+        wrap -> FlowRow(
+            modifier = Modifier.fillMaxWidth().selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+            maxItemsInEachRow = if (count > 5) (count + 1) / 2 else count,
+        ) { tiles() }
+        usingWallpaper -> Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectableGroup(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) { tiles() }
+        else -> Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .selectableGroup()
+                .padding(horizontal = AppSpacing.xs),
+            horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) { tiles() }
+    }
+}
+
+/** A tile for each of the wallpaper's palettes. */
+@Composable
+private fun WallpaperTiles(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
+    val context = LocalContext.current
+    val dark = MaterialTheme.colorScheme.isDark
+    for (palette in WallpaperPalette.entries) {
+        val swatch = remember(palette, dark, context) {
+            AppTheme.paletteSwatch(
+                AppTheme.scheme(context, ColorSource.System, prefs.accent, palette, dark),
             )
         }
+        CircularSwatchTile(
+            label = palette.label,
+            swatch = swatch,
+            selected = palette == prefs.wallpaperPalette,
+            onClick = {
+                haptics.selection()
+                preferences.setWallpaperPalette(palette)
+            },
+        )
+    }
+}
+
+/** A tile for each of the app's own colors. */
+@Composable
+private fun AccentTiles(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
+    val dark = MaterialTheme.colorScheme.isDark
+    for (accent in AccentColor.entries) {
+        val swatch = remember(accent, dark) {
+            AppTheme.paletteSwatch(AppTheme.accentScheme(accent, dark))
+        }
+        CircularSwatchTile(
+            label = accent.label,
+            swatch = swatch,
+            selected = accent == prefs.accent,
+            onClick = {
+                haptics.selection()
+                preferences.setAccent(accent)
+            },
+        )
     }
 }
 

@@ -1,5 +1,6 @@
 package com.example.normpix.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -178,7 +179,7 @@ class AppOverlays {
         message: String? = null,
         /**
          * False for work that changes data and must finish once it has begun (checking and repairing the ledger, restoring a
-         * backup): the sheet has no Cancel and can't be swiped or tapped away, and if the app closes it all the same (locking
+         * backup): the sheet has no Cancel and can't be swiped, tapped or backed away, and if the app closes it all the same (locking
          * closes every sheet) the work still runs to its end and its result is given back.
          */
         cancellable: Boolean = true,
@@ -281,6 +282,9 @@ class SheetDismissGuard {
     internal var needsConfirmation: () -> Boolean = { false }
     internal var confirm: suspend () -> Boolean = { true }
 
+    /** Runs [confirm] (one question at a time) and closes the sheet on a yes; [OverlayHost] sets it. */
+    internal var ask: () -> Unit = {}
+
     /** Set once the sheet is closing for good (saved, confirmed), so the guard stops getting in the way. */
     internal var released = false
     internal var prompting = false
@@ -305,6 +309,9 @@ fun SheetDismissConfirmation(needed: Boolean, confirm: suspend () -> Boolean) {
             guard.confirm = { true }
         }
     }
+    // Back comes to the sheet's own window, where this is the newest handler: it asks before Material's does, which would
+    // shrink the sheet as if closing it and leave it shrunk when the answer is to stay.
+    BackHandler(enabled = needed) { guard.ask() }
 }
 
 val LocalOverlays = compositionLocalOf<AppOverlays> { error("No AppOverlays provided") }
@@ -332,27 +339,33 @@ fun OverlayHost(overlays: AppOverlays) {
             // any other. Decided once, from its first measure - before it starts to rise - so it never changes on screen.
             var fits by remember { mutableStateOf<Boolean?>(null) }
             val handleHeight = remember { intArrayOf(0) }
+            guard.ask = remember(guard) {
+                {
+                    if (!guard.prompting && !guard.released) {
+                        guard.prompting = true
+                        scope.launch {
+                            try {
+                                if (guard.confirm()) {
+                                    guard.released = true
+                                    runCatching { stateRef[0]?.hide() }
+                                    request.result.complete(null)
+                                }
+                            } finally {
+                                guard.prompting = false
+                            }
+                        }
+                    }
+                }
+            }
             val sheetState = rememberModalBottomSheetState(
                 skipPartiallyExpanded = !request.expandable || fits == true,
-                // Every way of closing asks here first. A held-up close snaps the sheet back while the guard asks.
+                // A swipe and the scrim ask here first (back asks in SheetDismissConfirmation). A held-up close snaps the
+                // sheet back while the guard asks.
                 confirmValueChange = { target ->
                     if (target != SheetValue.Hidden || guard.released || !guard.needsConfirmation()) {
                         true
                     } else {
-                        if (!guard.prompting) {
-                            guard.prompting = true
-                            scope.launch {
-                                try {
-                                    if (guard.confirm()) {
-                                        guard.released = true
-                                        runCatching { stateRef[0]?.hide() }
-                                        request.result.complete(null)
-                                    }
-                                } finally {
-                                    guard.prompting = false
-                                }
-                            }
-                        }
+                        guard.ask()
                         false
                     }
                 },
@@ -363,7 +376,9 @@ fun OverlayHost(overlays: AppOverlays) {
             // Under a sheet or picker opened over it, this sheet is blurred like the page under them all.
             val above = rememberEasedBlur { overlays.blurAbove(request) }
             ModalBottomSheet(
-                onDismissRequest = { request.result.complete(null) },
+                // Material calls this when its hide() is over, however it went: for back (material3 1.4.0) even when the
+                // guard held the sheet up. Only a sheet that has really gone is dismissed.
+                onDismissRequest = { if (!sheetState.isVisible) request.result.complete(null) },
                 sheetState = sheetState,
                 // At full height a sheet stops under the status bar, which stays over the page (blurred, as around the sheet).
                 // The padding looks up the insets of the window it ends up in - the sheet's own - unlike a WindowInsets

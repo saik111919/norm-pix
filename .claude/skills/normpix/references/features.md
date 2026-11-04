@@ -302,8 +302,18 @@ build **over** an existing NormPix is an update and is not welcomed, by design. 
 defaults to true, so updates and tests never see it; it is outside backups and reset. **Settings > Welcome tour** (a row in the System group, also
 found by searching "tour", "welcome" or "onboarding": `SettingsSpecial.WelcomeTour`) and Settings > About > Welcome tour play it again. It covers
 the app (composed beneath, touches blocked) until `finishOnboarding`. Its look is the app's own: each step is Home's `Hero` card (primary, the cookie
-bleeding off its corner) holding the step's picture and title, with the tonal cards below; the first step's picture is the user's chosen launcher icon
-(`AppIconArt(AppIcons.current(context))`).
+bleeding off its corner) holding the step's picture and title, with the tonal cards below. **The pictures** (`onboarding/TourArt.kt`, 2026-11-04; the
+owner chose "3D stickers" over a flat drawn scene and a morphing badge, after "onboarding is not feeling fun"): each step is a little scene of
+Fluent 3D emoji (the bundled `assets/fluent3d` set, MIT) on pads of M3 Expressive shapes (cookie, sunny, four-sided cookie, soft burst, pill) in the
+theme's containers, so the pads follow Light/Dark/Pure/wallpaper colours and the pictures keep theirs: 🎨 💳 🪙 ✨ (welcome and look), the live
+avatar + 🪪 ✍️ (its pad is `tertiaryContainer`, because the empty avatar's disc is `primaryContainer`), 🔔 ⏰ 🗓️ (reminders), 🚀 🎉 🧾 (start). The
+pictures are 128 px, so the main one stays at 80 dp (the avatar 96). Motion, all off with reduced motion: the stickers pop in one after another when
+a step comes into view (`popOf`: 520 ms each, 80 ms apart, an overshooting curve), lag behind the page as it is swiped (`StepPlace.offset` x each
+sticker's depth), and bob gently on the step at rest (a few dp, the live clock at 30 fps, only where `LocalLiveMotion` allows, so tests settle). The
+art is decorative (`clearAndSetSemantics`, tag `tour_art`); the tour decodes all its pictures on open (`tourPictures`). A wide hero card (inside
+>= 560 dp) puts the art beside the title at the phone's 323 dp. The first step's Colors card is Settings > Appearance > Colors' own picker
+(`PaletteChoices(wrap = true)` - the same squircle tiles, wrapped into even rows instead of a sideways-scrolling row inside the pager - and
+`ColorSourceChoice`, Wallpaper colors | Other colors), so the two look alike (owner, 2026-11-04).
 
 **Banks** (`banks/BankCatalog`, `wallet/BankDirectory`): 158 built-in banks, each with a `BankCategory` (public sector, private, small finance,
 payments, co-operative, regional rural, foreign, earlier names - a merged bank carries `note` "Now part of ..."). Ids are what accounts and cards
