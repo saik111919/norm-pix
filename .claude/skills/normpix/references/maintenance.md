@@ -21,7 +21,7 @@ When a fact drifts: fix the prose that mentions it **first**, then change the va
 nothing needed changing.
 
 <!-- facts:begin -->
-verified_commit=e100d0ca
+verified_commit=04173067
 verified_date=2026-11-04
 versionName=1.5.0
 finance_db_version=12

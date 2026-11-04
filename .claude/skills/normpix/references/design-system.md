@@ -34,7 +34,8 @@ Use these before writing anything new:
 - **Pages**: `AppPage` (tab pages), `AppSubPage` (pushed pages; owns the back button styles), `Pages.kt`. Lists: `Lists.kt`
   (`ListSection`, `SectionSubheader`, grouped segments with 4 dp inner / 20 dp outer corners).
 - **Sheets**: `EditorSheet` (every add/edit form: titled sheet, scrolling body, **pinned full-width Save**, no Cancel/close,
-  `DiscardChangesGuard` asks before dropping unsaved changes), `ConfirmSheetContent` (every confirm/alert), `SheetSurface.kt`.
+  `DiscardChangesGuard` asks before dropping unsaved changes, on Back too - section 3), `ConfirmSheetContent` (every confirm/alert),
+  `SheetSurface.kt`.
   Opened imperatively: `LocalOverlays.current.sheet<T> { dismiss -> ... }`, `.confirm(...)`, `.alert(...)`, `.loading(...)`.
 - **Choices**: `ConnectedChoiceRow` (`finance/ui/FormSelectors.kt`: the type selector, theme System|Light|Dark,
   Expense|Income - one pill track with the chosen choice as a pill inside; 2 dp gaps, radio semantics), `ButtonGroup.kt`,
@@ -90,6 +91,12 @@ Use these before writing anything new:
   names are old wrappers that open them). The destructive action wears the error colours. Swipe, scrim, back and locking the
   app all mean "no". Every sheet has a drag handle; a tall sheet that fits opens fully, otherwise half-way
   (`expandable = true`).
+- **A form with changes asks before any close - swipe, scrim and Back alike** (`DiscardChangesGuard` -> `SheetDismissConfirmation`);
+  a saving form can't be closed at all, a clean one closes at once. Back does not go through `confirmValueChange`: Material's back
+  handler hides the sheet and calls `onDismissRequest` whatever the guard said (material3 1.4.0, `verified-facts.md`), which lost
+  entries until 2026-11-04. So the guard registers a `BackHandler` in the sheet's own window while it needs asking (it runs before
+  Material's and keeps the sheet from shrinking for a predictive-back close that won't happen), and `OverlayHost` only counts a
+  sheet as dismissed once `!sheetState.isVisible`. A clean sheet keeps Material's predictive-back shrink. Tests: `SheetBackTest`.
 - **Say things inside the sheet, not in a snackbar.** The snackbar host lives in the activity window and every sheet is a
   window above it, so a snackbar fired mid-form shows faintly *behind* the sheet. Since 2026-10-14
   `AppSnackbars(heldBack = { overlays.isOpen })` holds every snackbar until no sheet is open. Do instead: a notice at the top
