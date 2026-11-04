@@ -9,7 +9,10 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -154,6 +157,22 @@ class TransactionEditorTest {
         compose.waitUntil(timeoutMillis = 10_000) {
             compose.onAllNodes(hasContentDescription("Food & dining", substring = true)).fetchSemanticsNodes().isNotEmpty()
         }
+    }
+
+    @Test
+    fun saving_withoutAnAmount_saysSo_andTakesTheCursorBackToIt() {
+        openEditor()
+        val amount = compose.onNodeWithContentDescription("Amount in INR")
+        amount.assertIsFocused() // a new expense opens ready to type
+        amount.performImeAction() // Done: the keyboard goes, the rest of the form shows
+        compose.waitForIdle()
+        amount.assertIsNotFocused()
+
+        compose.onNodeWithText("Save expense").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Enter an amount greater than zero").assertExists()
+        amount.assertIsFocused()
+        assertEquals(0, runBlocking { container.finance.repository.transactions(TransactionQuery(), limit = 5).items.size })
     }
 
     @Test

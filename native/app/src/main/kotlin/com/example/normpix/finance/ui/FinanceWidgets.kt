@@ -44,6 +44,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -295,14 +296,15 @@ fun budgetLabel(health: BudgetHealth): String = when (health) {
     BudgetHealth.Exceeded -> "Over budget"
 }
 
-/** Inline error text under a form group that isn't a text field. */
+/** Inline error text under a form group that isn't a text field; [textAlign] centres it under a centred one (the amount). */
 @Composable
-fun FieldError(message: String?, modifier: Modifier = Modifier) {
+fun FieldError(message: String?, modifier: Modifier = Modifier, textAlign: TextAlign? = null) {
     if (message == null) return
     Text(
         message,
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.error,
+        textAlign = textAlign,
         modifier = modifier
             .padding(top = AppSpacing.xs)
             .semantics { liveRegion = LiveRegionMode.Polite },

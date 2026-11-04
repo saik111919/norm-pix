@@ -2,6 +2,7 @@ package com.example.normpix.finance.ui
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.em
 import com.example.normpix.finance.domain.CurrencySpec
 import com.example.normpix.finance.domain.MoneyFormatter
 import com.example.normpix.finance.domain.groupWholeDigits
@@ -70,9 +71,42 @@ class AmountInputTest {
         }
     }
 
+    private val hint = Color.Gray
+
+    private fun hinted(raw: String, decimals: Int = 2): androidx.compose.ui.text.input.TransformedText =
+        AmountTransformation("₹ ", inr.indianGrouping, Color.Red, prefixSize = 0.6.em, hintColor = hint, decimals = decimals)
+            .filter(AnnotatedString(raw))
+
     @Test
-    fun `placeholder shows the currency's decimals`() {
-        assertEquals("₹ 0.00", amountPlaceholder("₹ ", 2))
-        assertEquals("¥ 0", amountPlaceholder("¥ ", 0))
+    fun `with hints, nothing typed reads as the symbol and a faint zero, the cursor where the first digit goes`() {
+        val empty = hinted("")
+        assertEquals("₹ 0", empty.text.text, "the empty field is the same line as a typed one, not a different placeholder")
+        assertEquals("₹ ".length, empty.offsetMapping.originalToTransformed(0), "the cursor sits after the symbol, in front of the 0")
+        for (inShown in 0..empty.text.length) assertEquals(0, empty.offsetMapping.transformedToOriginal(inShown))
+        assertEquals(hint, empty.text.spanStyles.single { it.start == 2 }.item.color, "the zero is a hint, drawn faintly")
+    }
+
+    @Test
+    fun `with hints, a typed point brings in the decimals still to come, and only those`() {
+        assertEquals("₹ 480", hinted("480").text.text, "no point, no decimals: they are optional")
+        assertEquals("₹ 480.00", hinted("480.").text.text)
+        assertEquals("₹ 1,25,000.50", hinted("125000.5").text.text, "what is drawn is what will be saved")
+        assertEquals("₹ 480.25", hinted("480.25").text.text)
+        assertEquals("¥ 480", AmountTransformation("¥ ", false, hintColor = hint, decimals = 0).filter(AnnotatedString("480")).text.text)
+
+        // The hint is faint and after the cursor: the cursor never goes past the last digit typed.
+        val result = hinted("125000.5")
+        val hintSpan = result.text.spanStyles.single { it.item.color == hint }
+        assertEquals("0", result.text.text.substring(hintSpan.start, hintSpan.end))
+        assertEquals(hintSpan.start, result.offsetMapping.originalToTransformed("125000.5".length))
+        assertEquals("125000.5".length, result.offsetMapping.transformedToOriginal(result.text.length), "a tap on the hint lands after the digits")
+    }
+
+    @Test
+    fun `the symbol can be drawn smaller than the figures`() {
+        val prefix = hinted("480").text.spanStyles.single { it.start == 0 }
+        assertEquals(2, prefix.end, "the symbol and its space")
+        assertEquals(0.6.em, prefix.item.fontSize)
+        assertEquals(Color.Red, prefix.item.color)
     }
 }

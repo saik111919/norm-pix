@@ -3,6 +3,8 @@ package com.example.normpix.finance.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.isSpecified
+import androidx.compose.ui.graphics.isUnspecified
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -12,6 +14,7 @@ import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.TextUnit
 import com.example.normpix.finance.domain.groupingCommaIndices
 
 /*
@@ -21,24 +24,51 @@ import com.example.normpix.finance.domain.groupingCommaIndices
  */
 
 /**
- * Draws "1234567.5" as "₹ 12,34,567.5": the [prefix] in [prefixColor], then the whole digits grouped (Indian or western per
- * [indianGrouping]) and the fraction as typed. The cursor follows the digits, never landing before a comma or inside the
- * prefix, so editing in the middle of a long number works.
+ * Draws "1234567.5" as "₹ 12,34,567.5": the [prefix] in [prefixColor] (at [prefixSize], when the symbol should be smaller
+ * than the figures), then the whole digits grouped (Indian or western per [indianGrouping]) and the fraction as typed. The
+ * cursor follows the digits, never landing before a comma or inside the prefix, so editing in the middle of a long number
+ * works.
+ *
+ * With a [hintColor], what is still to come is drawn faintly in it: a "0" while nothing is typed (the cursor between the
+ * symbol and it, where the first digit goes - so the empty field and the typed one are the same line), and once the point
+ * is typed, the [decimals] not typed yet ("480.5" reads "₹ 480.50", which is what is saved).
  */
 internal class AmountTransformation(
     val prefix: String,
     private val indianGrouping: Boolean,
     private val prefixColor: Color = Color.Unspecified,
+    private val prefixSize: TextUnit = TextUnit.Unspecified,
+    private val hintColor: Color = Color.Unspecified,
+    private val decimals: Int = 0,
 ) : VisualTransformation {
+
+    private fun AnnotatedString.Builder.appendPrefix() {
+        if (prefix.isNotEmpty()) withStyle(SpanStyle(color = prefixColor, fontSize = prefixSize)) { append(prefix) }
+    }
 
     override fun filter(text: AnnotatedString): TransformedText {
         val raw = text.text
-        // Nothing typed: nothing drawn, so the field's placeholder is all there is.
-        if (raw.isEmpty()) return TransformedText(text, OffsetMapping.Identity)
-        val wholeLength = raw.indexOf('.').let { if (it < 0) raw.length else it }
+        if (raw.isEmpty()) {
+            // Nothing typed: nothing drawn, so the field's placeholder is all there is - or, with hints, the symbol and a faint
+            // zero, the cursor in front of the zero.
+            if (hintColor.isUnspecified) return TransformedText(text, OffsetMapping.Identity)
+            val shown = buildAnnotatedString {
+                appendPrefix()
+                withStyle(SpanStyle(color = hintColor)) { append('0') }
+            }
+            return TransformedText(
+                shown,
+                object : OffsetMapping {
+                    override fun originalToTransformed(offset: Int): Int = prefix.length
+                    override fun transformedToOriginal(offset: Int): Int = 0
+                },
+            )
+        }
+        val point = raw.indexOf('.')
+        val wholeLength = if (point < 0) raw.length else point
         val commas = groupingCommaIndices(wholeLength, indianGrouping)
         val shown = buildAnnotatedString {
-            if (prefix.isNotEmpty()) withStyle(SpanStyle(color = prefixColor)) { append(prefix) }
+            appendPrefix()
             var next = 0
             for (i in raw.indices) {
                 if (next < commas.size && commas[next] == i) {
@@ -47,6 +77,9 @@ internal class AmountTransformation(
                 }
                 append(raw[i])
             }
+            // After the digits, so the cursor (which never goes past the last typed one) stays in front of it.
+            val missing = if (point < 0) 0 else decimals - (raw.length - point - 1)
+            if (hintColor.isSpecified && missing > 0) withStyle(SpanStyle(color = hintColor)) { append("0".repeat(missing)) }
         }
         val mapping = object : OffsetMapping {
             // A cursor between two digits sits after the comma that comes before the next digit, never before it.
@@ -64,18 +97,15 @@ internal class AmountTransformation(
     }
 }
 
-/** What the amount looks like with nothing typed: the symbol and a zero, with the currency's decimals ("₹ 0.00"). */
-internal fun amountPlaceholder(prefix: String, decimals: Int): String =
-    prefix + if (decimals > 0) "0." + "0".repeat(decimals) else "0"
-
 /**
  * [base] shrunk, if it must be, until [shown] fits in [availablePx] on one line. The glyphs' advances do not scale perfectly
  * with the size, so the result is measured again and tightened until it really fits - which is what keeps a long amount
  * whole on screen instead of running past the field's edge and leaving the rest to be scrolled to. Only the font size
- * changes (the line height stays), so nothing around the amount moves while it is typed.
+ * changes (the line height stays), so nothing around the amount moves while it is typed. [shown] is measured with its spans,
+ * so a symbol drawn smaller is measured at its own size (and shrinks with the rest, being sized relative to it).
  */
 @Composable
-internal fun rememberFittedAmountStyle(shown: String, base: TextStyle, availablePx: Float): TextStyle {
+internal fun rememberFittedAmountStyle(shown: AnnotatedString, base: TextStyle, availablePx: Float): TextStyle {
     val measurer = rememberTextMeasurer()
     return remember(shown, base, availablePx, measurer) {
         fun widthAt(style: TextStyle): Int = measurer.measure(shown, style, softWrap = false, maxLines = 1).size.width

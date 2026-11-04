@@ -61,8 +61,20 @@ Use these before writing anything new:
   Same layout and size as before; the banners behind the front one are only 6% darker, `DeckStack(behindDim)`, where cards take 20%). **Search**: `SearchField`, `SearchFilterBar`. **Reveal/LiveRegion** helpers for notices.
 - **Chrome**: `FloatingNavBar` (dock), `BottomControls.kt`, `Tabs.kt`, `FocusRing.kt`, `LockGate.kt`, `Snackbar.kt`.
 - **Fields**: tonal fill `surfaceContainerHighest`, `TonalFieldShape`, min 64 dp, `IconBadge`; typed fields (Paid to, Note,
-  names, numbers) get a soft outline, picking fields stay tonal; the amount is centred at Display size with no box (a soft
-  outline appears while typing, error colour when invalid).
+  names, numbers) get a soft outline, picking fields stay tonal.
+- **The amount** (`HeroAmountField` in `FormSelectors.kt`, drawn by `AmountTransformation` in `AmountInput.kt`; the transaction,
+  recurring, pay-bill, budget-limit and starting-balance forms) since 2026-11-03: centred tabular figures at **Display Large**
+  SemiBold (Home's hero size) with no box; a 2 dp outline in the type's colour while it is typed in; when invalid the outline,
+  the label and the message under it (centred) are all the error colour and the message is the field's `error` semantics. The
+  **₹ is 0.6 em on the baseline** in the type's colour, animating with the Expense / Income / Transfer choice (lifting it to the
+  figures' tops was tried: it rides each font's ascent, overshot and made the line taller). One line in every state: empty it is
+  **"₹ 0" with a faint 0 and the cursor in front of it** (a separate centred placeholder put the cursor through the middle of
+  "0.00"), a typed point brings the missing decimals in faintly ("₹ 480.50", what is saved), digits are grouped as typed, and a
+  long figure shrinks to fit (`rememberFittedAmountStyle`, measured with the smaller symbol). It holds a `TextFieldValue` whose
+  cursor starts after the digits: a `String` `BasicTextField` starts at 0, so a tap on the label while editing typed in front.
+  Keyboard Decimal, IME **Done** (clears focus; what follows the amount is picked, not typed). A new entry focuses it on open; a
+  Save without an amount focuses it again (`TransactionEditor`, `RecurringEditor`, `PayBillSheet`). Tests: `AmountInputTest`,
+  `EditorStyleTest`, `TransactionEditorTest`.
 - **Icons/art**: `ui/theme/AppIcons.kt` (app icon set; Wallet uses the supplied Google Wallet artwork), `finance/ui/CategoryArt`
   / `CategoryVisuals` / `BrandLogos`, `banks/ui/BankBadge`, `AssetImage`, `SvgAsset`.
 

@@ -19,7 +19,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -254,6 +258,90 @@ class EditorStyleTest {
             HeroAmountField(value = "", onValueChange = {}, currency = inr, accent = accent, errorText = "Enter an amount greater than zero")
         }
         compose.onNodeWithText("Enter an amount greater than zero").assertExists()
+        // A screen reader hears it on the field itself, not only from the line under it.
+        compose.onNodeWithContentDescription("Amount in INR")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Error, "Enter an amount greater than zero"))
+    }
+
+    @Test
+    fun theEmptyAmountIsTheSymbolAndAFaintZeroWithTheCursorInFrontOfIt() {
+        themed {
+            HeroAmountField(value = "", onValueChange = {}, currency = inr, accent = accent)
+        }
+        // One line in both states: what is drawn empty is what a first digit replaces (it used to be "₹ 0.00", a placeholder
+        // the cursor sat in the middle of, which then became "₹ 4").
+        val layout = amountLayout()
+        assertEquals("₹ 0", layout.layoutInput.text.text)
+        val cursorX = layout.getHorizontalPosition(2, usePrimaryDirection = true)
+        assertTrue(cursorX <= layout.getBoundingBox(2).left + 1f, "the cursor is in front of the zero: $cursorX")
+    }
+
+    @Test
+    fun theSymbolIsSmallerThanTheFiguresAndATypedPointShowsTheDecimalsToCome() {
+        themed {
+            HeroAmountField(value = "480.5", onValueChange = {}, currency = inr, accent = accent)
+        }
+        val layout = amountLayout()
+        assertEquals("₹ 480.50", layout.layoutInput.text.text, "what is drawn is what will be saved")
+        val symbol = layout.layoutInput.text.spanStyles.single { it.start == 0 }.item
+        assertTrue(symbol.fontSize.isEm && symbol.fontSize.value < 1f, "the symbol is drawn smaller than the figures: ${symbol.fontSize}")
+        assertTrue(
+            layout.getBoundingBox(0).width < layout.getBoundingBox(2).width * 1.2f,
+            "and is measured at that size: ₹ ${layout.getBoundingBox(0).width}px against a digit's ${layout.getBoundingBox(2).width}px",
+        )
+    }
+
+    @Test
+    fun anAmountFocusedByItsLabelGoesOnTypingAfterTheDigits() {
+        var typed by androidx.compose.runtime.mutableStateOf("480")
+        themed {
+            HeroAmountField(value = typed, onValueChange = { typed = it }, currency = inr, accent = accent)
+        }
+        // Editing an expense: a tap on the label (not on the digits) used to put the cursor in front of the first digit, so a
+        // 5 typed then made it 5480.
+        compose.onNodeWithText("Amount").performTouchInput { click() }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Amount in INR").performTextInput("5")
+        compose.waitForIdle()
+        assertEquals("4805", typed)
+
+        // An amount set from outside (a bill chip, a picture read) puts the cursor after it, too.
+        typed = "1200"
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Amount in INR").performTextInput("7")
+        compose.waitForIdle()
+        assertEquals("12007", typed)
+    }
+
+    @Test
+    fun aRefusedKeyLeavesTheAmountAndItsCursorAsTheyWere() {
+        var typed by androidx.compose.runtime.mutableStateOf("480.50")
+        themed {
+            HeroAmountField(value = typed, onValueChange = { typed = it }, currency = inr, accent = accent)
+        }
+        compose.onNodeWithText("Amount").performTouchInput { click() }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Amount in INR").performTextInput("9") // a third decimal
+        compose.waitForIdle()
+        assertEquals("480.50", typed)
+        compose.onNodeWithContentDescription("Amount in INR")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.TextSelectionRange, androidx.compose.ui.text.TextRange(6)))
+    }
+
+    @Test
+    fun theKeyboardsActionIsDoneAndPutsTheKeyboardAway() {
+        themed {
+            HeroAmountField(value = "250", onValueChange = {}, currency = inr, accent = accent)
+        }
+        val field = compose.onNodeWithContentDescription("Amount in INR")
+        // What follows the amount in every form is picked, not typed: Next only moved focus onto a dropdown.
+        field.assert(SemanticsMatcher.expectValue(SemanticsProperties.ImeAction, androidx.compose.ui.text.input.ImeAction.Done))
+        compose.onNodeWithText("Amount").performTouchInput { click() }
+        compose.waitForIdle()
+        field.assertIsFocused()
+        field.performImeAction()
+        compose.waitForIdle()
+        field.assertIsNotFocused()
     }
 
     // --- the save button -------------------------------------------------------------------------------------
