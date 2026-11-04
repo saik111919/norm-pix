@@ -17,6 +17,16 @@ Format: `claim - applies to - source - status/date`.
   `~/.gradle/caches/modules-2/files-2.1/androidx.compose.material3/material3-android/1.4.0/.../material3-android-1.4.0-sources.jar`
   (no `fun LoadingIndicator` / `fun SplitButtonLayout` in any `.kt`) - **RE-CHECKED 2026-10-26**. The app builds its own
   (`Progress.kt`, `SplitButton.kt`).
+- `ModalBottomSheet` **Back** skips the `confirmValueChange` veto: the sheet's dialog runs `scope.launch { sheetState.hide() }
+  .invokeOnCompletion { onDismissRequest() }` with no `isVisible` check (the swipe's `settleToDismiss` and the scrim's
+  `animateToDismiss` have one), so a vetoed hide still dismisses. Its `PredictiveBackOnBackPressedCallback` also leaves the sheet
+  scaled (up to 48 dp narrower) when that hide doesn't happen - material3 1.4.0 - sources jar `commonMain/.../ModalBottomSheet.kt`
+  lines ~151-183 and `androidMain/.../ModalBottomSheet.android.kt` ~528-640 - **RE-CHECKED 2026-11-04** (and on the phone: Back
+  closed a dirty form). Fix in `OverlayHost` / `SheetDismissConfirmation`: `design-system.md` section 3.
+- activity-compose **1.13.0** `BackHandler` resolves its owner as `LocalNavigationEventDispatcherOwner` (view-tree host default),
+  falling back to `LocalOnBackPressedDispatcherOwner`. Inside sheet content that is the sheet's own `ComponentDialog`, and it is added after
+  Material's dialog callback, so it wins - activity-compose 1.13.0, navigationevent-compose 1.1.2 - sources jars + `SheetBackTest` +
+  the phone - **RE-CHECKED 2026-11-04**.
 - `androidx.graphics:graphics-shapes` 1.1.0 is declared explicitly in `libs.versions.toml` (the loader's morph; it was already on
   the runtime classpath) - build files - **RE-CHECKED 2026-10-26**.
 - R8 removes the no-argument constructors ML Kit builds its components with by reflection (`NoSuchMethodException ...Registrar.<init>`),

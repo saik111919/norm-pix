@@ -95,6 +95,11 @@ reasons - check these before suspecting the code:
     `toString()`); a trailing lambda binds to the *last* parameter - name it.
 12. Bottom-sheet windows don't capture with `captureToImage`: render the sheet composable inline.
 13. New navigation methods: add to `RecordingNavigator`. New `AppContainer` services: add to `DummyData`.
+14. **Back on a sheet needs the sheet's window.** Each sheet is a `ComponentDialog`, so `compose.activity.onBackPressedDispatcher`
+    never reaches it, and `SemanticsActions.Dismiss` takes Material's scrim route (`animateToDismiss`), not Back's. Press Back with
+    `(ShadowDialog.getShownDialogs().last { it.isShowing } as ComponentDialog).onBackPressedDispatcher.onBackPressed()`; a
+    predictive gesture is `dispatchOnBackStarted` / `dispatchOnBackProgressed(BackEventCompat(...))` first (`SheetBackTest`).
+    Espresso is not on the unit-test compile classpath.
 
 Test data rules: receipt fixtures come from real recognizer output/phone geometry with personal details swapped for stand-ins
 (never real names, UPI ids, account numbers or references). Don't validate a reader against fixtures you wrote yourself - "don't
