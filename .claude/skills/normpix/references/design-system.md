@@ -76,7 +76,12 @@ Use these before writing anything new:
   Save without an amount focuses it again (`TransactionEditor`, `RecurringEditor`, `PayBillSheet`). Tests: `AmountInputTest`,
   `EditorStyleTest`, `TransactionEditorTest`.
 - **Icons/art**: `ui/theme/AppIcons.kt` (app icon set; Wallet uses the supplied Google Wallet artwork), `finance/ui/CategoryArt`
-  / `CategoryVisuals` / `BrandLogos`, `banks/ui/BankBadge`, `AssetImage`, `SvgAsset`.
+  / `CategoryVisuals` / `BrandLogos`, `banks/ui/BankBadge`, `AssetImage`, `SvgAsset`. Illustrations (the welcome tour's,
+  `onboarding/TourArt.kt`) are Fluent 3D emoji from `assets/fluent3d` on pads of M3 Expressive shapes (`graphics-shapes`) in the theme's
+  containers; those pictures are 128 px, so keep one under ~80 dp or it goes soft on a 3x screen.
+- **Palette picker**: `PaletteChoices` + `ColorSourceChoice` (`settings/ui/AppearanceColors.kt`) are Settings > Appearance > Colors'
+  squircle palette tiles and Wallpaper colors | Other colors choice; anywhere else that picks the app's colours (the welcome tour) uses
+  them (`wrap = true` inside a pager, where a sideways-scrolling row would fight the swipe).
 
 ## 3. Sheets, messages and menus (rules the owner has corrected before)
 
@@ -185,7 +190,9 @@ Use these before writing anything new:
 
 ## 6. Motion
 
-**Live motion** (endless, ambient): only the hero's weather today. It runs only where `LocalLiveMotion` is true - provided by
+**Live motion** (endless, ambient): the hero's weather, and the welcome tour's stickers bobbing on the step at rest (`onboarding/TourArt.kt`:
+the same live clock, only on the settled step, the app resumed and animations on; their pop-in and swipe parallax are finite or follow the
+finger, and also stop with reduced motion). It runs only where `LocalLiveMotion` is true - provided by
 `MainActivity` alone, so tests, previews and pages rendered on their own never have endless motion and every screen still settles (a
 Compose test's `waitForIdle` would hang on one) - and only while wanted and seen: its setting on, animations on, Battery Saver off, the
 screen resumed, the card on screen (`onGloballyPositioned` bounds). Its clock (`rememberLiveClock`) ticks at **30 fps** (`LIVE_FPS`), not

@@ -21,7 +21,7 @@ When a fact drifts: fix the prose that mentions it **first**, then change the va
 nothing needed changing.
 
 <!-- facts:begin -->
-verified_commit=ef9061c8
+verified_commit=e100d0ca
 verified_date=2026-11-04
 versionName=1.5.0
 finance_db_version=12
@@ -160,6 +160,7 @@ FinanceBackupCodec
 | `updates/`, `.github/workflows/` | `features.md` section 7; `build-test-release.md` section 7 |
 | `widgets/`, `about/` | `features.md` sections 8-9 |
 | `settings/` (new setting, default, page), `SettingsCatalog`, `AppearanceSection` | `architecture.md` sections 6-7; `features.md` section 10 |
+| `onboarding/` (the welcome tour, its pictures and their motion) | `features.md` section 8, the **Welcome tour** paragraph; `design-system.md` sections 2 and 6 |
 | `navigation/` (routes, shell, navigator interface) | `architecture.md` section 5 |
 | `ui/components`, `ui/theme`, blur, sheets, motion | `design-system.md` |
 | A new top-level package | the package map in `SKILL.md` (verify.sh fails otherwise) |
