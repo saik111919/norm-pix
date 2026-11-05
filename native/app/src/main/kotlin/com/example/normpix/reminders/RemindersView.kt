@@ -59,6 +59,7 @@ fun RemindersView() {
                                         onComplete = { flows.complete(reminder) },
                                         onSnooze = { flows.snooze(reminder) },
                                         onDelete = { flows.delete(reminder) },
+                                        onClockAlarm = { flows.addToClock(reminder) },
                                     )
                                 }
                             }

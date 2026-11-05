@@ -25,6 +25,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.material3.ColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
@@ -161,6 +162,24 @@ private fun stickersOf(scene: TourScene): List<Sticker> = when (scene) {
 
 private fun picture(emoji: String) = "fluent3d/$emoji.webp"
 
+/**
+ * How far off the middle of its 128 px box a picture's artwork sits, as shares of the box: x to the right, y downwards (measured
+ * from where each picture is opaque: `TourArtCentringTest` re-measures them). The credit card and the ID card are drawn in the
+ * lower part of theirs, so centred in the box they sat about 7 dp under the middle of their pads (the welcome step's card looked
+ * pushed down in its blob); the receipt is a little to the left. Only the pictures off by more than a pixel or two are listed.
+ */
+internal fun pictureOffset(emoji: String): Pair<Float, Float> = when (emoji) {
+    "1f4b3", "1faaa" -> 0f to 20f / 128f
+    "1f3a8" -> 0f to 3f / 128f
+    "1f9fe" -> -6f / 128f to 0f
+    else -> 0f to 0f
+}
+
+/** The pictures that stand on a pad of their own (the rest float free), which is where being off-centre shows. */
+internal val paddedPictures: List<String> by lazy {
+    TourScene.entries.flatMap { scene -> stickersOf(scene).filter { it.shape != null }.mapNotNull { it.emoji } }.distinct()
+}
+
 /** Every picture the tour shows, so it can decode them before they are needed. */
 internal val tourPictures: List<String> by lazy { TourScene.entries.flatMap { scene -> stickersOf(scene).mapNotNull { it.emoji?.let(::picture) } } }
 
@@ -260,7 +279,21 @@ private fun StickerView(
         }
         when {
             content != null -> content()
-            sticker.emoji != null -> AssetImage(picture(sticker.emoji), Modifier.size(sticker.size).graphicsLayer { rotationZ = sticker.tilt })
+            sticker.emoji != null -> {
+                // Moved by how far off the middle of its box the artwork sits, and turned about the artwork's own middle, so it is
+                // centred on its pad.
+                val (dx, dy) = pictureOffset(sticker.emoji)
+                AssetImage(
+                    picture(sticker.emoji),
+                    Modifier
+                        .size(sticker.size)
+                        .offset(x = -sticker.size * dx, y = -sticker.size * dy)
+                        .graphicsLayer {
+                            rotationZ = sticker.tilt
+                            transformOrigin = TransformOrigin(0.5f + dx, 0.5f + dy)
+                        },
+                )
+            }
         }
     }
 }

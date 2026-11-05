@@ -71,6 +71,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
@@ -87,6 +88,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.sp
@@ -95,6 +97,7 @@ import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.isDark
 import com.example.normpix.ui.theme.rememberReducedMotion
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 /*
@@ -196,6 +199,39 @@ fun rememberActionMenuProgress(open: Boolean): State<Float> {
  * somewhere to come from.
  */
 internal fun dockShown(progress: Float): Float = ((DockGoneAt - progress) / DockGoneAt).coerceIn(0f, 1f)
+
+/**
+ * Where the bottom row (the dock and the "+") stands across the width it shares with the panel, at [progress] of the menu: the
+ * middle of it while the menu is closed, the end - under the panel's own end, where the panel grows out of the "+" - once it is
+ * open, and on the way between in step with the panel. [space] is that width and [size] the row's, in pixels; at the end of a
+ * right-to-left layout is its left edge.
+ *
+ * It used to be one or the other: the row was put at the end of a column the width of the panel while the panel was composed and in
+ * the middle of one the width of the row once it was not, so as the panel finished closing the whole footer jumped sideways by half
+ * the room around it (measured in a screen recording: 26 px in one frame), just as it was arriving.
+ */
+internal fun dockRowX(space: Int, size: Int, progress: Float, rtl: Boolean): Int {
+    val middle = (space - size) / 2f
+    val end = if (rtl) 0f else (space - size).toFloat()
+    return (middle + (end - middle) * progress.coerceIn(0f, 1f)).roundToInt()
+}
+
+/** [dockRowX] as the alignment of the bottom row in its column; [progress] is read as the row is placed, so a frame recomposes nothing. */
+internal class DockRowAlignment(private val progress: () -> Float) : Alignment.Horizontal {
+    override fun align(size: Int, space: Int, layoutDirection: LayoutDirection): Int =
+        dockRowX(space, size, progress(), rtl = layoutDirection == LayoutDirection.Rtl)
+}
+
+/**
+ * Holds a column at the width the panel has - as wide as the room allows, up to [ActionMenuMaxWidth] - whether the panel is in it
+ * or not, and wider if its content is. Without it the column was as wide as the panel while the panel was there and as the row
+ * once it was gone, which moved everything in it when the panel left (see [dockRowX]).
+ */
+internal fun Modifier.atPanelWidth(): Modifier = layout { measurable, constraints ->
+    val floor = if (constraints.hasBoundedWidth) minOf(constraints.maxWidth, ActionMenuMaxWidth.roundToPx()) else 0
+    val placeable = measurable.measure(constraints.copy(minWidth = maxOf(constraints.minWidth, floor)))
+    layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
+}
 
 /** The menu's progress by which the dock has gone; the Edit button beside the "x" comes in only after it. */
 internal const val DockGoneAt = 0.75f

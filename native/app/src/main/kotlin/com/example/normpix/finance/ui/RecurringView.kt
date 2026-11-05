@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.example.normpix.finance.domain.RecurringRule
@@ -114,6 +115,9 @@ private fun NextThirtyDays(rules: List<RecurringRule>) {
 private fun RuleTile(rule: RecurringRule) {
     val finance = rememberFinanceState()
     val actions = rememberFinanceActions()
+    // Whether a reminder is set for it: the payment and its reminder are one thing, so the row says so (see RecurringReminders).
+    val remindedRules = LocalReminderLauncher.current?.remindedRules?.collectAsState()?.value.orEmpty()
+    val reminded = rule.id != null && rule.id in remindedRules && rule.active && !rule.isFinished
     val isTransfer = rule.type == TransactionType.Transfer
     val category = finance.category(rule.categoryId)
     val account = finance.account(rule.accountId)
@@ -140,7 +144,8 @@ private fun RuleTile(rule: RecurringRule) {
             finance.person(rule.personId)?.let { add("For ${it.name}") }
         }
     }
-    val spoken = "${rule.type.label}, ${finance.money.format(rule.amount)}, $title, repeating, ${details.joinToString(", ")}, $status"
+    val spoken = "${rule.type.label}, ${finance.money.format(rule.amount)}, $title, repeating, ${details.joinToString(", ")}, $status" +
+        if (reminded) ", with a reminder" else ""
 
     LedgerRow(
         title = title,
@@ -153,5 +158,6 @@ private fun RuleTile(rule: RecurringRule) {
         repeating = true,
         note = status,
         muted = rule.isFinished || !rule.active,
+        reminder = reminded,
     )
 }

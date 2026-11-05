@@ -21,8 +21,8 @@ When a fact drifts: fix the prose that mentions it **first**, then change the va
 nothing needed changing.
 
 <!-- facts:begin -->
-verified_commit=08087061
-verified_date=2026-11-04
+verified_commit=4968bdd9
+verified_date=2026-11-05
 versionName=1.5.0
 finance_db_version=12
 reminders_db_version=2
@@ -142,7 +142,9 @@ ReminderDelivery
 ReminderOverlay
 decideOverlay
 ReminderAccess
-ExcludedApps
+RecurringReminders
+HeroCollapseState
+dockRowX
 ReminderAlertActivity
 ReminderAlertCard
 holdFocus

@@ -67,6 +67,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -228,7 +229,10 @@ fun FloatingNavigationRow(
             .padding(bottom = 12.dp),
         contentAlignment = Alignment.BottomCenter,
     ) {
+        // As wide as the panel whether it is composed or not, and the row between the middle and the end of it as the menu opens:
+        // the footer then glides where it stood instead of jumping when the panel is let go (see [dockRowX]).
         Column(
+            modifier = Modifier.atPanelWidth(),
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(ActionMenuGap),
         ) {
@@ -251,7 +255,9 @@ fun FloatingNavigationRow(
                 )
             }
 
+            val rowAlignment = remember(progress) { DockRowAlignment(progress) }
             Row(
+                modifier = Modifier.align(rowAlignment),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -583,6 +589,13 @@ private fun EditActionsButton(
 }
 
 /**
+ * How far the "+" turns to become the "x": an eighth of a turn. It was 135 degrees, but a plus is the same shape every quarter turn,
+ * so on the way it read plus, cross, plus, cross - on a close of a quarter of a second, a flicker (seen frame by frame in a screen
+ * recording, in the very moment the footer comes back). An eighth of a turn is one clean change.
+ */
+internal const val PlusToCross = 45f
+
+/**
  * Expressive companion button beside the dock or back row.
  * When [isActionMenu] is true, renders a circular "+" button that rotates into "×" when open.
  * Otherwise renders a squircle companion tile with [icon].
@@ -605,7 +618,7 @@ fun FloatingNavCompanionItem(
     val tooltipState = rememberTooltipState()
 
     val ownRotation by animateFloatAsState(
-        targetValue = if (isActionMenu && isMoreOpen) 135f else 0f,
+        targetValue = if (isActionMenu && isMoreOpen) PlusToCross else 0f,
         animationSpec = AppMotion.spatial(),
         label = "companion_rotation",
     )
@@ -670,7 +683,7 @@ fun FloatingNavCompanionItem(
                     tint = contentColor,
                     modifier = Modifier
                         .size(24.dp)
-                        .graphicsLayer { rotationZ = if (menuProgress != null) 135f * menuProgress() else ownRotation },
+                        .graphicsLayer { rotationZ = if (menuProgress != null) PlusToCross * menuProgress() else ownRotation },
                 )
             }
         }

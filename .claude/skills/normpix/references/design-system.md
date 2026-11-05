@@ -173,7 +173,13 @@ Use these before writing anything new:
   (`dockShown`: gone by three-quarters open (`DockGoneAt`), and while not all there it **slides** `DockSlide` 72 dp towards the "+" and
   shrinks `DockShrink` 15%, so on the close it visibly slides back out of the button over ~200 ms; until 2026-11-01 it was gone by half open
   and only faded with a 10% shrink, which the owner saw "snap into place" - filmed on the phone after: a steady ease-out slide) and the
-  page's dim (`actionMenuScrim`); read it only in `graphicsLayer`/`drawBehind` lambdas so `AppShell` never recomposes per frame. While
+  page's dim (`actionMenuScrim`); **the bottom row also slides sideways on that same progress** (owner, 2026-11-05: "when closing the action the
+  footer is not smoothly appearing"; read frame by frame from a screen recording: the row stood at the panel's end until the panel left the
+  composition, then jumped 26 px to the middle in one frame, because the column was as wide as the panel while it was composed and as the
+  row once it was not): `atPanelWidth()` holds the column at the panel's width always and `DockRowAlignment`/`dockRowX` put the row between the
+  middle (closed) and the end (open) by progress, read at placement. And **the "+" turns `PlusToCross` = 45 degrees**, not 135: a plus is the same
+  shape every quarter turn, so 135 read plus, cross, plus, cross on a 250 ms close - a flicker in the same frames. `DockRowTravelTest` films the
+  close on a manual clock and asserts no frame carries half the way; read it only in `graphicsLayer`/`drawBehind` lambdas so `AppShell` never recomposes per frame. While
   open the dock is not pressable and hidden from TalkBack (a tap on it closes the menu), the scrim is a tap-to-close target, back
   closes it. With large text (font scale over 1.15) or cells under 54 dp the same actions come as a three-column icon-over-label
   list with two-line labels (reordered with the bar's buttons; sizes mean nothing there, so no resize). Tile colours are **three theme roles, as the rest of the app uses them** (`tileTone`): the first tile is the

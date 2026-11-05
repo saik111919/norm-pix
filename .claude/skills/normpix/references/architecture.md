@@ -84,7 +84,9 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
 - Permissions: NFC, POST_NOTIFICATIONS, USE_EXACT_ALARM (auto-granted on 13+, the user cannot revoke it) + SCHEDULE_EXACT_ALARM
   (`maxSdkVersion` 32), RECEIVE_BOOT_COMPLETED, VIBRATE, INTERNET +
   ACCESS_NETWORK_STATE (updates only), REQUEST_INSTALL_PACKAGES, UPDATE_PACKAGES_WITHOUT_USER_ACTION,
-  FOREGROUND_SERVICE(+_DATA_SYNC). No SMS, no notification-listener, no contacts. `allowBackup=false` and
+  FOREGROUND_SERVICE(+_DATA_SYNC), and for the optional reminder delivery USE_FULL_SCREEN_INTENT and SYSTEM_ALERT_WINDOW ("Display over
+  other apps", granted by the user in Android's own settings). No SMS, no notification-listener, no contacts, **no Usage access
+  (`PACKAGE_USAGE_STATS`) and no query for every app on the phone** (removed 2026-11-05; `NoUsageAccessTest` guards both). `allowBackup=false` and
   `data_extraction_rules.xml` excludes everything from cloud backup and device transfer.
 - Network: `network_security_config.xml` trusts nothing by default and allows only `api.github.com`, `github.com`,
   `objects.githubusercontent.com`, `release-assets.githubusercontent.com` (no cleartext). `updates/UpdateNetwork.kt` keeps

@@ -111,6 +111,8 @@ object ReminderOverlay {
                     ) {
                         ReminderAlertCard(
                             reminder = reminder,
+                            // The phone is unlocked and in use: the note shows, and the card grows to hold it.
+                            showNotes = true,
                             onAction = { action ->
                                 dismissNow(animate = true)
                                 onAction(action)

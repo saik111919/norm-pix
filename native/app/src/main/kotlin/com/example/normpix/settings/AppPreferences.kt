@@ -436,8 +436,6 @@ data class AppPrefsState(
      * Notifications > Floating reminders). Off until the user turns it on, and it needs Android's "Display over other apps".
      */
     val reminderOverlayEnabled: Boolean = false,
-    /** Apps (package names) the floating card is never shown over: banking and other private apps. Empty until the user turns it on. */
-    val reminderOverlayExcluded: Set<String> = emptySet(),
     /** A reminder that comes due on a locked phone (or one with its screen off) may raise a full-screen alert, where Android allows it. */
     val reminderFullScreenEnabled: Boolean = true,
     /** Every amount is shown as dots (the eye button at the top of Home and Wallet) until shown again. */
@@ -483,6 +481,12 @@ data class FontShape(val weightShift: Int = 0, val width: Int = 100, val roundne
  * asynchronously, and [state] always reflects the latest values.
  */
 class AppPreferences(private val prefs: SharedPreferences) {
+    init {
+        // The floating card used to be kept away from "excluded apps", chosen from the apps on the phone; that needed Android's Usage
+        // access and was taken out. The list of package names is of no use now, so it is not left on the phone.
+        if (prefs.contains(OBSOLETE_OVERLAY_EXCLUDED)) prefs.edit().remove(OBSOLETE_OVERLAY_EXCLUDED).apply()
+    }
+
     private val _state = MutableStateFlow(read())
     val state: StateFlow<AppPrefsState> = _state.asStateFlow()
 
@@ -542,7 +546,6 @@ class AppPreferences(private val prefs: SharedPreferences) {
             updateCheckOnOpen = prefs.getBoolean(K_UPDATE_CHECK_ON_OPEN, defaults.updateCheckOnOpen),
             notificationsEnabled = prefs.getBoolean(K_NOTIFICATIONS, defaults.notificationsEnabled),
             reminderOverlayEnabled = prefs.getBoolean(K_REMINDER_OVERLAY, defaults.reminderOverlayEnabled),
-            reminderOverlayExcluded = prefs.getStringSet(K_REMINDER_OVERLAY_EXCLUDED, null)?.toSet() ?: defaults.reminderOverlayExcluded,
             reminderFullScreenEnabled = prefs.getBoolean(K_REMINDER_FULL_SCREEN, defaults.reminderFullScreenEnabled),
             amountsHidden = prefs.getBoolean(K_AMOUNTS_HIDDEN, defaults.amountsHidden),
             interfaceFont = prefs.enum(K_FONT, defaults.interfaceFont),
@@ -757,10 +760,6 @@ class AppPreferences(private val prefs: SharedPreferences) {
     fun setReminderOverlayEnabled(enabled: Boolean) =
         change({ copy(reminderOverlayEnabled = enabled) }) { putBoolean(K_REMINDER_OVERLAY, enabled) }
 
-    /** The apps the floating card stays away from; replaces the whole list. */
-    fun setReminderOverlayExcluded(packages: Set<String>) =
-        change({ copy(reminderOverlayExcluded = packages.toSet()) }) { putStringSet(K_REMINDER_OVERLAY_EXCLUDED, packages.toSet()) }
-
     fun setReminderFullScreenEnabled(enabled: Boolean) =
         change({ copy(reminderFullScreenEnabled = enabled) }) { putBoolean(K_REMINDER_FULL_SCREEN, enabled) }
 
@@ -972,7 +971,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_UPDATE_CHECK_ON_OPEN = "update_check_on_open"
         const val K_NOTIFICATIONS = "notifications_enabled"
         const val K_REMINDER_OVERLAY = "reminder_overlay_enabled"
-        const val K_REMINDER_OVERLAY_EXCLUDED = "reminder_overlay_excluded"
+
+        /** The key of the removed "excluded apps" list: only ever deleted (see the class's init), never read or written. */
+        const val OBSOLETE_OVERLAY_EXCLUDED = "reminder_overlay_excluded"
         const val K_REMINDER_FULL_SCREEN = "reminder_full_screen_enabled"
         const val K_AMOUNTS_HIDDEN = "amounts_hidden"
         const val K_FONT = "interface_font"

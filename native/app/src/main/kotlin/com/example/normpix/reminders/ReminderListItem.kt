@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Alarm
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
@@ -140,9 +141,12 @@ fun ReminderListItem(
     onSnooze: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Opens the Clock app's alarm form for this reminder (see [ClockAlarms]); offered only where an alarm can say what it does. */
+    onClockAlarm: (() -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val overlays = LocalOverlays.current
+    val clockAlarm = onClockAlarm?.takeIf { ClockAlarms.canBeAlarm(reminder) }
     val scope = rememberCoroutineScope()
     val isCompleted = reminder.status == ReminderStatus.Completed
     // What it is attached to, read fresh, and the way to open it.
@@ -162,6 +166,7 @@ fun ReminderListItem(
                         ActionRow(Icons.Rounded.Snooze, "Snooze") { dismiss(onSnooze) }
                     }
                     if (canOpen) ActionRow(Icons.AutoMirrored.Outlined.OpenInNew, openLabel(attached)) { dismiss { openLink(attached) } }
+                    if (clockAlarm != null) ActionRow(Icons.Outlined.Alarm, "Add to Clock alarms") { dismiss(clockAlarm) }
                     ActionRow(Icons.Outlined.Edit, "Edit") { dismiss(onClick) }
                     ActionRow(Icons.Outlined.DeleteOutline, "Delete") { dismiss(onDelete) }
                     Spacer(Modifier.height(AppSpacing.sm))
@@ -184,6 +189,7 @@ fun ReminderListItem(
                     add(CustomAccessibilityAction("Snooze") { onSnooze(); true })
                 }
                 if (canOpen) add(CustomAccessibilityAction(openLabel(attached)) { openLink(attached); true })
+                if (clockAlarm != null) add(CustomAccessibilityAction("Add to Clock alarms") { clockAlarm(); true })
                 add(CustomAccessibilityAction("Delete") { onDelete(); true })
             }
         },

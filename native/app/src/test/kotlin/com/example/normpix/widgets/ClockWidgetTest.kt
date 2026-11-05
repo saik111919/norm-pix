@@ -90,8 +90,10 @@ class ClockWidgetTest {
 
     @Test
     fun `the rings are drawn for the minute it is, and differ from one minute to the next`() {
+        // The second is pinned: left to the wall clock, the rings are drawn for the second as well, so two renders a few milliseconds
+        // apart differ whenever a second ticks between them (this failed once on CI, in a run that had nothing to do with the widget).
         fun ringsAt(minute: Int): ByteArray {
-            val bitmap = (shown(ClockWidget.views(context, options(160, 160), minute)).findViewById<ImageView>(R.id.widget_clock_rings).drawable as BitmapDrawable).bitmap
+            val bitmap = (shown(ClockWidget.views(context, options(160, 160), minute, second = 0)).findViewById<ImageView>(R.id.widget_clock_rings).drawable as BitmapDrawable).bitmap
             return java.io.ByteArrayOutputStream().also { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
         }
         assertTrue(!ringsAt(10).contentEquals(ringsAt(11)), "the inner ring has turned a minute")
