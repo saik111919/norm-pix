@@ -4,6 +4,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.RecurringRule
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Starts a reminder about something in the ledger - the reminder form, already filled in and attached to it. Reminders are
@@ -22,6 +23,22 @@ interface ReminderLauncher {
      * repeating with it - without asking, and say so with an Undo. Nothing happens when one is already linked to [rule].
      */
     fun linkAutomatically(rule: RecurringRule)
+
+    /**
+     * The ids of the repeating payments that have a reminder now, kept up to date as reminders are made, removed and finished -
+     * what Plans > Recurring says on a payment's row.
+     */
+    val remindedRules: StateFlow<Set<Long>>
+
+    /**
+     * The repeating payment [rule] was saved ([before] is how it was, null for a new one): its reminder follows it. A new payment
+     * (or one back from a pause) gets one, an edited one's is edited, a paused or ended one's is taken away - see
+     * `RecurringReminders` for the whole rule.
+     */
+    fun follow(rule: RecurringRule, before: RecurringRule?)
+
+    /** The repeating payment [ruleId] has been deleted for good: so are the reminders about it. */
+    fun forget(ruleId: Long)
 }
 
 /** The launcher the screens use, or null where reminders are not available (then no "Remind me" is offered). */

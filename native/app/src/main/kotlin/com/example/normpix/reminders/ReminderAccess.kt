@@ -1,17 +1,13 @@
 package com.example.normpix.reminders
 
 import android.app.ActivityManager
-import android.app.AppOpsManager
 import android.app.KeyguardManager
 import android.app.NotificationManager
-import android.app.usage.UsageEvents
-import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
-import android.os.Process
 import android.provider.Settings
 import androidx.core.net.toUri
 
@@ -29,63 +25,28 @@ enum class BatteryAccess {
 
 /**
  * What Android says about the permissions and states the reminders depend on, and the system pages where each is changed.
- * Everything here only reads the phone's state; nothing is stored, and what app is in front is looked at only when a reminder
- * comes due and never kept (see [foregroundPackage]).
- *
- * No Accessibility service is used or needed, and nothing here gets around a restriction: each page opened is Android's own
- * switch for NormPix.
+ * Everything here only reads the phone's state; nothing is stored. NormPix never looks at which other app is in front (no
+ * "Usage access") and uses no Accessibility service, and nothing here gets around a restriction: each page opened is Android's
+ * own switch for NormPix.
  */
 object ReminderAccess {
     // --------------------------------------------------------------- Display over other apps
 
     fun canDrawOverlays(context: Context): Boolean = Settings.canDrawOverlays(context)
 
-    /** Android's page for "Display over other apps", opened on NormPix. */
+    /**
+     * Android's "Display over other apps", opened on NormPix by name: the page the SDK gives for it, with the package in the request,
+     * which goes straight to NormPix's switch on the phones that honour it. Not all do: Android 17's Settings (an emulator) opens the
+     * list of every app and ignores the package, and the one action that does open one app's page there
+     * (`android.settings.MANAGE_APP_OVERLAY_PERMISSION`) is refused to other apps (it asks for the signature permission
+     * `INTERNAL_SYSTEM_WINDOW`; seen in the log). So where the list opens, the person is told which row to tap ([OVERLAY_HINT]).
+     */
     fun overlaySettingsIntent(context: Context): Intent =
         Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:${context.packageName}".toUri())
 
-    // --------------------------------------------------------------- Which app is in front (Usage access)
+    /** What to tell the person on the way to Android's "Display over other apps", in case it opens on the list of apps. */
+    const val OVERLAY_HINT = "Tap NormPix in the list, then turn on \"Allow display over other apps\"."
 
-    fun hasUsageAccess(context: Context): Boolean {
-        val ops = context.getSystemService(AppOpsManager::class.java) ?: return false
-        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
-        } else {
-            @Suppress("DEPRECATION")
-            ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
-        }
-        return mode == AppOpsManager.MODE_ALLOWED
-    }
-
-    /** Android's "Usage access" page. Some makers' versions ignore the package and open the list. */
-    fun usageAccessSettingsIntent(context: Context): Intent =
-        Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS, "package:${context.packageName}".toUri())
-
-    /**
-     * The app in front right now, read once from Android's usage events (what the system already keeps), or null when it cannot be
-     * told: no Usage access, or no app has changed in the last day. It is used for one thing - not showing the floating card over an
-     * app the user excluded - and is neither stored nor logged.
-     */
-    fun foregroundPackage(context: Context, now: Long = System.currentTimeMillis()): String? {
-        if (!hasUsageAccess(context)) return null
-        val stats = context.getSystemService(UsageStatsManager::class.java) ?: return null
-        val events = runCatching { stats.queryEvents(now - EVENT_WINDOW_MS, now) }.getOrNull() ?: return null
-        val event = UsageEvents.Event()
-        var front: String? = null
-        while (events.hasNextEvent()) {
-            events.getNextEvent(event)
-            when (event.eventType) {
-                // ACTIVITY_RESUMED / MOVE_TO_FOREGROUND are one value (1), ACTIVITY_PAUSED / MOVE_TO_BACKGROUND another (2).
-                RESUMED -> front = event.packageName
-                PAUSED -> if (event.packageName == front) front = null
-            }
-        }
-        return front
-    }
-
-    private const val RESUMED = 1
-    private const val PAUSED = 2
-    private const val EVENT_WINDOW_MS = 24L * 60 * 60 * 1000
 
     // --------------------------------------------------------------- Screen and lock
 
@@ -128,17 +89,4 @@ object ReminderAccess {
     /** NormPix's own page in Android's settings, where a phone's battery controls for it live. */
     fun appDetailsIntent(context: Context): Intent =
         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
-
-    // --------------------------------------------------------------- Apps that can be excluded
-
-    /** The apps with a launcher icon on this phone (the ones a person would think of as "an app"), NormPix itself left out. */
-    fun launcherApps(context: Context): List<InstalledApp> {
-        val pm = context.packageManager
-        val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        return runCatching { pm.queryIntentActivities(main, 0) }.getOrDefault(emptyList())
-            .map { InstalledApp(it.activityInfo.packageName, it.loadLabel(pm).toString()) }
-            .filter { it.packageName != context.packageName }
-            .distinctBy { it.packageName }
-            .sortedBy { it.label.lowercase() }
-    }
 }

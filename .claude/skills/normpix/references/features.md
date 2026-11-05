@@ -17,7 +17,18 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
   attention** banners (overdue, update available, ...; the page's own tonal surface, status said by icon and eyebrow colour,
   never colour alone), quick add (expense / income / transfer), coming up, **Top spending** (stack or carousel by
   `TopSpendingLayout`), cards on Home, **Recent** (the latest *as of today*; "See all" opens the whole history, All time),
-  budgets tile. The account pill / profile button at the top opens Settings (or Profile, by choice).
+  budgets tile. The account pill / profile button at the top opens Settings (or Profile, by choice). **The month's number collapses into the
+  header as the page is scrolled** (2026-11-05, owner: "see how the number became small and then the same way it becomes big", after Google
+  Weather's temperature; `screens/HeroCollapse.kt`): "Spent in November" and the amount shrink and glide up (`heroCollapseFrame`, a pure
+  function of the scroll: the page's own speed at first, easing into the chip's place so nothing jolts) and settle as a small primary chip
+  where the page's title was ("Home" fades out only as the lines arrive over it, `HeroCollapseFrame.titleAlpha` through `AppPage(titleAlpha)`); scrolling back reverses it frame for frame. The lines are drawn by
+  `HeroCollapseOverlay` over the page while it is scrolled (the card clips what is inside it); the card's own copies stay for layout and
+  TalkBack and are undrawn only then (`isCollapsing`), same text/style/width so the hand-over is invisible. Scroll-driven, so no
+  reduced-motion variant is needed. The chip is drawn solid only once the lines reach the header's solid colour (`chipAlpha`), because the
+  lines are `onPrimary` and dark on a dark page otherwise. **Where the lines rest is computed from the list's own numbers** (`listTop` +
+  `layoutInfo.beforeContentPadding`, plus the lines' places *inside* the item), never from the item's position on screen: that lags a scroll by a
+  frame, and a first version drew the chip a whole step ahead of the text in a render. Home only; written for the top floating header (default) and the standard top
+  bar. Not verified on a phone.
 - **Plans & Activity** (`screens/PlansAndTransactionsScreen.kt`, `finance/ui/TransactionsScreen.kt`): two tabs.
   *Activity* = the transaction history: month switcher (two looks, `MonthControlStyle` Track | Split), **All time** scope,
   **by day** (`DaySwitcher`; a day heading shows what went out and opens that day), an **Upcoming** row for entries dated
@@ -26,7 +37,8 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
   row springs back), right = Delete (the row flies off and folds away, **no confirmation**, Undo snackbar; the details sheet and the
   TalkBack action still ask first), details sheet with Delete/Edit and the attached picture. On a month's **last day** the month ends
   exactly at the cutoff, so the Upcoming query keys on `range.end == cutoff` (month view only) to keep next month's entries listed. *Plans* = Budgets (per category + overall, history page, sub-categories fold into the parent),
-  Recurring (`RecurringView`/`RecurringEditor`; rows record themselves on their day), Reminders (`RemindersView`).
+  Recurring (`RecurringView`/`RecurringEditor`; rows record themselves on their day; **a payment and its reminder are kept in step** -
+  section 5, `RecurringReminders`; a row with a reminder shows a small bell and says "with a reminder" to TalkBack), Reminders (`RemindersView`).
 - **Insights** (`finance/ui/InsightsScreen.kt`, `finance/domain/Insights.kt`): a story - snapshot hero (one sentence of how
   this compares and with what, two bars on one scale), a single-series multi-month trend, ranked category rows with share and
   a link to their transactions (or, Settings > Appearance > Layouts > **Categories in Insights**, `InsightsCategoriesLayout.Carousel`
@@ -145,6 +157,10 @@ transaction and read again to fill the form.
   alone. A card answers a finger with `ui/components/HoldFocus.kt` `Modifier.holdFocus(source, shape)`: it sinks while pressed and, held
   for a long press, rises 2% with a 3 dp primary ring inside its edge (`DeckStack` items, `AccountCardView`); the "+" menu's tile held to
   be moved wears the same ring instead of a lift shadow. Where the hold opens a sheet (`LocalOverlaysOrNull`, provided with `LocalOverlays`) the ring stays until that sheet closes, so the card stays marked as the one it is about.
+  **Every card face answers a finger the same way** (owner, 2026-11-05: "cards focus is not consistent"): `WalletCardView`'s flip card (the carousel's
+  front card, the card list, the card sheet) was the one still on a plain `clickable` with a ripple; it now sinks while pressed (`holdFocus(longPress = false)`:
+  a hold does nothing there, so no lifted-with-a-ring step), has no ripple, and shows keyboard focus as `focusRing` along its edge - as the stacks and
+  `AccountCardView` do. `holdFocus` is the one modifier to put on any new card.
 - Bank card faces use shared pattern-and-colour themes (`BankCardDesign`, `AccountCardDesign.themeFor`). A per-bank redesign is
   **blocked on the owner supplying the designs - do not start it from a guess**.
 - Privacy posture to preserve: no SMS or notification access; the only network host family is GitHub; ML Kit telemetry removed;
@@ -162,14 +178,54 @@ transaction and read again to fill the form.
   that arrives on a lit phone made the heads-up stick on screen and cover the floating card - found on the emulator) and the user's
   switch is on and `ReminderAccess.canUseFullScreen` - on Android 14+ that permission is not granted for you, so it is optional and the
   notification is the fallback); (2) **the floating card on top** (`ReminderOverlay`, a `TYPE_APPLICATION_OVERLAY` window with `ReminderAlertCard`: Mark
-  as paid, Snooze (15 min / 1 h / tomorrow 9:00), Dismiss, Open app; a swipe up or 30 s puts it away, the notification stays). It is
+  as paid, then **Snooze | Dismiss | Open app as one `ConnectedButtonGroup`** (owner, 2026-11-05: "make these a Material button group";
+  52 dp, round at the ends, squared where they meet; Snooze opens 15 min / 1 hour / Tomorrow 9:00 as the same kind of group); **the reminder's
+  notes show on the floating card** (`showNotes`, up to 5 lines, and the card grows to hold them - the window wraps its content) but never on the
+  lock-screen one, which stays title and time only because a locked phone may be in front of others; a swipe up or 30 s puts it away, the
+  notification stays). It is
   **off by default** (`reminderOverlayEnabled`, excluded from backups) and `decideOverlay` (pure, `ReminderOverlayPolicy.kt`) lets it
-  show only on an unlocked, screen-on phone with "Display over other apps" allowed, never over NormPix itself, never over an
-  **excluded app**; with any app excluded it needs **Usage access** (`ReminderAccess.foregroundPackage`, one read at fire time, never
-  stored - the only non-Accessibility way to know the front app) and shows nothing when it cannot tell. Turning it on pre-picks
-  banking/payment/password apps (`ExcludedApps.suggested`, a name guess). **No Accessibility service, nothing forced.** While Settings or a system permission dialog is in front Android itself hides overlay windows (`mPolicyVisibility=false`: no card there, only the notification - seen on the emulator); the card is put away when NormPix comes to the front (`MainActivity.onStart`), and it was seen working over an ordinary app (Clock) and not over an excluded one (Chrome). Settings >
-  Notifications > *Reaching you on time* (exact alarms, battery, full-screen) and *Floating reminders* (`ReminderAlertSettings`,
-  `ExcludedAppsSheet`, "Try it" sample). Mark as paid only finishes the reminder; it records no transaction.
+  show only on an unlocked, screen-on phone with "Display over other apps" allowed, never over NormPix itself. **NormPix never asks for
+  Usage access and never looks at which other app is open** (owner, 2026-11-05: "no need to take usage access of apps ... this is going
+  into a separate way from the intentions of the app"): the *excluded apps* list, the `PACKAGE_USAGE_STATS` permission, the launcher-apps
+  `<queries>` entry, `ExcludedApps` and `foregroundPackage` were all removed, and the stored `reminder_overlay_excluded` list is deleted from the
+  phone on start (`AppPreferences` init). The cost is plain: the card can now appear over any app, a banking app included - it never
+  shows what is under it and it is off by default. Do not bring a "which app is in front" check back without the owner's word.
+  **No Accessibility service, nothing forced.** While Settings or a system permission dialog is in front Android itself hides overlay windows (`mPolicyVisibility=false`: no card there, only the notification - seen on the emulator); the card is put away when NormPix comes to the front (`MainActivity.onStart`), and it was seen working over an ordinary app (Clock). Settings >
+  Notifications > *Reaching you on time* (exact alarms, battery, full-screen) and *Floating reminders* (`ReminderAlertSettings`, "Try it" sample;
+  `openAndroidPage` opens Android's own switch pages, shared with the welcome tour). Mark as paid only finishes the reminder; it records no transaction.
+- **Alarm to overlay, checked end to end** (owner, 2026-11-05: "confirm when there is an alarm we need this overlay to appear"):
+  `AlarmToOverlayTest` runs the real chain on Robolectric - a saved reminder arms an exact `RTC_WAKEUP` alarm for its minute, the alarm's own
+  intent goes to `ReminderAlarmReceiver`, which delivers the notification and the floating card and stamps `lastFiredAt` - and the places the
+  card must not come (switch off, no "Display over other apps", reminder finished or deleted meanwhile). A broadcast receiver run by hand has no
+  `goAsync()` result: `work` tolerates that. What this does not prove: a real phone's ROM (see the emulator notes in memory for the recipe).
+- **"Display over other apps" is asked for on NormPix, and the person is told which row to tap** (owner, 2026-11-05: "when allowing over other
+  apps in system settings focus on our app so the user can go directly there"): the request names the package
+  (`ReminderAccess.overlaySettingsIntent`), which lands straight on NormPix's switch on the phones that honour it. **Found on an Android 17
+  emulator that Settings ignores the package and opens the list of every app**; the `:settings:fragment_args_key` extras did nothing, and the one
+  action that does open one app's page there (`android.settings.MANAGE_APP_OVERLAY_PERMISSION`) is **refused to other apps** (log: "requires
+  android.permission.INTERNAL_SYSTEM_WINDOW") - so neither is used. What is done instead: the explanation sheet and the welcome tour say "tap
+  NormPix and turn on Allow display over other apps", and `openAndroidPage(hint = ReminderAccess.OVERLAY_HINT)` repeats it in a toast while Settings
+  is up. Exact alarms and full-screen alerts already open on the package (their actions are app-specific) and the battery page is a list by nature.
+  `SettingsFocusTest`. Whether the owner's phone lands directly is not known.
+- **Add to Clock alarms** (owner, 2026-11-05: "connect these to the system alarm app if possible"): a reminder's actions sheet (long press) has
+  "Add to Clock alarms", which opens the Clock app's own alarm form (`AlarmClock.ACTION_SET_ALARM`, `EXTRA_SKIP_UI` false so the person sees and
+  saves it; `ClockAlarms.intentFor`). A clock alarm only knows a time of day and weekdays, so it is offered only for a reminder that falls within
+  the next 24 h or repeats daily / on weekdays / on days of the week - not for a monthly bill or one three days off. Needs the normal
+  permission `com.android.alarm.permission.SET_ALARM` and a `<queries>` entry for `SET_ALARM`. NormPix keeps nothing about the alarm; making
+  every reminder a status-bar "next alarm" with `AlarmManager.setAlarmClock` was not done (it would show a NormPix reminder in place of the
+  person's morning alarm on the lock screen) - a question for the owner if they want it.
+- **A repeating payment and its reminder are one thing** (owner, 2026-11-05: "in Planning we have recurrence, we need to connect them to
+  reminders - they are always inter-linked"; `reminders/RecurringReminders.kt`, a pure rule, applied by `ReminderFlows.follow/forget`, reached
+  from the finance screens through `ReminderLauncher`): a new payment gets its reminder at once (due its next day at 9:00, repeating as it does;
+  Undo in the snackbar); **editing** the payment edits it - title and notes only where they are still what NormPix wrote, and the day and repeat
+  only when the payment's schedule (frequency, interval, start, end) changed, at the hour the reminder already rang at; a **paused or ended**
+  payment has none (it is removed, and comes back when the payment resumes); a **deleted** payment takes its reminders once the Undo is let go
+  (`offerUndo(onSettled)`), so no reminder is left saying "this repeating payment no longer exists". A reminder the person deleted from a
+  payment that is still going is **not** brought back. **A sheet cannot see `LocalReminderLauncher`**: sheets are drawn by `OverlayHost`, which stands
+  above where `NormPixRoot` provides it, so the editors read `null` there and the old "a new repeating payment gets a reminder at once" never ran
+  from the form (found 2026-11-05 by `RecurringReminderLinkTest`); `FinanceActions.WithReminders` now provides it around each editor sheet it opens.
+  Any new sheet that needs a local provided below the overlay host must be given it the same way. Plans > Recurring rows show a bell (`LedgerRow(reminder)`, from `remindedRules`). Not
+  built, and a question for the owner: reminding *before* the day ("nearing the day to pay") - a reminder rings on the payment's own day at 9:00.
 - **Reliability rules** (audited 2026-11-04): an alarm carries the reminder's id; `alerted()` stamps `lastFiredAt` and, for a repeating
   reminder nobody dealt with, sets an alarm for its next time (`ReminderActions.nextCycle`) so one ignored occurrence does not silence the
   rest; completing a long-overdue repeating reminder moves it to the first time still **ahead** (it used to land in the past, where no
@@ -317,7 +373,7 @@ avatar draws its first frame at once and an `AnimatedImageDrawable` (API 28+, `I
 `isProfilePhotoName` accepts `.jpg|.gif`; the backup takes a `.gif` only if its bytes are a GIF.
 
 **Welcome tour** (`onboarding/OnboardingTour.kt`, reference: DropSauce's onboarding): four steps in a pager (look: theme + colours, applied live; name +
-avatar; the notifications permission; where to start), animated pill dots, an arrow that becomes a check, Skip, Back steps back. Shown only on a
+avatar; the reminders permissions; where to start), animated pill dots, an arrow that becomes a check, Skip, Back steps back. Shown only on a
 **new install**: `welcomeNewInstall` (NormPixApplication) compares package first-install and last-update time, **or** finds no ledger yet
 (`hadData`: `normpix_finance.db` absent before the container opens it - a new install, or one whose storage was cleared, which keeps an update's
 times: fixed 2026-11-01; verified on the phone: a fresh qa install shows the tour, and so does an updated one after Clear storage); installing a
@@ -333,7 +389,13 @@ avatar + 🪪 ✍️ (its pad is `tertiaryContainer`, because the empty avatar's
 pictures are 128 px, so the main one stays at 80 dp (the avatar 96). Motion, all off with reduced motion: the stickers pop in one after another when
 a step comes into view (`popOf`: 520 ms each, 80 ms apart, an overshooting curve), lag behind the page as it is swiped (`StepPlace.offset` x each
 sticker's depth), and bob gently on the step at rest (a few dp, the live clock at 30 fps, only where `LocalLiveMotion` allows, so tests settle). The
-art is decorative (`clearAndSetSemantics`, tag `tour_art`); the tour decodes all its pictures on open (`tourPictures`). A wide hero card (inside
+art is decorative (`clearAndSetSemantics`, tag `tour_art`); the tour decodes all its pictures on open (`tourPictures`). Some pictures are drawn off the middle of their box (the credit card and the ID card sit 20 px low in 128): `pictureOffset` nudges them
+back onto their pad's centre and turns them about their own middle, and `TourArtCentringTest` measures every padded picture's opaque bounds
+(the welcome step's card was visibly low in its blob, owner 2026-11-05). **Step 3 ("Reminders that arrive")** asks for notifications as before and,
+under "Make sure they reach you", shows only what is still to be allowed, each with what it is for and a button that opens Android's own page
+(`openAndroidPage`; read again on resume): exact alarms (only where not granted - Android 13+ grants them at install), a **card over other apps**
+(optional; turning it on sets `reminderOverlayEnabled` and opens "Display over other apps"; says NormPix does not see the screen) and
+**full-screen alerts** (Android 14+, optional). All optional, the same switches as Settings > Notifications. A wide hero card (inside
 >= 560 dp) puts the art beside the title at the phone's 323 dp. The first step's Colors card is Settings > Appearance > Colors' own picker
 (`PaletteChoices(wrap = true)` - the same squircle tiles, wrapped into even rows instead of a sideways-scrolling row inside the pager - and
 `ColorSourceChoice`, Wallpaper colors | Other colors), so the two look alike (owner, 2026-11-04).

@@ -10,9 +10,6 @@ import kotlin.test.assertTrue
 
 /** When the floating card may appear over another app - and, as important, every reason it may not. */
 class ReminderOverlayPolicyTest {
-    private val bank = "com.somebank.mobile"
-    private val chat = "com.chat.app"
-
     /** Everything in order for the card to show. */
     private fun ready(
         featureOn: Boolean = true,
@@ -20,16 +17,21 @@ class ReminderOverlayPolicyTest {
         screenOn: Boolean = true,
         locked: Boolean = false,
         appInFront: Boolean = false,
-        usageAccess: Boolean = true,
-        foregroundPackage: String? = chat,
-        excluded: Set<String> = setOf(bank),
-    ) = OverlayContext(featureOn, canDrawOverlays, screenOn, locked, appInFront, usageAccess, foregroundPackage, excluded)
+    ) = OverlayContext(featureOn, canDrawOverlays, screenOn, locked, appInFront)
 
     private fun skip(c: OverlayContext) = (decideOverlay(c) as? OverlayDecision.Skip)?.reason
 
     @Test
     fun showsOverAnOrdinaryAppOnAnUnlockedPhone() {
         assertEquals(OverlayDecision.Show, decideOverlay(ready()))
+    }
+
+    @Test
+    fun theDecisionKnowsNothingAboutWhichOtherAppIsOpen() {
+        // The rule is made of what the phone says about itself, never of what the person is doing in another app: no field of it
+        // names an app, so there is nothing a Usage access grant could be needed for.
+        val fields = OverlayContext::class.java.declaredFields.map { it.name }.filterNot { it.startsWith("$") }
+        assertEquals(listOf("featureOn", "canDrawOverlays", "screenOn", "locked", "appInFront"), fields)
     }
 
     @Test
@@ -54,67 +56,36 @@ class ReminderOverlayPolicyTest {
     }
 
     @Test
-    fun neverOverAnExcludedApp() {
-        assertEquals(OverlaySkip.ExcludedApp, skip(ready(foregroundPackage = bank)))
-    }
-
-    @Test
-    fun withAppsExcludedItDoesNotGuessWhenItCannotTellWhatIsInFront() {
-        assertEquals(OverlaySkip.NeedsUsageAccess, skip(ready(usageAccess = false)))
-        assertEquals(OverlaySkip.UnknownApp, skip(ready(foregroundPackage = null)))
-    }
-
-    @Test
-    fun withNothingExcludedItNeedsNoUsageAccessAtAll() {
-        val none = ready(excluded = emptySet(), usageAccess = false, foregroundPackage = null)
-        assertEquals(OverlayDecision.Show, decideOverlay(none))
-    }
-
-    @Test
     fun theFirstReasonIsTheOneGiven() {
-        // Off beats a missing permission; a locked phone beats an excluded app.
+        // Off beats a missing permission; a locked phone beats NormPix being in front.
         assertEquals(OverlaySkip.Off, skip(ready(featureOn = false, canDrawOverlays = false)))
-        assertEquals(OverlaySkip.Locked, skip(ready(locked = true, foregroundPackage = bank)))
+        assertEquals(OverlaySkip.Locked, skip(ready(locked = true, appInFront = true)))
     }
 }
 
-class ExcludedAppsTest {
-    private fun app(label: String, pkg: String) = InstalledApp(pkg, label)
-
+/** The manifest no longer asks for Usage access, and the leftover list of excluded apps does not stay on the phone. */
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(sdk = [33])
+class NoUsageAccessTest {
     @Test
-    fun banksPaymentAppsAndPasswordManagersAreSuggested() {
-        val apps = listOf(
-            app("HDFC Bank MobileBanking", "com.snapwork.hdfc"),
-            app("Google Pay", "com.google.android.apps.nbu.paisa.user"),
-            app("PhonePe", "com.phonepe.app"),
-            app("Paytm", "net.one97.paytm"),
-            app("Bitwarden", "com.x8bit.bitwarden"),
-            app("Authenticator", "com.google.android.apps.authenticator2"),
-            app("Zerodha Kite", "com.zerodha.kite3"),
-            app("Samsung Pay", "com.samsung.android.spay"),
-        )
-        assertEquals(apps.map { it.packageName }.toSet(), ExcludedApps.suggested(apps))
+    fun theManifestDoesNotDeclareUsageAccessOrAskToListEveryApp() {
+        val manifest = java.io.File("src/main/AndroidManifest.xml").readText()
+        // Only the comments may speak of it; no <uses-permission> or <queries> entry may.
+        val live = manifest.replace(Regex("<!--.*?-->", RegexOption.DOT_MATCHES_ALL), "")
+        assertFalse("PACKAGE_USAGE_STATS" in live)
+        assertFalse("CATEGORY_LAUNCHER" in live, "no query for every app with a launcher icon")
     }
 
     @Test
-    fun everydayAppsAreLeftAlone() {
-        val apps = listOf(
-            app("Chrome", "com.android.chrome"),
-            app("WhatsApp", "com.whatsapp"),
-            app("Camera", "com.android.camera"),
-            app("Spay Clean", "com.example.cleaner"),
-            app("Incredible Hulk Game", "com.games.hulk"),
-            app("Maps", "com.google.android.apps.maps"),
-        )
-        assertTrue(ExcludedApps.suggested(apps).isEmpty(), "none of these is a banking app")
-    }
+    fun theRemovedExcludedAppsListIsDeletedFromAnExistingPhone() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val file = context.getSharedPreferences("no_usage_access_test", android.content.Context.MODE_PRIVATE)
+        file.edit().clear().putStringSet("reminder_overlay_excluded", setOf("com.somebank.mobile")).putBoolean("reminder_overlay_enabled", true).commit()
 
-    @Test
-    fun aShortWordCountsOnlyAsAWholeWord() {
-        assertTrue(ExcludedApps.isSensitive(app("Pay", "x.y")))
-        assertTrue(ExcludedApps.isSensitive(app("CRED", "x.y")))
-        assertFalse(ExcludedApps.isSensitive(app("Payload Viewer", "x.y")))
-        assertFalse(ExcludedApps.isSensitive(app("Credulous", "x.y")))
+        val preferences = com.example.normpix.settings.AppPreferences(file)
+
+        assertFalse(file.contains("reminder_overlay_excluded"), "the list of package names is gone")
+        assertTrue(preferences.state.value.reminderOverlayEnabled, "what else the user chose is untouched")
     }
 }
 

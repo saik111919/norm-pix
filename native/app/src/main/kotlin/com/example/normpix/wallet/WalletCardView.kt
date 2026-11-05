@@ -6,6 +6,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -85,6 +86,8 @@ import com.example.normpix.settings.BankIconStyle
 import com.example.normpix.settings.WalletCardActionStyle
 import com.example.normpix.ui.components.DeckCardSpace
 import com.example.normpix.ui.components.SwipeRevealRow
+import com.example.normpix.ui.components.focusRing
+import com.example.normpix.ui.components.holdFocus
 import com.example.normpix.ui.components.rememberAppHaptics
 import kotlin.math.roundToInt
 import com.example.normpix.ui.theme.AppMotion
@@ -182,6 +185,10 @@ fun WalletCardView(
     val underlapPx = with(density) { (deck?.underlap ?: 0.dp).roundToPx() }
     val underlap = (deck?.underlap ?: 0.dp) / printScale
 
+    // A card answers a finger the same way wherever it is: it sinks while pressed (nothing happens on a hold here, so there is no
+    // lifted-with-a-ring step), with no ripple, and keyboard focus is a ring along its own edge - as on the stacks and the accounts.
+    val press = remember { MutableInteractionSource() }
+
     val flipCard: @Composable () -> Unit = {
         CompositionLocalProvider(LocalDensity provides fixedDensity) {
             val angle = flip.value * 180f
@@ -190,7 +197,9 @@ fun WalletCardView(
                 Modifier
                     .fillMaxWidth()
                     .cardProportions(underlapPx)
-                    .clickable(onClickLabel = if (showingBack) "Shows the front" else showBack, onClick = ::doFlip)
+                    .holdFocus(press, AppRadius.rLg, longPress = false)
+                    .focusRing(press, AppRadius.rLg)
+                    .clickable(interactionSource = press, indication = null, onClickLabel = if (showingBack) "Shows the front" else showBack, onClick = ::doFlip)
                     .clearAndSetSemantics {
                         contentDescription = spoken
                         role = Role.Button

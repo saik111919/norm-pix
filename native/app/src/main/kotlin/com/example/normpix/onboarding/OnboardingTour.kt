@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -54,6 +55,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -72,10 +74,14 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.example.normpix.finance.ui.ConnectedChoiceRow
 import com.example.normpix.finance.ui.Hero
 import com.example.normpix.finance.ui.TonalFieldShape
 import com.example.normpix.finance.ui.typedFieldColors
+import com.example.normpix.navigation.LocalAppContainer
+import com.example.normpix.reminders.ReminderAccess
 import com.example.normpix.reminders.ReminderNotifications
 import com.example.normpix.settings.AppPreferences
 import com.example.normpix.settings.AppPrefsState
@@ -85,6 +91,7 @@ import com.example.normpix.settings.ProfilePhotos
 import com.example.normpix.settings.ui.AvatarThumb
 import com.example.normpix.settings.ui.ColorSourceChoice
 import com.example.normpix.settings.ui.PaletteChoices
+import com.example.normpix.settings.ui.openAndroidPage
 import com.example.normpix.settings.ui.themeOptions
 import com.example.normpix.ui.theme.AppTheme
 import com.example.normpix.ui.components.AssetBitmaps
@@ -144,7 +151,7 @@ fun OnboardingTour(preferences: AppPreferences, onFinished: () -> Unit) {
                 when (step) {
                     0 -> LookStep(preferences, prefs)
                     1 -> ProfileStep(preferences, prefs.profileName, prefs.profileEmoji, prefs.profilePhoto)
-                    2 -> NotificationsStep()
+                    2 -> NotificationsStep(preferences, prefs)
                     else -> StartStep()
                 }
             }
@@ -366,21 +373,31 @@ private fun ProfileStep(preferences: AppPreferences, savedName: String, emoji: S
 
 // ------------------------------------------------------------------------------------------------ 3: notifications
 
+/**
+ * The reminders step: the one permission a reminder cannot do without (notifications), and the rest that decide how surely one
+ * reaches the person - ringing on the minute, a card over the app in use, a full-screen alert over a locked phone - each shown only
+ * where it is still to be allowed, each with what it is for. All of it is optional and the same switches are in Settings >
+ * Notifications. Android's own pages are where the last three are granted, so they are read again when the person comes back.
+ */
 @Composable
-private fun NotificationsStep() {
+private fun NotificationsStep(preferences: AppPreferences, prefs: AppPrefsState) {
     val context = LocalContext.current
+    val container = LocalAppContainer.current
     val permissions = LocalPermissions.current
     val scope = rememberCoroutineScope()
-    var allowed by remember { mutableStateOf(ReminderNotifications.hasPermission(context)) }
+    var revision by remember { mutableIntStateOf(0) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { revision++ }
+    val allowed = remember(revision) { ReminderNotifications.hasPermission(context) }
+    val exact = remember(revision) { container.alarms?.canScheduleExact() ?: true }
+    val canDraw = remember(revision) { ReminderAccess.canDrawOverlays(context) }
+    val fullScreen = remember(revision) { ReminderAccess.canUseFullScreen(context) }
+    val fullScreenPage = remember(revision) { ReminderAccess.fullScreenSettingsIntent(context) }
 
     Step(TourScene.Reminders, "Reminders that arrive") {
         Body("NormPix can remind you about bills, repeating payments and cards about to expire. Reminders are made on your phone; nothing is sent anywhere.")
         Card("Notifications") {
             if (allowed) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.politeLiveRegion()) {
-                    Icon(Icons.Outlined.TaskAlt, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Text("Notifications are on", style = MaterialTheme.typography.bodyLarge)
-                }
+                Allowed("Notifications are on")
             } else {
                 Text(
                     "Android asks first. You can say no here and turn them on later, when you set a reminder.",
@@ -391,13 +408,62 @@ private fun NotificationsStep() {
                     onClick = {
                         scope.launch {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) permissions.request(Manifest.permission.POST_NOTIFICATIONS)
-                            allowed = ReminderNotifications.hasPermission(context)
+                            revision++
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                 ) { Text("Allow notifications") }
             }
         }
+        Card("Make sure they reach you") {
+            // On the minute: from Android 13 this is granted when NormPix is installed, so it is asked about only where it is not.
+            if (!exact) {
+                Permission(
+                    why = "Ring on the minute. Android lets NormPix do that once you allow \"Alarms & reminders\"; without it a reminder can be a few minutes late.",
+                    action = "Allow exact alarms",
+                    onAction = { openAndroidPage(container, context, container.alarms?.exactAlarmSettingsIntent()) },
+                )
+            }
+            // A card over the app in use: optional, off until chosen, and it does not look at what is on the screen.
+            if (prefs.reminderOverlayEnabled && canDraw) {
+                Allowed("A card appears over the app you are using")
+            } else {
+                Permission(
+                    why = "Optional: a small card over the app you are using when a reminder is due, with Mark as paid and Snooze. Android asks you to allow \"Display over other apps\": tap NormPix there and switch it on. NormPix does not see what is on the screen.",
+                    action = "Show reminders over other apps",
+                    onAction = {
+                        if (!canDraw) openAndroidPage(container, context, ReminderAccess.overlaySettingsIntent(context), ReminderAccess.OVERLAY_HINT)
+                        preferences.setReminderOverlayEnabled(true)
+                    },
+                )
+            }
+            // A full-screen alert over a locked phone: Android 14 and later do not allow it on their own.
+            if (!fullScreen && fullScreenPage != null) {
+                Permission(
+                    why = "Optional: light up a locked phone with the reminder, not just a notification. Android asks you to allow \"Full-screen notifications\".",
+                    action = "Allow full-screen alerts",
+                    onAction = { openAndroidPage(container, context, fullScreenPage) },
+                )
+            }
+        }
+    }
+}
+
+/** A line saying something is already on: a tick and the words, read out when it changes. */
+@Composable
+private fun Allowed(text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.politeLiveRegion()) {
+        Icon(Icons.Outlined.TaskAlt, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Text(text, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+/** Something still to be allowed: what it is for, then a button that goes to where Android asks. */
+@Composable
+private fun Permission(why: String, action: String, onAction: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(why, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        FilledTonalButton(onClick = onAction, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(action) }
     }
 }
 

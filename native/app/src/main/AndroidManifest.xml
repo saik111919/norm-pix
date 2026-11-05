@@ -16,16 +16,17 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- "Add to Clock alarms" opens the phone's Clock app on an alarm made from a reminder (AlarmClock.ACTION_SET_ALARM, which names
+         this permission). A normal permission, granted at install; the person still saves the alarm in the Clock app. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <!-- Reminders that reach a person who is not looking at NormPix, in order of how reliable they are. The notification (above) is
          the default and needs nothing else. A full-screen alert over a locked phone needs USE_FULL_SCREEN_INTENT, which Android 14
          no longer grants on its own: the app asks where it is not allowed (Settings > Notifications) and falls back to the
          notification when it is refused. A floating card over other apps needs "Display over other apps" (SYSTEM_ALERT_WINDOW), which
-         the user grants in Android's own settings; it is off until they turn it on. "Usage access" (PACKAGE_USAGE_STATS) is the one
-         way, without an Accessibility service, to tell which app is in front, so the card is never shown over an app the user
-         excluded: it is read once, when a reminder comes due, and neither stored nor logged. No Accessibility service is used. -->
+         the user grants in Android's own settings; it is off until they turn it on. NormPix does not ask for "Usage access" and does
+         not look at which other app is open, and no Accessibility service is used. -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
 
     <!-- Everything NormPix holds stays on the device. Its one connection is to GitHub, to check for and download
          updates (`updates/`): network_security_config.xml refuses every other host, and the telemetry upload ML Kit
@@ -51,11 +52,9 @@
         <intent>
             <action android:name="android.intent.action.SHOW_ALARMS" />
         </intent>
-        <!-- The apps with a launcher icon, to choose the ones a floating reminder is never shown over (Settings > Notifications).
-             The list is shown and nothing else is done with it; only the apps chosen are kept, as names, on this phone. -->
+        <!-- ... and to know whether there is a Clock app that can take an alarm, before offering it. -->
         <intent>
-            <action android:name="android.intent.action.MAIN" />
-            <category android:name="android.intent.category.LAUNCHER" />
+            <action android:name="android.intent.action.SET_ALARM" />
         </intent>
     </queries>
 

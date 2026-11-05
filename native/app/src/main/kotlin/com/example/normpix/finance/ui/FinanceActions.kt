@@ -22,6 +22,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -84,11 +85,21 @@ class FinanceActions(
 ) {
     private val state get() = finance.state.value
 
+    /**
+     * What a sheet that holds an editor is drawn inside: with the reminder launcher in reach. Sheets are drawn by the overlay host,
+     * which stands above where the launcher is provided, so an editor opened in one saw none - and a new repeating payment was
+     * given no reminder of its own, nor an edited one's reminder kept in step (found by `RecurringReminderLinkTest`).
+     */
+    @Composable
+    private fun WithReminders(content: @Composable () -> Unit) {
+        CompositionLocalProvider(LocalReminderLauncher provides reminders, content = content)
+    }
+
     /** The new-transaction sheet; [accountId], when given, is the account it starts on (a card's "Add expense"). */
     fun addTransaction(type: TransactionType = TransactionType.Expense, accountId: Long? = null, personId: Long? = null) {
         scope.launch {
             overlays.sheet<Boolean> { dismiss ->
-                TransactionEditorSheet(type, existingId = null, onDone = dismiss, initialAccountId = accountId, initialPersonId = personId)
+                WithReminders { TransactionEditorSheet(type, existingId = null, onDone = dismiss, initialAccountId = accountId, initialPersonId = personId) }
             }
         }
     }
@@ -186,7 +197,7 @@ class FinanceActions(
 
     private suspend fun openSharedDraft(prefill: SharedTransactionPrefill) {
         overlays.sheet<Boolean> { dismiss ->
-            TransactionEditorSheet(prefill.type ?: TransactionType.Expense, existingId = null, onDone = dismiss, prefill = prefill)
+            WithReminders { TransactionEditorSheet(prefill.type ?: TransactionType.Expense, existingId = null, onDone = dismiss, prefill = prefill) }
         }
     }
 
@@ -197,7 +208,7 @@ class FinanceActions(
 
     fun editTransaction(transaction: FinanceTransaction) {
         scope.launch {
-            overlays.sheet<Boolean> { dismiss -> TransactionEditorSheet(transaction.type, existingId = transaction.id, onDone = dismiss) }
+            overlays.sheet<Boolean> { dismiss -> WithReminders { TransactionEditorSheet(transaction.type, existingId = transaction.id, onDone = dismiss) } }
         }
     }
 
@@ -254,13 +265,15 @@ class FinanceActions(
     // --------------------------------------------------------------- recurring
 
     fun addRecurring() {
-        scope.launch { overlays.sheet<Boolean> { dismiss -> RecurringEditorSheet(existingId = null, onDone = dismiss) } }
+        scope.launch { overlays.sheet<Boolean> { dismiss -> WithReminders { RecurringEditorSheet(existingId = null, onDone = dismiss) } } }
     }
 
     fun editRecurring(id: Long) {
         scope.launch {
             overlays.sheet<Boolean> { dismiss ->
-                RecurringEditorSheet(existingId = id, onDone = dismiss, onRemind = reminders?.let { launcher -> { rule -> launcher.about(rule) } })
+                WithReminders {
+                    RecurringEditorSheet(existingId = id, onDone = dismiss, onRemind = reminders?.let { launcher -> { rule -> launcher.about(rule) } })
+                }
             }
         }
     }
@@ -589,7 +602,14 @@ private class PictureRead(val text: PictureText?)
  * it back, and the snackbar going without it settles the change. If something else changed meanwhile, undoing would take
  * that away too, so it says so instead.
  */
-internal fun AppSnackbars.offerUndo(message: String, finance: FinanceController, undo: FinanceUndo, scope: CoroutineScope) {
+internal fun AppSnackbars.offerUndo(
+    message: String,
+    finance: FinanceController,
+    undo: FinanceUndo,
+    scope: CoroutineScope,
+    /** Called when the change is final - the snackbar went without an Undo, or the Undo could not be done. */
+    onSettled: (() -> Unit)? = null,
+) {
     showUndoable(
         message,
         undo = {
@@ -605,10 +625,14 @@ internal fun AppSnackbars.offerUndo(message: String, finance: FinanceController,
                     show("Undone")
                 } else {
                     finance.settle(undo)
+                    onSettled?.invoke()
                     show("Couldn't undo, because something else changed since.", SnackbarKind.Warning)
                 }
             }
         },
-        settle = { scope.launch { finance.settle(undo) } },
+        settle = {
+            scope.launch { finance.settle(undo) }
+            onSettled?.invoke()
+        },
     )
 }

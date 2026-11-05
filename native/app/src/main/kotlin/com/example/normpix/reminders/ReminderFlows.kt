@@ -29,6 +29,10 @@ import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.wallet.StoredCard
 import java.time.Duration
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -116,21 +120,50 @@ class ReminderFlows(
         addFrom(ReminderDrafts.aboutRecurring(rule, recurringName(rule, state), recurringSummary(rule, state), LocalDateTime.now()))
     }
 
-    override fun linkAutomatically(rule: RecurringRule) {
+    override fun linkAutomatically(rule: RecurringRule) = follow(rule, null)
+
+    // The repeating payments with a reminder that is still to come: a finished one no longer says the payment is looked after.
+    override val remindedRules: StateFlow<Set<Long>> = container.reminders.state
+        .map { remindedRuleIds(it.reminders) }
+        .stateIn(scope, SharingStarted.WhileSubscribed(5_000), remindedRuleIds(container.reminders.state.value.reminders))
+
+    override fun follow(rule: RecurringRule, before: RecurringRule?) {
         val id = rule.id ?: return
         scope.launch {
             controller.ensureLoaded()
-            if (controller.state.value.reminders.any { it.link == ReminderLink.recurring(id) }) return@launch
-            val now = LocalDateTime.now()
-            val draft = ReminderDrafts.aboutRecurring(rule, recurringName(rule, finance), recurringSummary(rule, finance), now)
-            ensureAlertAccess()
-            val added = controller.addReminder(draft)
-            val is24Hour = android.text.format.DateFormat.is24HourFormat(context)
-            snackbars.showUndoable(
-                "Reminder set for ${formatDueMoment(added.effectiveDueAt, is24Hour)}",
-                undo = { scope.launch { added.id?.let { controller.deleteReminder(it) } } },
-                kind = SnackbarKind.Done,
+            val state = finance
+            val words = RecurringReminders.Words(
+                title = recurringName(rule, state),
+                summary = recurringSummary(rule, state),
+                beforeTitle = before?.let { recurringName(it, state) },
+                beforeSummary = before?.let { recurringSummary(it, state) },
             )
+            val steps = RecurringReminders.stepsAfterSave(rule, before, RecurringReminders.about(controller.state.value.reminders, id), words, LocalDateTime.now())
+            for (step in steps) {
+                when (step) {
+                    is RecurringReminders.Step.Add -> {
+                        ensureAlertAccess()
+                        val added = controller.addReminder(step.reminder)
+                        val is24Hour = android.text.format.DateFormat.is24HourFormat(context)
+                        snackbars.showUndoable(
+                            "Reminder set for ${formatDueMoment(added.effectiveDueAt, is24Hour)}",
+                            undo = { scope.launch { added.id?.let { controller.deleteReminder(it) } } },
+                            kind = SnackbarKind.Done,
+                        )
+                    }
+                    is RecurringReminders.Step.Change -> controller.updateReminder(step.reminder)
+                    is RecurringReminders.Step.Delete -> controller.deleteReminder(step.id)
+                }
+            }
+        }
+    }
+
+    override fun forget(ruleId: Long) {
+        scope.launch {
+            controller.ensureLoaded()
+            for (step in RecurringReminders.stepsAfterDelete(RecurringReminders.about(controller.state.value.reminders, ruleId))) {
+                if (step is RecurringReminders.Step.Delete) controller.deleteReminder(step.id)
+            }
         }
     }
 
@@ -181,6 +214,22 @@ class ReminderFlows(
         }
     }
 
+    /**
+     * Opens the Clock app's alarm form for [reminder] (see [ClockAlarms]); the person saves the alarm there. NormPix keeps nothing
+     * about it. Says so when there is no Clock app to take it.
+     */
+    fun addToClock(reminder: Reminder) {
+        val intent = ClockAlarms.intentFor(reminder)
+        if (intent == null) {
+            snackbars.show("A clock alarm can only hold a time of day, so it can't take that reminder", SnackbarKind.Warning)
+            return
+        }
+        // Leaving NormPix on purpose: the lock must not close behind the person.
+        container.lock.expectExternalActivity()
+        val opened = runCatching { context.startActivity(intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+        if (!opened) snackbars.show("No Clock app on this phone can take an alarm", SnackbarKind.Warning)
+    }
+
     fun delete(reminder: Reminder) {
         scope.launch {
             val confirmed = overlays.confirm(
@@ -221,3 +270,9 @@ fun rememberReminderFlows(): ReminderFlows {
         ReminderFlows(container, context, overlays, snackbars, haptics, permissions, scope, cardFlows::addAndSave)
     }
 }
+
+/** The ids of the repeating payments that have a reminder still to come (not finished). */
+internal fun remindedRuleIds(reminders: List<Reminder>): Set<Long> = reminders
+    .filter { it.status != ReminderStatus.Completed }
+    .mapNotNull { reminder -> reminder.link?.takeIf { it.kind == ReminderLinkKind.Recurring }?.id?.toLongOrNull() }
+    .toSet()

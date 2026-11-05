@@ -173,6 +173,8 @@ fun AppPage(
     /** False for a page whose content opens with a heading of its own, so the page's name isn't set above it as well. */
     largeTitle: Boolean = true,
     bottomSearch: (@Composable () -> Unit)? = null,
+    /** How much of the page's title shows now, 0 to 1, read as it is drawn: a page whose header is taken over by something else (Home's collapsing number) fades it out. */
+    titleAlpha: (() -> Float)? = null,
     content: LazyListScope.() -> Unit,
 ) {
     // Under a tab with the rail beside it nothing floats over the list: it ends a step under its last row, clear of the system bar.
@@ -201,6 +203,7 @@ fun AppPage(
                     floatingTopBar = floatingTopBar,
                     displayTitle = displayTitle,
                     largeTitle = largeTitle,
+                    titleAlpha = titleAlpha,
                     content = content,
                 )
                 DockedSearchCard(onHeightChange = { cardHeightPx = it }) { bottomSearch() }
@@ -221,6 +224,7 @@ fun AppPage(
             floatingTopBar = floatingTopBar,
             displayTitle = displayTitle,
             largeTitle = largeTitle,
+            titleAlpha = titleAlpha,
             content = content,
         )
         return
@@ -243,6 +247,7 @@ fun AppPage(
             floatingTopBar = true,
             largeTitle = pushed && largeTitle,
             displayTitle = displayTitle,
+            titleAlpha = titleAlpha,
             content = content,
         )
         FloatingTopHeader(
@@ -253,6 +258,7 @@ fun AppPage(
             // A top-level page's title is simply in the row; a pushed page's comes up from the list.
             titleFromList = pushed && pinnedHeader == null,
             listUnderRow = pinnedHeader == null,
+            titleAlpha = titleAlpha,
             leading = onBack?.let { back -> @Composable { FloatingCircleBackButton(onBack = back) } },
             actions = if (pushed) {
                 actions
@@ -286,6 +292,7 @@ private fun PageFrame(
     largeTitle: Boolean = true,
     /** The title in the display size, as a screen that opens with one (Settings) has it, not the headline size of other pages. */
     displayTitle: Boolean = false,
+    titleAlpha: (() -> Float)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val page = pageColor()
@@ -317,6 +324,7 @@ private fun PageFrame(
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = if (titleAlpha != null) Modifier.graphicsLayer { alpha = titleAlpha() } else Modifier,
                     )
                 },
                 navigationIcon = navigationIcon,
@@ -466,7 +474,7 @@ private fun PageTitle(title: String, gone: Boolean, display: Boolean, collapse: 
 }
 
 /** The controls floating over the top of a page ([AppSubPage] in the top floating circle style). */
-private object FloatingTopControls {
+internal object FloatingTopControls {
     /** Their size: the back circle, and the actions pill's height. */
     val size = 42.dp
 
@@ -754,6 +762,7 @@ private fun BoxScope.FloatingTopHeader(
     leading: (@Composable () -> Unit)?,
     actions: (@Composable RowScope.() -> Unit)?,
     actionsVisible: Boolean = true,
+    titleAlpha: (() -> Float)? = null,
 ) {
     val scrolled = rememberTitleCollapse(listState)
     val always = remember { mutableFloatStateOf(1f) }
@@ -785,8 +794,9 @@ private fun BoxScope.FloatingTopHeader(
                     .padding(start = if (leading != null) AppSpacing.md else 0.dp, end = AppSpacing.md)
                     .graphicsLayer {
                         // In once the one on the page is out, so the two are never both there.
-                        alpha = ((collapse.value - 0.45f) / 0.55f).coerceIn(0f, 1f)
-                        translationY = (1f - alpha) * 8.dp.toPx()
+                        val shown = ((collapse.value - 0.45f) / 0.55f).coerceIn(0f, 1f)
+                        alpha = shown * (titleAlpha?.invoke() ?: 1f)
+                        translationY = (1f - shown) * 8.dp.toPx()
                     }
                     // Spoken once: by the page's own title while that is there, by this one once it is gone.
                     .then(if (collapsed) Modifier.semantics { heading() } else Modifier.clearAndSetSemantics {}),

@@ -5,7 +5,7 @@ description: "Everything about the NormPix project - a private, offline-first An
 
 # NormPix project skill
 
-Stamp: verified against commit `08087061` (v1.5.0 in the working tree; v1.4.1 is the last release) on 2026-11-04. If `git log` shows newer commits on source paths, or
+Stamp: verified against commit `4968bdd9` (v1.5.0 in the working tree; v1.4.1 is the last release) on 2026-11-05. If `git log` shows newer commits on source paths, or
 `bash .claude/skills/normpix/scripts/verify.sh` reports drift, trust the code and fix the skill (`references/maintenance.md`).
 
 ## 1. The 60-second picture
@@ -43,7 +43,7 @@ reference rather than exploring. For the history or reasoning behind a feature, 
 ## 3. Hard rules (each one cost the owner something when broken)
 
 1. **Privacy.** Only GitHub is ever contacted (`network_security_config.xml` refuses every other host; ML Kit telemetry is stripped
-   at build time). No SMS, notification-listener or analytics. **Never log or store** card numbers, CVVs, clipboard contents,
+   at build time). No SMS, notification-listener, **Usage access** (which app is open) or analytics. **Never log or store** card numbers, CVVs, clipboard contents,
    account numbers, UPI ids or references. Release builds set `FLAG_SECURE`.
 2. **The owner's data is sacred.** Database migrations are additive (`ALTER TABLE`/new tables behind `if (oldVersion < N)`), never
    drop or recreate. Backup/cards/update formats are versioned and additive; old files must still restore; validate before writing.
@@ -91,8 +91,8 @@ reference rather than exploring. For the history or reasoning behind a feature, 
 | `wallet/clipboard/` | `SecureClipboard` (per-copy token, timed clear), copy sheet |
 | `wallet/expiry/` | Card expiry tracker, alarms, notices |
 | `wallet/motion/` | `CardTilt` (every card on screen leans) |
-| `reminders/` | Model, `RemindersDatabase` (v2), alarms, notifications, alert screen, links; delivery (`ReminderDelivery`, `ReminderOverlay` floating card, `ReminderOverlayPolicy`, `ReminderAccess`, `ExcludedApps`, `ReminderAlertActivity`) |
-| `screens/` | The tabs' screens: `HomeScreen`, `HomeBanners`, `PlansAndTransactionsScreen`, `WalletScreen` |
+| `reminders/` | Model, `RemindersDatabase` (v2), alarms, notifications, alert screen, links; delivery (`ReminderDelivery`, `ReminderOverlay` floating card, `ReminderOverlayPolicy`, `ReminderAccess`, `ReminderAlertActivity`); `RecurringReminders` (a repeating payment and its reminder kept in step); `ClockAlarms` (a reminder as the Clock app's alarm, on request) |
+| `screens/` | The tabs' screens: `HomeScreen`, `HomeBanners`, `HeroCollapse` (Home's number shrinking into the header on scroll), `PlansAndTransactionsScreen`, `WalletScreen` |
 | `navigation/` | `NormPixRoot` (`Routes`, `ShellState`, locals), `AppShell`, `AppNavigator`, `FloatingNavBar`, `ActionMenu` (the "+" bento panel), `PageTransitions`, `LinuxWindowMotion`, `AppSearch`, `AppearanceSection`, splash |
 | `settings/` | `AppPreferences` (`AppPrefsState`, all choice enums), app icons, notifications, custom font (`CustomFont`, `FontFile`: zip and variable fonts), profile photos (GIFs, avatar presets) |
 | `onboarding/` | `OnboardingTour`: the welcome tour of a new install (four steps in a pager); `TourArt`: each step's 3D-sticker picture and its motion |

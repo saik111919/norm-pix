@@ -40,7 +40,13 @@ class GroupButton(
  * outer ends and squared off where they meet, so they read as a single control with several parts. Each part keeps its own tone.
  */
 @Composable
-fun ConnectedButtonGroup(buttons: List<GroupButton>, modifier: Modifier = Modifier, height: Dp = 48.dp) {
+fun ConnectedButtonGroup(
+    buttons: List<GroupButton>,
+    modifier: Modifier = Modifier,
+    height: Dp = 48.dp,
+    /** The room either side of a segment's icon and words: less where three share a narrow card. */
+    contentPadding: Dp = AppSpacing.md,
+) {
     val haptics = rememberAppHaptics()
     val outer = CornerSize(50)
     val inner = CornerSize(4.dp)
@@ -57,6 +63,7 @@ fun ConnectedButtonGroup(buttons: List<GroupButton>, modifier: Modifier = Modifi
                     bottomEnd = if (last) outer else inner,
                 ),
                 height = height,
+                contentPadding = contentPadding,
                 onClick = {
                     haptics.selection()
                     button.onClick()
@@ -67,7 +74,7 @@ fun ConnectedButtonGroup(buttons: List<GroupButton>, modifier: Modifier = Modifi
 }
 
 @Composable
-private fun RowScope.Segment(button: GroupButton, shape: RoundedCornerShape, height: Dp, onClick: () -> Unit) {
+private fun RowScope.Segment(button: GroupButton, shape: RoundedCornerShape, height: Dp, contentPadding: Dp, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         modifier = Modifier.weight(1f).height(height),
@@ -76,7 +83,7 @@ private fun RowScope.Segment(button: GroupButton, shape: RoundedCornerShape, hei
         contentColor = button.content,
     ) {
         Row(
-            Modifier.padding(horizontal = AppSpacing.md),
+            Modifier.padding(horizontal = contentPadding),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {

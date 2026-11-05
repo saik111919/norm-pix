@@ -1,10 +1,12 @@
 package com.example.normpix.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -23,11 +25,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.heightIn
@@ -204,59 +209,67 @@ private class HomeData(
 fun HomeScreen(listState: LazyListState = rememberLazyListState()) {
     val navigator = LocalNavigator.current
     val result by rememberFinanceQuery(Unit) { HomeData.load(this) }
+    // The month's number collapses into the header as the page is scrolled (see HeroCollapse.kt).
+    val collapse = remember(listState) { HeroCollapseState(listState) }
+    val collapseSpec = rememberHeroCollapseSpec(AppLayout.maxWideContentWidth)
 
-    AppPage(
-        title = "Home",
-        actions = {
-            AmountsVisibilityButton()
-            AppSearchButton()
-        },
-        maxWidth = AppLayout.maxWideContentWidth,
-        listState = listState,
-        bottomPadding = AppLayout.fabClearance,
-        insetBottom = false,
-    ) {
-        item(key = "content") {
-            Column(Modifier.padding(AppSpacing.page)) {
-                when (val value = result) {
-                    is AsyncValue.Loading -> AppLoadingState(label = "Loading your month")
-                    is AsyncValue.Failure -> AppErrorState(
-                        title = "Couldn't open your finances",
-                        message = "Your data is safe on this device. Try again.",
-                    )
-                    is AsyncValue.Data -> {
-                        val data = value.value
-                        // The month first, then whatever needs attention (stacked by kind), then the rest in sections.
-                        val seeInsights: () -> Unit = { navigator.go(AppDestination.Insights) }
-                        val seePlans: (PlanSection) -> Unit = { section -> navigator.openPlans(section) }
-                        AdaptiveColumns(
-                            narrow = {
-                                MonthOverview(data, onClick = seeInsights)
-                                QuickAdd()
-                                NeedsAttention(data.budgets)
-                                CardsOnHome()
-                                Recent(data.recent, onSeeAll = navigator::openTransactions)
-                                if (data.topSpending.isNotEmpty()) TopSpending(data, onSeeAll = seeInsights)
-                                ComingUp(data.upcoming, onSeeAll = seePlans)
-                            },
-                            left = {
-                                MonthOverview(data, onClick = seeInsights)
-                                QuickAdd()
-                                NeedsAttention(data.budgets)
-                                ComingUp(data.upcoming, onSeeAll = seePlans)
-                            },
-                            right = {
-                                CardsOnHome(padding = HomeColumnStartPadding)
-                                // With no cards above it, Recent opens the column.
-                                val recentPadding = if (rememberHomeCards().isEmpty()) HomeColumnStartPadding else HomeSectionPadding
-                                Recent(data.recent, onSeeAll = navigator::openTransactions, padding = recentPadding)
-                                if (data.topSpending.isNotEmpty()) TopSpending(data, onSeeAll = seeInsights)
-                            },
+    Box(Modifier.fillMaxSize()) {
+        AppPage(
+            title = "Home",
+            actions = {
+                AmountsVisibilityButton()
+                AppSearchButton()
+            },
+            maxWidth = AppLayout.maxWideContentWidth,
+            listState = listState,
+            bottomPadding = AppLayout.fabClearance,
+            insetBottom = false,
+            // The page's own title gives way to the chip the number settles in.
+            titleAlpha = { collapse.frame(collapseSpec)?.titleAlpha ?: 1f },
+        ) {
+            item(key = "content") {
+                Column(Modifier.collapseItem(collapse).padding(AppSpacing.page)) {
+                    when (val value = result) {
+                        is AsyncValue.Loading -> AppLoadingState(label = "Loading your month")
+                        is AsyncValue.Failure -> AppErrorState(
+                            title = "Couldn't open your finances",
+                            message = "Your data is safe on this device. Try again.",
                         )
+                        is AsyncValue.Data -> {
+                            val data = value.value
+                            // The month first, then whatever needs attention (stacked by kind), then the rest in sections.
+                            val seeInsights: () -> Unit = { navigator.go(AppDestination.Insights) }
+                            val seePlans: (PlanSection) -> Unit = { section -> navigator.openPlans(section) }
+                            AdaptiveColumns(
+                                narrow = {
+                                    MonthOverview(data, collapse, onClick = seeInsights)
+                                    QuickAdd()
+                                    NeedsAttention(data.budgets)
+                                    CardsOnHome()
+                                    Recent(data.recent, onSeeAll = navigator::openTransactions)
+                                    if (data.topSpending.isNotEmpty()) TopSpending(data, onSeeAll = seeInsights)
+                                    ComingUp(data.upcoming, onSeeAll = seePlans)
+                                },
+                                left = {
+                                    MonthOverview(data, collapse, onClick = seeInsights)
+                                    QuickAdd()
+                                    NeedsAttention(data.budgets)
+                                    ComingUp(data.upcoming, onSeeAll = seePlans)
+                                },
+                                right = {
+                                    CardsOnHome(padding = HomeColumnStartPadding)
+                                    // With no cards above it, Recent opens the column.
+                                    val recentPadding = if (rememberHomeCards().isEmpty()) HomeColumnStartPadding else HomeSectionPadding
+                                    Recent(data.recent, onSeeAll = navigator::openTransactions, padding = recentPadding)
+                                    if (data.topSpending.isNotEmpty()) TopSpending(data, onSeeAll = seeInsights)
+                                },
+                            )
+                        }
                     }
                 }
             }
         }
+        HeroCollapseOverlay(collapse, collapseSpec)
     }
 }
 
@@ -320,7 +333,7 @@ internal fun CardsOnHome(padding: PaddingValues = HomeSectionPadding) {
  * total (it opens the Wallet).
  */
 @Composable
-private fun MonthOverview(data: HomeData, onClick: () -> Unit) {
+private fun MonthOverview(data: HomeData, collapse: HeroCollapseState, onClick: () -> Unit) {
     val finance = rememberFinanceState()
     val navigator = LocalNavigator.current
     val money = finance.money
@@ -347,9 +360,21 @@ private fun MonthOverview(data: HomeData, onClick: () -> Unit) {
             },
         ),
     ) {
-        Column(Modifier.semantics(mergeDescendants = true) {}) {
-            HeroEyebrow("Spent in ${monthLabel(data.month)}")
-            HeroAmount(money.format(s.expense))
+        val eyebrow = "Spent in ${monthLabel(data.month)}"
+        val amount = money.format(s.expense)
+        SideEffect {
+            collapse.eyebrow = eyebrow
+            collapse.amount = amount
+        }
+        // While the page is scrolled these two lines are drawn over it instead (HeroCollapseOverlay), on their way to the header;
+        // these stay as they are - they hold the room, and they are what a screen reader reads - but are not drawn then.
+        Column(
+            Modifier
+                .semantics(mergeDescendants = true) {}
+                .graphicsLayer { alpha = if (collapse.isCollapsing) 0f else 1f },
+        ) {
+            Box(Modifier.collapsingLine(collapse, CollapsingLine.Eyebrow)) { HeroEyebrow(eyebrow) }
+            Box(Modifier.collapsingLine(collapse, CollapsingLine.Amount)) { HeroAmount(amount) }
         }
         if (change != null) {
             Spacer(Modifier.height(AppSpacing.sm))

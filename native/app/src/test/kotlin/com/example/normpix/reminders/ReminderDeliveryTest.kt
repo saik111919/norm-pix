@@ -142,7 +142,6 @@ class ReminderDeliveryTest {
     fun aDueReminderGetsItsNotificationAndTheCardOnTop_onlyWhenEverythingAllowsIt() {
         val prefs = (context as NormPixApplication).container.preferences
         prefs.setReminderOverlayEnabled(true)
-        prefs.setReminderOverlayExcluded(emptySet())
         ShadowSettings.setCanDrawOverlays(true)
         ReminderDelivery.deliver(context, reminder())
         org.robolectric.shadows.ShadowLooper.idleMainLooper()
@@ -154,7 +153,6 @@ class ReminderDeliveryTest {
     fun withTheCardSwitchedOffOrNotificationsOffNoCardAppears_butTheNotificationStaysTheDefault() {
         val prefs = (context as NormPixApplication).container.preferences
         ShadowSettings.setCanDrawOverlays(true)
-        prefs.setReminderOverlayExcluded(emptySet())
 
         prefs.setReminderOverlayEnabled(false)
         ReminderDelivery.deliver(context, reminder())

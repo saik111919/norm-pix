@@ -208,7 +208,8 @@ class AlarmReminderScheduler(
 private val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
 private fun BroadcastReceiver.work(block: suspend () -> Unit) {
-    val pending = goAsync()
+    // Null when the receiver is run by hand rather than by a broadcast (a test, or a caller that holds the receiver itself).
+    val pending: BroadcastReceiver.PendingResult? = goAsync()
     receiverScope.launch {
         try {
             block()
@@ -217,7 +218,7 @@ private fun BroadcastReceiver.work(block: suspend () -> Unit) {
         } catch (_: Exception) {
             // A broadcast receiver has no screen to say it on: a failed alarm or action must not take the whole app down with it.
         } finally {
-            pending.finish()
+            pending?.finish()
         }
     }
 }

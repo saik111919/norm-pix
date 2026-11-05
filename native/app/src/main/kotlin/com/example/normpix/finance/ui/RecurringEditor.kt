@@ -249,8 +249,8 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
                 val saved = controller.saveRecurringRule(draft(parsed))
                 haptics.success()
                 snackbars.show(if (isEditing) "Recurring payment updated" else "Recurring payment saved")
-                // A new repeating payment gets a reminder of its own at once, linked to it.
-                if (!isEditing) reminderLauncher?.linkAutomatically(saved)
+                // Its reminder follows it: a new payment gets one at once, an edited one's is edited, a paused or ended one's goes.
+                reminderLauncher?.follow(saved, existing)
                 onDone(true)
             } catch (e: FinanceValidationException) {
                 formError = e.message
@@ -278,8 +278,10 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
                 deleteRecurringRule(existing!!.id!!)
                 emptyList()
             }
-            // The app's scope, not this sheet's: the Undo has to work after the sheet has closed.
-            snackbars.offerUndo("Recurring payment deleted", controller, undo, appScope)
+            // The app's scope, not this sheet's: the Undo has to work after the sheet has closed. Its reminders go once the Undo
+            // is let go - taken back, the payment keeps them.
+            val ruleId = existing!!.id!!
+            snackbars.offerUndo("Recurring payment deleted", controller, undo, appScope, onSettled = { reminderLauncher?.forget(ruleId) })
             onDone(true)
         }
     }
@@ -467,7 +469,7 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
         if (isEditing) {
             SwitchRow(
                 title = "Active",
-                subtitle = "Paused payments aren't recorded. Missed ones are skipped when you resume.",
+                subtitle = "Paused payments aren't recorded and don't remind you. Missed ones are skipped when you resume.",
                 checked = active,
                 onChange = {
                     haptics.selection()

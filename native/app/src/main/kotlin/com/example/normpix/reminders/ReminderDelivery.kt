@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
  *  1. **The notification, always** - the reliable default: it is posted whatever else happens, and stays until the reminder is dealt
  *     with. On a locked phone, and where Android allows and the user wants it, it also raises a full-screen alert.
  *  2. **The floating card, on top** - only while the phone is unlocked, the user turned it on, Android's "Display over other apps"
- *     is allowed, and no app the user excluded is in front ([decideOverlay]). It is never a replacement: when it is not shown the
+ *     is allowed, and NormPix itself is not in front ([decideOverlay]). It is never a replacement: when it is not shown the
  *     notification is all there is, and that is by design.
  */
 object ReminderDelivery {
@@ -41,10 +41,6 @@ object ReminderDelivery {
         screenOn = ReminderAccess.screenOn(context),
         locked = ReminderAccess.locked(context),
         appInFront = appInFront,
-        usageAccess = ReminderAccess.hasUsageAccess(context),
-        // Looked at only when there is an app to keep away from, and only once, here: it is not kept.
-        foregroundPackage = if (prefs.reminderOverlayExcluded.isEmpty()) null else ReminderAccess.foregroundPackage(context),
-        excluded = prefs.reminderOverlayExcluded,
     )
 
     private fun showCard(app: Context, reminder: Reminder) {
@@ -59,6 +55,8 @@ object ReminderDelivery {
         val sample = Reminder(
             id = SAMPLE_ID,
             title = "Pay electricity bill",
+            // A note, so "Try it" shows what a reminder with one looks like: the card grows to hold it.
+            notes = "Cash only. Take the old bill and ask for a receipt.",
             category = ReminderCategory.Payments,
             dueAt = now,
             repeatRule = RepeatRule.Once,

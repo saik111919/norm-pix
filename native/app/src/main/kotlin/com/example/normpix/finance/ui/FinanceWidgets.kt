@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -134,6 +135,8 @@ internal fun LedgerRow(
     note: String? = null,
     direction: TransferDirection? = null,
     muted: Boolean = false,
+    /** A reminder is set for it (a repeating payment's): a small bell shows after the repeat mark. */
+    reminder: Boolean = false,
 ) {
     val finance = rememberFinanceState()
     // At large text a row gets room for a second line of its title and its details, instead of cutting them short.
@@ -156,6 +159,10 @@ internal fun LedgerRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (repeating) {
                     Icon(Icons.Rounded.Repeat, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(AppSpacing.xs))
+                }
+                if (reminder) {
+                    Icon(Icons.Outlined.NotificationsActive, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(AppSpacing.xs))
                 }
                 // A repeating payment's line carries how often it repeats as well, so it may take a second line before it cuts.

@@ -137,7 +137,7 @@ object SettingsCatalog {
 
         // Notifications
         SettingsEntry("Notifications", SettingsPage.Notifications, listOf("notifications", "notify", "alerts", "alert", "mute", "silence", "reminder alerts", "card expiry")),
-        SettingsEntry("Floating reminders", SettingsPage.Notifications, listOf("floating", "overlay", "over other apps", "display over other apps", "draw over", "popup", "pop-up", "card", "samsung reminder", "samsung", "excluded apps", "exclude apps", "banking apps", "usage access", "reminder card")),
+        SettingsEntry("Floating reminders", SettingsPage.Notifications, listOf("floating", "overlay", "over other apps", "display over other apps", "draw over", "popup", "pop-up", "card", "samsung reminder", "samsung", "reminder card")),
         SettingsEntry("Full-screen reminder alerts", SettingsPage.Notifications, listOf("full screen", "full-screen", "lock screen", "locked", "alarm", "wake", "screen off", "full screen intent")),
         SettingsEntry("Reminders on time", SettingsPage.Notifications, listOf("exact alarm", "exact alarms", "alarms and reminders", "late", "on time", "battery", "battery optimisation", "battery optimization", "restricted", "background", "doze", "not arriving", "missing reminders")),
 
