@@ -5,7 +5,7 @@ description: "Everything about the NormPix project - a private, offline-first An
 
 # NormPix project skill
 
-Stamp: verified against commit `04173067` (v1.5.0 in the working tree; v1.4.1 is the last release) on 2026-11-04. If `git log` shows newer commits on source paths, or
+Stamp: verified against commit `08087061` (v1.5.0 in the working tree; v1.4.1 is the last release) on 2026-11-04. If `git log` shows newer commits on source paths, or
 `bash .claude/skills/normpix/scripts/verify.sh` reports drift, trust the code and fix the skill (`references/maintenance.md`).
 
 ## 1. The 60-second picture
@@ -90,8 +90,8 @@ reference rather than exploring. For the history or reasoning behind a feature, 
 | `wallet/nfc/` | `NfcTagReader` (add by tap), `NfcCardExchange` + HCE `NfcCardOutletService`, tag registration, tap guide/sheets |
 | `wallet/clipboard/` | `SecureClipboard` (per-copy token, timed clear), copy sheet |
 | `wallet/expiry/` | Card expiry tracker, alarms, notices |
-| `wallet/motion/` | `CardTilt`, `TiltFocus` (only the card nearest the window's vertical centre leans) |
-| `reminders/` | Model, `RemindersDatabase` (v2), alarms, notifications, alert screen, links |
+| `wallet/motion/` | `CardTilt` (every card on screen leans) |
+| `reminders/` | Model, `RemindersDatabase` (v2), alarms, notifications, alert screen, links; delivery (`ReminderDelivery`, `ReminderOverlay` floating card, `ReminderOverlayPolicy`, `ReminderAccess`, `ExcludedApps`, `ReminderAlertActivity`) |
 | `screens/` | The tabs' screens: `HomeScreen`, `HomeBanners`, `PlansAndTransactionsScreen`, `WalletScreen` |
 | `navigation/` | `NormPixRoot` (`Routes`, `ShellState`, locals), `AppShell`, `AppNavigator`, `FloatingNavBar`, `ActionMenu` (the "+" bento panel), `PageTransitions`, `LinuxWindowMotion`, `AppSearch`, `AppearanceSection`, splash |
 | `settings/` | `AppPreferences` (`AppPrefsState`, all choice enums), app icons, notifications, custom font (`CustomFont`, `FontFile`: zip and variable fonts), profile photos (GIFs, avatar presets) |

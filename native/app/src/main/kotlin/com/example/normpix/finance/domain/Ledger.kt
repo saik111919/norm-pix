@@ -196,12 +196,12 @@ data class BudgetOverview(
     val hasAnyBudget: Boolean get() = overall != null || categories.isNotEmpty()
 
     /**
-     * The single headline status: the overall budget when set, otherwise the
-     * sum of the category budgets against spending in those categories.
+     * Every category budget added together, against what was spent in those categories: the combined total the Plan screen
+     * shows, or null when no category has a budget. A budget on a sub-category whose parent has one too is left out of both
+     * figures ([nested]) - the parent's already holds that money - so nothing is counted twice; [categories] still lists it.
      */
-    val headline: BudgetStatus?
+    val categoryTotal: BudgetStatus?
         get() {
-            overall?.let { return it }
             if (categories.isEmpty()) return null
             var allocated = 0L
             var spent = 0L
@@ -212,6 +212,13 @@ data class BudgetOverview(
             }
             return BudgetStatus(allocated = allocated, spent = spent)
         }
+
+    /**
+     * The single headline status: the overall budget when set, otherwise the
+     * sum of the category budgets against spending in those categories.
+     */
+    val headline: BudgetStatus?
+        get() = overall ?: categoryTotal
 }
 
 /** Builds a [BudgetOverview] from resolved limits and the month's spending. */

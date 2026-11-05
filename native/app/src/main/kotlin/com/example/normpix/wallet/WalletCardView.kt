@@ -59,7 +59,6 @@ import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
@@ -340,23 +339,6 @@ private fun androidx.compose.foundation.layout.RowScope.CardRevealAction(
     }
 }
 
-/**
- * A soft contact shadow cut exactly to the card: the card's own rounded outline, grown in a few steps and shifted
- * down a little, each step faint, so it fades outwards and its corners follow the card's corners.
- */
-private fun DrawScope.drawCardShadow() {
-    val steps = 6
-    val reach = 7.dp.toPx()
-    val drop = 3.dp.toPx()
-    for (i in steps downTo 1) {
-        val grow = reach * i / steps
-        val outline = AppRadius.rLg.createOutline(Size(size.width + 2 * grow, size.height + 2 * grow), layoutDirection, this)
-        translate(left = -grow, top = -grow + drop) {
-            drawOutline(outline, Color.Black, alpha = 0.04f)
-        }
-    }
-}
-
 /** A soft highlight that slides across the card as it leans, like light moving over a glossy surface. */
 internal fun DrawScope.drawSheen(tilt: CardTiltState) {
     val x = (tilt.roll / MAX_CARD_TILT_DEGREES).coerceIn(-1f, 1f)
@@ -595,13 +577,12 @@ internal fun CardFace(
     bottomInset: androidx.compose.ui.unit.Dp = 0.dp,
     content: @Composable () -> Unit,
 ) {
-    // The one place a shadow is kept: card faces are physical objects, so a soft contact shadow reads as "card",
-    // not "UI panel". It is painted, not an elevation shadow: the card turns in 3D (flip, tilt), and the system's
-    // elevation shadow of a turned layer is drawn square and unrelated to the card's corners.
+    // No shadow under the card (owner, 2026-11-04): the card is cut out by its own edge - the hairline drawn below - and the
+    // page behind it does the rest. (A painted contact shadow was kept here before; a card that turns in 3D never had a
+    // usable elevation shadow, which is drawn square and unrelated to its corners.)
     Box(
         Modifier
             .fillMaxSize()
-            .drawBehind { drawCardShadow() }
             .clip(AppRadius.rLg)
             .drawBehind {
                 drawRect(theme.gradient.brush(size))

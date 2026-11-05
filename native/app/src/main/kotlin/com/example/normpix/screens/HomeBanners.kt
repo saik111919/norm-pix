@@ -85,7 +85,7 @@ private fun reminderBanners(): List<Banner> {
             eyebrow = formatOverdueBy(reminder.effectiveDueAt),
             title = reminder.title,
             message = "Was due ${formatDueMoment(reminder.effectiveDueAt)}",
-            primary = StatusAction("Mark as done", onClick = { flows.complete(reminder) }),
+            primary = StatusAction(reminder.doneLabel, onClick = { flows.complete(reminder) }),
             secondary = StatusAction("Snooze", onClick = { flows.snooze(reminder) }),
             onOpen = { flows.edit(reminder) },
         )

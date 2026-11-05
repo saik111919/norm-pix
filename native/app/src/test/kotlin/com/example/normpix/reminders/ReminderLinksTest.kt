@@ -220,9 +220,14 @@ class ReminderLinksTest {
         assertEquals(RepeatRule(RepeatKind.Daily), ReminderDrafts.reminderRepeatFor(rule(RecurrenceFrequency.Daily)))
         assertEquals(RepeatRule(RepeatKind.Custom, intervalDays = 14), ReminderDrafts.reminderRepeatFor(rule(RecurrenceFrequency.Weekly, interval = 2)))
         assertEquals(RepeatRule(RepeatKind.Custom, intervalDays = 3), ReminderDrafts.reminderRepeatFor(rule(RecurrenceFrequency.Daily, interval = 3)))
-        // A reminder cannot say "every 2 months" or "every year": it is then a one-off, not a wrong rhythm.
-        assertEquals(RepeatRule.Once, ReminderDrafts.reminderRepeatFor(rule(RecurrenceFrequency.Monthly, interval = 2)))
-        assertEquals(RepeatRule.Once, ReminderDrafts.reminderRepeatFor(rule(RecurrenceFrequency.Yearly)))
+        // "Every 2 months" and "every year" are rhythms of their own (they were one-offs until 2026-11-04, which let a yearly
+        // premium's reminder fire once and never again).
+        val everyOtherMonth = ReminderDrafts.reminderRepeatFor(rule(RecurrenceFrequency.Monthly, interval = 2))
+        assertEquals(RepeatKind.Months, everyOtherMonth.kind)
+        assertEquals(2, everyOtherMonth.intervalMonths)
+        val yearly = ReminderDrafts.reminderRepeatFor(rule(RecurrenceFrequency.Yearly))
+        assertEquals(RepeatKind.Months, yearly.kind)
+        assertEquals(12, yearly.intervalMonths)
         assertEquals(ReminderCategory.Income, ReminderDrafts.aboutRecurring(rule(RecurrenceFrequency.Monthly, type = TransactionType.Income), "Salary", "", now).category)
     }
 

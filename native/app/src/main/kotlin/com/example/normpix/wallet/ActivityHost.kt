@@ -6,4 +6,8 @@ import androidx.fragment.app.FragmentActivity
 class ActivityHost {
     @Volatile
     var activity: FragmentActivity? = null
+
+    /** NormPix's screen is in front (started and not yet stopped): a reminder coming due then is shown by the app itself. */
+    @Volatile
+    var visible: Boolean = false
 }

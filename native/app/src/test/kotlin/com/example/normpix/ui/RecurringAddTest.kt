@@ -110,7 +110,7 @@ class RecurringAddTest {
         assertEquals(1, count("Add recurring payment"))
         compose.onNodeWithText("Add recurring payment").performScrollTo().performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("New recurring").assertIsDisplayed()
+        compose.onNodeWithText("New recurring expense").assertIsDisplayed()
     }
 
     @Test
@@ -122,7 +122,7 @@ class RecurringAddTest {
         compose.onNodeWithContentDescription("Add reminder").assertIsDisplayed()
         compose.onNodeWithContentDescription("Add recurring payment").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("New recurring").assertIsDisplayed()
+        compose.onNodeWithText("New recurring expense").assertIsDisplayed()
     }
 
     @Test
@@ -132,7 +132,7 @@ class RecurringAddTest {
         compose.waitForIdle()
         compose.onNodeWithContentDescription("Add recurring payment").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("New recurring").assertIsDisplayed()
+        compose.onNodeWithText("New recurring expense").assertIsDisplayed()
     }
 
     @Test

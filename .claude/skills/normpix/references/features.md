@@ -34,13 +34,11 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
   default List), "More detail" collapsed (day by day, income sources). A month in progress is compared
   like-for-like (`comparisonRange`). Custom date ranges.
 - **Wallet** (`screens/WalletScreen.kt`, `wallet/`): Accounts (layouts Stack | Cards | Rows | Carousel) and Cards (layouts
-  Stack/Cards/Rows/Carousel; **Stack is the cards' default since 2026-11-02 and is filed like folders** - `wallet/CardFolderStack.kt`, after
-  the owner's reference: each card behind shows a tab strip (`FolderTabShape`, 64% wide, the edge stepping 16 dp down beside it) with its
-  network, `•••• last4` and the contactless mark, 58 dp apart (`FolderStep`), the front card printed in full; tapping a strip brings that
-  card forward on the spatial spring, tapping the front one opens it; **swiping the front card sideways** (past 22% of the width, or a
-  fling) brings the next card forward, the other way the previous one, round and round (TalkBack: "Show next card" / "Show previous
-  card"); one screen-reader node per card. Home's cards keep the older
-  `CardStack`), each with its own **"+ Add"** beside its heading (no dashed add tiles). NFC buttons show only
+  Stack/Cards/Rows/Carousel; **the cards' default is Cards**, and the Wallet's Stack layout draws `CardStack` (a `DeckStack`; swipe the
+  front card to bring the next forward, hold it to spread them out, Back gathers them again). **A "filed like folders" stack
+  (`wallet/CardFolderStack.kt`, tab strips, made 2026-11-02 with Stack as the default) is still in the source but the Wallet no longer
+  draws it and the default went back to Cards in `ec8a9cb3` - nothing in the log says the owner asked for that; ask before reviving or
+  deleting it.** Each of the two has its own **"+ Add"** beside its heading (no dashed add tiles). NFC buttons show only
   while NFC is usable (section 4).
 - **People** (`PeoplePage`, `PersonDetailPage`): label expenses with who they were for; totals per person. **Categories**
   (`CategoriesContent`, the Categories tab of Settings > Banks & Categories; `Routes.CATEGORIES` opens that page on it): two levels, ready-made set, 3D / emoji / outline icons with brand logos, archive, reorder. With the 3D style the main Settings list's groups wear 3D pictures too (`SettingsPage.emoji`, `SettingsRowEmoji`, drawn by `SettingsGlyph` on the group's tinted tile at 30 dp) unless **3D icons in Settings** (Appearance > Icons, pref `settings_icons_3d`, default on, disabled without the 3D style) is off; `LocalSettingsIcons3d` is provided by `ProvideAppEnvironment`, flat outside it; search results stay flat.
@@ -140,10 +138,13 @@ transaction and read again to fill the form.
   reduced motion). It leans the saved cards **and the accounts drawn as cards** (`AccountCardView(tilt)`: the carousel's front card and
   the list's cards; the accounts' stack stays flat; the cards' stacks, `CardStack` and `CardFolderStack`, lean their front card), with the
   sheen `drawSheen`; Wallet feeds one `rememberCardTilt` to both and
-  the accounts lean even where *Store cards* is off (the setting is under Effects either way). **Only one card leans at a time**
-  (`wallet/motion/TiltFocus.kt`, since 2026-11-02): each candidate (the front card of a stack or carousel, a card in a list) reports where
-  it is (`tiltFocusCandidate`), Wallet provides one `LocalTiltFocus`, and `CardTiltState?.ifFocused(key)` hands the tilt only to the one
-  nearest the window's vertical centre; with no provider (Home) a card keeps its tilt. **Card shadow** is painted from the card's rounded outline, not the hardware shadow.
+  the accounts lean even where *Store cards* is off (the setting is under Effects either way). **Every card on the screen leans
+  together** (restored 2026-11-04). `ec8a9cb3` (2026-11-02) had let only the card nearest the window's vertical centre lean, through a
+  `TiltFocus` that has been deleted; nothing recorded the owner asking for it, and they asked why the tilt had changed - do not bring
+  a "focused card" rule back without their word. **Cards have no shadow** (owner, 2026-11-04): `CardFace` is cut out by its hairline edge
+  alone. A card answers a finger with `ui/components/HoldFocus.kt` `Modifier.holdFocus(source, shape)`: it sinks while pressed and, held
+  for a long press, rises 2% with a 3 dp primary ring inside its edge (`DeckStack` items, `AccountCardView`); the "+" menu's tile held to
+  be moved wears the same ring instead of a lift shadow. Where the hold opens a sheet (`LocalOverlaysOrNull`, provided with `LocalOverlays`) the ring stays until that sheet closes, so the card stays marked as the one it is about.
 - Bank card faces use shared pattern-and-colour themes (`BankCardDesign`, `AccountCardDesign.themeFor`). A per-bank redesign is
   **blocked on the owner supplying the designs - do not start it from a guess**.
 - Privacy posture to preserve: no SMS or notification access; the only network host family is GitHub; ML Kit telemetry removed;
@@ -151,15 +152,37 @@ transaction and read again to fill the form.
 
 ## 5. Reminders and card expiry
 
-- **Reminders** (`reminders/`): one-off or repeating (`RepeatEnd`), exact alarms (`AlarmReminderScheduler`, re-armed after
-  boot/update), notification actions Complete / Snooze, a full alert screen when opened from the notification. Linked to a
-  card, account, transaction or recurring payment (`ReminderLinkKind`); overdue is easy to find (badges, a notice, counts),
-  never alarming. Stored in `RemindersDatabase`; part of an app backup.
+- **Reminders** (`reminders/`): one-off or repeating (`RepeatEnd`; kinds Once/Daily/Weekdays/Weekly/Monthly/Custom days and, since
+  2026-11-04, `Months` = every N months, 12 = a year, which a yearly or every-other-month repeating payment's reminder uses), exact
+  alarms (`AlarmReminderScheduler`). Linked to a card, account, transaction or recurring payment (`ReminderLinkKind`); overdue is easy
+  to find (badges, a notice, counts), never alarming. Stored in `RemindersDatabase`; part of an app backup.
+- **Delivery is a hybrid** (`ReminderDelivery`): (1) **the notification, always** (`ReminderNotifications.post`: buttons *Paid/Received/Done* (`Reminder.shortDoneLabel`; the long `doneLabel` "Mark as paid" is for the card and in-app rows - it was cut to "Mark as p..." in a heads-up),
+  *Snooze* (1 h), *Open*; private on a lock screen that hides content; a **full-screen alert** (`ReminderAlertActivity`, over the lock
+  screen, only the title and due time) **only when the phone is locked or its screen is off** (a full-screen intent on a notification
+  that arrives on a lit phone made the heads-up stick on screen and cover the floating card - found on the emulator) and the user's
+  switch is on and `ReminderAccess.canUseFullScreen` - on Android 14+ that permission is not granted for you, so it is optional and the
+  notification is the fallback); (2) **the floating card on top** (`ReminderOverlay`, a `TYPE_APPLICATION_OVERLAY` window with `ReminderAlertCard`: Mark
+  as paid, Snooze (15 min / 1 h / tomorrow 9:00), Dismiss, Open app; a swipe up or 30 s puts it away, the notification stays). It is
+  **off by default** (`reminderOverlayEnabled`, excluded from backups) and `decideOverlay` (pure, `ReminderOverlayPolicy.kt`) lets it
+  show only on an unlocked, screen-on phone with "Display over other apps" allowed, never over NormPix itself, never over an
+  **excluded app**; with any app excluded it needs **Usage access** (`ReminderAccess.foregroundPackage`, one read at fire time, never
+  stored - the only non-Accessibility way to know the front app) and shows nothing when it cannot tell. Turning it on pre-picks
+  banking/payment/password apps (`ExcludedApps.suggested`, a name guess). **No Accessibility service, nothing forced.** While Settings or a system permission dialog is in front Android itself hides overlay windows (`mPolicyVisibility=false`: no card there, only the notification - seen on the emulator); the card is put away when NormPix comes to the front (`MainActivity.onStart`), and it was seen working over an ordinary app (Clock) and not over an excluded one (Chrome). Settings >
+  Notifications > *Reaching you on time* (exact alarms, battery, full-screen) and *Floating reminders* (`ReminderAlertSettings`,
+  `ExcludedAppsSheet`, "Try it" sample). Mark as paid only finishes the reminder; it records no transaction.
+- **Reliability rules** (audited 2026-11-04): an alarm carries the reminder's id; `alerted()` stamps `lastFiredAt` and, for a repeating
+  reminder nobody dealt with, sets an alarm for its next time (`ReminderActions.nextCycle`) so one ignored occurrence does not silence the
+  rest; completing a long-overdue repeating reminder moves it to the first time still **ahead** (it used to land in the past, where no
+  alarm is ever set); after a **restart or an update** `rearmAll(deliverMissed = true)` hands back reminders that came due while the
+  phone was off (once - `wasAlerted`); the boot receiver also re-arms on `TIME_SET`, `TIMEZONE_CHANGED` and the exact-alarm permission
+  change; a failed receiver never crashes the app; a payment's reminder is at **9:00**, not at the midnight a date-only payment is stored as
+  (`ReminderDrafts.morningIfDateOnly`).
 - **Card expiry** (`wallet/expiry/`): alerts start on the 1st of the month before the expiry month, daily at 9:00 until the card
   is marked done; per-card state Normal / Expiring soon / Reminder active / Completed in its own store (bank, last four,
   expiry, done); renewal starts a fresh cycle; re-armed after reboot, update, clock or time-zone change; falls back to an
   in-app notice when notifications are off.
-- Backlog: Samsung-Reminder-style alarm alerts (full-screen intent, act from the alert, re-alert until handled) - parked.
+- Not built: a **re-alert until handled** for a reminder that does not repeat (one notification that stays in the shade is all it
+  gets), and anything checked on a real phone - see the Phase 50 entry in `native/TASKS.md` for what was and was not tried.
 
 ## 6. Data safety: backup, restore, check, sample data
 
@@ -359,7 +382,7 @@ spending, Categories in Insights, Accounts, Cards). Search finds each choice by 
 ## 11. Open and parked (check `native/TASKS.md` Backlog; verify against the code first - old "[ ]" lines go stale)
 
 - Per-bank card designs: blocked on the owner's designs.
-- Samsung-style reminder alerts: parked.
+- Samsung-style reminders: built 2026-11-04 (floating card + full-screen alert + notification); open: a phone test, and a re-alert for a non-repeating reminder that nobody handled.
 - Preview update channel + data-safety fallbacks: designed, awaiting the owner's go.
 - Not tried on a phone at the end of Phase 36: the About guide's pictures at real sizes, the Colors tiles, Pure on OLED,
   widgets on every launcher, the Top spending carousel's feel.

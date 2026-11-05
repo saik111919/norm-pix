@@ -10,11 +10,7 @@ import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.material3.MaterialTheme
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.upcomingOccurrences
@@ -124,26 +120,38 @@ private fun RuleTile(rule: RecurringRule) {
     val to = finance.account(rule.toAccountId)
     val title = rule.payee ?: if (isTransfer) "Transfer" else category?.name ?: "Uncategorized"
     val schedule = scheduleLabel(rule.frequency, rule.interval)
+    // Where it stands, in the place a transaction row puts its day: when it is next due, or that it is not going to be.
     val status = when {
         rule.isFinished -> "Ended"
         !rule.active -> "Paused"
         else -> "Next ${shortDate(rule.nextDate)}"
     }
-    val where = if (isTransfer) "${account?.name ?: "Unknown"} → ${to?.name ?: "Unknown"}" else account?.name ?: "Unknown account"
     // Where it stops, while it is still going: a finished one already says "Ended".
-    val until = rule.endDate?.takeIf { !rule.isFinished }?.let { " · until ${shortDate(it)}" }.orEmpty()
-    val subtitle = "$schedule · $status$until · $where"
-    val amount = finance.money.format(rule.amount)
+    val until = rule.endDate?.takeIf { !rule.isFinished }?.let { " until ${shortDate(it)}" }.orEmpty()
+    // The details a transaction row has (where, for whom), with how often it repeats in front. Not the category's path, which a
+    // transaction row adds under a payee: the avatar already shows the category, and on a phone the line is too short to hold it
+    // as well as the account (the account was what got cut off).
+    val details = buildList {
+        add(schedule + until)
+        if (isTransfer) {
+            add("${account?.name ?: "Unknown"} → ${to?.name ?: "Unknown"}")
+        } else {
+            add(account?.name ?: "Unknown account")
+            finance.person(rule.personId)?.let { add("For ${it.name}") }
+        }
+    }
+    val spoken = "${rule.type.label}, ${finance.money.format(rule.amount)}, $title, repeating, ${details.joinToString(", ")}, $status"
 
-    ListRow(
-        headline = title,
-        supporting = subtitle,
+    LedgerRow(
+        title = title,
+        details = details,
+        spoken = spoken,
+        type = rule.type,
+        amount = rule.amount,
         leading = { if (isTransfer) TransferAvatar() else CategoryAvatar(category, payee = rule.payee) },
-        trailing = { TransactionAmount(rule.type, rule.amount, finance.money, style = MaterialTheme.typography.titleSmall) },
         onClick = { rule.id?.let(actions::editRecurring) },
-        modifier = Modifier.clearAndSetSemantics {
-            contentDescription = "${rule.type.label}, $amount, $title, $subtitle"
-            onClick { rule.id?.let(actions::editRecurring); true }
-        },
+        repeating = true,
+        note = status,
+        muted = rule.isFinished || !rule.active,
     )
 }

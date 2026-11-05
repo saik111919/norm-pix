@@ -81,6 +81,7 @@ object SettingsCatalog {
         SettingsEntry("Background blur", SettingsPage.Appearance, listOf("sheet", "dialog", "blur", "frosted", "glass", "background", "overlay", "dock", "footer"), appearance = AppearanceSection.Effects),
         SettingsEntry("Category icons", SettingsPage.Appearance, listOf("category", "icons", "emoji", "outline", "outlined", "glyph", "avatar", "style"), appearance = AppearanceSection.CategoryIcons),
         SettingsEntry("3D icons in Settings", SettingsPage.Appearance, listOf("3d", "three d", "settings icons", "icons", "pictures", "emoji", "flat", "settings list"), appearance = AppearanceSection.CategoryIcons),
+        SettingsEntry("Icon gallery", SettingsPage.Appearance, listOf("icon gallery", "all icons", "every icon", "icon list", "icon library", "brands", "logos", "launcher icons", "interface icons", "find an icon"), appearance = AppearanceSection.CategoryIcons),
         SettingsEntry("Icon background", SettingsPage.Appearance, listOf("icon background", "shape", "radius", "circle", "rounded", "square", "avatar", "corners", "disc", "tile", "category", "logo", "round", "bank", "account"), appearance = AppearanceSection.CategoryIcons),
         SettingsEntry("Interface font", SettingsPage.Appearance, listOf("font", "typeface", "text", "gs flex", "google sans", "nunito", "rounded", "weight", "width", "roundness", "zenith", "neo", "impact", "airy"), appearance = AppearanceSection.InterfaceFont),
         SettingsEntry("Your font", SettingsPage.Appearance, listOf("custom font", "upload font", "ttf", "otf", "zip", "google fonts", "font file", "import font", "own font", "my font", "typeface", "text"), appearance = AppearanceSection.InterfaceFont),
@@ -136,6 +137,9 @@ object SettingsCatalog {
 
         // Notifications
         SettingsEntry("Notifications", SettingsPage.Notifications, listOf("notifications", "notify", "alerts", "alert", "mute", "silence", "reminder alerts", "card expiry")),
+        SettingsEntry("Floating reminders", SettingsPage.Notifications, listOf("floating", "overlay", "over other apps", "display over other apps", "draw over", "popup", "pop-up", "card", "samsung reminder", "samsung", "excluded apps", "exclude apps", "banking apps", "usage access", "reminder card")),
+        SettingsEntry("Full-screen reminder alerts", SettingsPage.Notifications, listOf("full screen", "full-screen", "lock screen", "locked", "alarm", "wake", "screen off", "full screen intent")),
+        SettingsEntry("Reminders on time", SettingsPage.Notifications, listOf("exact alarm", "exact alarms", "alarms and reminders", "late", "on time", "battery", "battery optimisation", "battery optimization", "restricted", "background", "doze", "not arriving", "missing reminders")),
 
         // Availability
         SettingsEntry("NFC card exchange schedule", SettingsPage.Availability, listOf("nfc", "schedule", "hours", "time window", "availability", "when")),

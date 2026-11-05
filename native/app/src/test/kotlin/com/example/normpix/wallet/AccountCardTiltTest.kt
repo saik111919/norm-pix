@@ -12,7 +12,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.testing.TestEnvironment
@@ -32,7 +34,7 @@ import org.robolectric.annotation.GraphicsMode
 /** An account drawn as a card leans with the phone as a saved card does, and lies flat without a tilt (or with none to give). */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34], qualifiers = "w411dp-h400dp-xhdpi")
+@Config(sdk = [34], qualifiers = "w411dp-h900dp-xhdpi")
 class AccountCardTiltTest {
     @get:Rule
     val compose = createComposeRule()
@@ -100,5 +102,32 @@ class AccountCardTiltTest {
         val flat = look()
         compose.runOnIdle { tilt = leanOf(pitch = -3f, roll = -4f) }
         assertTrue(differs(flat, look()))
+    }
+
+    /**
+     * Regression (2026-11-04): a change on 2026-11-02 let only the card nearest the middle of the window lean, so a list of
+     * cards sat still but for one. Every card on the screen leans with the phone, from the one sensor that feeds them all.
+     */
+    @Test
+    fun everyCardInAListLeansTogether_notOnlyOne() {
+        compose.setContent {
+            env.Content {
+                CompositionLocalProvider(LocalReducedMotionOverride provides true) {
+                    androidx.compose.foundation.layout.Column(Modifier.padding(24.dp).width(320.dp)) {
+                        for (n in 1..3) {
+                            Box(Modifier.padding(bottom = 16.dp).testTag("card-$n")) {
+                                AccountCardView(account.copy(id = n.toLong(), name = "Account $n"), onOpen = {}, onManage = {}, tilt = tilt)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        fun look(n: Int) = compose.onNodeWithTag("card-$n").captureToImage()
+        val flat = (1..3).map(::look)
+        compose.runOnIdle { tilt = leanOf(pitch = 4f, roll = 5f) }
+        compose.waitForIdle()
+        for (n in 1..3) assertTrue(differs(flat[n - 1], look(n)), "card $n leans with the phone")
     }
 }

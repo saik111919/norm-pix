@@ -89,6 +89,7 @@ import com.example.normpix.ui.components.AppSnackbars
 import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.reminders.LocalReminders
 import com.example.normpix.ui.components.LocalOverlays
+import com.example.normpix.ui.components.LocalOverlaysOrNull
 import com.example.normpix.ui.components.LocalPermissions
 import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.rememberPermissionRequester
@@ -361,6 +362,7 @@ fun ProvideAppEnvironment(container: AppContainer, content: @Composable () -> Un
         LocalFinance provides container.finance,
         LocalWalletCards provides container.cards,
         LocalOverlays provides overlays,
+        LocalOverlaysOrNull provides overlays,
         LocalSnackbars provides snackbars,
         LocalAppScope provides scope,
         LocalCategoryIconStyle provides prefs.categoryIconStyle,

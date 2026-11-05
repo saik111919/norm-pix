@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.domain.BudgetOverview
+import com.example.normpix.finance.domain.BudgetHealth
 import com.example.normpix.finance.domain.BudgetStatus
 import com.example.normpix.finance.domain.Category
 import com.example.normpix.finance.domain.CategoryType
@@ -114,7 +115,10 @@ fun BudgetsView() {
                         )
                     }
                 } else {
+                    // The combined total leads when there is no overall budget to lead with; under the overall one when there is.
+                    if (data.overall == null) CategoryBudgetsTotal(data)
                     OverallBudget(data, editable, actions)
+                    if (data.overall != null) CategoryBudgetsTotal(data)
                     CategoryBudgets(data, editable, actions)
                     if (!editable) {
                         Text(
@@ -174,6 +178,64 @@ private fun OverallBudget(overview: BudgetOverview, editable: Boolean, actions: 
                 }
                 Spacer(Modifier.height(AppSpacing.md))
                 BudgetProgress(status, finance.money)
+            }
+        }
+    }
+}
+
+/**
+ * All the category budgets of the month added together: what is set aside across the categories, what was spent in them, and
+ * how that stands. Nothing here when no category has a budget. A sub-category budget inside its parent's is not added a second
+ * time (see [BudgetOverview.categoryTotal]).
+ */
+@Composable
+private fun CategoryBudgetsTotal(overview: BudgetOverview) {
+    val total = overview.categoryTotal ?: return
+    val finance = rememberFinanceState()
+    val count = overview.categories.size
+    val health = total.health
+    val overall = overview.overall
+    val footer = buildList {
+        if (overview.nested.isNotEmpty()) add("A budget on a sub-category sits inside its parent's, so it isn't added again.")
+        if (overall != null && total.allocated > overall.allocated) {
+            add(
+                "The category budgets add up to more than your overall budget of " +
+                    "${finance.money.format(overall.allocated, trimZeroFraction = true)}.",
+            )
+        }
+    }.joinToString(" ").ifEmpty { null }
+    ListSection(title = "All category budgets", footer = footer) {
+        item {
+            Column(Modifier.padding(AppSpacing.lg)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // "On track" is the whole: one category can be over while the rest are well under, so say how many are over.
+                    val over = overview.categories.count { it.value.health == BudgetHealth.Exceeded }
+                    Text(
+                        "$count category ${if (count == 1) "budget" else "budgets"}" + if (over > 0) " · $over over budget" else "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    StatusTag(label = budgetLabel(health), tone = budgetTone(health), icon = budgetIcon(health))
+                }
+                Spacer(Modifier.height(AppSpacing.md))
+                Row {
+                    SummaryStat(
+                        label = "Budgeted",
+                        value = finance.money.format(total.allocated, trimZeroFraction = true),
+                        valueStyle = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(AppSpacing.lg))
+                    SummaryStat(
+                        label = "Spent",
+                        value = finance.money.format(total.spent),
+                        valueStyle = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Spacer(Modifier.height(AppSpacing.md))
+                BudgetProgress(total, finance.money)
             }
         }
     }

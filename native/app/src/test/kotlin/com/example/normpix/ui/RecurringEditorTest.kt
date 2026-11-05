@@ -117,7 +117,7 @@ class RecurringEditorTest {
         compose.waitForIdle()
         compose.onNodeWithText("Add recurring payment").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("New recurring").assertIsDisplayed()
+        compose.onNodeWithText("New recurring expense").assertIsDisplayed()
     }
 
     private fun dismissSheet() {
@@ -135,7 +135,7 @@ class RecurringEditorTest {
         compose.onNode(hasText("Expense") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)).assertIsSelected()
         compose.onNodeWithText("Category").assertIsDisplayed()
         compose.onNode(hasText("Monthly") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)).performScrollTo().assertIsSelected()
-        compose.onNodeWithText("Save recurring").assertIsDisplayed()
+        compose.onNodeWithText("Save recurring expense").assertIsDisplayed()
         // No pushed page: no close button in a top bar.
         assertTrue(compose.onAllNodesWithContentDescription("Discard").fetchSemanticsNodes().isEmpty())
     }
@@ -144,7 +144,7 @@ class RecurringEditorTest {
     fun aCleanEditor_justCloses_backToRecurring() {
         openEditor()
         dismissSheet()
-        compose.waitUntil(timeoutMillis = 5_000) { gone("New recurring") }
+        compose.waitUntil(timeoutMillis = 5_000) { gone("New recurring expense") }
         tab("Recurring").assertIsSelected()
     }
 
@@ -157,20 +157,20 @@ class RecurringEditorTest {
         compose.onNodeWithText("Discard this entry?").assertIsDisplayed()
         compose.onNodeWithText("Keep editing").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("New recurring").assertIsDisplayed()
+        compose.onNodeWithText("New recurring expense").assertIsDisplayed()
 
         dismissSheet()
         compose.onNodeWithText("Discard").performClick()
-        compose.waitUntil(timeoutMillis = 5_000) { gone("New recurring") }
+        compose.waitUntil(timeoutMillis = 5_000) { gone("New recurring expense") }
     }
 
     @Test
     fun savingWithoutAnAmount_saysWhatIsMissing_andStaysOpen() {
         openEditor()
-        compose.onNodeWithText("Save recurring").performClick()
+        compose.onNodeWithText("Save recurring expense").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Enter an amount greater than zero").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("New recurring").assertIsDisplayed()
+        compose.onNodeWithText("New recurring expense").assertIsDisplayed()
     }
 
     @Test
@@ -181,8 +181,8 @@ class RecurringEditorTest {
         compose.waitForIdle()
         compose.onNodeWithText("Food & dining").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("Save recurring").performClick()
-        compose.waitUntil(timeoutMillis = 10_000) { gone("New recurring") }
+        compose.onNodeWithText("Save recurring expense").performClick()
+        compose.waitUntil(timeoutMillis = 10_000) { gone("New recurring expense") }
         val rules = runBlocking { container.finance.repository.recurringRules() }
         assertEquals(1, rules.size)
         assertEquals(64_900L, rules.single().amount)
@@ -204,8 +204,8 @@ class RecurringEditorTest {
 
     private fun saveRule() {
         // Save is pinned below the form's scrolling body, so there is nothing to scroll it into.
-        compose.onNodeWithText("Save recurring").performClick()
-        compose.waitUntil(timeoutMillis = 10_000) { gone("New recurring") }
+        compose.onNodeWithText("Save recurring expense").performClick()
+        compose.waitUntil(timeoutMillis = 10_000) { gone("New recurring expense") }
     }
 
     @Test

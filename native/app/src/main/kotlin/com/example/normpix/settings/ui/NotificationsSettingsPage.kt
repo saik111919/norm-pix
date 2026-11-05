@@ -108,6 +108,8 @@ fun NotificationsSettingsPage() {
                         }
                     }
                 }
+                // How sure a reminder is to reach you, and the optional floating card: only worth setting while notifications are on.
+                if (prefs.notificationsEnabled) ReminderAlertSettings()
             }
         }
     }

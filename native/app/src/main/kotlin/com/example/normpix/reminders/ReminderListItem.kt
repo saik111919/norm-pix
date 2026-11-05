@@ -158,7 +158,7 @@ fun ReminderListItem(
                         SheetHeader(title = reminder.title)
                     }
                     if (!isCompleted) {
-                        ActionRow(Icons.Outlined.CheckCircle, "Mark as done") { dismiss(onComplete) }
+                        ActionRow(Icons.Outlined.CheckCircle, reminder.doneLabel) { dismiss(onComplete) }
                         ActionRow(Icons.Rounded.Snooze, "Snooze") { dismiss(onSnooze) }
                     }
                     if (canOpen) ActionRow(Icons.AutoMirrored.Outlined.OpenInNew, openLabel(attached)) { dismiss { openLink(attached) } }
@@ -180,7 +180,7 @@ fun ReminderListItem(
         modifier = modifier.semantics {
             customActions = buildList {
                 if (!isCompleted) {
-                    add(CustomAccessibilityAction("Mark as done") { onComplete(); true })
+                    add(CustomAccessibilityAction(reminder.doneLabel) { onComplete(); true })
                     add(CustomAccessibilityAction("Snooze") { onSnooze(); true })
                 }
                 if (canOpen) add(CustomAccessibilityAction(openLabel(attached)) { openLink(attached); true })
@@ -206,7 +206,7 @@ fun ReminderListItem(
                 } else {
                     {
                         IconButton(onClick = onComplete) {
-                            Icon(Icons.Outlined.CheckCircle, contentDescription = "Mark as done")
+                            Icon(Icons.Outlined.CheckCircle, contentDescription = reminder.doneLabel)
                         }
                     }
                 },

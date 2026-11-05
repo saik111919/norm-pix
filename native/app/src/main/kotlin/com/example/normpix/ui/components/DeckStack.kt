@@ -1,5 +1,6 @@
 package com.example.normpix.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
@@ -17,7 +18,6 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -163,6 +163,8 @@ fun <T> DeckStack(
     // A deck with nothing to unfold (its items went, or it leaves the screen) is not left unfolded: the page's button would stay.
     LaunchedEffect(state, unfolds) { if (!unfolds) state.fold() }
     DisposableEffect(state) { onDispose { state.fold() } }
+    // Back gathers a spread-out stack again before it leaves the page, as the page's Stack button does.
+    BackHandler(enabled = state.unfolded) { state.fold() }
     if (items.isEmpty()) return
     val haptics = rememberAppHaptics()
     var frontKey by remember { mutableStateOf<Any?>(null) }
@@ -337,8 +339,6 @@ private fun DeckItem(
     var width by remember { mutableIntStateOf(0) }
     val peekPx = with(LocalDensity.current) { Peek.toPx() }
     val press = remember { MutableInteractionSource() }
-    val pressed by press.collectIsPressedAsState()
-    val pressScale by animateFloatAsState(if (pressed && position == 0) 0.98f else 1f, settle, label = "deck_press")
     // Printed while at or near the front; an item on its way back turns to a plate before any of its print could show.
     val printed by remember { derivedStateOf { depth < 0.5f } }
     val isFront = position == 0
@@ -369,9 +369,9 @@ private fun DeckItem(
                 .graphicsLayer {
                     translationX = drag.value
                     rotationZ = if (width > 0) drag.value / width * DRAG_LEAN else 0f
-                    scaleX = pressScale
-                    scaleY = pressScale
                 }
+                // Sinks under a finger and, held for a long press, rises with a ring along its edge - no shadow (see [holdFocus]).
+                .holdFocus(press, shape, enabled = isFront, longPress = onLongPress != null)
                 .onSizeChanged { width = it.width }
                 .draggable(
                     orientation = Orientation.Horizontal,

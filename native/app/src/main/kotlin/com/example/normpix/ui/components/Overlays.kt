@@ -316,6 +316,9 @@ fun SheetDismissConfirmation(needed: Boolean, confirm: suspend () -> Boolean) {
 
 val LocalOverlays = compositionLocalOf<AppOverlays> { error("No AppOverlays provided") }
 
+/** The same [AppOverlays], or null where none is provided (a preview, a test): for what can use sheets but does not need them. */
+val LocalOverlaysOrNull = compositionLocalOf<AppOverlays?> { null }
+
 /** A scope that outlives any single screen: flows that must finish (and report) even if their trigger leaves composition. */
 val LocalAppScope = compositionLocalOf<CoroutineScope> { error("No app CoroutineScope provided") }
 

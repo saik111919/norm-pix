@@ -25,6 +25,9 @@ import kotlinx.coroutines.sync.withLock
 interface ReminderScheduler {
     suspend fun schedule(reminder: Reminder)
 
+    /** An alarm for [reminder] at [at] (a time other than its own due time): the next time of one that is not being dealt with. */
+    suspend fun scheduleAt(reminder: Reminder, at: LocalDateTime) = Unit
+
     suspend fun cancel(id: Long)
 }
 
@@ -147,13 +150,41 @@ class RemindersController(
     suspend fun rescheduleReminder(id: Long, newDueAt: LocalDateTime) =
         applyAndPersist(id) { ReminderActions.reschedule(it, newDueAt, clock()) }
 
-    /** Re-registers every pending alarm (after a reboot or app update, when the OS has dropped them). */
-    suspend fun rearmAll() = mutex.withLock {
+    /**
+     * Re-registers every pending alarm (after a reboot or app update, when the OS has dropped them, or after the clock or the time
+     * zone moved). With [deliverMissed] it also returns the reminders that came due while no alarm could ring - the phone was off,
+     * or NormPix was being updated - and were never alerted, so the caller can deliver them now instead of leaving them silent.
+     * Each is returned once: [alerted] records it.
+     */
+    suspend fun rearmAll(deliverMissed: Boolean = false): List<Reminder> = mutex.withLock {
         if (!loaded) loadLocked()
         val now = clock()
+        val missed = mutableListOf<Reminder>()
         for (reminder in _state.value.reminders) {
-            if (reminder.status != ReminderStatus.Completed && reminder.effectiveDueAt.isAfter(now)) scheduler.schedule(reminder)
+            if (reminder.status == ReminderStatus.Completed) continue
+            if (reminder.effectiveDueAt.isAfter(now)) {
+                scheduler.schedule(reminder)
+            } else if (deliverMissed && !reminder.wasAlerted()) {
+                missed += reminder
+            }
         }
+        missed
+    }
+
+    /**
+     * A reminder has just alerted (a notification, and a card where one was shown): that is recorded, and a repeating one that is
+     * still not dealt with gets an alarm for its next time, so leaving one occurrence alone does not silence all the others.
+     */
+    suspend fun alerted(id: Long) = mutex.withLock {
+        if (!loaded) loadLocked()
+        val current = _state.value.byId(id) ?: return@withLock
+        if (current.status == ReminderStatus.Completed) return@withLock
+        val now = clock()
+        val updated = current.copy(lastFiredAt = now)
+        dao.update(updated)
+        replace(updated)
+        ReminderActions.nextCycle(current, now)?.let { scheduler.scheduleAt(current, it) }
+        armDueTimer()
     }
 
     private suspend fun applyAndPersist(id: Long, transform: (Reminder) -> Reminder) = mutex.withLock {

@@ -315,8 +315,9 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
     val step = remember(start, frequency, interval) { recurrenceStep(start, frequency, interval) }
 
     EditorSheet(
-        title = if (isEditing) "Edit recurring" else "New recurring",
-        saveLabel = if (isEditing) "Save changes" else "Save recurring",
+        // Named by its type as the transaction form is ("New expense"), and changing with it.
+        title = "${if (isEditing) "Edit" else "New"} recurring ${type.label.lowercase()}",
+        saveLabel = if (isEditing) "Save changes" else "Save recurring ${type.label.lowercase()}",
         onSave = ::save,
         saving = saving,
         saveColors = ButtonDefaults.buttonColors(containerColor = role.color, contentColor = role.onColor),

@@ -105,13 +105,14 @@ enum class GuideTopic(
         hue = 4,
         steps = listOf(
             "Open Plans & Activity, then switch to Plans.",
-            "Budgets: set an overall monthly limit and one for each category. A change applies from that month on; earlier months keep theirs.",
+            "Budgets: set an overall monthly limit and one for each category; the budgets of all your categories are also added into one total with what you spent in them. A change applies from that month on; earlier months keep theirs.",
             "Recurring: add a payment that repeats, and NormPix records it on its day.",
-            "Reminders: one-off or repeating, with snooze, and you can complete one from its notification.",
+            "Reminders: one-off or repeating, with snooze, and you can mark one paid, snooze it or open it from its notification.",
         ),
         tips = listOf(
             "A reminder can be tied to a transaction, a repeating payment, an account or a card's bill.",
             "Overdue reminders put a badge on the Plans & Activity tab.",
+            "Settings > Notifications checks that reminders can ring on time, and can also float a reminder card over the app you are using while your phone is unlocked. It never appears over apps you exclude, such as banking ones.",
         ),
         link = GuideLink.Plans,
     ),

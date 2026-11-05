@@ -254,6 +254,21 @@ private fun CategoryIconsSection(prefs: AppPrefsState, preferences: AppPreferenc
             }
         }
     }
+    val overlays = LocalOverlays.current
+    val scope = LocalAppScope.current
+    ListSection(
+        title = "Icon gallery",
+        footer = "Every icon NormPix draws, in one place: the interface's own, the ones a category can wear, and the home-screen icons.",
+    ) {
+        item {
+            ListRow(
+                headline = "See all icons",
+                supporting = "Interface, categories and brands, app icons",
+                leading = { LeadingIcon(Icons.Outlined.Category) },
+                onClick = { scope.launch { overlays.sheet<Unit>(expandable = true) { IconGallerySheet() } } },
+            )
+        }
+    }
 }
 
 @Composable

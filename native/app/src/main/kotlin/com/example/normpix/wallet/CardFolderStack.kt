@@ -61,8 +61,6 @@ import com.example.normpix.settings.BankIconStyle
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.wallet.motion.CardTiltState
-import com.example.normpix.wallet.motion.ifFocused
-import com.example.normpix.wallet.motion.tiltFocusCandidate
 import kotlin.math.abs
 import kotlinx.coroutines.launch
 
@@ -200,17 +198,15 @@ fun CardFolderStack(
                             },
                     ) {
                         if (inFront) {
-                            val cardTilt = tilt?.ifFocused("folder-card-${card.id}")
                             Box(
                                 Modifier
-                                    .tiltFocusCandidate("folder-card-${card.id}", enabled = true)
                                     .graphicsLayer {
-                                        if (cardTilt != null) {
-                                            rotationX = -cardTilt.pitch
-                                            rotationY = cardTilt.roll
+                                        if (tilt != null) {
+                                            rotationX = -tilt.pitch
+                                            rotationY = tilt.roll
                                         }
                                     }
-                                    .then(if (cardTilt != null) Modifier.drawWithContent { drawContent(); drawSheen(cardTilt) } else Modifier)
+                                    .then(if (tilt != null) Modifier.drawWithContent { drawContent(); drawSheen(tilt) } else Modifier),
                             ) {
                                 WalletCardFacePreview(card, revealed = false, bankIconStyle = bankIconStyle)
                             }
