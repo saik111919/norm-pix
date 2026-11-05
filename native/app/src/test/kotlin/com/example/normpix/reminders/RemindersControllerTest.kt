@@ -24,9 +24,14 @@ import org.robolectric.annotation.Config
 private class RecordingScheduler : ReminderScheduler {
     val scheduled = mutableListOf<Long>()
     val cancelled = mutableListOf<Long>()
+    val followUps = mutableListOf<Pair<Long, LocalDateTime>>()
 
     override suspend fun schedule(reminder: Reminder) {
         scheduled += reminder.id!!
+    }
+
+    override suspend fun scheduleAt(reminder: Reminder, at: LocalDateTime) {
+        followUps += reminder.id!! to at
     }
 
     override suspend fun cancel(id: Long) {
@@ -137,6 +142,47 @@ class RemindersControllerTest {
         controller.snoozeReminder(id, Duration.ofMinutes(10))
         assertEquals(ReminderStatus.Snoozed, dao.getById(id)!!.status)
         assertEquals(false, controller.state.value.loading)
+    }
+
+    @Test
+    fun aReminderMissedWhileThePhoneWasOffIsHandedBackOnceAfterABoot() = runBlocking {
+        val missed = dao.insert(draft(title = "Missed", dueAt = now.minusHours(3)))
+        val fine = dao.insert(draft(title = "Later", dueAt = now.plusHours(1)))
+        val done = dao.insert(draft(title = "Done", dueAt = now.minusHours(2)).copy(status = ReminderStatus.Completed, completedAt = now))
+        // A plain re-arm (the app coming to the front) does not deliver anything.
+        assertTrue(controller.rearmAll().isEmpty())
+        // After a restart the reminder that came due unseen is handed back, and the future one is armed.
+        val handedBack = controller.rearmAll(deliverMissed = true)
+        assertEquals(listOf(missed), handedBack.map { it.id })
+        assertTrue(fine in scheduler.scheduled)
+        assertTrue(done !in handedBack.map { it.id })
+        // Once it has alerted it is not handed back again, however many times the phone restarts.
+        controller.alerted(missed)
+        assertTrue(controller.rearmAll(deliverMissed = true).isEmpty())
+        assertEquals(now, controller.findById(missed)!!.lastFiredAt)
+    }
+
+    @Test
+    fun aRepeatingReminderLeftAloneStillAlertsAtItsNextTime() = runBlocking {
+        val due = now.minusMinutes(1)
+        val saved = controller.addReminder(draft(dueAt = due, rule = RepeatRule(RepeatKind.Daily)))
+        controller.alerted(saved.id!!)
+        assertEquals(listOf(saved.id!! to due.plusDays(1)), scheduler.followUps)
+        // A reminder that does not repeat has no next time to set.
+        scheduler.followUps.clear()
+        val once = controller.addReminder(draft(dueAt = due))
+        controller.alerted(once.id!!)
+        assertTrue(scheduler.followUps.isEmpty())
+    }
+
+    @Test
+    fun finishingAReminderLeftOverdueForWeeksArmsItsNextTimeAhead() = runBlocking {
+        val saved = controller.addReminder(draft(dueAt = now.minusDays(20), rule = RepeatRule(RepeatKind.Daily)))
+        scheduler.scheduled.clear()
+        controller.completeReminder(saved.id!!)
+        val next = controller.findById(saved.id)!!
+        assertTrue(next.dueAt.isAfter(now), "not a time that has already gone by")
+        assertEquals(listOf(saved.id), scheduler.scheduled, "and an alarm is set for it")
     }
 
     @Test

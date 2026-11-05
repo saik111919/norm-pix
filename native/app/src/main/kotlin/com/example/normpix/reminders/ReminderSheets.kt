@@ -322,8 +322,8 @@ fun AddReminderSheet(
             RepeatKind.Weekdays -> RepeatRule(RepeatKind.Weekdays)
             RepeatKind.Weekly -> RepeatRule(RepeatKind.Weekly, weekdays = setOf(dueAt.dayOfWeek.value))
             RepeatKind.Monthly -> RepeatRule(RepeatKind.Monthly, dayOfMonth = dueAt.dayOfMonth)
-            // Custom intervals are only configured through the detail sheet.
-            RepeatKind.Custom -> repeat
+            // Custom intervals are only configured through the detail sheet; "every N months" comes from a repeating payment.
+            RepeatKind.Custom, RepeatKind.Months -> repeat
         }
     }
 
@@ -370,6 +370,8 @@ fun AddReminderSheet(
         add(ChoiceOption(RepeatKind.Monthly, "Monthly", Icons.Outlined.CalendarMonth))
         // A custom interval shows as its own choice once set; it's made through "Custom repeat".
         if (repeat.kind == RepeatKind.Custom) add(ChoiceOption(RepeatKind.Custom, repeat.label, Icons.Rounded.Tune))
+        // "Every 2 months" / "Every year" comes with a reminder made from a repeating payment, and is kept as it is.
+        if (repeat.kind == RepeatKind.Months) add(ChoiceOption(RepeatKind.Months, repeat.label, Icons.Outlined.CalendarMonth))
     }
     val overlaysForAttach = com.example.normpix.ui.components.LocalOverlays.current
     fun openAttach() {

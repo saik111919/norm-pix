@@ -142,6 +142,51 @@ class LedgerTest {
     }
 
     @Test
+    fun `category total adds every category budget and the spending in those categories`() {
+        val overview = buildBudgetOverview(
+            month = MonthKey(2026, 9),
+            limits = mapOf(null to 20000L, 1L to 1000L, 2L to 3000L, 3L to 500L),
+            spentByCategory = mapOf(1L to 500L, 2L to 3500L, 9L to 7777L),
+            totalExpense = 11777,
+        )
+        val total = overview.categoryTotal!!
+        assertEquals(4500L, total.allocated)
+        assertEquals(4000L, total.spent) // nothing was spent in category 3, and 9 has no budget
+        assertEquals(500L, total.remaining)
+        assertEquals(3, overview.categories.size)
+        // The overall budget does not change it, and still leads the headline.
+        assertEquals(20000L, overview.headline!!.allocated)
+    }
+
+    @Test
+    fun `category total does not count a sub-category budget twice`() {
+        // 5 is a sub-category of 1: the spending of 1 already includes the 400 spent in 5.
+        val overview = buildBudgetOverview(
+            month = MonthKey(2026, 9),
+            limits = mapOf(1L to 1000L, 5L to 300L),
+            spentByCategory = mapOf(1L to 700L, 5L to 400L),
+            totalExpense = 700,
+            parents = mapOf(5L to 1L),
+        )
+        assertEquals(setOf(5L), overview.nested)
+        assertEquals(2, overview.categories.size, "both budgets are listed")
+        val total = overview.categoryTotal!!
+        assertEquals(1000L, total.allocated, "only the parent's budget is added")
+        assertEquals(700L, total.spent)
+    }
+
+    @Test
+    fun `category total is empty without a category budget`() {
+        val overview = buildBudgetOverview(
+            month = MonthKey(2026, 9),
+            limits = mapOf(null to 5000L),
+            spentByCategory = mapOf(1L to 500L),
+            totalExpense = 500,
+        )
+        assertNull(overview.categoryTotal)
+    }
+
+    @Test
     fun `relative change needs a baseline`() {
         assertEquals(0.18, relativeChange(118, 100)!!, 1e-9)
         assertEquals(-0.18, relativeChange(82, 100)!!, 1e-9)

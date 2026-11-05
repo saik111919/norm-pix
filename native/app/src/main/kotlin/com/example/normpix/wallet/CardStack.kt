@@ -10,8 +10,6 @@ import com.example.normpix.ui.components.DeckStack
 import com.example.normpix.ui.components.DeckStackState
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.wallet.motion.CardTiltState
-import com.example.normpix.wallet.motion.ifFocused
-import com.example.normpix.wallet.motion.tiltFocusCandidate
 
 /**
  * The saved cards as a stack: the front one printed in full, the others a hair of colour above it, each a little
@@ -44,17 +42,15 @@ fun CardStack(
         modifier = modifier,
         plate = { WalletCardPlate(it) },
         face = { card ->
-            val cardTilt = tilt?.ifFocused("card-${card.id}")
             Box(
                 Modifier
-                    .tiltFocusCandidate("card-${card.id}", enabled = true)
                     .graphicsLayer {
-                        if (cardTilt != null) {
-                            rotationX = -cardTilt.pitch
-                            rotationY = cardTilt.roll
+                        if (tilt != null) {
+                            rotationX = -tilt.pitch
+                            rotationY = tilt.roll
                         }
                     }
-                    .then(if (cardTilt != null) Modifier.drawWithContent { drawContent(); drawSheen(cardTilt) } else Modifier)
+                    .then(if (tilt != null) Modifier.drawWithContent { drawContent(); drawSheen(tilt) } else Modifier),
             ) {
                 WalletCardFacePreview(card, revealed = false, bankIconStyle = bankIconStyle)
             }

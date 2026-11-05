@@ -32,7 +32,7 @@ object ReminderDrafts {
             TransactionType.Income -> ReminderCategory.Income
             TransactionType.Transfer -> ReminderCategory.Accounts
         },
-        dueAt = transaction.occurredAt.takeIf { it.isAfter(now) } ?: tomorrowMorning(now),
+        dueAt = morningIfDateOnly(transaction.occurredAt).takeIf { it.isAfter(now) } ?: tomorrowMorning(now),
         repeatRule = RepeatRule.Once,
         link = transaction.id?.let(ReminderLink::transaction),
         createdAt = now,
@@ -45,7 +45,7 @@ object ReminderDrafts {
      * does, when the payment has an end date of its own (never earlier than the first reminder).
      */
     fun aboutRecurring(rule: RecurringRule, name: String, summary: String, now: LocalDateTime): Reminder {
-        val dueAt = rule.nextDate.takeIf { it.isAfter(now) } ?: tomorrowMorning(now)
+        val dueAt = morningIfDateOnly(rule.nextDate).takeIf { it.isAfter(now) } ?: tomorrowMorning(now)
         return Reminder(
             title = name,
             notes = summary,
@@ -61,6 +61,14 @@ object ReminderDrafts {
             updatedAt = now,
         )
     }
+
+    /**
+     * A repeating payment falls on a day, stored as that day's midnight when no time was chosen; a reminder set for midnight would
+     * ring while its owner sleeps (or be held back by a bedtime mode) and so go unseen. A date with no time of its own is
+     * reminded at nine in the morning, as the other reminders that start from a day are; one with a time keeps it.
+     */
+    fun morningIfDateOnly(moment: LocalDateTime): LocalDateTime =
+        if (moment.toLocalTime() == LocalTime.MIDNIGHT) LocalDateTime.of(moment.toLocalDate(), LocalTime.of(9, 0)) else moment
 
     /** This rhythm, ending on the last day of [rule]'s payments if it has one; a rhythm that does not repeat has no end. */
     private fun RepeatRule.endingWithPayment(rule: RecurringRule, first: LocalDateTime): RepeatRule {
@@ -96,8 +104,8 @@ object ReminderDrafts {
     }
 
     /**
-     * The reminder rhythm that matches [rule]'s, or [RepeatRule.Once] when there is none: a reminder repeats daily, weekly on a
-     * day, monthly on a day, or every N days - "every 2 months" and "every year" are not among them.
+     * The reminder rhythm that matches [rule]'s: a reminder repeats daily, weekly on a day, monthly on a day, every N days or
+     * every N months ("every 2 months", "every year") - so one reminder keeps pace with any repeating payment.
      */
     fun reminderRepeatFor(rule: RecurringRule): RepeatRule {
         val anchor = rule.nextDate
@@ -108,8 +116,13 @@ object ReminderDrafts {
             } else {
                 RepeatRule(RepeatKind.Custom, intervalDays = rule.interval * 7)
             }
-            RecurrenceFrequency.Monthly -> if (rule.interval == 1) RepeatRule(RepeatKind.Monthly, dayOfMonth = anchor.dayOfMonth) else RepeatRule.Once
-            RecurrenceFrequency.Yearly -> RepeatRule.Once
+            RecurrenceFrequency.Monthly -> if (rule.interval == 1) {
+                RepeatRule(RepeatKind.Monthly, dayOfMonth = anchor.dayOfMonth)
+            } else {
+                RepeatRule(RepeatKind.Months, dayOfMonth = anchor.dayOfMonth, intervalMonths = rule.interval)
+            }
+            // A yearly payment (an insurance premium) is a reminder every 12 months, not one that is never repeated.
+            RecurrenceFrequency.Yearly -> RepeatRule(RepeatKind.Months, dayOfMonth = anchor.dayOfMonth, intervalMonths = 12 * rule.interval)
         }
     }
 }

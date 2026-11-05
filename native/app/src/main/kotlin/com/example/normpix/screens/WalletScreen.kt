@@ -126,13 +126,8 @@ import com.example.normpix.wallet.CardStack
 import com.example.normpix.wallet.CardsState
 import com.example.normpix.wallet.WalletCardView
 import com.example.normpix.wallet.expiry.CardExpiryNotice
-import androidx.compose.runtime.CompositionLocalProvider
 import com.example.normpix.wallet.motion.CardTiltState
-import com.example.normpix.wallet.motion.LocalTiltFocus
-import com.example.normpix.wallet.motion.ifFocused
 import com.example.normpix.wallet.motion.rememberCardTilt
-import com.example.normpix.wallet.motion.rememberTiltFocusState
-import com.example.normpix.wallet.motion.tiltFocusCandidate
 import com.example.normpix.wallet.nfc.ExchangeTab
 import com.example.normpix.wallet.rememberCardFlows
 import com.example.normpix.wallet.rememberCardReveal
@@ -192,7 +187,6 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
     // Cards - the saved ones and the accounts drawn as cards - lean with the phone only while they can be seen: this tab in front,
     // unlocked, and the setting on. One sensor feeds them all, and the accounts lean even where the saved cards are switched off.
     val tilt = rememberCardTilt(enabled = prefs.cardTiltEnabled && LocalTabVisible.current && !locked)
-    val tiltFocus = rememberTiltFocusState()
     // Whether the cards are spread out of their stack; the layout selector's "Stack" segment gathers them again.
     val cardsDeck = rememberDeckStackState()
 
@@ -240,7 +234,6 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
     // with either off, or no NFC in the phone, nothing offers it - not the button, not the "Tap to add" row, not a card's Share.
     val nfcOn = rememberNfcExchangeOffered()
 
-    CompositionLocalProvider(LocalTiltFocus provides tiltFocus) {
     AppPage(
         title = "Wallet",
         actions = {
@@ -474,8 +467,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                                         revealed.remove(card.id)
                                                         flows.deleteCard(card)
                                                     },
-                                                    tilt = tilt.ifFocused("card-${card.id}"),
-                                                    modifier = Modifier.tiltFocusCandidate("card-${card.id}"),
+                                                    tilt = tilt,
                                                     onCopy = { field -> reveal.copy(card, field) },
                                                 )
                                             }
@@ -510,7 +502,6 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
             }
             for (b in cardBlocks) item(key = b.key) { b.content(Modifier.animateItem()) }
         }
-    }
     }
 }
 
@@ -800,8 +791,7 @@ private fun AccountCards(
                                     onOpen = { navigator.openAccountHistory(card.id) },
                                     onManage = { actions.manageAccount(accountOf(card)) },
                                     bankIconStyle = bankIconStyle,
-                                    tilt = tilt.ifFocused("account-${card.id}"),
-                                    modifier = Modifier.tiltFocusCandidate("account-${card.id}"),
+                                    tilt = tilt,
                                 )
                             }
                         }

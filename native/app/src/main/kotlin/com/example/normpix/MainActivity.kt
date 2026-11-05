@@ -11,6 +11,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
 import com.example.normpix.navigation.NormPixRoot
 import com.example.normpix.reminders.ReminderNotifications
+import com.example.normpix.reminders.ReminderOverlay
 import com.example.normpix.updates.SystemUpdateNotifier
 import com.example.normpix.wallet.BiometricAuthenticator
 import com.example.normpix.wallet.expiry.CardExpiryNotifications
@@ -97,6 +98,10 @@ class MainActivity : FragmentActivity() {
 
     override fun onStart() {
         super.onStart()
+        container.host.visible = true
+        // NormPix is in front: the reminder is its own alert screen's now, so a floating card still up over it (the notification's
+        // "Open", say, brought us here) would only say the same thing twice.
+        ReminderOverlay.dismiss()
         // Back in front: expiry reminders are re-checked against today's date (a day may have passed, or the clock changed).
         container.expiry.rearmAll()
         container.lock.onAppResumed(container.preferences.state.value)
@@ -128,6 +133,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onStop() {
         super.onStop()
+        container.host.visible = false
         container.lock.onAppPaused(container.preferences.state.value)
     }
 

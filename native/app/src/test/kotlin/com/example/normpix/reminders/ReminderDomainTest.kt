@@ -47,12 +47,31 @@ class RepeatRuleTest {
     }
 
     @Test
+    fun everyNMonthsKeepsTheDayAndClampsToShortMonths() {
+        val bimonthly = RepeatRule(RepeatKind.Months, dayOfMonth = 31, intervalMonths = 2)
+        assertEquals(dt(2026, 12, 31), bimonthly.nextOccurrence(dt(2026, 10, 31)))
+        // Two months on from 31 December is the end of February, and it goes back to the 31st once the month has one.
+        assertEquals(dt(2027, 2, 28), bimonthly.nextOccurrence(dt(2026, 12, 31)))
+        assertEquals(dt(2027, 4, 30), bimonthly.nextOccurrence(dt(2027, 2, 28)))
+    }
+
+    @Test
+    fun everyYearIsTwelveMonthsAndHandlesALeapDay() {
+        val yearly = RepeatRule(RepeatKind.Months, dayOfMonth = 29, intervalMonths = 12)
+        assertEquals("Every year", yearly.label)
+        assertEquals(dt(2029, 2, 28), yearly.nextOccurrence(dt(2028, 2, 29)))
+        assertEquals(dt(2030, 2, 28), yearly.nextOccurrence(dt(2029, 2, 28)))
+        assertEquals("Every 3 months", RepeatRule(RepeatKind.Months, dayOfMonth = 5, intervalMonths = 3).label)
+    }
+
+    @Test
     fun jsonRoundTrips() {
         val rules = listOf(
             RepeatRule.Once,
             RepeatRule(RepeatKind.Weekly, weekdays = setOf(7, 2)),
             RepeatRule(RepeatKind.Monthly, dayOfMonth = 15),
             RepeatRule(RepeatKind.Custom, intervalDays = 3),
+            RepeatRule(RepeatKind.Months, dayOfMonth = 9, intervalMonths = 12),
         )
         for (rule in rules) assertEquals(rule, RepeatRule.fromJson(rule.toJson()))
     }
@@ -85,6 +104,51 @@ class ReminderActionsTest {
         assertEquals(ReminderStatus.Active, next.status)
         assertEquals(LocalDateTime.of(2026, 10, 4, 9, 0), next.dueAt)
         assertNull(next.snoozedUntil)
+    }
+
+    @Test
+    fun completingAWeeksOverdueRepeatingReminderMovesToTheFirstTimeAhead() {
+        // Left alone for 12 days: advancing one step would land on a time already past, which is never alarmed.
+        val stale = reminder(RepeatRule(RepeatKind.Daily), dueAt = LocalDateTime.of(2026, 9, 21, 9, 0))
+        val next = ReminderActions.complete(stale, now)
+        assertEquals(ReminderStatus.Active, next.status)
+        assertEquals(LocalDateTime.of(2026, 10, 4, 9, 0), next.dueAt, "the next 9:00 after now, the days missed skipped")
+        assertTrue(next.dueAt.isAfter(now))
+    }
+
+    @Test
+    fun aRepeatThatEndedWhileOverdueFinishesTheReminder() {
+        val rule = RepeatRule(RepeatKind.Daily, endDate = java.time.LocalDate.of(2026, 9, 25))
+        val done = ReminderActions.complete(reminder(rule, dueAt = LocalDateTime.of(2026, 9, 21, 9, 0)), now)
+        assertEquals(ReminderStatus.Completed, done.status)
+    }
+
+    @Test
+    fun nextCycleIsTheNextTimeAfterBothTheDueTimeAndNow() {
+        val daily = reminder(RepeatRule(RepeatKind.Daily), dueAt = LocalDateTime.of(2026, 10, 3, 9, 0))
+        assertEquals(LocalDateTime.of(2026, 10, 4, 9, 0), ReminderActions.nextCycle(daily, now))
+        assertNull(ReminderActions.nextCycle(reminder(), now), "a reminder that does not repeat has no next cycle")
+    }
+
+    @Test
+    fun theDoneButtonSaysWhatIsBeingDone() {
+        assertEquals("Mark as paid", reminder().doneLabel)
+        assertEquals("Mark as received", reminder().copy(category = ReminderCategory.Income).doneLabel)
+        assertEquals("Mark as done", reminder().copy(category = ReminderCategory.Personal).doneLabel)
+        // ... and the same in one word for a notification's button.
+        assertEquals("Paid", reminder().shortDoneLabel)
+        assertEquals("Received", reminder().copy(category = ReminderCategory.Income).shortDoneLabel)
+        assertEquals("Done", reminder().copy(category = ReminderCategory.Cards).shortDoneLabel)
+    }
+
+    @Test
+    fun aReminderIsAlertedOnceItsLastAlertIsAtOrAfterTheTimeItWaitsOn() {
+        val r = reminder(dueAt = LocalDateTime.of(2026, 10, 3, 9, 0))
+        assertFalse(r.wasAlerted())
+        assertTrue(r.copy(lastFiredAt = LocalDateTime.of(2026, 10, 3, 9, 0, 1)).wasAlerted())
+        // Snoozed to a later time: the earlier alert does not count for it.
+        val snoozed = ReminderActions.snooze(r.copy(lastFiredAt = LocalDateTime.of(2026, 10, 3, 9, 0, 1)), Duration.ofHours(1), now)
+        assertFalse(snoozed.wasAlerted())
     }
 
     @Test

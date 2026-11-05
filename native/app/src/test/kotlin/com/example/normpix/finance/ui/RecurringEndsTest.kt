@@ -82,7 +82,7 @@ class RecurringEndsTest {
 
     private fun edit(rule: RecurringRule) {
         compose.setContent { env.Content { RecurringEditorSheet(existingId = rule.id, onDone = { done = it }) } }
-        compose.waitUntil(timeoutMillis = 10_000) { compose.onAllNodesWithText("Edit recurring").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(timeoutMillis = 10_000) { compose.onAllNodesWithText("Edit recurring expense").fetchSemanticsNodes().isNotEmpty() }
     }
 
     private fun saveChanges() {

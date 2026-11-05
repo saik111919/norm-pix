@@ -68,6 +68,10 @@ object ReminderNotifications {
         Build.VERSION.SDK_INT < 33 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
+    /** Whether a reminder can be posted right now: the user's switch, Android's permission and Android's per-app switch. */
+    fun canPost(context: Context): Boolean =
+        AppNotifications.allowed(context) && hasPermission(context) && NotificationManagerCompat.from(context).areNotificationsEnabled()
+
     private fun uri(id: Long, what: String): Uri = "normpix://reminder/$id/$what".toUri()
 
     private fun broadcast(context: Context, receiver: Class<*>, action: String, id: Long): PendingIntent =
@@ -80,35 +84,67 @@ object ReminderNotifications {
 
     fun alarmIntent(context: Context, id: Long): PendingIntent = broadcast(context, ReminderAlarmReceiver::class.java, ACTION_ALARM, id)
 
-    /** Shows the heads-up notification for a reminder that is due. Tapping the body opens the alert screen. */
+    /** NormPix opened on a reminder's alert screen. */
+    fun openIntent(context: Context, id: Long): Intent =
+        Intent(context, MainActivity::class.java)
+            .setData(uri(id, "open"))
+            .putExtra(EXTRA_REMINDER_ID, id)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+
+    /** The alert on its own screen, over a locked phone, for the notification's full-screen intent. */
+    private fun alertIntent(context: Context, id: Long): PendingIntent = PendingIntent.getActivity(
+        context,
+        0,
+        Intent(context, ReminderAlertActivity::class.java)
+            .setData(uri(id, "alert"))
+            .putExtra(EXTRA_REMINDER_ID, id)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+    /** Whether a full-screen alert may come with the notification: the user's switch, and Android's permission for it. */
+    fun fullScreenAllowed(context: Context): Boolean =
+        AppNotifications.fullScreenWanted(context) && ReminderAccess.canUseFullScreen(context)
+
+    /**
+     * Shows the heads-up notification for a reminder that is due: Mark as paid / done, Snooze and Open, and tapping the body opens
+     * the alert screen. Where Android allows it (and the user has not switched it off) it also carries a full-screen alert, which
+     * Android raises only when the phone is locked or its screen is off; on an unlocked phone it is an ordinary heads-up.
+     * Returns whether it was posted - it is not when notifications are off, here or in Android.
+     */
     @SuppressLint("MissingPermission")
-    fun post(context: Context, reminder: Reminder) {
-        val id = reminder.id ?: return
+    fun post(context: Context, reminder: Reminder): Boolean {
+        val id = reminder.id ?: return false
         // Turned off in Settings: the reminder still comes due in the list, it just doesn't alert.
-        if (!AppNotifications.allowed(context)) return
-        if (!hasPermission(context) || !NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+        if (!canPost(context)) return false
         createChannel(context)
-        val open = PendingIntent.getActivity(
-            context,
-            0,
-            Intent(context, MainActivity::class.java)
-                .setData(uri(id, "open"))
-                .putExtra(EXTRA_REMINDER_ID, id)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        val open = PendingIntent.getActivity(context, 0, openIntent(context, id), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        // On a lock screen set to hide private content Android shows this instead of the reminder's words.
+        val hidden = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_reminder)
+            .setContentTitle("Reminder")
+            .setContentText("Something is due")
+            .build()
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_reminder)
             .setContentTitle(reminder.title)
             .setContentText(reminder.notes?.trim()?.takeIf { it.isNotEmpty() } ?: "Reminder due now")
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(hidden)
             .setAutoCancel(true)
             .setContentIntent(open)
-            .addAction(0, "Complete", broadcast(context, ReminderActionReceiver::class.java, ACTION_COMPLETE, id))
+            .addAction(0, reminder.shortDoneLabel, broadcast(context, ReminderActionReceiver::class.java, ACTION_COMPLETE, id))
             .addAction(0, "Snooze", broadcast(context, ReminderActionReceiver::class.java, ACTION_SNOOZE, id))
-            .build()
-        NotificationManagerCompat.from(context).notify(id.toInt(), notification)
+            .addAction(0, "Open", open)
+        // Only when nobody is looking at the phone (locked, or screen off). Attached to a notification that arrives on an unlocked,
+        // lit phone it made the heads-up sit on screen for as long as it was left (seen on an emulator, Android 17) - covering the
+        // floating card that goes at the same place - when an ordinary heads-up is gone in a few seconds.
+        val nobodyLooking = ReminderAccess.locked(context) || !ReminderAccess.screenOn(context)
+        if (nobodyLooking && fullScreenAllowed(context)) builder.setFullScreenIntent(alertIntent(context, id), true)
+        NotificationManagerCompat.from(context).notify(id.toInt(), builder.build())
+        return true
     }
 
     fun cancelPosted(context: Context, id: Long) {
@@ -130,14 +166,29 @@ class AlarmReminderScheduler(
         val id = reminder.id ?: return
         val due = reminder.effectiveDueAt
         if (due.isBefore(LocalDateTime.now())) return
-        val at = due.atZone(zone).toInstant().toEpochMilli()
+        set(id, due)
+    }
+
+    override suspend fun scheduleAt(reminder: Reminder, at: LocalDateTime) {
+        val id = reminder.id ?: return
+        if (at.isBefore(LocalDateTime.now())) return
+        set(id, at)
+    }
+
+    private fun set(id: Long, at: LocalDateTime) {
+        val millis = at.atZone(zone).toInstant().toEpochMilli()
         val intent = ReminderNotifications.alarmIntent(context, id)
-        // Without the exact-alarm opt-in the alarm still fires, just within a window rather than on the minute.
+        // Without the exact-alarm opt-in the alarm still fires, just within a window rather than on the minute. A phone that
+        // refuses even that (a security exception when the permission was taken away mid-way) falls back to the inexact one.
         if (canScheduleExact()) {
-            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
-        } else {
-            alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
+            try {
+                alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, intent)
+                return
+            } catch (_: SecurityException) {
+                // fall through to the inexact alarm
+            }
         }
+        alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, intent)
     }
 
     override suspend fun cancel(id: Long) {
@@ -161,15 +212,19 @@ private fun BroadcastReceiver.work(block: suspend () -> Unit) {
     receiverScope.launch {
         try {
             block()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // A broadcast receiver has no screen to say it on: a failed alarm or action must not take the whole app down with it.
         } finally {
             pending.finish()
         }
     }
 }
 
-private fun Context.reminders(): RemindersController = (applicationContext as NormPixApplication).container.reminders
+internal fun Context.reminders(): RemindersController = (applicationContext as NormPixApplication).container.reminders
 
-/** An alarm went off: show the notification for that reminder. */
+/** An alarm went off: deliver that reminder - its notification, and where it may, the floating card. */
 class ReminderAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getLongExtra(ReminderNotifications.EXTRA_REMINDER_ID, -1)
@@ -178,12 +233,16 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
             val controller = context.reminders()
             controller.ensureLoaded()
             val reminder = controller.findById(id) ?: return@work
-            if (reminder.status != ReminderStatus.Completed) ReminderNotifications.post(context, reminder)
+            if (reminder.status == ReminderStatus.Completed) return@work
+            // A snooze that was moved on while this alarm was already on its way: its own alarm will deliver it.
+            if (reminder.effectiveDueAt.isAfter(LocalDateTime.now().plusMinutes(1))) return@work
+            ReminderDelivery.deliver(context, reminder)
+            controller.alerted(id)
         }
     }
 }
 
-/** The Complete / Snooze buttons on a reminder notification. */
+/** The Mark as paid / Snooze buttons on a reminder notification. */
 class ReminderActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getLongExtra(ReminderNotifications.EXTRA_REMINDER_ID, -1)
@@ -193,23 +252,42 @@ class ReminderActionReceiver : BroadcastReceiver() {
             val controller = context.reminders()
             controller.ensureLoaded()
             ReminderNotifications.cancelPosted(context, id)
-            when (action) {
-                ReminderNotifications.ACTION_COMPLETE -> controller.completeReminder(id)
-                ReminderNotifications.ACTION_SNOOZE -> controller.snoozeReminder(id, ReminderNotifications.DEFAULT_SNOOZE)
+            // A floating card for the same reminder is no longer needed.
+            ReminderOverlay.dismiss()
+            // A reminder deleted since the notification was posted has nothing to finish; that must not take the app down.
+            runCatching {
+                when (action) {
+                    ReminderNotifications.ACTION_COMPLETE -> controller.completeReminder(id)
+                    ReminderNotifications.ACTION_SNOOZE -> controller.snoozeReminder(id, ReminderNotifications.DEFAULT_SNOOZE)
+                }
             }
         }
     }
 }
 
-/** Alarms don't survive a reboot or an app update: put them back. */
+/**
+ * Alarms don't survive a reboot or an app update, and are set against the clock and the time zone: put them back whenever any of
+ * those change. A reminder that came due while the phone was off or NormPix was being updated is delivered now (once), not lost;
+ * a change of clock or zone only re-sets the alarms.
+ */
 class ReminderBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
-        if (action == Intent.ACTION_BOOT_COMPLETED ||
+        val restart = action == Intent.ACTION_BOOT_COMPLETED ||
             action == Intent.ACTION_MY_PACKAGE_REPLACED ||
             action == "android.intent.action.QUICKBOOT_POWERON"
-        ) {
-            work { context.reminders().rearmAll() }
+        val reset = restart ||
+            action == Intent.ACTION_TIME_CHANGED ||
+            action == Intent.ACTION_TIMEZONE_CHANGED ||
+            // Android 12+: the user allowed (or took away) exact alarms; the same text as AlarmManager's constant, which is newer.
+            action == "android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED"
+        if (!reset) return
+        work {
+            val missed = context.reminders().rearmAll(deliverMissed = restart)
+            for (reminder in missed) {
+                ReminderDelivery.deliver(context, reminder)
+                reminder.id?.let { context.reminders().alerted(it) }
+            }
         }
     }
 }

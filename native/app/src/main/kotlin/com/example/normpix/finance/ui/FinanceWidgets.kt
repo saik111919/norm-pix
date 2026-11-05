@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalDensity
 import com.example.normpix.ui.components.AppLinearProgress
 
@@ -73,8 +74,6 @@ fun TransactionTile(
     perspectiveAccountId: Long? = null,
 ) {
     val finance = rememberFinanceState()
-    // At large text a row gets room for a second line of its title and its details, instead of cutting them short.
-    val roomy = LocalDensity.current.fontScale > HERO_STATS_STACK_SCALE
     val t = transaction
     val direction = transferDirection(t, perspectiveAccountId)
     val category = finance.category(t.categoryId)
@@ -99,9 +98,50 @@ fun TransactionTile(
     val spoken = "${direction?.label ?: t.type.label}, $amountText, $title, ${spokenDetails.joinToString(", ")}" +
         if (t.recurringId != null) ", recurring" else ""
 
+    LedgerRow(
+        title = title,
+        details = details,
+        spoken = spoken,
+        type = t.type,
+        amount = t.amount,
+        leading = { if (isTransfer) TransferAvatar() else CategoryAvatar(category, payee = t.payee) },
+        modifier = modifier,
+        onClick = onClick,
+        repeating = t.recurringId != null,
+        note = if (showDate) shortDate(t.occurredAt) else null,
+        direction = direction,
+    )
+}
+
+/**
+ * The one row every ledger entry is drawn with - an expense, an income, a transfer, and a repeating payment that will record
+ * them: the avatar (the category's, or the transfer's), the title, a line of details (a repeat mark in front of it when it repeats),
+ * and the amount in its type's colour with a small [note] under it (a day, or when a repeating payment is next due). A repeating
+ * payment is therefore read exactly as the entries it records are, and the two cannot drift apart. [muted] softens a row that is
+ * not going to happen (a payment that is paused or has ended).
+ */
+@Composable
+internal fun LedgerRow(
+    title: String,
+    details: List<String>,
+    spoken: String,
+    type: TransactionType,
+    amount: Long,
+    leading: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    repeating: Boolean = false,
+    note: String? = null,
+    direction: TransferDirection? = null,
+    muted: Boolean = false,
+) {
+    val finance = rememberFinanceState()
+    // At large text a row gets room for a second line of its title and its details, instead of cutting them short.
+    val roomy = LocalDensity.current.fontScale > HERO_STATS_STACK_SCALE
     ListItem(
         modifier = modifier
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(if (muted) Modifier.alpha(MUTED_ROW_ALPHA) else Modifier)
             .clearAndSetSemantics {
                 contentDescription = spoken
                 if (onClick != null) {
@@ -110,23 +150,24 @@ fun TransactionTile(
                 }
             },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        leadingContent = { if (isTransfer) TransferAvatar() else CategoryAvatar(category, payee = t.payee) },
+        leadingContent = leading,
         headlineContent = { Text(title, maxLines = if (roomy) 2 else 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (t.recurringId != null) {
+                if (repeating) {
                     Icon(Icons.Rounded.Repeat, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(AppSpacing.xs))
                 }
-                Text(details.joinToString(" · "), maxLines = if (roomy) 2 else 1, overflow = TextOverflow.Ellipsis)
+                // A repeating payment's line carries how often it repeats as well, so it may take a second line before it cuts.
+                Text(details.joinToString(" · "), maxLines = if (roomy || repeating) 2 else 1, overflow = TextOverflow.Ellipsis)
             }
         },
         trailingContent = {
             Column(horizontalAlignment = Alignment.End) {
-                TransactionAmount(t.type, t.amount, finance.money, style = MaterialTheme.typography.titleSmall, direction = direction)
-                if (showDate) {
+                TransactionAmount(type, amount, finance.money, style = MaterialTheme.typography.titleSmall, direction = direction)
+                if (note != null) {
                     Text(
-                        shortDate(t.occurredAt),
+                        note,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -135,6 +176,9 @@ fun TransactionTile(
         },
     )
 }
+
+/** How faint a paused or ended repeating payment is drawn: still readable (it is text), plainly not live. */
+private const val MUTED_ROW_ALPHA = 0.7f
 
 private val amountShape = Regex("^\\d{0,12}(\\.\\d*)?$")
 

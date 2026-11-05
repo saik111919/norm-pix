@@ -5,7 +5,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,6 +55,7 @@ import com.example.normpix.settings.BankIconStyle
 import com.example.normpix.ui.components.DeckStack
 import com.example.normpix.ui.components.DeckStackState
 import com.example.normpix.ui.components.focusRing
+import com.example.normpix.ui.components.holdFocus
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.wallet.motion.CardTiltState
@@ -377,15 +377,12 @@ fun AccountCardView(
     tilt: CardTiltState? = null,
 ) {
     val press = remember { MutableInteractionSource() }
-    val pressed by press.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.98f else 1f, AppMotion.spatial<Float>(), label = "account_card_press")
     val density = LocalDensity.current.density
-    // No clip and no ripple: the card paints its own shadow outside its edge, and a clip here would cut it off.
+    // No ripple: the card sinks under a finger and, held, rises with a ring along its edge (no shadow - see holdFocus).
     Box(
         modifier
+            .holdFocus(press, AppRadius.rLg)
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
                 // Read while drawing, so a moving phone redraws the card without recomposing it.
                 if (tilt != null) {
                     cameraDistance = 12f * density

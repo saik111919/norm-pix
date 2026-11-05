@@ -11,6 +11,11 @@ object AppNotifications {
         (context.applicationContext as? NormPixApplication)?.container?.preferences?.state?.value?.notificationsEnabled
     }.getOrNull() ?: true
 
+    /** Whether the user lets a due reminder raise a full-screen alert over a locked phone (Settings > Notifications); true when that can't be told. */
+    fun fullScreenWanted(context: Context): Boolean = runCatching {
+        (context.applicationContext as? NormPixApplication)?.container?.preferences?.state?.value?.reminderFullScreenEnabled
+    }.getOrNull() ?: true
+
     /** Whether Android lets NormPix post notifications at all (its permission and its own per-app switch). */
     fun allowedByAndroid(context: Context): Boolean = NotificationManagerCompat.from(context).areNotificationsEnabled()
 

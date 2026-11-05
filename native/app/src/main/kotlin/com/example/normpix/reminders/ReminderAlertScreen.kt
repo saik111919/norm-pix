@@ -100,7 +100,9 @@ fun ReminderAlertScreen(reminderId: Long) {
         AppLoadingState(Modifier.fillMaxSize(), label = "Loading reminder")
         return
     }
-    val reminder = state.reminder
+    // One finished since the alert was asked for (from its notification, or a card) is as good as gone: "Due now" over a reminder
+    // already marked paid said the opposite of what had happened.
+    val reminder = state.reminder?.takeIf { it.status != ReminderStatus.Completed }
     if (reminder == null) {
         // Deleted (or completed elsewhere) between the notification firing and this screen opening.
         Scaffold { padding ->
@@ -213,7 +215,7 @@ fun ReminderAlertScreen(reminderId: Long) {
                     ) {
                         Icon(Icons.Rounded.Check, contentDescription = null)
                         Spacer(Modifier.width(AppSpacing.sm))
-                        Text("Mark as done", style = text.titleMedium)
+                        Text(reminder.doneLabel, style = text.titleMedium)
                     }
                     Spacer(Modifier.height(AppSpacing.md))
                     Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)) {

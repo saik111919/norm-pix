@@ -340,9 +340,11 @@ class ReminderRepeatEndRuleTest {
     }
 
     @Test
-    fun `a rhythm a reminder cannot have is still a reminder that does not repeat, with no end`() {
+    fun `a yearly payment's reminder repeats every year, and stops where the payment does`() {
         val draft = ReminderDrafts.aboutRecurring(payment(RecurrenceFrequency.Yearly, moment(2030, 1, 1)), "Insurance", "", now)
-        assertEquals(RepeatRule.Once, draft.repeatRule)
+        assertEquals(RepeatKind.Months, draft.repeatRule.kind)
+        assertEquals(12, draft.repeatRule.intervalMonths)
+        assertEquals(java.time.LocalDate.of(2030, 1, 1), draft.repeatRule.endDate)
     }
 }
 

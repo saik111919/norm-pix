@@ -22,6 +22,9 @@ enum class RepeatKind(val key: String) {
     Weekly("weekly"),
     Monthly("monthly"),
     Custom("custom"),
+
+    /** Every N months on the same day ("every 2 months", and 12 of them is "every year"); added 2026-11-04, so an older build reads it as no repeat. */
+    Months("months"),
     ;
 
     companion object {
@@ -36,6 +39,8 @@ enum class RepeatKind(val key: String) {
  * - [RepeatKind.Monthly] uses [dayOfMonth] (1-31, clamped to the target month's
  *   actual length - the 31st of a 30-day month lands on its 30th).
  * - [RepeatKind.Custom] uses [intervalDays] (a fixed day interval).
+ * - [RepeatKind.Months] uses [intervalMonths] and [dayOfMonth] (every N months on that day, clamped like [RepeatKind.Monthly];
+ *   12 is a year).
  *
  * A repeat goes on for ever unless it has an [endDate]: the last day a reminder may fall on. After it, completing the last
  * reminder finishes it instead of moving it on. "After 12 times" is kept as the day of the 12th ([ending]), the way a repeating
@@ -46,6 +51,8 @@ data class RepeatRule(
     val weekdays: Set<Int>? = null,
     val dayOfMonth: Int? = null,
     val intervalDays: Int? = null,
+    /** For [RepeatKind.Months]: how many months apart (at least 1). */
+    val intervalMonths: Int? = null,
     /** The last day a reminder may fall on (that day included), or null for no end. Ignored for a reminder that does not repeat. */
     val endDate: LocalDate? = null,
 ) {
@@ -61,6 +68,11 @@ data class RepeatRule(
                 RepeatKind.Weekly -> weeklyLabel()
                 RepeatKind.Monthly -> "Monthly on day ${dayOfMonth ?: 1}"
                 RepeatKind.Custom -> "Every ${intervalDays ?: 1} day${if (intervalDays == 1) "" else "s"}"
+                RepeatKind.Months -> when (val n = intervalMonths ?: 1) {
+                    1 -> "Monthly on day ${dayOfMonth ?: 1}"
+                    12 -> "Every year"
+                    else -> "Every $n months"
+                }
             }
             val end = endDate
             return if (repeats && end != null) "$every until ${dayText(end)}" else every
@@ -104,6 +116,14 @@ data class RepeatRule(
         RepeatKind.Weekly -> nextWeekly(from)
         RepeatKind.Monthly -> nextMonthly(from)
         RepeatKind.Custom -> from.plusDays((intervalDays ?: 1).toLong())
+        RepeatKind.Months -> nextAfterMonths(from)
+    }
+
+    private fun nextAfterMonths(from: LocalDateTime): LocalDateTime {
+        val target = dayOfMonth ?: from.dayOfMonth
+        val next = YearMonth.of(from.year, from.monthValue).plusMonths((intervalMonths ?: 1).coerceAtLeast(1).toLong())
+        val day = target.coerceIn(1, next.lengthOfMonth())
+        return LocalDateTime.of(LocalDate.of(next.year, next.monthValue, day), LocalTime.of(from.hour, from.minute, from.second))
     }
 
     private fun nextWeekly(from: LocalDateTime): LocalDateTime {
@@ -128,6 +148,7 @@ data class RepeatRule(
         weekdays?.let { put("weekdays", JsonArray(it.sorted().map(::JsonPrimitive))) }
         dayOfMonth?.let { put("dayOfMonth", it) }
         intervalDays?.let { put("intervalDays", it) }
+        intervalMonths?.let { put("intervalMonths", it) }
         endDate?.let { put("endDate", it.toString()) }
     }
 
@@ -145,6 +166,7 @@ data class RepeatRule(
             weekdays = (json["weekdays"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.intOrNull }?.toSet(),
             dayOfMonth = (json["dayOfMonth"] as? JsonPrimitive)?.intOrNull,
             intervalDays = (json["intervalDays"] as? JsonPrimitive)?.intOrNull,
+            intervalMonths = (json["intervalMonths"] as? JsonPrimitive)?.intOrNull,
             // Absent in a rule saved before repeats could end, and in one with no end: no end. A date that can't be read is no end too.
             endDate = (json["endDate"] as? JsonPrimitive)?.takeIf { it.isString }?.content
                 ?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
@@ -257,6 +279,28 @@ data class Reminder(
     fun isOverdue(now: LocalDateTime = LocalDateTime.now()): Boolean =
         status != ReminderStatus.Completed && !effectiveDueAt.isAfter(now)
 
+    /** Whether it has already alerted for the time it is waiting on: its last alert was at or after that time. */
+    fun wasAlerted(): Boolean = lastFiredAt?.let { !it.isBefore(effectiveDueAt) } == true
+
+    /** What finishing it is called on a button: a payment is "paid", money coming in "received", anything else "done". */
+    val doneLabel: String
+        get() = when (category) {
+            ReminderCategory.Payments -> "Mark as paid"
+            ReminderCategory.Income -> "Mark as received"
+            else -> "Mark as done"
+        }
+
+    /**
+     * [doneLabel] short enough for a notification's button, where three buttons share the width and "Mark as paid" is cut to
+     * "Mark as p..." (seen on a phone-sized emulator): "Paid", "Received" or "Done".
+     */
+    val shortDoneLabel: String
+        get() = when (category) {
+            ReminderCategory.Payments -> "Paid"
+            ReminderCategory.Income -> "Received"
+            else -> "Done"
+        }
+
     val categoryLabel: String
         get() = if (category == ReminderCategory.Custom) {
             customCategoryLabel?.trim()?.takeIf { it.isNotEmpty() } ?: "Custom"
@@ -271,6 +315,9 @@ data class Reminder(
  * both apply exactly the same semantics.
  */
 object ReminderActions {
+    /** Enough steps to catch a daily reminder up over ten years of being ignored; past that it simply takes the next step. */
+    private const val MAX_CATCH_UP_STEPS = 4000
+
     /**
      * A one-time reminder completes outright. A repeating one instead advances to
      * its next occurrence, computed from the *original* due time (not [now]) so a
@@ -278,7 +325,7 @@ object ReminderActions {
      * day.
      */
     fun complete(reminder: Reminder, now: LocalDateTime = LocalDateTime.now()): Reminder {
-        val next = reminder.repeatRule.nextOccurrence(reminder.dueAt)
+        val next = nextCycle(reminder, now)
             ?: return reminder.copy(status = ReminderStatus.Completed, completedAt = now, updatedAt = now)
         return reminder.copy(
             dueAt = next,
@@ -287,6 +334,22 @@ object ReminderActions {
             lastFiredAt = null,
             updatedAt = now,
         )
+    }
+
+    /**
+     * For a repeating reminder, the next time it falls: after its due time (computed from that, not from [now], so a 9am reminder
+     * done a few minutes late stays at 9am) and after [now] (one left overdue for weeks moves to the first time still ahead, and
+     * the times missed are skipped - an alarm for a time already behind us is never set, so the reminder would be overdue again at
+     * once and never alert). Null when it does not repeat or its repeat has ended.
+     */
+    fun nextCycle(reminder: Reminder, now: LocalDateTime): LocalDateTime? {
+        val rule = reminder.repeatRule
+        var next = rule.nextOccurrence(reminder.dueAt) ?: return null
+        var steps = 0
+        while (!next.isAfter(now) && steps++ < MAX_CATCH_UP_STEPS) {
+            next = rule.nextOccurrence(next) ?: return null
+        }
+        return next
     }
 
     /** Sets the snooze time without touching the due time, so the repeat chain isn't disturbed. */

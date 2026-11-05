@@ -115,5 +115,6 @@ object ReminderBackupCodec {
         weekdays = weekdays?.filter { it in 1..7 }?.toSet(),
         dayOfMonth = dayOfMonth?.coerceIn(1, 31),
         intervalDays = intervalDays?.coerceAtLeast(1),
+        intervalMonths = intervalMonths?.coerceAtLeast(1),
     )
 }

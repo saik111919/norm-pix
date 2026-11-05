@@ -63,7 +63,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -558,8 +557,8 @@ private fun BentoTile(
     val onDragEndNow by rememberUpdatedState(onDragEnd)
     val onResizeNow by rememberUpdatedState(onResize)
     LaunchedEffect(target) { if (!dragging) offset.animateTo(target, settleSpec) }
+    // A tile held to be moved rises and wears the primary ring - the same answer a held card gives (`holdFocus`), no shadow.
     val lift by animateFloatAsState(if (dragging) 1.06f else 1f, AppMotion.spatial(), label = "tile_lift")
-    val liftElevation by animateDpAsState(if (dragging) 14.dp else 0.dp, AppMotion.spatial(), label = "tile_elevation")
 
     fun finishDrag() {
         scope.launch {
@@ -582,14 +581,13 @@ private fun BentoTile(
                 scaleX = s
                 scaleY = s
             }
-            .shadow(liftElevation, tileShape, clip = false)
             .clip(tileShape)
             .background(tone.container)
             .then(
                 if (editing) {
                     Modifier.border(
-                        if (selected) 2.dp else 1.dp,
-                        if (selected) scheme.onSurface else tone.content.copy(alpha = 0.35f),
+                        if (dragging) 3.dp else if (selected) 2.dp else 1.dp,
+                        if (dragging) scheme.primary else if (selected) scheme.onSurface else tone.content.copy(alpha = 0.35f),
                         tileShape,
                     )
                 } else {

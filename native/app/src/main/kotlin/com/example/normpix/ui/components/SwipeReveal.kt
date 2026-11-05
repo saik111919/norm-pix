@@ -1,5 +1,6 @@
 package com.example.normpix.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.Orientation
@@ -127,6 +128,8 @@ internal val LocalSwipeRowClose = compositionLocalOf<() -> Unit> { {} }
 @Composable
 fun SwipeRevealHost(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val coordinator = remember { SwipeRevealCoordinator() }
+    // Back (the key or the gesture) shuts the open row before it leaves the page, as a tap elsewhere does.
+    BackHandler(enabled = coordinator.openKey != null) { coordinator.closeAll() }
     Box(
         modifier
             .onGloballyPositioned { coordinator.host = it }

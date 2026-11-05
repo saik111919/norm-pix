@@ -431,6 +431,15 @@ data class AppPrefsState(
     val updateCheckOnOpen: Boolean = true,
     /** NormPix may post notifications: reminders that come due and card-expiry reminders. Android's own switch still applies. */
     val notificationsEnabled: Boolean = true,
+    /**
+     * A reminder that comes due also floats over the app in front, as a card, while the phone is unlocked (Settings >
+     * Notifications > Floating reminders). Off until the user turns it on, and it needs Android's "Display over other apps".
+     */
+    val reminderOverlayEnabled: Boolean = false,
+    /** Apps (package names) the floating card is never shown over: banking and other private apps. Empty until the user turns it on. */
+    val reminderOverlayExcluded: Set<String> = emptySet(),
+    /** A reminder that comes due on a locked phone (or one with its screen off) may raise a full-screen alert, where Android allows it. */
+    val reminderFullScreenEnabled: Boolean = true,
     /** Every amount is shown as dots (the eye button at the top of Home and Wallet) until shown again. */
     val amountsHidden: Boolean = false,
     /** The interface's typeface: GS Flex, in its Zenith style, until the user picks another. */
@@ -532,6 +541,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
             updateCheckMinuteOfDay = prefs.getInt(K_UPDATE_CHECK_MINUTE, defaults.updateCheckMinuteOfDay).coerceIn(0, 24 * 60 - 1),
             updateCheckOnOpen = prefs.getBoolean(K_UPDATE_CHECK_ON_OPEN, defaults.updateCheckOnOpen),
             notificationsEnabled = prefs.getBoolean(K_NOTIFICATIONS, defaults.notificationsEnabled),
+            reminderOverlayEnabled = prefs.getBoolean(K_REMINDER_OVERLAY, defaults.reminderOverlayEnabled),
+            reminderOverlayExcluded = prefs.getStringSet(K_REMINDER_OVERLAY_EXCLUDED, null)?.toSet() ?: defaults.reminderOverlayExcluded,
+            reminderFullScreenEnabled = prefs.getBoolean(K_REMINDER_FULL_SCREEN, defaults.reminderFullScreenEnabled),
             amountsHidden = prefs.getBoolean(K_AMOUNTS_HIDDEN, defaults.amountsHidden),
             interfaceFont = prefs.enum(K_FONT, defaults.interfaceFont),
             fontPreset = prefs.enum(K_FONT_PRESET, defaults.fontPreset),
@@ -742,6 +754,16 @@ class AppPreferences(private val prefs: SharedPreferences) {
     fun setNotificationsEnabled(enabled: Boolean) =
         change({ copy(notificationsEnabled = enabled) }) { putBoolean(K_NOTIFICATIONS, enabled) }
 
+    fun setReminderOverlayEnabled(enabled: Boolean) =
+        change({ copy(reminderOverlayEnabled = enabled) }) { putBoolean(K_REMINDER_OVERLAY, enabled) }
+
+    /** The apps the floating card stays away from; replaces the whole list. */
+    fun setReminderOverlayExcluded(packages: Set<String>) =
+        change({ copy(reminderOverlayExcluded = packages.toSet()) }) { putStringSet(K_REMINDER_OVERLAY_EXCLUDED, packages.toSet()) }
+
+    fun setReminderFullScreenEnabled(enabled: Boolean) =
+        change({ copy(reminderFullScreenEnabled = enabled) }) { putBoolean(K_REMINDER_FULL_SCREEN, enabled) }
+
     fun setAmountsHidden(hidden: Boolean) = change({ copy(amountsHidden = hidden) }) { putBoolean(K_AMOUNTS_HIDDEN, hidden) }
 
     fun setInterfaceFont(font: InterfaceFont) = change({ copy(interfaceFont = font) }) { putString(K_FONT, font.name) }
@@ -949,6 +971,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_UPDATE_CHECK_MINUTE = "update_check_minute_of_day"
         const val K_UPDATE_CHECK_ON_OPEN = "update_check_on_open"
         const val K_NOTIFICATIONS = "notifications_enabled"
+        const val K_REMINDER_OVERLAY = "reminder_overlay_enabled"
+        const val K_REMINDER_OVERLAY_EXCLUDED = "reminder_overlay_excluded"
+        const val K_REMINDER_FULL_SCREEN = "reminder_full_screen_enabled"
         const val K_AMOUNTS_HIDDEN = "amounts_hidden"
         const val K_FONT = "interface_font"
         const val K_FONT_PRESET = "font_preset"
@@ -972,6 +997,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
          *   registered here (kept apart, under a key that never leaves this phone), and it is a lock like the one above.
          * - [K_CARD_CVV], [K_WALLET_CARDS]: whether this phone keeps CVVs and cards at all. Each is tied to what is stored here
          *   (turning one off deletes it, after asking), so a file must neither switch it off over saved cards nor back on.
+         * - [K_REMINDER_OVERLAY]: whether reminders float over other apps; it rests on a permission granted on this phone.
          * Update records and the card vault are in files of their own, not in these preferences.
          */
         val BACKUP_EXCLUDED: Set<String> = setOf(
@@ -986,6 +1012,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
             K_NFC_REVEAL_REGISTERED,
             K_CARD_CVV,
             K_WALLET_CARDS,
+            // Floating reminders draw over other apps on this phone, under a permission only this phone's user grants: a file
+            // must not be able to switch them on. (The list of apps they keep away from is carried; it is only names.)
+            K_REMINDER_OVERLAY,
         )
 
         fun ScheduledFeature.key(field: String) = "availability_${name.lowercase()}_$field"
