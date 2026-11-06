@@ -16,11 +16,19 @@ Contents: 1 Theme and tokens · 2 The shared components · 3 Sheets, messages an
   success / warning / info / error roles (`StatusTone`). `ThemeContrastTest.everyTheme` checks contrast for every theme; a
   new palette must be added there.
 - Tokens (`Tokens.kt`): `AppSpacing` (2,4,8,12,16,20,24,32,40,48 dp as xxs..x5l), `AppRadius` (xs 4, sm 8, md 12, lg 16, xl
-  20, xxl 28; pick by *role*: xs inner list corners, sm chips, md fields/menus/rows, lg cards, xl outer list groups and
-  snackbars, xxl sheets/dialogs), `AppIconSizes`, `AppLayout` (content max widths 720/840/1200, `railWidth` 96, `wideRailWidth`
-  256, `listPaneWidth` 360, bottom clearances), `AppMotion` (200/300/500 ms; emphasized enter/exit/standard easings; a
+  20, xxl 28, **xxlIncreased 32** (2026-11-06; M3's `CornerExtraLargeIncreased`, verified in material3 1.4.0's `ShapeTokens`: the hero card,
+  `HeroCard.OuterCorner`; it used to be a private literal); pick by *role*: xs inner list corners, sm chips, md fields/menus/rows, lg cards,
+  xl outer list groups and snackbars, xxl sheets/dialogs, xxlIncreased the hero), `AppIconSizes`, `AppLayout` (content max widths
+  720/840/1200, `railWidth` 96, `wideRailWidth` 256, `listPaneWidth` 360, bottom clearances, **`minTouchTarget` 48**: what is drawn
+  smaller keeps its look and takes its tap area from this, as the day heading's 8 dp top gap is inside its tappable pill), `AppMotion` (200/300/500 ms; emphasized enter/exit/standard easings; a
   `spatial()` spring with damping 0.8), `AppFrostedTokens` (page blur 40 dp, chrome blur 20 dp, see-through surface 62%,
   scrim 8%).
+- **A ratchet holds the leaks where they are** (2026-11-06, `DesignTokenRatchetTest` + `app/src/test/design-baseline.txt`): per source file it
+  counts raw `Color(0x..)`, `RoundedCornerShape(<n>.dp)` and the half-step spacings `AppSpacing` has no step for (6, 10, 14, 18, 22 dp);
+  a file with **more** than its recorded count fails (use `AppSpacing`, `AppRadius` or a theme colour), one with **fewer** fails too (lower
+  the line, so a clean-up's slack is not spent again; `-PdesignBaseline=write` rewrites the file), and a file not listed has none. Art that
+  is meant to have its own colours (bank cards, logos, the guide's pictures) is simply in the list. Today: 514 colours (art), 49 hand-sized
+  corners, 221 half-steps. Do not sweep them: that moves the phone's design; snap one when you are in its file anyway.
 - Type: interface font is GS Flex (Google Sans Flex, variable) by default - weight/width/roundness axes via presets or hand
   values; Nunito (bundled, variable), System font or the user's own file or Google Fonts zip are alternatives (features.md
   section "Interface font"). Money and hero numbers use the "hero amount" styles.
@@ -147,7 +155,17 @@ Use these before writing anything new:
   change (`ScrollAwareBar`: offset + alpha only so nothing jumps; 16 dp jitter threshold). What changes size when the tab changes (the
   selected pill's padding and its label opening) moves on **`dockSpring`** (damping 0.65, stiffness 300: ~7% overshoot, settled in a third
   of a second, instant with animations off), after Essentials' toolbar (verified-facts.md) - the app's own `spatial()` spring measured
-  almost the same as the old 300 ms curve, so the dock has a livelier one; colours stay short curves, which must not overshoot. The trailing button is the **"+"
+  almost the same as the old 300 ms curve, so the dock has a livelier one; colours stay short curves, which must not overshoot.
+  **The pill glides** (2026-11-07, after DropSauce's floating bar - its timings, not its code; Settings > Appearance > Transitions > Dock, `DockSelectionStyle.Glide`
+  the default, **Fade in place** the old per-item fade): in `FloatingNavBar` ONE pill is drawn in the row's `drawBehind`, from where the items are at
+  that frame (`DockGeometry`: each item measured against the *row's* coordinates and read at draw time - not `positionInParent`, which was 0 for every
+  item because each sits in a tooltip's wrapper; found by logging, a first film showed the pill never leaving Home), and flies from where it was to the tab
+  it is going to on `DockGlide.curve` (cubic 0.32, 0, 0.14, 1) over **350 ms + 16 ms per extra tab, 400 at most**; the edge it moves towards runs ahead
+  (`DockGlide.edges`: the leading edge arrives by 82% of the flight, the trailing one starts 10% late), so it stretches in flight; a second tap
+  mid-flight starts from where the pill is, and the target is read live (labels open and close as it goes). In the glide an item draws no pill of its own
+  and its ink changes as the pill arrives (110 ms delay, 150 ms), so it is never the pill's dark ink on the dock's dark; animations off: no flight, the
+  pill is just there. Tests: `DockGlideMathTest`, `DockGlideTest` (pixel at the top of the tab *between*: the glide covers it, the fade never does).
+  The trailing button is the **"+"
   action menu** (`navigation/ActionMenu.kt`): a bento panel growing out of the button, on a grid of four equal cells - by default the
   two main actions as capsules side by side on the top row (Expense filled, Income tonal), then every other action as the same
   squircle (icon over its name, 12 sp). The circular **Edit** button is not in the grid since 2026-11-01 (owner: put it in the empty space left of the close button, only while the menu is open): `EditActionsButton` in `FloatingNavigationRow` overlays the faded dock's end, 10 dp left of the "x", the same diameter (`DockHeight`), filled with the dock's `companionContainer` and its icon in `companionContent` (the "+" button's resting colours) with a 6 dp shadow - an outlined circle on the panel's near-white fill vanished on a light page (owner, 2026-11-01; done by Gemini 3.8 Flash High, `ActionMenuEditTest.the_edit_button_is_visible_in_a_light_theme`); it fades and grows in only after the dock has gone (`(p - 0.5) / 0.5` in a `graphicsLayer`), takes touches and TalkBack only while open, and hides in Edit mode. The panel is fully opaque, so it draws no
@@ -248,8 +266,12 @@ riskier). Pull token numbers from the `*Tokens.kt` in that jar.
 1. Find the nearest existing pattern (a sheet, a list, a deck) and follow it; the owner's phrase is "follow the design pattern".
 2. If the owner sent a screenshot, treat it as the spec for the look; a *reference app* (CRED, Pixel Settings, komi-store,
    DropSauce, Samsung Reminder, the launcher drawer) is inspiration - build the app's own version in this design system.
+   **DropSauce is GPL-3.0** (checked 2026-11-07): read it for behaviour - durations, easing, the order things happen in - and write the
+   code from scratch; never paste its source into this repo. (`gh api repos/HuzaifaKhalid1311/DropSauce/contents/<path> -H "Accept: application/vnd.github.raw"` reads a file; keep copies in a scratch folder, not the tree.)
 3. Make it work for Light, Dark, **Pure** and wallpaper colours; blur on and off; 411 dp phone and wide windows; 1.6x text.
 4. **Render it** (throwaway Robolectric test, see `build-test-release.md`) and look at the PNG before claiming it is right.
 5. Keep the previous design as a choice when the owner says so (a Settings option), and don't change phone layouts for a
    tablet request.
 6. Update the About guide topic and `SettingsCatalog` entry if the change is user-visible.
+7. Use the tokens: a new colour, corner or off-scale spacing fails `DesignTokenRatchetTest` (section 1). Anything tappable is 48 dp
+   to the finger (`AppLayout.minTouchTarget`), however small it is drawn.

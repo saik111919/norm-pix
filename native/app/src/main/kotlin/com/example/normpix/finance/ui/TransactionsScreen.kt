@@ -625,11 +625,12 @@ private fun DayHeader(day: LocalDateTime, now: LocalDateTime, spent: String?, on
     Row(
         modifier
             .fillMaxWidth()
-            .padding(start = AppSpacing.md, top = AppSpacing.sm, end = AppSpacing.md)
+            .padding(start = AppSpacing.md, end = AppSpacing.md)
             .clip(AppRadius.rFull)
             .then(if (onOpen != null) Modifier.clickable(onClickLabel = "Show only this day", onClick = onOpen) else Modifier)
-            .heightIn(min = 40.dp)
-            .padding(start = AppSpacing.sm, end = AppSpacing.sm)
+            // 48 dp to the finger (it was 40): the 8 dp gap above the line is inside the tap area, so nothing on the page moves.
+            .heightIn(min = AppLayout.minTouchTarget)
+            .padding(start = AppSpacing.sm, top = AppSpacing.sm, end = AppSpacing.sm)
             .semantics(mergeDescendants = true) {
                 heading()
                 if (spent != null) contentDescription = "$name, spent $spent"

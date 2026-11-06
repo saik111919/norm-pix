@@ -16,6 +16,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.example.normpix.reminders.ReminderAlertScreen
 import com.example.normpix.settings.AppPreferences
+import com.example.normpix.settings.LaunchAnimation
 import com.example.normpix.settings.ui.SettingsDetail
 import com.example.normpix.settings.ui.SettingsRoute
 import com.example.normpix.ui.components.LockGate
@@ -200,7 +201,13 @@ fun rememberShellState(): ShellState = rememberSaveable(saver = ShellState.Saver
  * prompt - until it has gone.
  */
 @Composable
-fun NormPixRoot(container: AppContainer, showSplash: Boolean = false, onDarkChanged: (Boolean) -> Unit = {}) {
+fun NormPixRoot(
+    container: AppContainer,
+    showSplash: Boolean = false,
+    /** Android's own launch screen has gone (12 and later keep it over the app until it has drawn); the splash starts only then. */
+    systemSplashGone: Boolean = true,
+    onDarkChanged: (Boolean) -> Unit = {},
+) {
     val prefs by container.preferences.state.collectAsStateWithLifecycle()
     // Held above the data, so turning Dummy data on or off keeps you on the screen you were on.
     val nav = rememberNavController()
@@ -221,8 +228,9 @@ fun NormPixRoot(container: AppContainer, showSplash: Boolean = false, onDarkChan
         LaunchedEffect(dark) { onDarkChanged(dark) }
         Box(Modifier.fillMaxSize()) {
             Box(
-                if (splashing) {
-                    // Under the splash the app waits a little way back, and comes forward as it fades: a window opening.
+                if (splashing && prefs.launchAnimation == LaunchAnimation.Name) {
+                    // Under the name's splash the app waits a little way back, and comes forward as it fades: a window opening.
+                    // (The cookie opens the window itself, so the app under it stays whole.)
                     Modifier.fillMaxSize().graphicsLayer {
                         val scale = SPLASH_APP_SCALE + (1f - SPLASH_APP_SCALE) * splashLeaving.value
                         scaleX = scale
@@ -256,12 +264,21 @@ fun NormPixRoot(container: AppContainer, showSplash: Boolean = false, onDarkChan
                 }
             }
             if (splashing) {
-                LaunchSplash(
-                    ready = finance.status != FinanceStatus.Loading,
-                    leaving = splashLeaving,
-                    onFinished = { splashing = false },
-                    onWritten = { splashWritten = true },
-                )
+                when (prefs.launchAnimation) {
+                    LaunchAnimation.Cookie -> CookieSplash(
+                        ready = finance.status != FinanceStatus.Loading,
+                        onFinished = { splashing = false },
+                        onWritten = { splashWritten = true },
+                        systemSplashGone = systemSplashGone,
+                    )
+                    LaunchAnimation.Name -> LaunchSplash(
+                        ready = finance.status != FinanceStatus.Loading,
+                        leaving = splashLeaving,
+                        onFinished = { splashing = false },
+                        onWritten = { splashWritten = true },
+                        systemSplashGone = systemSplashGone,
+                    )
+                }
             }
         }
     }

@@ -19,6 +19,7 @@ import com.example.normpix.reminders.ReminderDao
 import com.example.normpix.reminders.RemindersController
 import com.example.normpix.reminders.RemindersDatabase
 import com.example.normpix.settings.AppPreferences
+import com.example.normpix.settings.LaunchAnimation
 import com.example.normpix.testing.InMemoryVault
 import com.example.normpix.ui.theme.LocalReducedMotionOverride
 import com.example.normpix.ui.theme.NormPixTheme
@@ -57,6 +58,8 @@ class LaunchSplashTest {
             vault = InMemoryVault(),
         )
         runBlocking { container.reminders.load() }
+        // These tests are about the name written out, which is a choice now (the cookie is the default); the cookie's are below.
+        container.preferences.setLaunchAnimation(LaunchAnimation.Name)
     }
 
     private fun splashShowing() = compose.onAllNodes(hasContentDescription("NormPix")).fetchSemanticsNodes().isNotEmpty()
@@ -75,6 +78,34 @@ class LaunchSplashTest {
         compose.mainClock.autoAdvance = true
         compose.waitUntil(timeoutMillis = 10_000) { !splashShowing() }
         compose.waitUntil(timeoutMillis = 10_000) { appShowing() }
+    }
+
+    @Test
+    fun theCookieSpinsInThenOpensIntoTheApp_andTheAppIsNotComposedWhileItSpins() {
+        container.preferences.setLaunchAnimation(LaunchAnimation.Cookie)
+        // The data is in already, as it is on a quick start: the app could be put up at once, and must not be.
+        runBlocking { container.finance.load() }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            CompositionLocalProvider(LocalReducedMotionOverride provides false) { NormPixRoot(container, showSplash = true) }
+        }
+        compose.mainClock.advanceTimeBy(400)
+        assertTrue(splashShowing(), "the cookie is up")
+        assertFalse(appShowing(), "while it spins the main thread is its own")
+
+        compose.mainClock.autoAdvance = true
+        compose.waitUntil(timeoutMillis = 10_000) { appShowing() }
+        compose.waitUntil(timeoutMillis = 10_000) { !splashShowing() }
+    }
+
+    @Test
+    fun withAnimationsRemovedTheCookieIsNotShownEither() {
+        container.preferences.setLaunchAnimation(LaunchAnimation.Cookie)
+        compose.setContent {
+            CompositionLocalProvider(LocalReducedMotionOverride provides true) { NormPixRoot(container, showSplash = true) }
+        }
+        compose.waitForIdle()
+        assertTrue(!splashShowing(), "the app just opens")
     }
 
     /** Shows the splash alone, counting how often it says it has written its name and has gone. */

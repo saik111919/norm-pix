@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.domain.BudgetOverview
@@ -164,7 +165,15 @@ private fun OverallBudget(overview: BudgetOverview, editable: Boolean, actions: 
         item {
             Column(
                 Modifier
-                    .then(if (editable) Modifier.clickable { actions.setOverall(current = status.allocated) } else Modifier)
+                    .then(
+                        if (editable) {
+                            Modifier.clickable(onClickLabel = "Change the overall budget", role = Role.Button) {
+                                actions.setOverall(current = status.allocated)
+                            }
+                        } else {
+                            Modifier
+                        },
+                    )
                     .padding(AppSpacing.lg),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -283,7 +292,7 @@ private fun CategoryBudgetTile(category: Category?, status: BudgetStatus, onClic
     Row(
         Modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(if (onClick != null) Modifier.clickable(onClickLabel = "Change this budget", role = Role.Button, onClick = onClick) else Modifier)
             .padding(horizontal = AppSpacing.lg, vertical = AppSpacing.md),
     ) {
         CategoryAvatar(category)

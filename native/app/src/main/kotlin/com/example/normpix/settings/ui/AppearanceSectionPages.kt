@@ -59,6 +59,8 @@ import com.example.normpix.settings.InsightsCategoriesLayout
 import com.example.normpix.settings.InterfaceFont
 import com.example.normpix.settings.MonthControlStyle
 import com.example.normpix.settings.TopSpendingLayout
+import com.example.normpix.settings.DockSelectionStyle
+import com.example.normpix.settings.LaunchAnimation
 import com.example.normpix.settings.PageAnimationType
 import com.example.normpix.settings.ProgressStyle
 import com.example.normpix.settings.SheetAnimationType
@@ -100,6 +102,8 @@ fun AppearanceSectionPage(section: AppearanceSection) {
                     AppearanceSection.Transitions -> {
                         PageTransitionsSection(prefs, preferences, haptics)
                         SheetTransitionsSection(prefs, preferences, haptics)
+                        LaunchAnimationSection(prefs, preferences, haptics)
+                        DockSelectionSection(prefs, preferences, haptics)
                     }
                     AppearanceSection.Effects -> EffectsSection(prefs, preferences, haptics)
                     AppearanceSection.Controls -> {
@@ -380,6 +384,54 @@ private fun PageTransitionsSection(prefs: AppPrefsState, preferences: AppPrefere
                     onClick = {
                         haptics.selection()
                         preferences.setPageAnimation(type)
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LaunchAnimationSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
+    ListSection(
+        title = "Launch",
+        footer = "What plays when the app starts, after Android's own launch screen. When animations are turned off in system " +
+            "settings, the app simply opens.",
+        modifier = Modifier.selectableGroup(),
+    ) {
+        for (type in LaunchAnimation.entries) {
+            item {
+                RadioRow(
+                    headline = type.label,
+                    supporting = type.description,
+                    selected = prefs.launchAnimation == type,
+                    onClick = {
+                        haptics.selection()
+                        preferences.setLaunchAnimation(type)
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DockSelectionSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
+    ListSection(
+        title = "Dock",
+        footer = "How the dock at the bottom shows the tab you open. When animations are turned off in system settings, " +
+            "it changes at once.",
+        modifier = Modifier.selectableGroup(),
+    ) {
+        for (type in DockSelectionStyle.entries) {
+            item {
+                RadioRow(
+                    headline = type.label,
+                    supporting = type.description,
+                    selected = prefs.dockSelection == type,
+                    onClick = {
+                        haptics.selection()
+                        preferences.setDockSelection(type)
                     },
                 )
             }

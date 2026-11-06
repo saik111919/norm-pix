@@ -55,6 +55,7 @@ import kotlin.math.roundToInt
 import androidx.graphics.shapes.CornerRounding
 import androidx.graphics.shapes.RoundedPolygon
 import androidx.graphics.shapes.star
+import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 
 /*
@@ -67,7 +68,7 @@ import com.example.normpix.ui.theme.AppSpacing
  */
 
 /** Material 3 Expressive's extra-large-increased corner, for the outside of the group. */
-private val OuterCorner = 32.dp
+private val OuterCorner = AppRadius.xxlIncreased
 
 /** Where two pieces of the group meet. */
 private val InnerCorner = 8.dp

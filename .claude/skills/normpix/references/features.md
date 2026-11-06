@@ -20,11 +20,21 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
   budgets tile. The account pill / profile button at the top opens Settings (or Profile, by choice). **The month's number collapses into the
   header as the page is scrolled** (2026-11-05, owner: "see how the number became small and then the same way it becomes big", after Google
   Weather's temperature; `screens/HeroCollapse.kt`): "Spent in November" and the amount shrink and glide up (`heroCollapseFrame`, a pure
-  function of the scroll: the page's own speed at first, easing into the chip's place so nothing jolts) and settle as a small primary chip
-  where the page's title was ("Home" fades out only as the lines arrive over it, `HeroCollapseFrame.titleAlpha` through `AppPage(titleAlpha)`); scrolling back reverses it frame for frame. The lines are drawn by
+  function of the scroll) and settle as a small primary chip where the page's title was; scrolling back reverses it frame for frame.
+  **Reworked 2026-11-06** (owner: it "goes up quickly", spacing not smooth, "the background of it is not looking good on the card"; filmed
+  as a contact sheet of Home scrolled step by step): each line leaves at the page's own speed and *slows to a stop*
+  (`1 - (1 - p)^COLLAPSE_STRETCH`, so it takes 1.8x its way in scroll, **never ahead of the card** - before, a blend toward the chip put it up to
+  a quarter of its way ahead, then stopped it sharply), and one smooth curve shrinks it over the first half of that (`SHRUNK_BY`; it used to
+  fall to a third in about 36 dp of scroll). The chip is **a capsule at every size** (radius = half its height, room round the lines growing
+  with their height; a box with square corners was the "patch" on the card) and comes in only across the page colour's own fade
+  (`HeroCollapseSpec.chipSolidAt` + `fade`: the floating header's cover is whole down to 12 dp above its foot and fades out over that, a bar's
+  to its foot) - it used to start 40 dp above the foot, which on a phone is *inside the card's own stretch*, so it showed from the first
+  pixel of scroll. "Home" fades **with the chip** (`titleAlpha = 1 - max(titleGone, chipAlpha)`, `HeroCollapseFrame.titleAlpha` through
+  `AppPage(titleAlpha)`), so the chip's edge never cuts through its letters. Tests: `HeroCollapseTest` (12, with a real phone's numbers),
+  `HeroCollapseSpecTest` (the real window's fade). The lines are drawn by
   `HeroCollapseOverlay` over the page while it is scrolled (the card clips what is inside it); the card's own copies stay for layout and
   TalkBack and are undrawn only then (`isCollapsing`), same text/style/width so the hand-over is invisible. Scroll-driven, so no
-  reduced-motion variant is needed. The chip is drawn solid only once the lines reach the header's solid colour (`chipAlpha`), because the
+  reduced-motion variant is needed. The chip is there once the lines are over the header's colour (`chipAlpha`), because the
   lines are `onPrimary` and dark on a dark page otherwise. **Where the lines rest is computed from the list's own numbers** (`listTop` +
   `layoutInfo.beforeContentPadding`, plus the lines' places *inside* the item), never from the item's position on screen: that lags a scroll by a
   frame, and a first version drew the chip a whole step ahead of the text in a render. Home only; written for the top floating header (default) and the standard top
@@ -416,6 +426,28 @@ chips (All / In use / Added by you / each kind), "In use" marks, a detail sheet,
 and the sheet does not offer it while a card does - `FinanceRepository.renameBank` / `deleteBank`, additive: nothing is dropped). More logos need a source
 that is bundled and licensed: the owner can send them.
 
+**Launch splash** (`navigation/CookieSplash.kt`, `LaunchSplash.kt`; 2026-11-07, reference: DropSauce's splash - its timings and idea, drawn from scratch;
+Settings > Appearance > Transitions > Launch, `LaunchAnimation`, key `launch_animation`): after Android's own launch screen, **Cookie** (default) spins a nine-lobed
+cookie in around the app's monochrome mark (`ic_launcher_monochrome`, tinted `onPrimary`, on `primary`, over `surface`) and, once the data has loaded, opens it
+like a window onto the app; **Name** is the older writing of "NormPix" letter by letter and the app receding under it. Both are shown only on a cold start and not
+with animations off; both hold the app's first composition until the intro is done (`onWritten`: the heaviest work of a cold start must not land among
+moving frames) and consume touches until they have gone. The cookie's motion is pure functions of milliseconds (`CookieMotion`): **intro 600 ms** - the cookie's scale
+and its lobes are springs (`spring(t, damping, omega)`, closed form: damping 0.6 / omega 15.1 overshoots ~9.5% at a quarter of the way; the lobes 0.7 / 11.8), it
+turns from -150 degrees to upright on emphasized decelerate, the mark grows 0.6 -> 1 from 15% in; **exit 750 ms** - the mark sinks (100-250 ms, emphasized
+accelerate), the cookie squishes to 0.82 (0-250, standard), then grows (250-750) until it clears the screen's corners by 2%, turning an eighth of a turn
+(150-550, emphasized decelerate) while its lobes smooth into a circle (250-350), its own colour fading out at 230-250 so the app shows through; the ground
+is the screen less the cookie (`PathFillType.EvenOdd`), so the opening is a real hole. One `Animatable` clock per half, so a late frame shows where the motion
+should be by then. The cookie is a polar curve (circle + 9 lobes, 216 points smoothed through their midpoints), rebuilt per frame. Tests: `CookieMotionTest`,
+`CookieSplashTest` (the corner is the app's colour after the exit), `CalmFramesTest`, `LaunchSplashTest` (pinned to Name, plus two for the cookie at the root).
+**Two things only the phone showed (2026-11-07, qa build, screen-recorded and cut with OpenCV)**: (1) on Android 12+ the system keeps its launch screen (the icon)
+over the app until the first frame and then fades it at its own pace, so the intro played *behind* it - the first frame seen was the cookie already full size.
+`MainActivity` now takes it away itself (`splashScreen.setOnExitAnimationListener`, a 90 ms fade, then `remove()`; no new dependency) and sets `systemSplashGone`
+(`NormPixRoot` -> `CookieSplash` / `LaunchSplash`), which the intro waits for (up to `SYSTEM_SPLASH_WAIT_MS` 1.5 s, in case it never reports). (2) The exit started
+as the data arrived, so the real Home's first heavy frames landed in the opening and it showed the same small hole for five frames (a ~250 ms stall). The exit now
+waits for the data **and** `CalmFrames`: 4 frames in a row, none later than 40 ms after the one before, capped at `SETTLE_MAX_MS` 900. The limit is for a stall, not for
+the pace: a slow build draws at ~23 ms a frame, and a first version that wanted 22 ms never saw calm and always waited out the cap (+1 s on every start). Measured after:
+the exit is 19 distinct frames over ~440 ms, 22 ms apart, one 66 ms gap. The qa build is unoptimised: its cold start shows the system icon for ~1.5-2 s first.
+
 ## 9. About guide (`about/`)
 
 Settings > About NormPix opens a page (not a dialog): name, version, a **Feature guide** pill (`PagePill`, the same as the update page's
@@ -436,7 +468,9 @@ Theme (System/Light/Dark) + Colors (Wallpaper colors on Android 12+, or Other co
 **Volt** (default, hand-drawn), **Pure** (black/white, hand-drawn); each shown as a tile with the three colours it gives
 the app), App icon (ten launcher icons), Interface font (GS Flex presets Standard/Zenith/Neo/Impact/Airy or hand-set axes,
 Nunito, System, or the user's own .ttf/.otf/Google Fonts .zip), Icons (category style 3D/Emoji/Outline, bank logo style, shape behind), Progress
-indicators (Wavy | Flat), Transitions (six page styles incl. **Linux window**, five sheet/dialog styles, "Try it"), Effects
+indicators (Wavy | Flat), Transitions (six page styles incl. **Linux window**, five sheet/dialog styles, "Try it", and since 2026-11-07 **Launch**:
+**Cookie** (default; `navigation/CookieSplash.kt`) | Name (the name written letter by letter, `LaunchSplash`), and **Dock**: **Glide** (default) | Fade in place, see
+`design-system.md` section 5), Effects
 (background blur, footer blur, card tilt), Navigation & controls (footer labels, Reset action menu - the "+" menu itself is
 arranged in its Edit mode, bottom controls, back button style, month control), Layouts (Top
 spending, Categories in Insights, Accounts, Cards). Search finds each choice by its own name.

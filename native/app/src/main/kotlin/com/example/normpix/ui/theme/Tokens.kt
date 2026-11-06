@@ -107,12 +107,19 @@ object AppRadius {
     /** Extra-large - bottom sheets and dialogs. */
     val xxl = 28.dp
 
+    /**
+     * Extra-large-increased (M3 Expressive: `CornerExtraLargeIncreased` in material3 1.4.0's `ShapeTokens`) - the hero card at the
+     * top of a page. It had no name here, so `HeroCard` kept a private 32 dp of its own.
+     */
+    val xxlIncreased = 32.dp
+
     val rXs = RoundedCornerShape(xs)
     val rSm = RoundedCornerShape(sm)
     val rMd = RoundedCornerShape(md)
     val rLg = RoundedCornerShape(lg)
     val rXl = RoundedCornerShape(xl)
     val rXxl = RoundedCornerShape(xxl)
+    val rXxlIncreased = RoundedCornerShape(xxlIncreased)
     val rFull = RoundedCornerShape(CornerSize(50))
 }
 
@@ -271,6 +278,12 @@ object AppLayout {
 
     /** The shortest window the wide rail and the list-beside-page Settings are for: under it (a phone on its side) neither fits its rows. */
     val minRoomyHeight = 480.dp
+
+    /**
+     * The least a tappable thing is in each direction: the 48 dp this app and Material ask for. What is drawn smaller keeps its look and
+     * takes its tap area from this (a row's own padding counts, so a 40 dp pill inside an 8 dp gap is 48 dp to the finger).
+     */
+    val minTouchTarget = 48.dp
 
     /** The width of the list when Settings shows it beside the page that is open. */
     val listPaneWidth = 360.dp

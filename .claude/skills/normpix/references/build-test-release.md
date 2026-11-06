@@ -32,7 +32,12 @@ Contents: 1 Local environment · 2 Commands · 3 Reading results · 4 Windows an
 .\gradlew.bat :app:assembleRelease                                                                          # R8 release (needs release key props to be update-compatible)
 .\gradlew.bat :app:assembleRelease -PsplitAbis                                                              # what CI builds: per-CPU APKs + universal
 .\gradlew.bat testDebugUnitTest --rerun --tests 'com.example.normpix.ReadmeScreenshots' -Pscreenshots="$PWD\..\docs\screenshots"
+.\gradlew.bat :app:testDebugUnitTest --tests "*DesignTokenRatchetTest" -PdesignBaseline=write                # re-record src/test/design-baseline.txt (see design-system.md section 1)
 ```
+
+Render the README screens into a scratch folder (not `docs/screenshots`, which is tracked) with `-Pscreenshots=<folder>` to look at a
+change on the real screens. `DesignTokenRatchetTest` reads the sources and `src/test/design-baseline.txt` as files, so `build.gradle.kts`
+declares them as inputs of the test task; without that, Gradle reports the test up to date ("BUILD SUCCESSFUL in 2s") after only the baseline changed.
 
 There is only `testDebugUnitTest` (no `testReleaseUnitTest`, no qa tests, no `androidTest`). `:app:check` runs `lintDebug`
 and `lint`. A "CI-equivalent" gate = full `testDebugUnitTest`, then `lintDebug` alone (expect 0 errors and a few advisory

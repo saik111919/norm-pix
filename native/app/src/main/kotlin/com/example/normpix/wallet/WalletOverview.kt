@@ -34,6 +34,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
@@ -142,6 +143,13 @@ private fun FigureTile(icon: ImageVector, label: String, value: String, modifier
     }
 }
 
+/** Lines that come out even, for a short line of text that wraps (a heading's summary), not the default of filling each line first. */
+private val BalancedLineBreak = LineBreak(
+    strategy = LineBreak.Strategy.Balanced,
+    strictness = LineBreak.Strictness.Normal,
+    wordBreak = LineBreak.WordBreak.Default,
+)
+
 /**
  * A section of the Wallet: its name as a heading - the screen's outline, for a screen reader moving by headings - with a
  * line under it saying what is in it ("3 accounts", "2 cards, encrypted on this device") and, at the end, the way to add to
@@ -163,7 +171,13 @@ fun WalletSectionHeader(
                 modifier = Modifier.semantics { heading() },
             )
             if (summary != null) {
-                Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Balanced, so a summary that needs two lines splits them evenly ("... kept on / this device") and does not leave one
+                // word alone on the second ("device"), as it did at 411 dp.
+                Text(
+                    summary,
+                    style = MaterialTheme.typography.bodySmall.copy(lineBreak = BalancedLineBreak),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         action?.invoke()

@@ -1,11 +1,15 @@
 package com.example.normpix
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.example.normpix.ui.components.LocalLiveMotion
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
@@ -17,12 +21,29 @@ import com.example.normpix.wallet.BiometricAuthenticator
 import com.example.normpix.wallet.expiry.CardExpiryNotifications
 import com.example.normpix.widgets.WidgetIntents
 
+/** How long Android's own launch screen takes to fade once the app lets it go: short, so the app's splash is not hidden behind it. */
+private const val SYSTEM_SPLASH_FADE_MS = 90L
+
 // BiometricPrompt needs a FragmentActivity host.
 class MainActivity : FragmentActivity() {
     private val container get() = (application as NormPixApplication).container
 
+    /**
+     * Android 12 and later keep their own launch screen (the app's icon) over the app until it has drawn its first frame, and
+     * then fade it away at a pace of their own: the app's splash began under it, and a phone showed its cookie already full
+     * size when the icon went. So the app takes the launch screen away itself, with a short fade, and its splash starts only
+     * once it is going. Earlier versions have no such screen to wait for.
+     */
+    private var systemSplashGone by mutableStateOf(Build.VERSION.SDK_INT < Build.VERSION_CODES.S)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            splashScreen.setOnExitAnimationListener { view ->
+                systemSplashGone = true
+                view.animate().alpha(0f).setDuration(SYSTEM_SPLASH_FADE_MS).withEndAction { view.remove() }.start()
+            }
+        }
         if (BuildConfig.SECURE_WINDOW) {
             // Card numbers, CVVs and cardholder names render on screen: block
             // screenshots and screen recording, and blank the recents thumbnail
@@ -48,6 +69,7 @@ class MainActivity : FragmentActivity() {
                     container = container,
                     // A fresh start writes the app's name out first; coming back to a restored activity doesn't.
                     showSplash = savedInstanceState == null,
+                    systemSplashGone = systemSplashGone,
                     onDarkChanged = { dark ->
                         // The app's own light/dark choice can differ from the system's.
                         val transparent = android.graphics.Color.TRANSPARENT

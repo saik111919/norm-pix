@@ -126,7 +126,8 @@ internal fun AppearanceSection.summary(prefs: AppPrefsState, appIcon: AppIcon): 
     }
     AppearanceSection.CategoryIcons -> "${prefs.categoryIconStyle.label} · ${prefs.categoryIconShape.label}"
     AppearanceSection.ProgressIndicators -> prefs.progressStyle.label
-    AppearanceSection.Transitions -> "Pages: ${prefs.pageAnimation.label} · Sheets: ${prefs.sheetAnimation.label}"
+    AppearanceSection.Transitions ->
+        "Pages: ${prefs.pageAnimation.label} · Sheets: ${prefs.sheetAnimation.label} · Launch: ${prefs.launchAnimation.label} · Dock: ${prefs.dockSelection.label}"
     AppearanceSection.Effects -> buildString {
         append(if (prefs.sheetBlurEnabled) "Background blur on" else "Background blur off")
         append(if (prefs.cardTiltEnabled) " · Card tilt on" else " · Card tilt off")
