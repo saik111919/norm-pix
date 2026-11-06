@@ -5,7 +5,7 @@ description: "Everything about the NormPix project - a private, offline-first An
 
 # NormPix project skill
 
-Stamp: verified against commit `4968bdd9` (v1.5.0 in the working tree; v1.4.1 is the last release) on 2026-11-05. If `git log` shows newer commits on source paths, or
+Stamp: verified against commit `99d6c0f3` (v1.5.0 in the working tree; v1.4.1 is the last release) on 2026-11-06. If `git log` shows newer commits on source paths, or
 `bash .claude/skills/normpix/scripts/verify.sh` reports drift, trust the code and fix the skill (`references/maintenance.md`).
 
 ## 1. The 60-second picture
@@ -93,7 +93,7 @@ reference rather than exploring. For the history or reasoning behind a feature, 
 | `wallet/motion/` | `CardTilt` (every card on screen leans) |
 | `reminders/` | Model, `RemindersDatabase` (v2), alarms, notifications, alert screen, links; delivery (`ReminderDelivery`, `ReminderOverlay` floating card, `ReminderOverlayPolicy`, `ReminderAccess`, `ReminderAlertActivity`); `RecurringReminders` (a repeating payment and its reminder kept in step); `ClockAlarms` (a reminder as the Clock app's alarm, on request) |
 | `screens/` | The tabs' screens: `HomeScreen`, `HomeBanners`, `HeroCollapse` (Home's number shrinking into the header on scroll), `PlansAndTransactionsScreen`, `WalletScreen` |
-| `navigation/` | `NormPixRoot` (`Routes`, `ShellState`, locals), `AppShell`, `AppNavigator`, `FloatingNavBar`, `ActionMenu` (the "+" bento panel), `PageTransitions`, `LinuxWindowMotion`, `AppSearch`, `AppearanceSection`, splash |
+| `navigation/` | `NormPixRoot` (`Routes`, `ShellState`, locals), `AppShell`, `AppNavigator`, `FloatingNavBar` (+ `DockGlide`: the pill that flies between tabs), `ActionMenu` (the "+" bento panel), `PageTransitions`, `LinuxWindowMotion`, `AppSearch`, `AppearanceSection`, splash (`CookieSplash`, `LaunchSplash`) |
 | `settings/` | `AppPreferences` (`AppPrefsState`, all choice enums), app icons, notifications, custom font (`CustomFont`, `FontFile`: zip and variable fonts), profile photos (GIFs, avatar presets) |
 | `onboarding/` | `OnboardingTour`: the welcome tour of a new install (four steps in a pager); `TourArt`: each step's 3D-sticker picture and its motion |
 | `settings/ui/` | Settings pages, `SettingsCatalog` (search), `SettingsTwoPane`, Appearance sections, backup UI, ledger-check UI |

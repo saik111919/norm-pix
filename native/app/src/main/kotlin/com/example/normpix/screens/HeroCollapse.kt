@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.ui.HeroAmount
+import kotlin.math.pow
 import com.example.normpix.settings.BackButtonStyle
 import com.example.normpix.ui.components.FloatingTopControls
 import com.example.normpix.ui.components.rememberBackButtonStyle
@@ -57,8 +58,20 @@ import com.example.normpix.ui.theme.AppSpacing
 internal const val AMOUNT_PINNED_SCALE = 0.32f
 internal const val EYEBROW_PINNED_SCALE = 0.72f
 
-/** The share of the way up by which the lines have reached their pinned size: they shrink first and then settle. */
-private const val SHRUNK_BY = 0.6f
+/**
+ * How much more of the page's scroll than their own way up the lines take to arrive. The lines leave at the page's own speed (so the
+ * hand-over from the card's copies cannot be seen) and then slow to a stop, so they take this many times their way in scroll: the
+ * longer it is, the gentler the shrink and the later the lines dock, and the more they trail the card instead of racing it. At 1 they
+ * would dock as soon as the card had carried them there, and shrink to a third in a thumb's width of scroll.
+ */
+internal const val COLLAPSE_STRETCH = 1.8f
+
+/**
+ * The share of that way by which the lines have shrunk to their pinned size, and then they only settle. They cannot reach the header
+ * without crossing its edge, which they do early (the card starts just under it), so they are already small when they get there
+ * - a small pill coming in, not a big box - yet they take much longer to shrink than the way in is short.
+ */
+private const val SHRUNK_BY = 0.5f
 
 /** Where the header's room is, and the chip's measures, in pixels of the window. */
 internal class HeroCollapseSpec(
@@ -70,7 +83,12 @@ internal class HeroCollapseSpec(
     val padVertical: Float,
     /** The foot of the header, where the page's colour stops covering the list: the chip is drawn solid before it gets there. */
     val headerBottom: Float,
-    /** How far above [headerBottom] the chip starts to fade in. */
+    /**
+     * The line's top at which the chip must be fully there, because the page's colour is whole over the list from here up: a floating
+     * header's colour fades out over its last [fade] (so it is [headerBottom] less that), a bar's ends at its foot (so it is the foot).
+     */
+    val chipSolidAt: Float,
+    /** How far the chip takes to come in, down to [chipSolidAt]: the stretch the page's colour takes to build up over the list. */
     val fade: Float,
     /** Where the list's viewport starts below the top of the page (0 under the floating header; the app bar's height otherwise). */
     val listTop: Float,
@@ -105,40 +123,54 @@ private fun smooth(x: Float): Float {
 }
 
 /**
- * The collapse at [scroll] pixels of the list scrolled. The lines move up with the page - the way the card does - until, over the
- * last stretch, they ease into the chip's place instead of leaving with the page: `progress` is how far they have come, and their
- * place is the page's blended into the chip's by its square, so they arrive slowly (no jolt where they stop) and leave the page
- * at its own speed (no jump where they let go). They are also scaled, and moved sideways, by [smooth] of the way to [SHRUNK_BY].
+ * How much of its [way] up a line has come after [scroll] pixels (0 to 1): it takes [COLLAPSE_STRETCH] times its way in scroll, going
+ * at the page's speed to begin with (the slope at 0 is 1, in pixels of the way per pixel of scroll) and at none when it arrives.
+ */
+private fun along(scroll: Float, way: Float): Float {
+    val p = (scroll / (way * COLLAPSE_STRETCH)).coerceIn(0f, 1f)
+    return 1f - (1f - p).pow(COLLAPSE_STRETCH)
+}
+
+/**
+ * The collapse at [scroll] pixels of the list scrolled. Each line leaves where it stands at the page's own speed - the way the card
+ * does - and slows to a stop in the chip's place: its way in is `1 - (1 - p)^`[COLLAPSE_STRETCH] of the whole, which starts with the
+ * page's slope (no jump where the card's copy lets go), ends flat (no jolt where it stops) and is never ahead of the page, so the
+ * lines trail the card instead of racing it. `progress` is the scroll over [COLLAPSE_STRETCH] times the way the amount has to go;
+ * [smooth] of the first [SHRUNK_BY] of it scales the lines and moves them sideways, so the shrink is spread over a long stretch of
+ * scroll and is done before the lines settle.
  */
 internal fun heroCollapseFrame(scroll: Float, rest: HeroCollapseRest, spec: HeroCollapseSpec): HeroCollapseFrame {
     val textLeft = spec.chipLeft + spec.padHorizontal
     val eyebrowTop = spec.chipTop + spec.padVertical
     val eyebrowHeight = rest.eyebrowSize.height * EYEBROW_PINNED_SCALE
     val amountTop = eyebrowTop + eyebrowHeight
-    val travel = (rest.amount.y - amountTop).coerceAtLeast(1f)
-    val progress = (scroll / travel).coerceIn(0f, 1f)
-    val ease = progress * progress
+    val eyebrowWay = (rest.eyebrow.y - eyebrowTop).coerceAtLeast(1f)
+    val amountWay = (rest.amount.y - amountTop).coerceAtLeast(1f)
+    val progress = (scroll / (amountWay * COLLAPSE_STRETCH)).coerceIn(0f, 1f)
     val shrink = smooth(progress / SHRUNK_BY)
 
     val eyebrowScale = lerp(1f, EYEBROW_PINNED_SCALE, shrink)
     val amountScale = lerp(1f, AMOUNT_PINNED_SCALE, shrink)
-    val eyebrow = Offset(lerp(rest.eyebrow.x, textLeft, shrink), lerp(rest.eyebrow.y - scroll, eyebrowTop, ease))
-    val amount = Offset(lerp(rest.amount.x, textLeft, shrink), lerp(rest.amount.y - scroll, amountTop, ease))
+    val eyebrow = Offset(lerp(rest.eyebrow.x, textLeft, shrink), lerp(rest.eyebrow.y, eyebrowTop, along(scroll, eyebrowWay)))
+    val amount = Offset(lerp(rest.amount.x, textLeft, shrink), lerp(rest.amount.y, amountTop, along(scroll, amountWay)))
 
     val right = maxOf(eyebrow.x + rest.eyebrowSize.width * eyebrowScale, amount.x + rest.amountSize.width * amountScale)
-    val chip = Rect(
-        left = minOf(eyebrow.x, amount.x) - spec.padHorizontal * shrink,
-        top = eyebrow.y - spec.padVertical * shrink,
-        right = right + spec.padHorizontal * shrink,
-        bottom = amount.y + rest.amountSize.height * amountScale + spec.padVertical * shrink,
-    )
+    val bottom = amount.y + rest.amountSize.height * amountScale
+    // The room round the lines is the chip's own once they are small. While they are big it grows with their height, so what is
+    // behind them is a roomy capsule - the shape they settle in - and not a box that cuts their corners.
+    val textHeight = bottom - eyebrow.y
+    val roomy = 1f - shrink
+    val padH = spec.padHorizontal + (textHeight * 0.28f - spec.padHorizontal).coerceAtLeast(0f) * roomy
+    val padV = spec.padVertical + textHeight * 0.08f * roomy
+    val chip = Rect(minOf(eyebrow.x, amount.x) - padH, eyebrow.y - padV, right + padH, bottom + padV)
     // Drawn solid only once the lines are over the page's colour (the header covers the list there): over the card they are the
     // card's own colour, and a chip of it would cut a patch out of the card's decoration.
-    val chipAlpha = smooth((spec.headerBottom + spec.fade - eyebrow.y) / spec.fade)
-    // The title gives way as the lines arrive over it, not before: from the foot of the header, where the chip is already solid, to
-    // the chip's own place - so the header's start is never left empty while the lines are still on their way.
+    val chipAlpha = smooth((spec.chipSolidAt + spec.fade - eyebrow.y) / spec.fade)
+    // The title gives way as the chip comes in over it, not before: it fades with the chip across the page colour's own fade, so the
+    // chip's edge never cuts through its letters (it did, when the title waited for the lines to be in the header), and then it
+    // stays gone as the lines settle - so the header's start is never left empty while the lines are still on their way.
     val titleGone = smooth((spec.headerBottom - eyebrow.y) / (spec.headerBottom - eyebrowTop).coerceAtLeast(1f))
-    return HeroCollapseFrame(progress, eyebrow, eyebrowScale, amount, amountScale, chip, chip.height / 2f * shrink, chipAlpha, 1f - titleGone)
+    return HeroCollapseFrame(progress, eyebrow, eyebrowScale, amount, amountScale, chip, chip.height / 2f, chipAlpha, 1f - maxOf(titleGone, chipAlpha))
 }
 
 /** Which of the two lines a layout is the card's copy of. */
@@ -249,7 +281,10 @@ internal fun rememberHeroCollapseSpec(maxWidth: Dp?): HeroCollapseSpec {
                 padHorizontal = 12.dp.toPx(),
                 padVertical = 2.dp.toPx(),
                 headerBottom = statusBar + barHeight,
-                fade = 40.dp.toPx(),
+                // The chip comes in with the page's own colour, and not before, or it shows as a patch on the card while the lines are
+                // still on it. A floating header's colour is whole down to its last fade (and fades out over that), a bar's down to its foot.
+                chipSolidAt = statusBar + barHeight - if (floating) FloatingTopControls.fade.toPx() else 0f,
+                fade = FloatingTopControls.fade.toPx(),
                 listTop = listTop,
                 columnLeft = (window - column) / 2f,
             )

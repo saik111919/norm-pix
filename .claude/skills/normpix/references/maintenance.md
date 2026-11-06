@@ -21,8 +21,8 @@ When a fact drifts: fix the prose that mentions it **first**, then change the va
 nothing needed changing.
 
 <!-- facts:begin -->
-verified_commit=4968bdd9
-verified_date=2026-11-05
+verified_commit=99d6c0f3
+verified_date=2026-11-06
 versionName=1.5.0
 finance_db_version=12
 reminders_db_version=2
@@ -156,6 +156,22 @@ TestEnvironment
 AppBackupArchive
 CardsTransfer
 FinanceBackupCodec
+COLLAPSE_STRETCH
+chipSolidAt
+minTouchTarget
+xxlIncreased
+DesignTokenRatchetTest
+HeroCollapseSpecTest
+CookieMotion
+CookieSplash
+DockGlide
+DockGeometry
+LaunchAnimation
+DockSelectionStyle
+DockGlideTest
+CookieSplashTest
+CalmFrames
+systemSplashGone
 <!-- symbols:end -->
 
 ## 2. What to update when

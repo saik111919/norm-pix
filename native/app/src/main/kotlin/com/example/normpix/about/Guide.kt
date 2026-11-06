@@ -191,7 +191,7 @@ enum class GuideTopic(
             "Open Settings > Appearance and choose Light, Dark or the system's theme.",
             "In Colors, choose Wallpaper colors (Android 12 and later) or Other colors. Each palette shows the colors it gives the app: primary above, container and accent below.",
             "Choose Pure for black and white with greys between: black surfaces in dark, white in light.",
-            "Fonts, icon shapes, transitions and the app icon each have a screen of their own in Appearance. Interface font has GS Flex, Nunito, your phone's font, or a font file - or the zip you download from Google Fonts, with every weight of the family. With 3D category icons the Settings list is in 3D too; Appearance > Icons > 3D icons in Settings keeps it flat.",
+            "Fonts, icon shapes, transitions (pages, sheets, the animation the app starts with and how the dock's pill moves between tabs) and the app icon each have a screen of their own in Appearance. Interface font has GS Flex, Nunito, your phone's font, or a font file - or the zip you download from Google Fonts, with every weight of the family. With 3D category icons the Settings list is in 3D too; Appearance > Icons > 3D icons in Settings keeps it flat.",
         ),
         tips = listOf(
             "Every theme works in light and dark, and the pictures in this guide follow whichever you pick.",

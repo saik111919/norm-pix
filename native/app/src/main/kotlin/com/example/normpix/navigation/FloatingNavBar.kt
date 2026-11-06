@@ -2,7 +2,9 @@ package com.example.normpix.navigation
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
@@ -55,19 +57,28 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -84,6 +95,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.example.normpix.settings.DockSelectionStyle
 import com.example.normpix.ui.components.FrostedBackdrop
 import com.example.normpix.ui.components.LocalFrostedBackdrop
 import com.example.normpix.ui.components.frostedGlass
@@ -470,7 +482,36 @@ fun FloatingNavBar(
     showLabels: Boolean = true,
     /** The most the selected label may take, so the dock never outgrows its row; [Dp.Unspecified] for no limit. */
     maxLabelWidth: Dp = Dp.Unspecified,
+    /** How the pill moves between tabs: the user's choice (Settings > Appearance > Transitions), the glide where there is none. */
+    selectionStyle: DockSelectionStyle = rememberDockSelectionStyle(),
 ) {
+    val glide = selectionStyle == DockSelectionStyle.Glide
+    val reduced = rememberReducedMotion()
+    val selectedIndex = destinations.indexOf(current).coerceAtLeast(0)
+    // In the glide there is one pill, drawn behind the items from where they are at each frame. It is on [target] at rest; when the
+    // tab changes it flies there from where it was ([startEdges]: its left and right when the flight began), over [flight] 0 -> 1.
+    val geometry = remember(destinations.size) { DockGeometry(destinations.size) }
+    val flight = remember { Animatable(1f) }
+    val startEdges = remember { FloatArray(2) }
+    var target by remember { mutableIntStateOf(selectedIndex) }
+    LaunchedEffect(selectedIndex, glide, reduced) {
+        if (selectedIndex == target) return@LaunchedEffect
+        if (!glide || reduced || !geometry.isKnown(selectedIndex) || !geometry.isKnown(target)) {
+            // No flight to play (the other style, animations off, or the dock not yet laid out): the pill is just there.
+            flight.snapTo(1f)
+            target = selectedIndex
+            return@LaunchedEffect
+        }
+        // Where the pill is now: at rest on the tab it was on, or part-way along a flight that this tap interrupts.
+        val (left, right) = DockGlide.edges(startEdges[0], startEdges[1], geometry.left(target), geometry.right(target), flight.value)
+        startEdges[0] = left
+        startEdges[1] = right
+        val tabs = kotlin.math.abs(selectedIndex - target)
+        target = selectedIndex
+        flight.snapTo(0f)
+        flight.animateTo(1f, tween(DockGlide.durationMs(tabs), easing = LinearEasing))
+    }
+
     Surface(
         shape = RoundedCornerShape(DockCorner),
         color = colors.container,
@@ -487,11 +528,34 @@ fun FloatingNavBar(
         // follows them frame by frame. Animating the row's bounds as well made the items jump into place while only the
         // outline moved.
         Row(
-            modifier = Modifier.padding(DockPadding),
+            modifier = Modifier
+                .padding(DockPadding)
+                .then(
+                    if (glide) {
+                        Modifier
+                            // The row's own coordinates, where the items' places are measured (the pill is drawn in the same space).
+                            .onGloballyPositioned { geometry.row = it }
+                            .drawBehind {
+                                // Read, so a tab that moves redraws the pill with it.
+                                if (geometry.tick < 0 || !geometry.isKnown(target)) return@drawBehind
+                                val (left, right) =
+                                    DockGlide.edges(startEdges[0], startEdges[1], geometry.left(target), geometry.right(target), flight.value)
+                                val height = geometry.height(target)
+                                drawRoundRect(
+                                    color = colors.activePill,
+                                    topLeft = Offset(left, geometry.top(target)),
+                                    size = Size(right - left, height),
+                                    cornerRadius = CornerRadius(height / 2f),
+                                )
+                            }
+                    } else {
+                        Modifier
+                    },
+                ),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            destinations.forEach { destination ->
+            destinations.forEachIndexed { index, destination ->
                 FloatingNavItem(
                     destination = destination,
                     label = if (destination == AppDestination.PlansAndTransactions) currentLabel else destination.label,
@@ -500,13 +564,20 @@ fun FloatingNavBar(
                     colors = colors,
                     isNarrow = isNarrow,
                     onClick = { onDestinationSelected(destination) },
+                    modifier = Modifier.onGloballyPositioned { geometry.place(index, it) },
                     maxLabelWidth = maxLabelWidth,
                     showLabel = showLabels,
+                    glide = glide,
                 )
             }
         }
     }
 }
+
+/** The user's choice of how the dock's pill moves (Settings > Appearance > Transitions); the glide where there are no preferences (a preview, a test). */
+@Composable
+private fun rememberDockSelectionStyle(): DockSelectionStyle =
+    LocalAppPreferences.current?.state?.collectAsState()?.value?.dockSelection ?: DockSelectionStyle.Glide
 
 /**
  * Pill carrying a sub-page's own actions beside the floating back pill.
@@ -717,18 +788,27 @@ private fun FloatingNavItem(
     modifier: Modifier = Modifier,
     maxLabelWidth: Dp = Dp.Unspecified,
     showLabel: Boolean = true,
+    /** The dock draws one pill that travels between items ([DockGlide]): this item draws none of its own. */
+    glide: Boolean = false,
 ) {
     val haptics = rememberAppHaptics()
     val animDuration = AppMotion.duration(AppMotion.MEDIUM_MS)
 
     val containerColor by animateColorAsState(
-        targetValue = if (selected) colors.activePill else colors.activePill.copy(alpha = 0f),
+        targetValue = if (selected && !glide) colors.activePill else colors.activePill.copy(alpha = 0f),
         animationSpec = tween(animDuration, easing = AppMotion.standard),
         label = "nav_item_container_color",
     )
+    // With the pill flying in, the item turns to the colours it has on the pill only as the pill arrives - about a third of the way
+    // into the flight, where DropSauce swaps its label - and the item it leaves lets go of them at once, so neither is ever the
+    // pill's dark ink on the dock's own dark, or its light ink on the pill's light.
     val contentColor by animateColorAsState(
         targetValue = if (selected) colors.activePillContent else colors.inactiveIcon,
-        animationSpec = tween(animDuration, easing = AppMotion.standard),
+        animationSpec = if (glide) {
+            tween(AppMotion.duration(150), delayMillis = if (selected) AppMotion.duration(110) else 0, easing = AppMotion.standard)
+        } else {
+            tween(animDuration, easing = AppMotion.standard)
+        },
         label = "nav_item_content_color",
     )
 

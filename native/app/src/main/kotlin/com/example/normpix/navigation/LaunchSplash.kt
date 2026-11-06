@@ -119,11 +119,14 @@ internal fun LaunchSplash(
     leaving: Animatable<Float, AnimationVector1D>,
     onFinished: () -> Unit,
     onWritten: () -> Unit = {},
+    /** Android's own launch screen has gone: the writing waits for it (up to [CookieMotion.SYSTEM_SPLASH_WAIT_MS]), as it would start behind it. */
+    systemSplashGone: Boolean = true,
 ) {
     val scheme = MaterialTheme.colorScheme
     // The one clock of the writing: milliseconds since it began. Each letter and word reads its own progress off it as it draws.
     val clock = remember { Animatable(0f) }
     val isReady by rememberUpdatedState(ready)
+    val isSystemSplashGone by rememberUpdatedState(systemSplashGone)
     val finished by rememberUpdatedState(onFinished)
     val written by rememberUpdatedState(onWritten)
     val reducedMotion = rememberReducedMotion()
@@ -133,6 +136,9 @@ internal fun LaunchSplash(
         if (reducedMotion) {
             clock.snapTo(SPLASH_WRITE_MS.toFloat())
         } else {
+            // Not before Android's own launch screen has gone (it stays over the app until the app has drawn, and the first letters
+            // would come in behind it).
+            withTimeoutOrNull(CookieMotion.SYSTEM_SPLASH_WAIT_MS) { snapshotFlow { isSystemSplashGone }.first { it } }
             // Not until the splash has been drawn - twice, since the first frame of a cold start is the busiest - or
             // the start of the writing would be spent on work the user can't see, and the first letters would come in late
             // and together.

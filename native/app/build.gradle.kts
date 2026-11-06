@@ -184,6 +184,12 @@ android {
                 // `-Pguideshots=<folder>`: GuideScreenshots renders the Feature guide's pictures there (skipped otherwise); the folder
                 // to keep them in is `src/main/assets/guide`.
                 providers.gradleProperty("guideshots").orNull?.let { test.systemProperty("normpix.guideshots", it) }
+                // `-PdesignBaseline=write`: DesignTokenRatchetTest rewrites `src/test/design-baseline.txt` from the sources as they are,
+                // instead of checking them against it (after a clean-up that lowered a count, or a new art file that is meant to have its own).
+                providers.gradleProperty("designBaseline").orNull?.let { test.systemProperty("normpix.designBaseline", it) }
+                // That test reads the sources and its baseline as plain files: say so, or Gradle skips it as up to date when only they change.
+                test.inputs.file("src/test/design-baseline.txt").withPropertyName("designBaseline").optional()
+                test.inputs.dir("src/main/kotlin").withPropertyName("designSources").withPathSensitivity(PathSensitivity.RELATIVE)
             }
         }
     }

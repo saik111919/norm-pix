@@ -106,6 +106,25 @@ enum class SheetAnimationType(val label: String, val description: String) {
     }
 }
 
+/**
+ * What a cold start shows once Android's own launch screen has gone (after the way DropSauce's intro plays out - its timings, not its
+ * code). [Cookie] is the default; the name written out is how it was before and stays as a choice. With animations turned off in
+ * system settings neither plays.
+ */
+enum class LaunchAnimation(val label: String, val description: String) {
+    Cookie("Cookie", "A cookie spins in around the app's mark, then opens like a window onto the app"),
+    Name("Name", "The app's name written out letter by letter, then fading into the app"),
+}
+
+/**
+ * How the dock shows which tab is open as you change tabs. [Glide] is the default; the pill that fades out of one tab as
+ * another fades in is how it was before and stays as a choice. With animations turned off in system settings it changes at once.
+ */
+enum class DockSelectionStyle(val label: String, val description: String) {
+    Glide("Glide", "One pill travels from the tab you leave to the tab you open, stretching a little as it goes"),
+    Fade("Fade in place", "The pill of the tab you leave fades out as the pill of the tab you open fades in"),
+}
+
 /** Style and placement of a page's back button - and, in the floating style, of its whole header. [TopFloatingCircle] is the default. */
 enum class BackButtonStyle(val label: String, val description: String) {
     BottomDock("Bottom dock", "Floating pill at the bottom of sub-pages"),
@@ -317,6 +336,10 @@ data class AppPrefsState(
     val pageAnimation: PageAnimationType = PageAnimationType.LinuxWindow,
     /** How sheets and decisions open and close. Never picked, it is what the page style made it before (see [SheetAnimationType.defaultFor]). */
     val sheetAnimation: SheetAnimationType = SheetAnimationType.defaultFor(PageAnimationType.LinuxWindow),
+    /** What a cold start shows after Android's launch screen. */
+    val launchAnimation: LaunchAnimation = LaunchAnimation.Cookie,
+    /** How the dock moves its pill from one tab to the next. */
+    val dockSelection: DockSelectionStyle = DockSelectionStyle.Glide,
     val walletCardActionStyle: WalletCardActionStyle = WalletCardActionStyle.Bar,
     val bankIconStyle: BankIconStyle = BankIconStyle.Full,
     val accountsLayout: AccountsLayout = AccountsLayout.Stack,
@@ -501,6 +524,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
             pageAnimation = pages,
             // Sheets used to follow the page style: until one is picked they keep doing what they did.
             sheetAnimation = prefs.enum(K_SHEET_ANIMATION, SheetAnimationType.defaultFor(pages)),
+            launchAnimation = prefs.enum(K_LAUNCH_ANIMATION, defaults.launchAnimation),
+            dockSelection = prefs.enum(K_DOCK_SELECTION, defaults.dockSelection),
             walletCardActionStyle = prefs.enum(K_WALLET_ACTION_STYLE, defaults.walletCardActionStyle),
             bankIconStyle = prefs.enum(K_BANK_ICON_STYLE, defaults.bankIconStyle),
             accountsLayout = prefs.enum(K_ACCOUNTS_LAYOUT, defaults.accountsLayout),
@@ -603,6 +628,12 @@ class AppPreferences(private val prefs: SharedPreferences) {
 
     fun setSheetAnimation(animation: SheetAnimationType) =
         change({ copy(sheetAnimation = animation) }) { putString(K_SHEET_ANIMATION, animation.name) }
+
+    fun setLaunchAnimation(animation: LaunchAnimation) =
+        change({ copy(launchAnimation = animation) }) { putString(K_LAUNCH_ANIMATION, animation.name) }
+
+    fun setDockSelection(style: DockSelectionStyle) =
+        change({ copy(dockSelection = style) }) { putString(K_DOCK_SELECTION, style.name) }
 
     fun setWalletCardActionStyle(style: WalletCardActionStyle) =
         change({ copy(walletCardActionStyle = style) }) { putString(K_WALLET_ACTION_STYLE, style.name) }
@@ -925,6 +956,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_WALLPAPER_PALETTE = "wallpaper_palette"
         const val K_PAGE_ANIMATION = "page_animation"
         const val K_SHEET_ANIMATION = "sheet_animation"
+        const val K_LAUNCH_ANIMATION = "launch_animation"
+        const val K_DOCK_SELECTION = "dock_selection"
         const val K_WALLET_ACTION_STYLE = "wallet_card_action_style"
         const val K_BANK_ICON_STYLE = "bank_icon_style"
         const val K_ACCOUNTS_LAYOUT = "accounts_layout"
