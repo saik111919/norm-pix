@@ -1,11 +1,14 @@
 package com.example.normpix.about.ui
 
+import android.app.Application
+import android.content.Intent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -23,14 +26,19 @@ import com.example.normpix.settings.ui.SettingsCatalog
 import com.example.normpix.settings.ui.SettingsScreen
 import com.example.normpix.settings.ui.SettingsSpecial
 import com.example.normpix.testing.TestEnvironment
+import com.example.normpix.updates.ReleaseMetadata
+import androidx.test.core.app.ApplicationProvider
 import java.util.Locale
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
@@ -135,6 +143,35 @@ class AboutPageTest {
         compose.onNodeWithText("3D category pictures").assertExists()
         compose.onNodeWithText("GS Flex font").assertExists()
         compose.onNodeWithText("Microsoft Fluent Emoji, under the MIT licence.").assertExists()
+    }
+
+    @Test
+    fun theGitHubRowSaysWhereTheCodeIs() {
+        showAbout()
+        compose.onNodeWithText("On GitHub").assertExists()
+        compose.onNodeWithText("NormPix on GitHub").assertExists()
+        // The address itself is on the row, so it can be read where there is no browser to open it.
+        compose.onNode(hasText("github.com/${BuildConfig.UPDATE_REPOSITORY}", substring = true)).assertExists()
+    }
+
+    @Test
+    fun theGitHubRowOpensTheRepositoryInTheBrowser() {
+        showAbout()
+        compose.onNodeWithText("NormPix on GitHub").performScrollTo().performClick()
+        val started = assertNotNull(
+            shadowOf(ApplicationProvider.getApplicationContext<Application>()).nextStartedActivity,
+            "a browser was asked for the page",
+        )
+        assertEquals(Intent.ACTION_VIEW, started.action)
+        assertEquals("https://github.com/${BuildConfig.UPDATE_REPOSITORY}", started.data.toString())
+        assertEquals("github.com", started.data?.host)
+    }
+
+    @Test
+    fun theLinkAndTheUpdatesPointAtTheSameRepository() {
+        // One source for both (BuildConfig.UPDATE_REPOSITORY): a release's download link starts with the link About shows.
+        val download = ReleaseMetadata.downloadUrl(BuildConfig.UPDATE_REPOSITORY, "v1.0.0", "NormPix-1.0.0.apk")
+        assertTrue(download.startsWith(repositoryUrl() + "/"), "$download starts with ${repositoryUrl()}")
     }
 
     @Test
@@ -247,7 +284,7 @@ class AboutPageTest {
 
     @Test
     fun settingsSearchFindsTheGuide() {
-        for (query in listOf("about", "guide", "help", "how it works", "tips", "licenses", "credits", "privacy", "version")) {
+        for (query in listOf("about", "guide", "help", "how it works", "tips", "licenses", "credits", "privacy", "version", "github", "source code")) {
             val found = SettingsCatalog.search(query).filter { it.special == SettingsSpecial.About }
             assertEquals(1, found.size, "\"$query\" finds About")
         }

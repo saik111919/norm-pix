@@ -31,7 +31,7 @@ Contents: 1 Local environment · 2 Commands · 3 Reading results · 4 Windows an
 .\gradlew.bat :app:assembleQa                                                                               # installable QA build
 .\gradlew.bat :app:assembleQaRelease -PemulatorAbi                                                          # R8 release under the QA id + debug key, FLAG_SECURE off: for timing/recording a cold start
 .\gradlew.bat :app:assembleRelease                                                                          # R8 release (needs release key props to be update-compatible)
-.\gradlew.bat :app:assembleRelease -PsplitAbis                                                              # what CI builds: per-CPU APKs + universal
+.\gradlew.bat :app:assembleRelease -PsplitAbis                                                              # what CI builds: universal APK (the one it publishes) + per-CPU APKs (not published)
 .\gradlew.bat testDebugUnitTest --rerun --tests 'com.example.normpix.ReadmeScreenshots' -Pscreenshots="$PWD\..\docs\screenshots"
 .\gradlew.bat :app:testDebugUnitTest --tests "*DesignTokenRatchetTest" -PdesignBaseline=write                # re-record src/test/design-baseline.txt (see design-system.md section 1)
 ```
@@ -122,8 +122,10 @@ commit the tree mid-session and it would be swept in). Don't write PNGs with Pow
 
 - `.github/workflows/android.yml` (name `Android`): jobs **`verify`** (Tests and lint: `testDebugUnitTest`, `lintDebug`, annotate
   failures, upload reports), **`build`** (Release APK: reads the version, loads the signing key, builds `-PsplitAbis`, collects
-  APKs, checks the version is newer than the latest release, writes notes + `update.json`), **`release`** (GitHub release; not
-  on PRs). Triggers: PRs into `main`, pushes to `main`, tags `v*`, manual dispatch. Concurrency cancels superseded PR runs only.
+  the universal APK and checks its signature, checks the version is newer than the latest release, writes notes + `update.json`),
+  **`release`** (GitHub release; not on PRs; publishes **`NormPix-<version>.apk` and `update.json` only** - since 2026-11-08 no per-CPU
+  APKs and no `.sha256` files, the owner wanted one APK on the page; `update.json` has to stay, the app reads it). The collect step was
+  run for real against v1.5.9's APK in a scratch workspace when it was changed (the PR run builds but never publishes). Triggers: PRs into `main`, pushes to `main`, tags `v*`, manual dispatch. Concurrency cancels superseded PR runs only.
 - `.github/workflows/screenshots.yml` (`Render`): re-renders `docs/screenshots` when the app changes on `main`; on a PR it pushes
   them to `readme-screenshots/<branch>` (a PR's own branch is never pushed to).
 - PR checks to wait for: **Tests and lint (~8 min), Release APK (~5 min), Render (~3 min)**. "GitHub release" is skipped on PRs.
@@ -148,6 +150,15 @@ commit the tree mid-session and it would be swept in). Don't write PNGs with Pow
   over the real app, nor it over them. A debug/qa build installed before that key existed needs one uninstall (never the owner's
   real app).
 - Without secrets, CI still publishes a prerelease signed with the debug key and fails a real release.
+- **Play Protect says "Harmful app blocked - This app may be harmful" with an Install anyway link** (owner's phone, 2026-11-08, for v1.5.8 and
+  v1.5.9, installed from Downloads; whether v1.5.4 or older did too was not said). What was checked (nothing here is Play Protect's own
+  reason, which cannot be seen): the APK is the one CI built (SHA-256 equals GitHub's), signed with the same key as v1.5.0
+  (`CN=Android Debug`, `96b30aae...`, valid v2 signature); 18 permissions, each for a feature (no SMS, contacts, location, camera,
+  accessibility, notification-listener, device-admin or usage access); network limited to the GitHub hosts. Differences from v1.5.0: four
+  permissions, `SYSTEM_ALERT_WINDOW` and `USE_FULL_SCREEN_INTENT` (the reminder floating card and alert, first in **v1.5.5**),
+  `USE_EXACT_ALARM`, `SET_ALARM`. Best guess, unproven: an unknown signer plus a new file every release plus overlay + install-packages +
+  boot + full-screen-intent permissions together. Install anyway works; the signing key and package name cannot change without stranding
+  the installed app (Android's v3 key rotation might, unresearched). Not tried: an APK without the two overlay permissions.
 
 ## 9. Git, branches and PRs
 

@@ -1,5 +1,7 @@
 package com.example.normpix.about.ui
 
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -8,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Celebration
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.SystemUpdate
@@ -23,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.core.net.toUri
 import com.example.normpix.BuildConfig
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
@@ -35,6 +39,7 @@ import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import com.example.normpix.ui.components.PagePill
 import kotlinx.coroutines.launch
 
@@ -51,6 +56,7 @@ fun AboutPage() {
     val container = LocalAppContainer.current
     val overlays = LocalOverlays.current
     val scope = LocalAppScope.current
+    val context = LocalContext.current
     val updater = container.updates
     AppSubPage(title = "About NormPix", onBack = navigator::back) {
         item(key = "body") {
@@ -112,6 +118,21 @@ fun AboutPage() {
                     }
                 }
                 Spacer(Modifier.height(AppSpacing.lg))
+                ListSection(title = "On GitHub") {
+                    item {
+                        // The address is written out so it can be read, and typed, on a phone with no browser to open it in.
+                        ListRow(
+                            headline = "NormPix on GitHub",
+                            supporting = "${repositoryUrl().removePrefix("https://")}\n" +
+                                "The source code, every release and the full change history. Opens in your browser.",
+                            leading = { Icon(Icons.Outlined.Language, contentDescription = null) },
+                            trailing = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null) },
+                            supportingMaxLines = 4,
+                            onClick = { openInBrowser(context, repositoryUrl()) },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(AppSpacing.lg))
                 ListSection(title = "Credits") {
                     item {
                         ListRow(
@@ -168,6 +189,21 @@ fun AboutPage() {
             }
         }
     }
+}
+
+/**
+ * Where NormPix's source and releases are: the repository the updater reads (`BuildConfig.UPDATE_REPOSITORY`), so the link and
+ * the updates cannot point at two different places.
+ */
+internal fun repositoryUrl(repository: String = BuildConfig.UPDATE_REPOSITORY): String = "https://github.com/$repository"
+
+/**
+ * [url] in the user's browser. Android opens it, not NormPix: the app itself still connects to nothing but GitHub's update files.
+ * With no browser to take it nothing happens (the row prints the address, so it can still be read).
+ */
+private fun openInBrowser(context: Context, url: String) {
+    val view = Intent(Intent.ACTION_VIEW, url.toUri()).addCategory(Intent.CATEGORY_BROWSABLE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(view) }
 }
 
 /** SQLCipher's licence, as its repository gives it (`assets/licenses/sqlcipher.txt`). */

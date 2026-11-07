@@ -170,7 +170,7 @@ object SettingsCatalog {
         SettingsEntry(
             "About NormPix",
             null,
-            listOf("about", "guide", "help", "how to", "how it works", "tips", "tutorial", "features", "licenses", "licences", "credits", "version", "privacy"),
+            listOf("about", "guide", "help", "how to", "how it works", "tips", "tutorial", "features", "licenses", "licences", "credits", "version", "privacy", "github", "source code", "repository", "releases"),
             special = SettingsSpecial.About,
         ),
     )

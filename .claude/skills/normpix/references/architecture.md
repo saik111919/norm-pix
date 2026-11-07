@@ -33,7 +33,7 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
 - `BuildConfig` fields: `SECURE_WINDOW`, `UPDATES_ENABLED`, `UPDATE_REPOSITORY` (default `saik111919/norm-pix`; override
   `NORMPIX_UPDATE_REPOSITORY` / `normpixUpdateRepository`). Only a release updates itself: debug and qa carry another key.
 - ABIs: release carries `arm64-v8a` + `armeabi-v7a` (`-PemulatorAbi` adds `x86_64`); `-PsplitAbis` (what CI uses) builds one
-  APK per CPU plus a universal one. AGP does not treat the ABI filter as an input of the package step, so after switching
+  APK per CPU plus a universal one (CI publishes only the universal one). AGP does not treat the ABI filter as an input of the package step, so after switching
   between these, rebuild with `:app:stripReleaseDebugSymbols :app:packageRelease --rerun` and check the APK's `.so` files.
 - `DropTelemetryBackend` (task in `app/build.gradle.kts`) removes ML Kit's `CctBackendFactory` meta-data from every
   variant's merged manifest, so ML Kit's telemetry has no backend to upload to.
