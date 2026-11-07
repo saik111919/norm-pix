@@ -29,6 +29,7 @@ Contents: 1 Local environment · 2 Commands · 3 Reading results · 4 Windows an
 .\gradlew.bat :app:testDebugUnitTest --no-build-cache --console=plain                                       # everything: ~3-7 min
 .\gradlew.bat :app:lintDebug --console=plain                                                                # run on its own, ~2 min
 .\gradlew.bat :app:assembleQa                                                                               # installable QA build
+.\gradlew.bat :app:assembleQaRelease -PemulatorAbi                                                          # R8 release under the QA id + debug key, FLAG_SECURE off: for timing/recording a cold start
 .\gradlew.bat :app:assembleRelease                                                                          # R8 release (needs release key props to be update-compatible)
 .\gradlew.bat :app:assembleRelease -PsplitAbis                                                              # what CI builds: per-CPU APKs + universal
 .\gradlew.bat testDebugUnitTest --rerun --tests 'com.example.normpix.ReadmeScreenshots' -Pscreenshots="$PWD\..\docs\screenshots"
@@ -174,6 +175,11 @@ commit the tree mid-session and it would be swept in). Don't write PNGs with Pow
   phone (allowed since 2026-10-13 for testing; qa build only; never install over, open or touch the real `com.example.normpix` or
   its data; say what you'll install; always pass `-s <serial>`; delete UI dumps, receipt copies and test data afterwards).
   Release/debug builds blank screenshots (FLAG_SECURE in release); inspect a release through `uiautomator dump`.
+- **Timing or recording a cold start: use `qaRelease`** (`:app:assembleQaRelease`, build type in `app/build.gradle.kts`, manifest label in
+  `src/qaRelease/`; `com.example.normpix.qa`, not debuggable, R8, debug key, `SECURE_WINDOW`/`UPDATES_ENABLED` false), not `qa`: on the Moto the same
+  code started in ~0.28 s as `qaRelease` and ~1.5 s as `qa` (2026-11-07). It installs over an installed `qa` (same key). A true `assembleRelease`
+  is signed with the release key and can never install over a debug-signed `com.example.normpix` (the owner's phone had a debuggable Studio
+  install of it on 2026-11-07): the only way would be an uninstall, which wipes the vault and data - never do that unasked.
 - The emulator may be driven by someone else: if taps arrive that you didn't send (`adb shell dumpsys input | grep -A12
   RecentQueue`), stop and verify with Robolectric renders instead. Emulators have crashed mid-QA; Robolectric is the reliable
   fallback. Wait 12-16 s after launch and after opening a sheet; a tap during loading is silently lost; screenshot before trusting

@@ -71,6 +71,37 @@ Format: `claim - applies to - source - status/date`.
   card data) - `NfcTagReader.kt` - NOTES (Phase 14).
 - `am start -a SEND` with a MediaStore URI fails (MediaProvider permission); share a picture to the qa app by opening it in Google
   Photos with `-p com.google.android.apps.photos -f 0x10008000` and using its Share sheet - Android 14-17 devices - NOTES (2026-10-13).
+- **Launch screen (platform `android.window.SplashScreen`, no androidx library)**, all RE-CHECKED 2026-11-07 against the SDK files
+  `Sdk/sources/android-36.1/android/window/SplashScreen.java` + `SplashScreenView.java` and the SDK's platforms/android-36.1/data/api-versions.xml (outside the repo)
+  (two researchers, Haiku 5.5 xhigh and Gemini 3.8 Flash High, were run first; where they disagreed the source decided):
+  - `SplashScreen.setSplashScreenTheme(int)` exists from **API 31** (the method has no `since` of its own inside `since="31"`; "API 33" was wrong,
+    though DropSauce and NormPix guard the call at 33). It persists the theme by resource *name* (the name must be stable across versions);
+    `Resources.ID_NULL` resets to the manifest theme (`SplashScreen.java` 98-113, 177-198). It makes a system call: keep it off the main thread.
+  - `setOnExitAnimationListener` only takes effect during or before `onResume` (`SplashScreen.java` 75-89). The `SplashScreenView` it hands over
+    is drawn over the activity until the app calls `remove()` (`SplashScreenView.java` 523-560): an app may keep it as long as it likes. Its icon
+    is a `SurfacePackage` of the system's own surface (the animation keeps running there) centred with `Gravity.CENTER` in the view
+    (`SplashScreenView.java` 262-292, 366-369). `getIconAnimationStart()` (`Instant`) and `getIconAnimationDuration()` are public from API 31 and
+    the duration is null or 0 unless the icon is an `AnimatedVectorDrawable` / `AnimationDrawable` (`SplashScreenView.java` 449-471).
+  - The icon is 288 dp, shown through a 192 dp circle (no icon background; 240 / 160 with `windowSplashScreenIconBackgroundColor`) - developer.android.com
+    splash-screen page, via both researchers. `windowSplashScreenAnimationDuration` is deprecated at 33 (the duration is the AVD's own).
+  - A `pathData` morph (`valueType="pathType"`) needs `valueFrom` and `valueTo` with identical commands (`AnimatorInflater` throws otherwise); a
+    `pathInterpolator` may overshoot 1.0 on y (both researchers, `PathInterpolator.java`) - the AVD with those interpolators plays on the Pixel_10 emulator (Android 17) and the owner's motorola edge 50 neo (Android 16), 2026-11-07.
+  - `@android:color/system_accent1_0/_200/_600/_800` resolve in `values-v31` (the framework's colors_dynamic.xml); they are the tones Material's
+    dynamic scheme uses for primary / onPrimary (light 600 / 0, dark 200 / 800).
+  - UNVERIFIED: one researcher (from a fetched summary of AOSP, not verbatim) says the Shell clamps how long it shows an AVD launch screen to
+    ~400-500 ms when the app draws early; the app does not depend on it (it waits out the AVD's remaining intro itself). On the Moto (Android 16,
+    release build, 2026-11-07) the launch screen showed continuously from ~0.1 s until the app released it, ~0.5-0.6 s later, with no early cut seen, but that was not isolated: still not settled.
+- **Launch-screen hand-over on a phone** (motorola edge 50 neo, Android 16, release build, logs and 30 fps recordings, 2026-11-07): `SplashScreenView.iconAnimationStart`
+  is when the system actually started the AVD (`animationStartCallback`), ~0.02-0.03 s after the tap, so by the app's first drawn frame (`TotalTime` 260-325 ms) it had
+  played 222-316 ms; the window is seen only after the launcher's opening (~100+ ms), which hid the first ~100 ms of a 0-offset intro. The exit listener fires a frame or two after
+  the app's first draw: **at the hand-over and again where the held view is removed the screen showed one empty frame of the ground** when the app's own layer drew no cookie
+  under it - draw the settled cookie from the first frame and fade the view out instead of removing it (no empty frame after that). `android:color/system_surface_light` /
+  `system_surface_dark` exist from API 34 (the SDK's api-versions data); on this phone the system surface equals the app's own page colour (#FDF6F4 both).
+- **Debug vs release start**: on the Moto the same code took `am start -W` TotalTime ~1.5 s as the debuggable `qa` build and 261-318 ms as `qaRelease`
+  (R8, not debuggable), and Home opened at ~2.7 s against ~1.2 s - time and record cold starts only with `qaRelease`.
+- **Emulator timing**: with Gradle running next to the headless `Pixel_10` emulator its guest went to 97% system CPU and swapped, and
+  `am start -W` read 16-24 s instead of ~1.7 s. Run `gradlew --stop`, cold-boot the emulator (`-no-snapshot-load`) and measure only when calm.
+  `screenrecord` on it is variable-frame-rate: read frame times from OpenCV's `CAP_PROP_POS_MSEC`, not index / fps - observed 2026-11-07.
 
 ## Encryption at rest (2026-11-03: stage 1 locked backups and stage 2 SQLCipher databases built; pictures and strict mode not)
 

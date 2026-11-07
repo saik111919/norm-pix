@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Material's dynamic scheme: primary is the wallpaper accent at tone 600 by day and 200 by night, on-primary tone 0 and 800. -->
+    <color name="splash_cookie">@android:color/system_accent1_600</color>
+    <color name="splash_cookie_ink">@android:color/system_accent1_0</color>
+</resources>

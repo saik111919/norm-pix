@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Android 14 and later hand out their surface colours: this is the one the app's own surface is for the wallpaper palette, so the
+      window, Android's launch screen over it and the cookie's ground are the colour of the app's page from the very first frame
+      (the fixed colour below it is a close stand-in; the splash blends from it into the palette's surface, see CookieSplash).
+    -->
+    <color name="window_background">@android:color/system_surface_light</color>
+</resources>

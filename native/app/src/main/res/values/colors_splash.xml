@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The cookie of the launch screen (avd_splash.xml): the colour of its body and of the mark in it. Android 12 and later, which
+      are the ones that draw a launch screen at all, take them from the wallpaper's accent (values-v31) - the same two the app's
+      default palette uses for its controls (primary, on primary) - so the cookie is the colour the app is. These are only the
+      ones an older phone would use, if it ever drew it.
+    -->
+    <color name="splash_cookie">#7A5900</color>
+    <color name="splash_cookie_ink">#FFFFFF</color>
+</resources>
