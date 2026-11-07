@@ -17,7 +17,7 @@ import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.Unarchive
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.Text
@@ -201,9 +201,12 @@ class FinanceActions(
         }
     }
 
-    /** Pays a credit card's bill: a transfer from another account onto the card (see [PayBillSheet]). */
-    fun payBill(card: Account) {
-        scope.launch { overlays.sheet<Boolean> { dismiss -> PayBillSheet(card, onDone = dismiss) } }
+    /**
+     * Pays a credit card's bill: a transfer from another account onto the card (see [PayBillSheet]), starting at [suggested] - the
+     * unpaid part of the last statement - when the caller knows it, else at everything owed.
+     */
+    fun payBill(card: Account, suggested: Long? = null) {
+        scope.launch { overlays.sheet<Boolean> { dismiss -> PayBillSheet(card, suggested, onDone = dismiss) } }
     }
 
     fun editTransaction(transaction: FinanceTransaction) {

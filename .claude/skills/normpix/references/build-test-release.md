@@ -129,7 +129,7 @@ commit the tree mid-session and it would be swept in). Don't write PNGs with Pow
 - PR checks to wait for: **Tests and lint (~8 min), Release APK (~5 min), Render (~3 min)**. "GitHub release" is skipped on PRs.
 - **A push to `main` publishes a release** at the next free patch of `versionName`'s `X.Y` (highest `vX.Y.*` tag + 1), so only a
   minor/major bump is edited by hand (`versionName` in `native/app/build.gradle.kts`; `versionCode` follows). Notes = the commit
-  subjects since the last release (so write commit subjects a user can read), or an annotated tag's message; `mandatory: true` in
+  subjects since the last release (so write commit subjects a user can read), or an annotated tag's message, or - the way to get one short bullet for each change into the app's Changelog page - **`native/release-notes.md`** (hand-written, `##` headings and `-` lines, comment lines allowed): a release of main uses it **only if it changed since the last release** (else the commit subjects, so a release never repeats the last one's notes; `ReleaseNotesFileTest` keeps it in shape - rewrite it for each release); `mandatory: true` in
   a tag message makes the app offer it at every launch. `MAIN_BUILDS: release|prerelease` at the top of the workflow chooses.
   CI fails a tag that doesn't match `versionName`, a release not signed with the release key, and a `versionCode` not above the
   latest.

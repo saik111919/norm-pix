@@ -32,6 +32,8 @@ import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.MonthTotals
 import com.example.normpix.finance.domain.PeopleSpending
 import com.example.normpix.finance.domain.PeriodSummary
+import com.example.normpix.finance.domain.StatementFigures
+import com.example.normpix.finance.domain.previousOnDay
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.PersonTotal
 import com.example.normpix.finance.domain.cleanPersonName
@@ -409,6 +411,57 @@ class FinanceRepository(
                 ),
             )
         }
+    }
+
+    /**
+     * Money that moved through [accountId], by direction, for what is dated from [from] up to (not including) [to]. Add what came
+     * in and take away what went out to get how the account's balance changed over that time.
+     */
+    suspend fun accountFlowsBetween(accountId: Long, from: LocalDateTime, to: LocalDateTime): AccountFlows = io {
+        val range = "occurred_at >= ${from.toStorage()} AND occurred_at < ${to.toStorage()}"
+        var income = 0L
+        var expense = 0L
+        var transferOut = 0L
+        rawQuery(
+            "SELECT type, SUM(amount) AS total FROM ${FinanceDatabase.TRANSACTIONS} WHERE account_id = $accountId AND $range GROUP BY type",
+            null,
+        ).map { it.string("type") to it.long("total") }.forEach { (type, total) ->
+            when (type) {
+                "income" -> income = total
+                "expense" -> expense = total
+                "transfer" -> transferOut = total
+            }
+        }
+        val transferIn = rawQuery(
+            "SELECT to_account_id, SUM(amount) AS total FROM ${FinanceDatabase.TRANSACTIONS} " +
+                "WHERE type = 'transfer' AND to_account_id = $accountId AND $range GROUP BY to_account_id",
+            null,
+        ).map { it.long("total") }.sum()
+        AccountFlows(income = income, expense = expense, transferIn = transferIn, transferOut = transferOut)
+    }
+
+    /**
+     * Where each of [cards] stood at its last statement (the day it was made up, on or before [today]) and what has been put onto
+     * it since, as of the end of [today] - the figures `cardBill` turns into what is due. A card with no statement day has none.
+     */
+    suspend fun cardStatementFigures(cards: List<Account>, today: LocalDate): Map<Long, StatementFigures> {
+        val untilEndOfToday = today.plusDays(1).atStartOfDay()
+        val result = HashMap<Long, StatementFigures>()
+        val byStatement = cards.filter { it.id != null && it.statementDay != null }.groupBy { previousOnDay(it.statementDay!!, today) }
+        for ((statement, group) in byStatement) {
+            val endOfStatementDay = statement.plusDays(1).atStartOfDay()
+            val balances = accountBalances(asOf = endOfStatementDay)
+            for (card in group) {
+                val id = card.id!!
+                val flows = accountFlowsBetween(id, endOfStatementDay, untilEndOfToday)
+                result[id] = StatementFigures(
+                    statementDate = statement,
+                    owedAtStatement = maxOf(0L, -(balances[id] ?: 0L)),
+                    paidSince = flows.income + flows.transferIn,
+                )
+            }
+        }
+        return result
     }
 
     // ---------------------------------------------------------- categories

@@ -89,6 +89,7 @@ import com.example.normpix.ui.components.AppOverlays
 import com.example.normpix.ui.components.AppSnackbars
 import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.reminders.LocalReminders
+import com.example.normpix.ui.components.LocalIconStyle
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalOverlaysOrNull
 import com.example.normpix.ui.components.LocalPermissions
@@ -397,6 +398,8 @@ fun ProvideAppEnvironment(container: AppContainer, content: @Composable () -> Un
         LocalCategoryIconStyle provides prefs.categoryIconStyle,
         LocalSettingsIcons3d provides (prefs.categoryIconStyle == CategoryIconStyle.ThreeD && prefs.settingsIcons3d),
         LocalCategoryIconShape provides prefs.categoryIconShape,
+        // Here, above the sheets, so every icon in the app - a sheet's too - is drawn in the chosen set.
+        LocalIconStyle provides prefs.iconStyle,
         LocalRailCollapsed provides prefs.railCollapsed,
     ) {
         Box(Modifier.fillMaxSize()) {

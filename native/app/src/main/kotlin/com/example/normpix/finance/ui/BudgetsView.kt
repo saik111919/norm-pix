@@ -15,7 +15,9 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Savings
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.History
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.FloatingActionIconButton
+import com.example.normpix.ui.components.Icon
+import com.example.normpix.ui.components.ProvideArtworkSeed
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -378,6 +380,8 @@ private fun BudgetSheet(categoryId: Long?, current: Long?, pickCategory: Boolean
     var categoryError by remember { mutableStateOf<String?>(null) }
     var amountError by remember { mutableStateOf<String?>(null) }
     val category = finance.category(chosen)
+    // The sheet wears the colour of the category the budget is for; a whole-month budget has none, so the app's own.
+    ProvideArtworkSeed(artworkSeedOf(category, null, null))
     val title = when {
         pickCategory -> "Category budget"
         category == null -> "Monthly budget"
@@ -403,14 +407,15 @@ private fun BudgetSheet(categoryId: Long?, current: Long?, pickCategory: Boolean
         subtitle = "Applies from ${monthLabel(month)} onward. Earlier months keep their budget.",
         saveLabel = if (current == null) "Save budget" else "Save changes",
         onSave = ::save,
-        titleTrailing = if (current != null) {
-            {
-                IconButton(onClick = { onDone(BudgetResult(chosen, null)) }) {
-                    Icon(Icons.Outlined.DeleteOutline, contentDescription = "Remove budget", tint = scheme.error)
-                }
+        actions = {
+            if (current != null) {
+                FloatingActionIconButton(
+                    icon = Icons.Outlined.DeleteOutline,
+                    contentDescription = "Remove budget",
+                    onClick = { onDone(BudgetResult(chosen, null)) },
+                    tint = scheme.error,
+                )
             }
-        } else {
-            null
         },
     ) {
         if (choices.isNotEmpty()) {

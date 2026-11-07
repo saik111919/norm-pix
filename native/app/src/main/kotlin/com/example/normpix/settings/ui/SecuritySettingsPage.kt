@@ -15,7 +15,7 @@ import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Nfc
 import androidx.compose.material.icons.rounded.PhoneAndroid
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue

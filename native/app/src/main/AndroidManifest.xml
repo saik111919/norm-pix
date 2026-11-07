@@ -338,6 +338,19 @@
                 android:resource="@xml/apduservice" />
         </service>
 
+        <!-- The "Add expense" Quick Settings tile (the user adds it from the tile editor). A tap opens the new-expense sheet the way
+             the Add widget's buttons do: the system is the only thing that can bind it. -->
+        <service
+            android:name=".widgets.QuickAddTileService"
+            android:exported="true"
+            android:icon="@drawable/widget_ic_add"
+            android:label="Add expense"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <!-- Reminders: the alarm that fires a notification, its Complete / Snooze
              buttons, and re-arming alarms after a reboot or app update. -->
         <receiver

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,7 +39,7 @@ import com.example.normpix.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.delay
 
 /** The label of a sheet's primary button: medium-bold, so the one action to take reads first. */
-private val SheetButtonText: TextStyle
+internal val SheetButtonText: TextStyle
     @Composable get() = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
 
 /** Standard sheet header: a title and optional supporting line, with the sheet's horizontal padding. */
@@ -185,18 +186,21 @@ fun EditorSheet(
     saving: Boolean = false,
     saveColors: ButtonColors? = null,
     titleTrailing: (@Composable () -> Unit)? = null,
+    actions: @Composable RowScope.() -> Unit = {},
     /** Why the form could not be saved, said above Save where it cannot scroll out of sight; null says nothing. */
     errorText: String? = null,
     slideToSave: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(modifier.fillMaxWidth()) {
-        // The body scrolls (it may be taller than the space above the keyboard); Save stays put below it.
+        // The body scrolls (it may be taller than the space above the keyboard) and fades out into the sheet above the floating
+        // Save bar, which stays put below it (see fadingBottomEdge for why the form is not laid under the bar).
         Column(
             Modifier
                 .weight(1f, fill = false)
+                .fadingBottomEdge()
                 .verticalScroll(rememberScrollState())
-                .padding(start = AppSpacing.xxl, top = AppSpacing.xs, end = AppSpacing.xxl, bottom = AppSpacing.lg),
+                .padding(start = AppSpacing.xxl, top = AppSpacing.xs, end = AppSpacing.xxl, bottom = FloatingActionBarDefaults.FadeHeight),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -233,19 +237,23 @@ fun EditorSheet(
                 .padding(start = AppSpacing.xxl, top = AppSpacing.xs, end = AppSpacing.xxl, bottom = AppSpacing.md),
         ) {
             if (slideToSave) {
-                SlideToConfirm(
-                    label = "Slide to " + saveLabel.replaceFirstChar { it.lowercase() },
-                    onConfirm = onSave,
-                    enabled = !saving,
-                    busy = saving,
-                )
+                FloatingActionBar(actions = actions) {
+                    SlideToConfirm(
+                        label = "Slide to " + saveLabel.replaceFirstChar { it.lowercase() },
+                        onConfirm = onSave,
+                        enabled = !saving,
+                        busy = saving,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             } else {
-                Button(
-                    onClick = onSave,
-                    enabled = !saving,
-                    colors = saveColors ?: ButtonDefaults.buttonColors(),
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                ) { Text(saveLabel, style = SheetButtonText) }
+                FloatingActionBar(
+                    primaryLabel = saveLabel,
+                    onPrimary = onSave,
+                    primaryEnabled = !saving,
+                    primaryColors = saveColors,
+                    actions = actions,
+                )
             }
         }
     }

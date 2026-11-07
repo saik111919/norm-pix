@@ -26,6 +26,7 @@ import com.example.normpix.settings.LaunchAnimation
 import com.example.normpix.updates.SystemUpdateNotifier
 import com.example.normpix.wallet.BiometricAuthenticator
 import com.example.normpix.wallet.expiry.CardExpiryNotifications
+import com.example.normpix.widgets.QuickAddShortcuts
 import com.example.normpix.widgets.WidgetIntents
 import java.time.Duration
 import java.time.Instant
@@ -68,6 +69,8 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Add expense, Add income and Transfer on the app's icon (press and hold); each opens the app on that sheet, once unlocked.
+        if (savedInstanceState == null) QuickAddShortcuts.publish(applicationContext)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             splashScreen.setOnExitAnimationListener { view -> onLaunchScreen(view, coldStart = savedInstanceState == null) }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) keepLaunchScreenThemeInStep()

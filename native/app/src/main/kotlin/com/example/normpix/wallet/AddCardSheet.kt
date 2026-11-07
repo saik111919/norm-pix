@@ -26,7 +26,7 @@ import androidx.compose.material.icons.rounded.Contactless
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -69,6 +69,7 @@ import com.example.normpix.ui.components.AppLoadingIndicator
 import com.example.normpix.ui.components.DiscardChangesGuard
 import com.example.normpix.ui.components.EditorSheet
 import com.example.normpix.ui.components.LocalOverlays
+import com.example.normpix.ui.components.ProvideArtworkSeed
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppIconSizes
 import com.example.normpix.ui.theme.AppRadius
@@ -308,6 +309,13 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
         kind = kind,
         createdAt = LocalDateTime.now(),
         cardName = CardNames.clean(cardName),
+    )
+    // The sheet wears the colour of the card it is making: its product's or its bank's. Until a bank is chosen the card on show is only
+    // a stand-in's (a violet one), and the sheet keeps the app's own colours rather than take on a colour that means nothing.
+    ProvideArtworkSeed(
+        remember(bankName, liveCard.bankKey, liveCard.cardName) {
+            if (bankName.isEmpty()) null else BankCardDesign.forCard(liveCard).gradientColors.first()
+        },
     )
     val suggestions = CardNames.suggestionsFor(bank.key)
     val kinds = remember {

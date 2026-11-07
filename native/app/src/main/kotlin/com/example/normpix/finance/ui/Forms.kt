@@ -17,7 +17,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -65,10 +65,12 @@ import com.example.normpix.finance.domain.parseMinorUnits
 import com.example.normpix.ui.components.AppHaptics
 import com.example.normpix.ui.components.DiscardChangesGuard
 import com.example.normpix.ui.components.EditorSheet
+import com.example.normpix.ui.components.ProvideArtworkSeed
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.StatusColorRole
+import com.example.normpix.wallet.AccountCardDesign
 import com.example.normpix.wallet.CardsState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -128,6 +130,8 @@ fun CategoryFormSheet(
         updatedAt = now,
         parentId = null,
     )
+    // The sheet wears the tone this category will have (its parent's, when it sits under one).
+    ProvideArtworkSeed(paletteSeed(preview.color))
 
     val typeLabel = if (type == CategoryType.Income) "Income" else "Expense"
     val initialSnapshot = remember {
@@ -454,6 +458,10 @@ fun AccountFormSheet(
     }
     val title = if (existing == null) "New account" else "Edit account"
     val action = if (existing == null) "Save account" else "Save changes"
+    // The sheet wears the colour of the card this account will have in the Wallet: its bank's, or its kind's.
+    ProvideArtworkSeed(
+        remember(bank.key, kind) { AccountCardDesign.themeFor(finance.catalog.byKey(bank.key)?.name, kind).artworkSeed() },
+    )
 
     fun save() {
         val text = amount.trim()

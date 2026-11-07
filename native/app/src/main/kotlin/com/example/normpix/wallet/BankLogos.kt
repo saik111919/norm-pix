@@ -22,7 +22,7 @@ import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.WbSunny
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember

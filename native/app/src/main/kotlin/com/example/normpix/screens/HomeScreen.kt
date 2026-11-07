@@ -19,7 +19,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -245,6 +245,7 @@ fun HomeScreen(listState: LazyListState = rememberLazyListState()) {
                                     MonthOverview(data, collapse, onClick = seeInsights)
                                     QuickAdd()
                                     NeedsAttention(data.budgets)
+                                    BillsDue()
                                     CardsOnHome()
                                     Recent(data.recent, onSeeAll = navigator::openTransactions)
                                     if (data.topSpending.isNotEmpty()) TopSpending(data, onSeeAll = seeInsights)
@@ -254,6 +255,7 @@ fun HomeScreen(listState: LazyListState = rememberLazyListState()) {
                                     MonthOverview(data, collapse, onClick = seeInsights)
                                     QuickAdd()
                                     NeedsAttention(data.budgets)
+                                    BillsDue()
                                     ComingUp(data.upcoming, onSeeAll = seePlans)
                                 },
                                 right = {

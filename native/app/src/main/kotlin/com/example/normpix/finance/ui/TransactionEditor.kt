@@ -23,9 +23,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -76,6 +77,7 @@ import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.DiscardChangesGuard
 import com.example.normpix.ui.components.EditorSheet
+import com.example.normpix.ui.components.ProvideArtworkSeed
 import com.example.normpix.ui.components.RevealVisibility
 import com.example.normpix.ui.components.politeLiveRegion
 import com.example.normpix.ui.components.rememberAppHaptics
@@ -224,6 +226,9 @@ private fun TransactionEditor(
     var draftPicture by remember { mutableStateOf(prefill?.picture) }
     val keptFile = remember(keptPicture) { pictureStore?.file(keptPicture) }
     val shownPicture = draftPicture ?: keptFile
+    // The sheet wears the colour of the category chosen; with none, of the picture attached to it (read once, off the main thread, and
+    // kept while the next is read), else of the card of the account it is on, else the app's own (see artworkSeedOf).
+    ProvideArtworkSeed(artworkSeedOf(finance.category(categoryId), rememberPictureSeed(shownPicture), accountArtworkSeed(accountId)))
     var viewingPicture by remember { mutableStateOf(false) }
     // A payment read from an attached picture is looked for among those already recorded, as a shared one is.
     var readFromPicture by remember { mutableStateOf(false) }
@@ -793,7 +798,7 @@ private fun TransactionEditor(
         Spacer(Modifier.height(AppSpacing.lg))
         PickerFieldRow(
             first = PickerField("Date", if (dateUnset) "Choose" else shortDate(occurredAt)) { pickingDate = true },
-            second = PickerField("Time", timeLabel(occurredAt, is24Hour)) { pickingTime = true },
+            second = PickerField("Time", timeLabel(occurredAt, is24Hour), Icons.Outlined.Schedule) { pickingTime = true },
         )
         FieldError(dateError)
         Spacer(Modifier.height(AppSpacing.lg))

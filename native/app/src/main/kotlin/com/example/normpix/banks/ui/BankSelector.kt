@@ -19,7 +19,7 @@ import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.example.normpix.banks.Bank
 import com.example.normpix.banks.BankCatalog
 import com.example.normpix.finance.domain.FinanceValidationException
+import com.example.normpix.finance.ui.ChoicePickerField
 import com.example.normpix.finance.ui.LocalFinance
 import com.example.normpix.finance.ui.TonalFieldShape
 import com.example.normpix.finance.ui.rememberFinanceState
@@ -55,6 +56,8 @@ import com.example.normpix.ui.components.BankGlyph
 import com.example.normpix.ui.components.DiscardChangesGuard
 import com.example.normpix.ui.components.EditorSheet
 import com.example.normpix.ui.components.LocalOverlays
+import com.example.normpix.ui.components.OptionSheet
+import com.example.normpix.ui.components.OptionSheetItem
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
@@ -112,95 +115,92 @@ fun BankSelector(
             (cardsState as? CardsState.Ready)?.cards?.forEach { it.bankKey?.let(::add) }
         }
     }
-    val matches = remember(catalog, usedKeys, choice.typed) { catalog.matching(choice.typed, usedKeys) }
-    var open by remember { mutableStateOf(false) }
 
     fun pick(bank: Bank?) {
         haptics.selection()
         onChoice(BankChoice(bank?.key))
-        open = false
         if (bank != null) onPicked()
     }
 
-    fun addNew() {
-        open = false
+    val openSheet: () -> Unit = {
         scope.launch {
-            val key = overlays.sheet<String> { dismiss -> BankFormSheet(initialName = choice.typed, onDone = dismiss) }
-            if (key != null) {
-                onChoice(BankChoice(key))
-                onPicked()
+            val totalCount = catalog.all.size
+            val pickedKey = overlays.sheet<String> { dismiss ->
+                val options = buildList {
+                    if (optional && choice.key != null) {
+                        add(
+                            OptionSheetItem(
+                                key = "",
+                                label = "No bank",
+                                leading = {
+                                    Icon(Icons.Rounded.Close, contentDescription = null, modifier = Modifier.size(24.dp))
+                                },
+                            ),
+                        )
+                    }
+                    for (bank in catalog.matching("", usedKeys)) {
+                        add(
+                            OptionSheetItem(
+                                key = bank.key,
+                                label = bank.name,
+                                leading = {
+                                    BankGlyph(bank, tint = scheme.onSurfaceVariant, size = 28.dp, modifier = Modifier.padding(2.dp))
+                                },
+                            ),
+                        )
+                    }
+                }
+                OptionSheet(
+                    title = "Choose bank",
+                    subtitle = "$totalCount banks",
+                    searchPlaceholder = "Search banks",
+                    options = options,
+                    selected = if (choice.key != null) setOf(choice.key) else emptySet(),
+                    multiple = false,
+                    onSelect = { key ->
+                        dismiss(key)
+                    },
+                    actionLabel = "Add new bank",
+                    actionIcon = Icons.Rounded.Add,
+                    onAction = {
+                        dismiss("__add__")
+                    },
+                )
+            }
+            if (pickedKey != null) {
+                if (pickedKey == "__add__") {
+                    val newKey = overlays.sheet<String> { dismiss -> BankFormSheet(initialName = "", onDone = dismiss) }
+                    if (newKey != null) {
+                        onChoice(BankChoice(newKey))
+                        onPicked()
+                    }
+                } else if (pickedKey.isEmpty()) {
+                    pick(null)
+                } else {
+                    val bank = catalog.byKey(pickedKey)
+                    pick(bank)
+                }
             }
         }
     }
 
-    ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }, modifier = modifier) {
-        OutlinedTextField(
-            value = choice.text(catalog),
-            onValueChange = { text ->
-                open = true
-                onChoice(BankChoice(catalog.exact(text)?.key, text))
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
-                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                // Once the user moves on, a name that was a bank shows as the bank's own name.
-                .onFocusChanged { if (!it.isFocused && choice.key != null && choice.typed.isNotEmpty()) onChoice(BankChoice(choice.key)) },
-            label = { Text(if (optional) "$label (optional)" else label) },
-            placeholder = { Text("Search or choose a bank") },
-            leadingIcon = catalog.byKey(choice.key)?.let { bank ->
-                { BankGlyph(bank, tint = scheme.onSurfaceVariant, size = 24.dp) }
-            },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
-            isError = errorText != null,
-            supportingText = errorText?.let { { Text(it) } },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Next),
-            colors = typedFieldColors(),
-            shape = TonalFieldShape,
-        )
-        ExposedDropdownMenu(
-            expanded = open,
-            onDismissRequest = { open = false },
-            modifier = Modifier.heightIn(max = 320.dp),
-            // A popup over the sheet: nothing behind it is blurred, so it keeps the solid tone.
-            containerColor = solidColorScheme.surfaceContainer,
-            shape = AppRadius.rLg,
-        ) {
-            if (optional && choice.key != null) {
-                DropdownMenuItem(
-                    text = { Text("No bank") },
-                    leadingIcon = { Icon(Icons.Rounded.Close, contentDescription = null, modifier = Modifier.size(24.dp)) },
-                    onClick = { pick(null) },
-                    modifier = Modifier.heightIn(min = 48.dp),
-                )
+    val selectedBank = catalog.byKey(choice.key)
+    ChoicePickerField(
+        label = if (optional) "$label (optional)" else label,
+        value = selectedBank?.name ?: choice.text(catalog).ifEmpty { null },
+        placeholder = "Choose a bank",
+        onClick = openSheet,
+        leading = selectedBank?.let { bank ->
+            { BankGlyph(bank, tint = scheme.onSurfaceVariant, size = 24.dp) }
+        },
+        onClear = if (optional && choice.key != null) {
+            {
+                pick(null)
             }
-            for (bank in matches) {
-                val isSelected = bank.key == choice.key
-                DropdownMenuItem(
-                    text = { Text(bank.name, fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal) },
-                    leadingIcon = { BankGlyph(bank, tint = scheme.onSurfaceVariant, size = 28.dp, modifier = Modifier.padding(2.dp)) },
-                    trailingIcon = if (isSelected) {
-                        { Icon(Icons.Rounded.Check, contentDescription = null, tint = scheme.primary) }
-                    } else {
-                        null
-                    },
-                    onClick = { pick(bank) },
-                    modifier = Modifier
-                        .heightIn(min = 48.dp)
-                        .then(if (isSelected) Modifier.background(scheme.secondaryContainer.copy(alpha = 0.5f)) else Modifier)
-                        .semantics { this.selected = isSelected },
-                )
-            }
-            if (matches.isNotEmpty()) HorizontalDivider(Modifier.padding(vertical = AppSpacing.xs))
-            DropdownMenuItem(
-                text = { Text("Add new bank", color = scheme.primary) },
-                leadingIcon = { Icon(Icons.Rounded.Add, contentDescription = null, tint = scheme.primary) },
-                onClick = ::addNew,
-                modifier = Modifier.heightIn(min = 48.dp),
-            )
-        }
-    }
+        } else null,
+        errorText = errorText,
+        modifier = modifier.then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+    )
 }
 
 /**

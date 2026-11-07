@@ -15,7 +15,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -31,6 +30,7 @@ import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.normpix.ui.theme.AppRadius
@@ -312,13 +312,56 @@ fun RadioRow(
     supporting: String? = null,
     trailing: (@Composable () -> Unit)? = null,
     enabled: Boolean = true,
+    headlineColor: Color = Color.Unspecified,
+    headlineFontWeight: FontWeight? = null,
 ) {
     val dim = if (enabled) 1f else 0.38f
     androidx.compose.material3.ListItem(
         modifier = modifier.selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick),
         colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
         leadingContent = { androidx.compose.material3.RadioButton(selected = selected, onClick = null, enabled = enabled) },
-        headlineContent = { Text(headline, modifier = Modifier.alpha(dim)) },
+        headlineContent = {
+            Text(
+                headline,
+                color = headlineColor,
+                fontWeight = headlineFontWeight,
+                modifier = Modifier.alpha(dim),
+            )
+        },
+        supportingContent = supporting?.let { { Text(it, modifier = Modifier.alpha(dim)) } },
+        trailingContent = trailing,
+    )
+}
+
+/**
+ * One option of a multiple-choice setting. Put a group of these in a [ListSection]. An option
+ * that is not [enabled] is shown dimmed, announced as unavailable, and can't be picked.
+ */
+@Composable
+fun CheckboxRow(
+    headline: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    supporting: String? = null,
+    trailing: (@Composable () -> Unit)? = null,
+    enabled: Boolean = true,
+    headlineColor: Color = Color.Unspecified,
+    headlineFontWeight: FontWeight? = null,
+) {
+    val dim = if (enabled) 1f else 0.38f
+    androidx.compose.material3.ListItem(
+        modifier = modifier.selectable(selected = selected, enabled = enabled, role = Role.Checkbox, onClick = onClick),
+        colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
+        leadingContent = { androidx.compose.material3.Checkbox(checked = selected, onCheckedChange = null, enabled = enabled) },
+        headlineContent = {
+            Text(
+                headline,
+                color = headlineColor,
+                fontWeight = headlineFontWeight,
+                modifier = Modifier.alpha(dim),
+            )
+        },
         supportingContent = supporting?.let { { Text(it, modifier = Modifier.alpha(dim)) } },
         trailingContent = trailing,
     )

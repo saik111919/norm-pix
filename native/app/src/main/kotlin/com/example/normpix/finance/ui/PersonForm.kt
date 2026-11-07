@@ -34,6 +34,7 @@ import com.example.normpix.ui.components.AppPrimaryTabs
 import com.example.normpix.ui.components.AppTab
 import com.example.normpix.ui.components.DiscardChangesGuard
 import com.example.normpix.ui.components.EditorSheet
+import com.example.normpix.ui.components.ProvideArtworkSeed
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppSpacing
 import java.time.LocalDateTime
@@ -68,6 +69,8 @@ fun PersonFormSheet(existing: Person?, onDone: (Person?) -> Unit, initialName: S
 
     val now = LocalDateTime.now()
     val preview = Person(name = name, emoji = emoji.takeIf { pictureTab == 1 }, color = color, createdAt = now, updatedAt = now)
+    // The sheet wears the colour this person's avatar is on, and follows it as another is picked.
+    ProvideArtworkSeed(paletteSeed(color))
 
     fun save() {
         val draft = (existing ?: Person(name = name, createdAt = now, updatedAt = now))

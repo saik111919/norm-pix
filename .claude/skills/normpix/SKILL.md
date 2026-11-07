@@ -5,7 +5,7 @@ description: "Everything about the NormPix project - a private, offline-first An
 
 # NormPix project skill
 
-Stamp: verified against commit `6a16c45d` (`versionName` 1.5.0 in the tree; CI has released up to v1.5.7) on 2026-11-07. If `git log` shows newer commits on source paths, or
+Stamp: verified against commit `54f011dd` (`versionName` 1.5.0 in the tree; CI has released up to v1.5.7) on 2026-11-07. If `git log` shows newer commits on source paths, or
 `bash .claude/skills/normpix/scripts/verify.sh` reports drift, trust the code and fix the skill (`references/maintenance.md`).
 
 ## 1. The 60-second picture
@@ -83,7 +83,7 @@ reference rather than exploring. For the history or reasoning behind a feature, 
 | (root) | `MainActivity` (intents, lock lifecycle, FLAG_SECURE), `NormPixApplication` + `AppContainer` (all services), `DummyData` (sample-data container) |
 | `finance/` | The money core, in four layers - |
 | `finance/data/` | `FinanceDatabase` (SQLite v12), `FinanceRepository` (all queries/commands, `TransactionQuery`, `checkAndRepair`), backup codec/archive, `TransactionPictures`, `CategorySuggestions` |
-| `finance/domain/` | Pure rules: `Entities`, `Ledger` (balances, budgets), `Period` (months, "as of today"), `Insights`, `LedgerCheck`, `BillingCycle`, `CardBills`, `Recurrence`, `RepeatEnd`, `Money`/`CurrencySpec`, `CategoryTree` |
+| `finance/domain/` | Pure rules: `Entities`, `Ledger` (balances, budgets), `Period` (months, "as of today"), `Insights`, `LedgerCheck`, `BillingCycle`, `CardBills`, `CardStatement` (what is due on a card: the unpaid part of its last statement), `Recurrence`, `RepeatEnd`, `Money`/`CurrencySpec`, `CategoryTree` |
 | `finance/share/` | Receipts shared in: `ShareTransactionActivity`, `SharedPictureReader` (ML Kit), one reader per payment app + `ReceiptVocabulary`, `SharedTransactionParser` fallback, `AccountMatching`, `SelfTransfers`, `SharedTransactionImport` |
 | `finance/ui/` | `FinanceController`/`FinanceState`, `FinanceActions`, `TransactionsScreen`, `InsightsScreen`, `TransactionEditor`, `RecurringEditor`, forms/pickers/selectors, categories/people pages, month/day/date-range controls, charts |
 | `wallet/` | Cards and accounts as cards: `CardVault` (AES-GCM, Keystore), `CardsController`, `CardsPolicy`, `AppLock`, bank directory/designs/logos, `CardStack`/`CardCarousel`/`AccountCarousel`, `CardScan`, `CardsTransfer`, `WalletOverview` |
@@ -92,26 +92,27 @@ reference rather than exploring. For the history or reasoning behind a feature, 
 | `wallet/expiry/` | Card expiry tracker, alarms, notices |
 | `wallet/motion/` | `CardTilt` (every card on screen leans) |
 | `reminders/` | Model, `RemindersDatabase` (v2), alarms, notifications, alert screen, links; delivery (`ReminderDelivery`, `ReminderOverlay` floating card, `ReminderOverlayPolicy`, `ReminderAccess`, `ReminderAlertActivity`); `RecurringReminders` (a repeating payment and its reminder kept in step); `ClockAlarms` (a reminder as the Clock app's alarm, on request) |
-| `screens/` | The tabs' screens: `HomeScreen`, `HomeBanners`, `HeroCollapse` (Home's number shrinking into the header on scroll), `PlansAndTransactionsScreen`, `WalletScreen` |
+| `screens/` | The tabs' screens: `HomeScreen`, `HomeBanners`, `HomeBills` (the credit-card bills as two-panel banners, on Home and the Wallet), `HeroCollapse` (Home's number shrinking into the header on scroll), `PlansAndTransactionsScreen`, `WalletScreen` |
 | `navigation/` | `NormPixRoot` (`Routes`, `ShellState`, locals), `AppShell`, `AppNavigator`, `FloatingNavBar` (+ `DockGlide`: the pill that flies between tabs), `ActionMenu` (the "+" bento panel), `PageTransitions`, `LinuxWindowMotion`, `AppSearch`, `AppearanceSection`, splash (`CookieSplash`, `LaunchSplash`, `LaunchScreen`: what Android's own launch screen - which plays the cookie's intro - is doing) |
 | `settings/` | `AppPreferences` (`AppPrefsState`, all choice enums), app icons, notifications, custom font (`CustomFont`, `FontFile`: zip and variable fonts), profile photos (GIFs, avatar presets) |
 | `onboarding/` | `OnboardingTour`: the welcome tour of a new install (four steps in a pager); `TourArt`: each step's 3D-sticker picture and its motion |
 | `settings/ui/` | Settings pages, `SettingsCatalog` (search), `SettingsTwoPane`, Appearance sections, backup UI, ledger-check UI |
 | `ui/` | The design system, nothing app-specific - |
-| `ui/components/` | Design-system components: `Overlays` (sheets/confirm/loading/snackbars), `Sheets`, `Pages`, `Lists`, `DeckCarousel`, `SwipeReveal`, `SwipeActionRow`, `Progress`, `SplitButton`, `BottomControls`, glass/blur (`FrostedBackdrop`, `FooterBlur`) |
-| `ui/theme/` | `Theme` (palettes), `Tokens`, `Typography`, `StatusColors`, `AppIcons` |
+| `ui/components/` | Design-system components: `Overlays` (sheets/confirm/loading/snackbars), `Sheets`, `OptionSheet` (unified option chooser for all single/multi-choice fields), `ArtworkTheme` (`ProvideArtworkSeed`: a form says its artwork's colour, the host dresses the sheet in it), `FloatingActionBar` + `fadingBottomEdge` (the Save pill under an editor or filter sheet's form, which fades out above it), `Pages`, `Lists`, `DeckCarousel`, `SwipeReveal`, `SwipeActionRow`, `Progress`, `SplitButton`, `SplitStatBanner` (the two-panel summary banner), `AppIcon` (the `Icon` every file imports: Material's, or Lucide's drawing of it) + `LucideIcons` (the Lucide set from `res/raw/lucide_*.txt`), `BottomControls`, glass/blur (`FrostedBackdrop`, `FooterBlur`) |
+| `ui/theme/` | `Theme` (palettes), `Tokens`, `Typography`, `StatusColors`, `AppIcons`, `ArtworkColors` (seed from pixels, the scheme from a seed; pure) |
 | `updates/` | `AppUpdater`, `ReleaseMetadata`, downloader/installer/background job/foreground service, `Changelog` |
 | `updates/ui/` | Update page, changelog page, Home update banner |
 | `banks/` | `BankCatalog` (built-in + custom banks, shared by accounts and cards; the directory with categories is `wallet/BankDirectory`) |
 | `banks/ui/` | `BankSelector`, `BankBadge` (Settings > Banks & Categories is `settings/ui/BanksAndCategoriesPage`: `AppPrimaryTabs` over `BanksContent` / `CategoriesContent`) |
 | `availability/` | `ScheduledFeature` + weekly schedule rules (NFC exchange), settings widgets |
-| `backup/` | App backup zip: archive, manifest, reader, restorer, settings codec; `LockedFile` (any backup locked with a password) |
+| `backup/` | App backup zip: archive, manifest, reader, restorer, settings codec; `LockedFile` (any backup locked with a password); `BackupFreshness` (when Home says "back up your data") |
+| `diagnostics/` | The crash log: `CrashReport` (the text, with messages scrubbed), `CrashLog` (the files) and `CrashReporting` (the handler, the system's exit records); its screens are in `about/ui/CrashLogUi.kt` |
 | `storage/` | How the databases are opened: `DatabaseEngine` (`Plain` = framework SQLite for tests/sample data/fallback), `EncryptedDatabases` (SQLCipher + the one-time move from a plain file), `SqlCipherEngine` (the only SQLCipher calls), `DatabaseKey` (Keystore-sealed key), `DatabaseDigest`, `Sql.kt` (`rawQuery`/`insertOrThrow`/... on `SupportSQLiteDatabase`) |
-| `widgets/` | Watch-dial and cookie clocks (`ClockWidgets`, `ClockOptions` + Widget settings activity, `SimpleClock`), Recent, Add widgets, `HomeWidget` (the Settings > Widgets list, previews, pinning), `WidgetIntents`/`WidgetRequest` |
+| `widgets/` | Watch-dial and cookie clocks (`ClockWidgets`, `ClockOptions` + Widget settings activity, `SimpleClock`), Recent, Add widgets, `HomeWidget` (the Settings > Widgets list, previews, pinning), `WidgetIntents`/`WidgetRequest`, `QuickAdd` (the app icon's Add expense / income / Transfer shortcuts and the Add-expense Quick Settings tile) |
 | `about/` | About page, its Feature guide pill and page (`GuideIndexPage`) and the topics (`GuideTopic`, `GuideArt`: real screenshots `GuideShots`, drawings as fallback) |
 
 Outside it: tests mirror these packages in `native/app/src/test/kotlin/...` (`testing/TestEnvironment.kt` is the harness);
-`native/app/src/qa/` is the qa build's manifest label; `native/design/` generates icons and widget art (`clock-widget/` Python, `cookie-clock/` Java: `java CookieFace.java`) and the launch screen's animated cookie (`launch-splash/LaunchSplashAvd.py`, stdlib Python: `avd_splash.xml` + `splash_icon.xml`, re-run it when `CookieMotion` changes); `.github/workflows/`
+`native/app/src/qa/` is the qa build's manifest label; `native/design/` generates icons and widget art (`clock-widget/` Python, `cookie-clock/` Java: `java CookieFace.java`), the Lucide icon data (`lucide/LucideBuild.java`: `lucide_map.txt` + the release's SVGs -> `lucide_icons.txt`) and the launch screen's animated cookie (`launch-splash/LaunchSplashAvd.py`, stdlib Python: `avd_splash.xml` + `splash_icon.xml`, re-run it when `CookieMotion` changes); `.github/workflows/`
 (`android.yml` verify/build/release, `screenshots.yml`).
 
 ## 5. Working with the owner (full detail: `references/owner-working-style.md`)

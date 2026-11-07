@@ -21,12 +21,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -35,19 +36,24 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalButton
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.font.FontWeight
+import com.example.normpix.ui.components.readableOn
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -63,6 +69,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -202,8 +209,9 @@ fun TransactionCategoryField(
 }
 
 /**
- * The sheet: a search box, the categories used most ("Frequently used"), then every family - the category as a row that
- * picks it, its sub-categories as chips under it, closed until the row's chevron (or "Expand all") opens them - and "New category". Typing in the search box swaps the families for the
+ * The sheet: a search box, the categories used most ("Frequently used", as rows), then every family - the category as a row that
+ * picks it, its sub-categories as rows under it, closed until the row's chevron (or "Expand all") opens them - and "New category"
+ * as a button under the list. Typing in the search box swaps the families for the
  * matches, each named by where it sits. With [multiple] the rows toggle and a button applies the set; otherwise a tap picks
  * and closes. [onDone] gets the picked ids, or null when the sheet is dismissed.
  */
@@ -249,22 +257,69 @@ fun CategoryPickerSheet(
     }
 
     Column(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(start = AppSpacing.xxl, end = AppSpacing.xxl, bottom = AppSpacing.md)) {
-            SheetHeader(
-                title = if (multiple) "Select categories" else "Select a category",
-                subtitle = if (multiple && picked.isNotEmpty()) "${picked.size} selected" else null,
-                trailing = if (multiple && picked.isNotEmpty()) {
-                    { TextButton(onClick = { picked = emptySet() }) { Text("Clear") } }
-                } else {
-                    null
-                },
-            )
-            Spacer(Modifier.height(AppSpacing.md))
-            SearchField(value = query, onValueChange = { query = it }, placeholder = "Search categories")
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = AppSpacing.xxl,
+                    end = AppSpacing.xxl,
+                    top = AppSpacing.lg,
+                    bottom = AppSpacing.sm,
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    if (multiple) "Select categories" else "Select a category",
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = scheme.onSurface,
+                    modifier = Modifier.semantics { heading() },
+                )
+                if (multiple) {
+                    Spacer(Modifier.height(AppSpacing.xs))
+                    Text(
+                        if (picked.isEmpty()) "Any category" else "${picked.size} selected",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (multiple) {
+                FilledIconButton(
+                    onClick = { onDone(picked) },
+                    shape = CircleShape,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = scheme.primaryContainer,
+                        contentColor = scheme.onPrimaryContainer,
+                    ),
+                    modifier = Modifier
+                        .padding(start = AppSpacing.sm)
+                        .size(48.dp),
+                ) {
+                    Icon(
+                        Icons.Rounded.Check,
+                        contentDescription = if (picked.isEmpty()) "Any category" else "Apply (${picked.size})",
+                    )
+                }
+            }
         }
+        SearchField(
+            value = query,
+            onValueChange = { query = it },
+            placeholder = "Search categories",
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = AppSpacing.xxl, end = AppSpacing.xxl, bottom = AppSpacing.md),
+        )
         LazyColumn(
-            modifier = Modifier.weight(1f, fill = false).testTag(CATEGORY_PICKER_TAG),
-            contentPadding = PaddingValues(start = AppSpacing.xxl, end = AppSpacing.xxl, bottom = AppSpacing.lg),
+            modifier = Modifier
+                .weight(1f, fill = false)
+                .testTag(CATEGORY_PICKER_TAG),
+            contentPadding = PaddingValues(
+                start = AppSpacing.xxl,
+                end = AppSpacing.xxl,
+                bottom = if (onCreate != null) AppSpacing.sm else AppSpacing.lg,
+            ),
             verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
         ) {
             if (searching) {
@@ -301,18 +356,22 @@ fun CategoryPickerSheet(
                     Column(Modifier.animateContentSize()) {
                         if (frequent.isNotEmpty()) {
                             SectionSubheader("Frequently used")
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
-                                verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
-                                modifier = Modifier.padding(start = AppSpacing.xs, top = AppSpacing.xs, bottom = AppSpacing.sm),
+                            // The same rows as everywhere in the picker (2026-11-07: the owner found the chips here did not match them).
+                            Surface(
+                                shape = AppRadius.rLg,
+                                color = scheme.surfaceContainerHigh,
+                                modifier = Modifier.padding(top = AppSpacing.xs, bottom = AppSpacing.sm),
                             ) {
-                                for (category in frequent) {
-                                    CategoryChip(
-                                        category = category,
-                                        label = finance.categories.pathName(category),
-                                        selected = category.id in picked,
-                                        onClick = { choose(category) },
-                                    )
+                                Column {
+                                    for (category in frequent) {
+                                        PickerRow(
+                                            category = category,
+                                            name = finance.categories.pathName(category),
+                                            selected = category.id in picked,
+                                            multiple = multiple,
+                                            onClick = { choose(category) },
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -345,26 +404,23 @@ fun CategoryPickerSheet(
                     )
                 }
             }
-            if (onCreate != null) {
-                item(key = "create") {
-                    Surface(shape = AppRadius.rLg, color = scheme.surfaceContainerHigh) {
-                        ListItem(
-                            modifier = Modifier.clickable(onClick = onCreate),
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            leadingContent = { Icon(Icons.Rounded.Add, contentDescription = null, tint = scheme.primary) },
-                            headlineContent = { Text("New category", color = scheme.primary) },
-                        )
-                    }
-                }
-            }
         }
-        if (multiple) {
-            Box(Modifier.fillMaxWidth().padding(start = AppSpacing.xxl, end = AppSpacing.xxl, top = AppSpacing.xs, bottom = AppSpacing.md)) {
-                Button(onClick = { onDone(picked) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                    Text(
-                        if (picked.isEmpty()) "Any category" else "Apply (${picked.size})",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+        if (onCreate != null) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = AppSpacing.xxl, end = AppSpacing.xxl, top = AppSpacing.sm, bottom = AppSpacing.md),
+            ) {
+                FilledTonalButton(
+                    onClick = onCreate,
+                    shape = AppRadius.rFull,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                ) {
+                    Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(AppSpacing.sm))
+                    Text("New category", style = MaterialTheme.typography.titleMedium)
                 }
             }
         }
@@ -418,13 +474,17 @@ private fun FamilyCard(
                 exit = shrinkVertically(tween(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.standard)) +
                     fadeOut(tween(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.standard)),
             ) {
-                FlowRow(
-                    modifier = Modifier.padding(start = AppSpacing.lg, end = AppSpacing.lg, bottom = AppSpacing.md),
-                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
-                    verticalArrangement = Arrangement.spacedBy(AppSpacing.xs),
+                Column(
+                    modifier = Modifier.padding(start = AppSpacing.lg),
                 ) {
                     for (sub in family.subs) {
-                        CategoryChip(category = sub, label = sub.name, selected = sub.id in picked, onClick = { onChoose(sub) })
+                        PickerRow(
+                            category = sub,
+                            name = sub.name,
+                            selected = sub.id in picked,
+                            multiple = multiple,
+                            onClick = { onChoose(sub) },
+                        )
                     }
                 }
             }
@@ -463,59 +523,60 @@ private fun PickerRow(
     selected: Boolean,
     multiple: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     supporting: String? = null,
     supportingEmphasis: Boolean = false,
     trailingExtra: (@Composable () -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val mark: (@Composable () -> Unit)? = when {
-        multiple -> ({ Checkbox(checked = selected, onCheckedChange = null) })
-        selected -> ({ Icon(Icons.Rounded.Check, contentDescription = null, tint = scheme.primary) })
-        else -> null
-    }
+    val containerColor = scheme.surfaceContainerHigh
+    val selectedLabelColor = readableOn(containerColor, scheme.primary, scheme.onSurface)
+
     ListItem(
-        modifier = Modifier
-            .background(if (selected && !multiple) scheme.secondaryContainer.copy(alpha = 0.5f) else Color.Transparent)
+        modifier = modifier
             .clickable(onClick = onClick)
             .semantics {
                 this.selected = selected
                 role = if (multiple) Role.Checkbox else Role.RadioButton
             },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        leadingContent = { CategoryAvatar(category, size = 40.dp) },
-        headlineContent = { Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        leadingContent = {
+            if (multiple) {
+                Checkbox(checked = selected, onCheckedChange = null)
+            } else {
+                RadioButton(selected = selected, onClick = null)
+            }
+        },
+        headlineContent = {
+            Text(
+                name,
+                // A path ("Groceries › Fruits & vegetables") can be long: two lines, not a cut-off name.
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (selected) selectedLabelColor else scheme.onSurface,
+            )
+        },
         supportingContent = supporting?.let {
             {
                 Text(
                     it,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = if (supportingEmphasis) scheme.primary else Color.Unspecified,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (supportingEmphasis) scheme.primary else scheme.onSurfaceVariant,
                 )
             }
         },
-        trailingContent = if (mark == null && trailingExtra == null) {
-            null
-        } else {
-            {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    mark?.invoke()
-                    trailingExtra?.invoke()
-                }
+        trailingContent = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(AppSpacing.xs),
+            ) {
+                CategoryAvatar(category, size = 32.dp)
+                trailingExtra?.invoke()
             }
         },
-    )
-}
-
-/** A category as a chip with its icon: the way a sub-category is offered under its parent. */
-@Composable
-private fun CategoryChip(category: Category, label: String, selected: Boolean, onClick: () -> Unit) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        leadingIcon = { CategoryGlyph(category.icon, LocalContentColor.current, 18.dp) },
-        modifier = Modifier.semantics { role = Role.RadioButton },
     )
 }
 

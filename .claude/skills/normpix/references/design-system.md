@@ -41,13 +41,23 @@ Use these before writing anything new:
 
 - **Pages**: `AppPage` (tab pages), `AppSubPage` (pushed pages; owns the back button styles), `Pages.kt`. Lists: `Lists.kt`
   (`ListSection`, `SectionSubheader`, grouped segments with 4 dp inner / 20 dp outer corners).
-- **Sheets**: `EditorSheet` (every add/edit form: titled sheet, scrolling body, **pinned full-width Save**, no Cancel/close,
+- **Sheets**: `EditorSheet` (every add/edit form: titled sheet, scrolling body, and a **floating Save bar** - `FloatingActionBar` (`FloatingActionBar.kt`),
+  a pill with a soft shadow and a solid `solidColorScheme` fill, below the form with a gap around it. The form ends in `fadingBottomEdge()` (its last 16 dp fade
+  out into the sheet), so it goes on under the pill's top edge without a hard cut. The form is **not** laid under the bar (tried 2026-11-07 and dropped): a field
+  that gets focus is scrolled into the form's own bounds, which would put it behind the bar (the notes field, while typing), and `performScrollTo` + a tap in the
+  tests landed on the bar.
+  Secondary icon buttons (`FloatingActionIconButton`: Delete, Remind, Reset) go in its `actions` slot; `errorText` stays a line above it.
+  The filter sheet uses the same bar and fade. No Cancel/close,
   `DiscardChangesGuard` asks before dropping unsaved changes, on Back too - section 3), `ConfirmSheetContent` (every confirm/alert),
+  `OptionSheet` (`OptionSheet.kt`: the one sheet for a single or a multiple choice; a header with an optional subtitle and, for multiple choice only, a 48 dp
+  confirm circle; a search field only when `searchPlaceholder` is given (banks); the options as one `ListSegment` group (20 dp outer / 4 dp inner corners) with
+  a radio or checkbox, the label in `primary` + SemiBold when chosen, and a leading / trailing slot (bank logos, category avatars); an optional full-width tonal
+  action pill ("New category", "Add a bank")),
   `SheetSurface.kt`.
   Opened imperatively: `LocalOverlays.current.sheet<T> { dismiss -> ... }`, `.confirm(...)`, `.alert(...)`, `.loading(...)`.
 - **Choices**: `ConnectedChoiceRow` (`finance/ui/FormSelectors.kt`: the type selector, theme System|Light|Dark,
   Expense|Income - one pill track with the chosen choice as a pill inside; 2 dp gaps, radio semantics), `ButtonGroup.kt`,
-  `AppSplitButton` (`SplitButton.kt`),
+  `AppSplitButton` (`SplitButton.kt`), `OptionSheet` (`ui/components/OptionSheet.kt`: replaces exposed dropdown menus and floating chip grids across `AccountSelector`, `CategoryPicker`, `BankSelector`, `ChoiceDropdownField`, and `TransactionFilterSheet`),
   tonal selection cards with a 40 dp circular icon badge (Category, Paid from, From/To), split date/time chips.
 - **Progress**: `AppLinearProgress`, `AppLoadingIndicator` (`Progress.kt`) in Wavy or Flat (`ProgressStyle`).
 - **Decks**: `DeckCarousel` (a **flat** overlapping row since 2026-10-31: the front card whole, its neighbours at 0.9 and shaded, about 44 dp of
@@ -68,6 +78,25 @@ Use these before writing anything new:
   warning's deep; Fidelity-generated warning/info `onContainer` is white) and `onContainer` came out white on a pale tint. Every ink is
   checked for 4.5:1 (`readableOn`, falling back to `onSurface`), `BannerColorsTest` asserts it for every tone x accent x Light/Dark.
   Same layout and size as before; the banners behind the front one are only 6% darker, `DeckStack(behindDim)`, where cards take 20%). **Search**: `SearchField`, `SearchFilterBar`. **Reveal/LiveRegion** helpers for notices.
+- **Needs attention banners wear the summary design** (2026-11-07, owner: "apply the same banner design for these need attention ones in their respective
+  way"; `BannerStack.kt` `BannerFace`): two panels joined by a 4 dp seam - what it is on the left (status icon in a solid disc + eyebrow, the title - two lines
+  beside a figure, `minLines = 2` so a kind stays one size -, the detail, and an optional **bar**) and an optional **figure** on the right - over a bar with the
+  buttons (the main one measured first, the quieter one gets what is left), all in the status colour as before (washed surface, hairline, curved lines, pill
+  in the colour). `Banner` gained `bar: BannerBar?` and `figure: BannerFigure?`; each kind says its own: an **overdue reminder** the time it is late by
+  ("Late by 3 days", noted with when it was due); a **budget** its use as the pill ("112% used", ends 0 and the limit) and what is over or left; a **card's
+  expiry** "Valid thru 12/26" with "next month"; **backup** how long ago and how often it asks; an **update** its size, and - while downloading - the download
+  as the pill with how much of how much; the **crash** report has neither (one full-width panel). Large text stacks the panels. The pieces
+  (`Panel`, `FigureBody`, `PillBody`, `CyclePill`, the shapes) are the summary banner's, made `internal`. `spoken()` says the figure and the pill too. Items of a
+  deck must be the same size, so keep each line to one line (the title excepted as above). The ratchet counts hand-set spacing: `BannerStack.kt` is now clean.
+- **Summary banner** (`SplitStatBanner.kt`, 2026-11-07, from the owner's reference picture - a "Due date" panel with a progress pill beside a
+  "Total" panel): two panels in one `secondaryContainer`, big outer corners (`AppRadius.xxl`) and 8 dp where they meet, a 4 dp seam as the divider (the
+  hero's language), fine curved lines drawn over both at 7% of the ink (`curvedLines`, 16 dp apart). Left (`BannerProgress`): title, a line under it, a
+  pill whose fill has gone `fraction` of the way - never narrower than its own words, which sit at its end - and the bar's two ends under it. Right
+  (`BannerFigure`): title, the figure (shrinks to fit, tabular), a note. One button with one `spoken` description (the panels are `clearAndSetSemantics`);
+  a `tone` puts the pill in that status colour (`Warning` for a bill within `BillDue.DUE_SOON_DAYS`), none uses `primary`. Above font scale 1.3 (the hero
+  tiles' threshold) the panels stack - a stacked panel must hold its content and not fill the height (it once filled the screen). The quieter lines are
+  `quietInk` (78% ink, or full ink where that would not reach 4.5:1: Light/Green's container is near the limit). Tests: `SplitStatBannerTest`,
+  `HomeBillsTest`, `BillingCycleTest`. Anything with "how long is left" and "how much" can use it.
 - **Chrome**: `FloatingNavBar` (dock), `BottomControls.kt`, `Tabs.kt`, `FocusRing.kt`, `LockGate.kt`, `Snackbar.kt`.
 - **Fields**: tonal fill `surfaceContainerHighest`, `TonalFieldShape`, min 64 dp, `IconBadge`; typed fields (Paid to, Note,
   names, numbers) get a soft outline, picking fields stay tonal.
@@ -88,6 +117,41 @@ Use these before writing anything new:
   / `CategoryVisuals` / `BrandLogos`, `banks/ui/BankBadge`, `AssetImage`, `SvgAsset`. Illustrations (the welcome tour's,
   `onboarding/TourArt.kt`) are Fluent 3D emoji from `assets/fluent3d` on pads of M3 Expressive shapes (`graphics-shapes`) in the theme's
   containers; those pictures are 128 px, so keep one under ~80 dp or it goes soft on a 3x screen.
+- **Interface icons: Material or Lucide** (2026-11-07, owner: "can you use these icons" - Lucide, https://lucide.dev; Settings > Appearance > Icons > Interface
+  icons, `IconStyle`, preference `icon_style`, **Material by default** so no one's icons change by an update). The code names Material icons everywhere
+  (~840 uses of 297 icons), so Lucide is a **lookup at draw time**, not new names: every file imports `com.example.normpix.ui.components.Icon`
+  (`AppIcon.kt`: Material's three `Icon` forms, same defaults), which with `LocalIconStyle` = Lucide asks `LucideIcons.forMaterial` for the Lucide
+  drawing of the `ImageVector` it was given (matched by the vector's name: `Outlined.Lock`, `Rounded.Lock` and `AutoMirrored.*.Lock` are all "Lock") and
+  draws that where there is one. `LocalIconStyle` is provided in `ProvideAppEnvironment` (`NormPixRoot`), above the sheets. **Never import
+  `androidx.compose.material3.Icon` again** - a file that does skips the choice. Two plain-text resources hold it: `res/raw/lucide_map.txt`
+  (`MaterialName=lucide-name`, the table to edit; the header names the release, 1.70.0) and `res/raw/lucide_icons.txt` (each icon as path data, made by
+  `native/design/lucide/LucideBuild.java` from the SVGs of that release - `java LucideBuild.java <svgDir> <map> <out>`, JDK 11+, raw URL in its header;
+  it stops on any element or attribute it does not know). Each is built once into an `ImageVector` of strokes (24 grid, width 2, round caps and joins,
+  `PathParser`), mirrored in right-to-left only where the Material icon mirrored. **Left alone on purpose**: the app's own artwork (`AppIcons.Wallet`,
+  the supplied Google Wallet drawing, has no Material family prefix), brand marks, bank logos, emoji and 3D pictures. `LucideIconsTest` reads the sources:
+  **a new Material icon with no line in the map fails the build**, so Lucide never has a hole. Lucide has no filled form, so a "selected" icon that was
+  filled in Material is the same drawing (the dock's pill carries the selection). Licence: ISC (Lucide) and MIT (the icons it took from Feather); the
+  notice travels in `assets/licenses/lucide.txt` and About > Credits > Lucide icons opens it. **Map by what Material's icon draws, not by its name**
+  (2026-11-07: `CallReceived`, which the app uses as the Income arrow, is a plain down-left arrow in Material, and was first mapped to Lucide's
+  `phone-incoming`, so Income showed a phone; now `arrow-down-left`) - open the Material glyph before adding a line. Tests: `LucideIconsTest`,
+  `IconStyleDrawingTest`, `IconStyleChoiceTest`, `IconStylePreferenceTest`.
+- **Artwork colors** (2026-11-07, owner's "Cover-Based Dynamic Colors for Add/Edit Screens", after Komikku's cover-based theming: one seed from the
+  artwork -> a generated scheme for that screen -> the normal theme when there is none; read from Komikku's source, written from scratch). **One mechanism,
+  two files**: `ui/theme/ArtworkColors.kt` (pure: `seedFromPixels` - material-kolor's `QuantizerCelebi` + `Score`, which drops greys; `usable` (chroma >= 8: a
+  black card's grey would otherwise make a red theme); `isSame` (same hue within 2 degrees: TonalSpot takes the hue only); `scheme(base, seed, keepSurfaces)`;
+  the one `Style = TonalSpot` constant - soft, not Komikku's Vibrant) and `ui/components/ArtworkTheme.kt` (`ArtworkScope`, `ProvideArtworkSeed`, `appColorScheme`).
+  **A form says what its artwork's colour is with one call, `ProvideArtworkSeed(seed)`**; `OverlayHost` wraps *every sheet* in `ArtworkScope`, which
+  makes the scheme, animates it (`animateColorScheme`, a no-overshoot spring; none when reduced motion is on, and none when the colours arrive in the sheet's
+  first 500 ms - it opens already in them) and dresses the whole sheet in it - content **and** the sheet's own surface, handle and scrim, which the host draws
+  around the content (a theme wrapped only around the form would leave them in the app's colours). Seeds (2026-11-08, owner: "colors based on categories, otherwise fallbacks"): the transaction, recurring and budget forms wear the chosen **category's** colour (`paletteSeed(category.color)`); with none - or a transfer - `artworkSeedOf` falls back to the transaction's attached **picture** (read at
+  128 px off the main thread by `rememberPictureSeed`, cached by path + modified time + length, the previous colours kept while the next is read), else the
+  selected **account's card** colour; the card, account, category and person forms use the colour their own design defines (`BankBrandTheme.artworkSeed()`,
+  `paletteSeed(index)`; the card form has none until a bank is chosen, the stand-in card's violet means nothing) - **never read from rendered pixels**. A sheet opened over a form (a date, a category or an account to pick) **starts in the form's seed** (`AppOverlays.sheet`), so the two read as one. Pure and Volt keep every surface (only the accent families follow; black stays black), and the
+  error family and the scrim are always the app's. **What must never follow the artwork**: the status colours (they come from `LocalAppStatusColors`, outside any
+  scheme: expense warm, income positive) and a transfer's neutral (`TransactionType.role()` reads `appColorScheme`, the app's own scheme as the host saw it) -
+  new meaningful colours must do the same. Setting: `artworkColors` (`artwork_colors`, default on, in backups, back on at Reset) as a switch on
+  Settings > Appearance > Colors; **off is exactly the app's colours** (`ArtworkSheetTest`). Tests: `ArtworkColorsTest` (every text pair >= 4.5:1 for black,
+  white, grey, red, yellow, green, blue and a pastel in Light, Dark, Pure and Volt), `ArtworkSheetTest`, `ArtworkSeedsTest`, `ArtworkColorsSettingTest`.
 - **Palette picker**: `PaletteChoices` + `ColorSourceChoice` (`settings/ui/AppearanceColors.kt`) are Settings > Appearance > Colors'
   squircle palette tiles and Wallpaper colors | Other colors choice; anywhere else that picks the app's colours (the welcome tour) uses
   them (`wrap = true` inside a pager, where a sideways-scrolling row would fight the swipe).
@@ -96,7 +160,12 @@ Use these before writing anything new:
 
 - **Decisions, forms and pickers are bottom sheets**, not dialogs: add/edit forms, confirms ("Reset all settings", delete,
   discard), month/date/time/range pickers (`DateSheet`, `TimeSheet`, `MonthPickerSheet`, `DateRangeSheet`; the `*DialogFor`
-  names are old wrappers that open them). The destructive action wears the error colours. Swipe, scrim, back and locking the
+  names are old wrappers that open them). **Date and time (2026-11-07, owner: they did not match the other fields):** the form's
+  Date | Time pair (`PickerFieldRow`) is `TonalPickerField`s in `connectedFieldShapes()` - the same neutral tonal field as Category
+  and Paid from, with the badge icon (calendar; `PickerField(..., icon)` for the clock) and the dropdown arrow - not the peach
+  `PickerSegment`, which is only for the readouts inside a sheet (Hour | Minute, From | To). The date and time sheets' "Use ..." is
+  the `FloatingActionBar` pill with the body fading out above it (`fadingBottomEdge`), as Save; their quick picks wrap
+  (`QuickTileRow(wrap = true)`) instead of scrolling sideways with a tile cut off (the range sheet still scrolls). The destructive action wears the error colours. Swipe, scrim, back and locking the
   app all mean "no". Every sheet has a drag handle; a tall sheet that fits opens fully, otherwise half-way
   (`expandable = true`).
 - **A form with changes asks before any close - swipe, scrim and Back alike** (`DiscardChangesGuard` -> `SheetDismissConfirmation`);

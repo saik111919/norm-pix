@@ -14,9 +14,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.PieChart
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.rounded.DateRange
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
+import com.example.normpix.ui.components.LocalIconStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -62,6 +66,7 @@ import com.example.normpix.settings.TopSpendingLayout
 import com.example.normpix.settings.DockSelectionStyle
 import com.example.normpix.settings.LaunchAnimation
 import com.example.normpix.settings.PageAnimationType
+import com.example.normpix.settings.IconStyle
 import com.example.normpix.settings.ProgressStyle
 import com.example.normpix.settings.SheetAnimationType
 import com.example.normpix.ui.components.AppHaptics
@@ -179,6 +184,27 @@ private fun InterfaceFontSection(prefs: AppPrefsState, preferences: AppPreferenc
 @Composable
 private fun CategoryIconsSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
     ListSection(
+        title = "Interface icons",
+        footer = "The small icons on buttons, pages and settings - and on categories in the outlined style. Emoji, 3D pictures, " +
+            "bank logos and brand marks keep their own. Lucide is open-source; its licence is under About.",
+        modifier = Modifier.selectableGroup(),
+    ) {
+        for (style in IconStyle.entries) {
+            item {
+                RadioRow(
+                    headline = style.label,
+                    supporting = style.description,
+                    selected = prefs.iconStyle == style,
+                    onClick = {
+                        haptics.selection()
+                        preferences.setIconStyle(style)
+                    },
+                    trailing = { InterfaceIconPreview(style) },
+                )
+            }
+        }
+    }
+    ListSection(
         title = "Category icons",
         footer = "How categories are pictured in lists, charts and the transaction editor. A category with an emoji of " +
             "its own keeps it in every style.",
@@ -271,6 +297,18 @@ private fun CategoryIconsSection(prefs: AppPrefsState, preferences: AppPreferenc
                 leading = { LeadingIcon(Icons.Outlined.Category) },
                 onClick = { scope.launch { overlays.sheet<Unit>(expandable = true) { IconGallerySheet() } } },
             )
+        }
+    }
+}
+
+/** Three of the interface's icons drawn in [style], whatever the app is set to now. */
+@Composable
+private fun InterfaceIconPreview(style: IconStyle) {
+    CompositionLocalProvider(LocalIconStyle provides style) {
+        Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm), modifier = Modifier.clearAndSetSemantics {}) {
+            for (icon in listOf(Icons.Outlined.Home, Icons.Outlined.PieChart, Icons.Outlined.Settings)) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
+            }
         }
     }
 }

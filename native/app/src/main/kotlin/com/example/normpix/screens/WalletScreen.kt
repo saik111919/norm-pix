@@ -41,7 +41,7 @@ import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Nfc
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -378,6 +378,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                                 },
                                                 onTurnOnNotifications = flows::turnOnExpiryNotifications,
                                                 modifier = Modifier.padding(bottom = AppSpacing.md),
+                                                onOpen = { flows.showCard(card) },
                                             )
                                         }
                                     }
@@ -451,6 +452,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                                             },
                                                             onTurnOnNotifications = flows::turnOnExpiryNotifications,
                                                             modifier = Modifier.padding(bottom = AppSpacing.md),
+                                                            onOpen = { flows.showCard(card) },
                                                         )
                                                     }
                                                 }
@@ -633,6 +635,14 @@ private fun AccountsSection(
 
     Column {
         if (overview) WalletTotals(amountsHidden)
+        // The bills owed on credit cards, as banners, between the totals and the accounts they come from.
+        val bills = rememberDueBills()
+        if (bills.isNotEmpty()) {
+            Spacer(Modifier.height(AppSpacing.xxl))
+            WalletSectionHeader(title = if (bills.size == 1) "Bill due" else "Bills due", summary = null)
+            Spacer(Modifier.height(AppSpacing.sm))
+            BillBanners(bills)
+        }
         Spacer(Modifier.height(AppSpacing.xxl))
         // The way to add one more is beside the heading, as for the cards - in every layout, and not a tile after the last.
         WalletSectionHeader(

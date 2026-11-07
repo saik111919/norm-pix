@@ -16,7 +16,7 @@ import androidx.compose.material.icons.outlined.VerticalAlignBottom
 import androidx.compose.material.icons.outlined.ViewCarousel
 import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -35,6 +35,7 @@ import com.example.normpix.settings.AppIcon
 import com.example.normpix.settings.AppIcons
 import com.example.normpix.settings.AppPrefsState
 import com.example.normpix.settings.ColorSource
+import com.example.normpix.settings.IconStyle
 import com.example.normpix.settings.InterfaceFont
 import com.example.normpix.settings.ThemeMode
 import com.example.normpix.ui.components.AppSubPage
@@ -124,7 +125,9 @@ internal fun AppearanceSection.summary(prefs: AppPrefsState, appIcon: AppIcon): 
         InterfaceFont.System -> "System font"
         InterfaceFont.Custom -> prefs.customFontName.ifBlank { InterfaceFont.Custom.label }
     }
-    AppearanceSection.CategoryIcons -> "${prefs.categoryIconStyle.label} · ${prefs.categoryIconShape.label}"
+    AppearanceSection.CategoryIcons ->
+        "${prefs.categoryIconStyle.label} · ${prefs.categoryIconShape.label}" +
+            if (prefs.iconStyle == IconStyle.Material) "" else " · ${prefs.iconStyle.label} icons"
     AppearanceSection.ProgressIndicators -> prefs.progressStyle.label
     AppearanceSection.Transitions ->
         "Pages: ${prefs.pageAnimation.label} · Sheets: ${prefs.sheetAnimation.label} · Launch: ${prefs.launchAnimation.label} · Dock: ${prefs.dockSelection.label}"

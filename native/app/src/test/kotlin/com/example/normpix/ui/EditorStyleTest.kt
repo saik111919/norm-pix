@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
@@ -28,6 +29,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -46,6 +48,7 @@ import com.example.normpix.finance.ui.IconBadge
 import com.example.normpix.finance.ui.connectedFieldShapes
 import com.example.normpix.settings.ThemeMode
 import com.example.normpix.ui.components.EditorSheet
+import com.example.normpix.ui.components.FloatingActionIconButton
 import com.example.normpix.ui.theme.Appearance
 import com.example.normpix.ui.theme.LocalReducedMotionOverride
 import com.example.normpix.ui.theme.NormPixTheme
@@ -344,19 +347,44 @@ class EditorStyleTest {
         field.assertIsNotFocused()
     }
 
-    // --- the save button -------------------------------------------------------------------------------------
+    // --- the save button in floating action bar --------------------------------------------------------------
 
     @Test
-    fun saveIsAFullWidth56dpButton() {
+    fun saveIsInsideTheFloatingActionBar() {
         themed {
             Box(Modifier.testTag("sheet")) {
-                EditorSheet(title = "New expense", saveLabel = "Save expense", onSave = {}) { Text("body") }
+                EditorSheet(
+                    title = "New expense",
+                    saveLabel = "Save expense",
+                    onSave = {},
+                    actions = {
+                        FloatingActionIconButton(
+                            icon = Icons.Rounded.DeleteOutline,
+                            contentDescription = "Delete",
+                            onClick = {},
+                        )
+                    },
+                ) {
+                    Text("body")
+                }
             }
         }
-        val button = compose.onNode(hasText("Save expense") and hasClickAction()).getUnclippedBoundsInRoot()
-        val root = compose.onRoot().getUnclippedBoundsInRoot()
-        assertEquals(56f, (button.bottom - button.top).value, 0.5f)
-        // The sheet's 24dp gutters either side.
-        assertEquals((root.right - root.left).value - 48f, (button.right - button.left).value, 1f)
+        val saveButton = compose.onNode(hasText("Save expense") and hasClickAction())
+        val saveBounds = saveButton.getUnclippedBoundsInRoot()
+        val deleteButton = compose.onNode(hasContentDescription("Delete") and hasClickAction())
+        val deleteBounds = deleteButton.getUnclippedBoundsInRoot()
+
+        // Primary action has height >= 48dp (min touch target)
+        val saveHeight = (saveBounds.bottom - saveBounds.top).value
+        assertTrue(saveHeight >= 48f, "Save button height must be >= 48dp, was $saveHeight")
+
+        // Secondary action is at least 48dp
+        val deleteHeight = (deleteBounds.bottom - deleteBounds.top).value
+        val deleteWidth = (deleteBounds.right - deleteBounds.left).value
+        assertTrue(deleteHeight >= 48f, "Secondary action height must be >= 48dp, was $deleteHeight")
+        assertTrue(deleteWidth >= 48f, "Secondary action width must be >= 48dp, was $deleteWidth")
+
+        // Secondary action is to the left of the save button
+        assertTrue(deleteBounds.right <= saveBounds.left, "Secondary action must sit beside save button")
     }
 }

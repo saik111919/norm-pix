@@ -1,20 +1,18 @@
 # file|colour|corner|halfstep  (see DesignTokenRatchetTest: counts may only go down)
 com/example/normpix/about/ui/GuideArt.kt|0|18|53
 com/example/normpix/finance/ui/BudgetsView.kt|0|0|1
-com/example/normpix/finance/ui/CategoryPicker.kt|0|0|1
 com/example/normpix/finance/ui/CategoryShareRow.kt|0|0|1
 com/example/normpix/finance/ui/CategoryStack.kt|0|0|9
 com/example/normpix/finance/ui/CategoryVisuals.kt|8|0|0
 com/example/normpix/finance/ui/Charts.kt|0|0|3
 com/example/normpix/finance/ui/FinanceWidgets.kt|0|0|2
-com/example/normpix/finance/ui/FormSelectors.kt|0|0|1
 com/example/normpix/finance/ui/HeroCard.kt|0|1|2
 com/example/normpix/finance/ui/InsightsScreen.kt|0|0|1
 com/example/normpix/finance/ui/MonthSwitcher.kt|0|0|1
 com/example/normpix/finance/ui/MonthSwitcherSplit.kt|0|0|2
 com/example/normpix/finance/ui/Receipt.kt|0|0|4
 com/example/normpix/finance/ui/TransactionDetails.kt|0|0|1
-com/example/normpix/finance/ui/TransactionFilterSheet.kt|0|0|3
+com/example/normpix/finance/ui/TransactionFilterSheet.kt|0|0|1
 com/example/normpix/finance/ui/TransactionPictureUi.kt|1|0|1
 com/example/normpix/finance/ui/TransactionsScreen.kt|0|0|4
 com/example/normpix/navigation/ActionMenu.kt|0|0|5
@@ -35,7 +33,6 @@ com/example/normpix/settings/ui/IconGallery.kt|0|2|1
 com/example/normpix/settings/ui/ProfilePage.kt|0|0|2
 com/example/normpix/settings/ui/SettingsListPane.kt|0|0|1
 com/example/normpix/settings/ui/SettingsRows.kt|0|1|3
-com/example/normpix/ui/components/BannerStack.kt|0|0|1
 com/example/normpix/ui/components/BottomControls.kt|0|0|2
 com/example/normpix/ui/components/ButtonGroup.kt|0|0|1
 com/example/normpix/ui/components/DeckCarousel.kt|0|0|2

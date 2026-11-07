@@ -111,4 +111,62 @@ class BillingCycleTest {
         assertFalse(0 in BILLING_DAYS)
         assertFalse(32 in BILLING_DAYS)
     }
+
+    @Test
+    fun `the latest date on a day is this month's once it has come, last month's until then`() {
+        assertEquals(date(2026, 11, 5), previousOnDay(5, date(2026, 11, 12)))
+        assertEquals(date(2026, 11, 5), previousOnDay(5, date(2026, 11, 5)))
+        assertEquals(date(2026, 10, 5), previousOnDay(5, date(2026, 11, 3)))
+        assertEquals(date(2025, 12, 20), previousOnDay(20, date(2026, 1, 10)))
+        assertEquals(date(2026, 2, 28), previousOnDay(31, date(2026, 3, 15)), "February lacks a 31st")
+    }
+
+    @Test
+    fun `a bill's bar runs from the last statement to the due date`() {
+        // Statement on the 5th, due on the 20th, the 12th: 7 of the 15 days have gone.
+        val cycle = billCycle(statementDay = 5, dueDay = 20, today = date(2026, 11, 12))!!
+        assertEquals(date(2026, 11, 5), cycle.start)
+        assertEquals(date(2026, 11, 20), cycle.due.date)
+        assertEquals(7f / 15f, cycle.fraction, 0.0001f)
+        assertEquals(8, cycle.daysLeft)
+    }
+
+    @Test
+    fun `the bar is empty on the statement day and full on the due day`() {
+        assertEquals(0f, billCycle(5, 20, date(2026, 11, 5))!!.fraction)
+        val dueDay = billCycle(5, 20, date(2026, 11, 20))!!
+        assertEquals(1f, dueDay.fraction)
+        assertEquals(0, dueDay.daysLeft)
+    }
+
+    @Test
+    fun `a statement in the other month is the one before the due date`() {
+        // Statement on the 25th, due on the 12th: on 26 Nov the bill is the 25 Nov statement's, due 12 Dec (17 days; 1 gone).
+        val cycle = billCycle(25, 12, date(2026, 11, 26))!!
+        assertEquals(date(2026, 11, 25), cycle.start)
+        assertEquals(date(2026, 12, 12), cycle.due.date)
+        assertEquals(1f / 17f, cycle.fraction, 0.0001f)
+    }
+
+    @Test
+    fun `a statement so far back that a due date came between is not the bar's start`() {
+        // Statement on the 5th, due on the 20th, the 3rd: the 5 Oct statement is 46 days before 20 Nov and the 20 Oct due date is
+        // between them, so the bar runs from that due date: 14 of its 31 days.
+        val cycle = billCycle(5, 20, date(2026, 11, 3))!!
+        assertEquals(date(2026, 10, 20), cycle.start)
+        assertEquals(14f / 31f, cycle.fraction, 0.0001f)
+    }
+
+    @Test
+    fun `with no statement day the bar runs from a month before the due date`() {
+        val cycle = billCycle(null, 20, date(2026, 11, 12))!!
+        assertEquals(date(2026, 10, 20), cycle.start)
+        assertEquals(23f / 31f, cycle.fraction, 0.0001f)
+    }
+
+    @Test
+    fun `a card with no due day has no bar`() {
+        assertNull(billCycle(5, null, date(2026, 11, 12)))
+        assertNull(billCycle(null, null, date(2026, 11, 12)))
+    }
 }

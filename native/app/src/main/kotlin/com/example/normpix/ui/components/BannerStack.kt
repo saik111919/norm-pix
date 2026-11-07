@@ -5,8 +5,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -14,10 +16,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,6 +34,8 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,6 +66,10 @@ class Banner(
     val primary: StatusAction,
     /** A quieter alternative, shown before [primary]. */
     val secondary: StatusAction? = null,
+    /** A bar under the lines, when what it is about fills up or runs down: a budget's use, an update's download. */
+    val bar: BannerBar? = null,
+    /** The panel beside the lines: one figure with a title and a note, when there is a value to say (what is left, a date). */
+    val figure: BannerFigure? = null,
     /** Pressing the banner itself: the details. */
     val onOpen: () -> Unit,
 )
@@ -78,7 +86,7 @@ fun BannerStack(banners: List<Banner>, state: DeckStackState, modifier: Modifier
     DeckStack(
         items = banners,
         itemKey = { it.key },
-        shape = AppRadius.rXl,
+        shape = AppRadius.rXxl,
         description = { banner, index, count -> banner.spoken(index, count) },
         onOpen = { it.onOpen() },
         state = state,
@@ -145,19 +153,27 @@ internal fun readableOn(fill: Color, preferred: Color, fallback: Color): Color {
 
 private fun Banner.spoken(index: Int, count: Int): String = buildString {
     append("$eyebrow. $title. $message")
+    figure?.let {
+        append(". ${it.title} ${it.figure}")
+        it.note?.let { note -> append(", $note") }
+    }
+    bar?.let { append(". ${it.label}") }
     if (count > 1) append(", ${index + 1} of $count")
 }
 
 /**
- * The banner itself: the page's own tonal surface (as Home's other sections are) carrying its status in every colour it has, so
- * what kind of attention it needs is seen before a word is read - an overdue reminder red, a budget or a card amber, an update blue:
- * the surface washed with the status colour and edged with a hairline of it, the icon white-on-colour in a solid disc of it, the
- * eyebrow in it, and the main button filled with a tint of it. The title and its detail stay the page's ink. Every one of those is
- * the status *colour* at a fixed strength, never the status *container*: the roles' containers differ in strength (an error's is
- * pale, a warning's deep), which made one banner louder than the next.
+ * The banner itself, in the summary banner's design (`SplitStatBanner`): two panels joined by a seam - what it is on the left, with
+ * its bar if it has one, and one figure on the right if it has one - and the way to deal with it in a bar underneath, all in the
+ * status colour: the surface washed with it and edged with a hairline of it, curved lines across, the icon white-on-colour in a solid
+ * disc of it, the eyebrow in it, the pill filled with it, and the main button filled with a tint of it. The title and its detail stay
+ * the page's ink. Every one of those is the status *colour* at a fixed strength, never the status *container*: the roles'
+ * containers differ in strength (an error's is pale, a warning's deep), which made one banner louder than the next.
  *
- * (Until 2026-11-01 only the eyebrow and a pale icon disc were coloured, and the owner found it "not informative"; before that the
- * whole banner was a slab of the status container, out of key with the page.)
+ * (Until 2026-11-07 it was one slab with the icon beside three lines; until 2026-11-01 only the eyebrow and a pale icon disc were
+ * coloured, and the owner found it "not informative".)
+ *
+ * Each line is one line, so the banners of one kind - which have the same parts - are the same size and can share a [BannerStack].
+ * With large text the panels stack instead of sitting side by side.
  *
  * As a [plate] it is the same banner with nothing visible in it - and nothing to press, so a button on a banner behind can never
  * be pressed by mistake - which is the same size by construction, not by measurement.
@@ -168,20 +184,21 @@ private fun BannerFace(banner: Banner, plate: Boolean) {
     val scheme = MaterialTheme.colorScheme
     val text = MaterialTheme.typography
     val colors = remember(role, scheme) { bannerColors(role, scheme) }
-    Surface(
-        Modifier.fillMaxWidth(),
-        color = colors.surface,
-        contentColor = scheme.onSurface,
-        shape = AppRadius.rXl,
-        border = BorderStroke(1.dp, colors.edge),
-    ) {
-        Column(Modifier.padding(start = AppSpacing.lg, top = AppSpacing.lg, end = AppSpacing.lg, bottom = AppSpacing.sm)) {
-            Row(Modifier.graphicsLayer { alpha = if (plate) 0f else 1f }) {
-                Box(Modifier.size(40.dp).background(role.color, CircleShape), contentAlignment = Alignment.Center) {
-                    Icon(banner.icon, contentDescription = null, tint = colors.icon, modifier = Modifier.size(22.dp))
-                }
-                Spacer(Modifier.width(AppSpacing.md))
-                Column(Modifier.weight(1f)) {
+    val ink = scheme.onSurface
+    val quiet = remember(colors) { quietInk(ink, colors.surface) }
+    val edge = remember(colors) { BorderStroke(1.dp, colors.edge) }
+    val figure = banner.figure
+    val shown = if (plate) 0f else 1f
+    val stacked = LocalDensity.current.fontScale > StackAtFontScale
+
+    val info: @Composable (Shape, Modifier, Boolean) -> Unit = { shape, modifier, fillHeight ->
+        Panel(shape, colors.surface, ink, null, modifier, fillHeight, edge, shown) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(28.dp).background(role.color, CircleShape), contentAlignment = Alignment.Center) {
+                        Icon(banner.icon, contentDescription = null, tint = colors.icon, modifier = Modifier.size(16.dp))
+                    }
+                    Spacer(Modifier.width(AppSpacing.sm))
                     Text(
                         banner.eyebrow,
                         style = text.labelLarge.copy(fontWeight = FontWeight.SemiBold),
@@ -189,34 +206,69 @@ private fun BannerFace(banner: Banner, plate: Boolean) {
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(banner.title, style = text.titleMedium, color = scheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(banner.message, style = text.bodyMedium, color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+                Spacer(Modifier.height(AppSpacing.sm))
+                // Beside a figure the panel is narrow, so a title may take two lines - and then always has the room for two, so the
+                // banners of one kind stay the same size.
+                val beside = figure != null && !stacked
+                Text(
+                    banner.title,
+                    style = text.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = ink,
+                    minLines = if (beside) 2 else 1,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(banner.message, style = text.bodyMedium, color = quiet, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Spacer(Modifier.height(AppSpacing.xs))
-            if (plate) {
-                Spacer(Modifier.fillMaxWidth().height(ActionRowHeight))
-            } else {
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = ActionRowHeight),
-                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm, Alignment.End),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    banner.secondary?.let { action ->
-                        TextButton(
-                            onClick = action.onClick,
-                            colors = ButtonDefaults.textButtonColors(contentColor = colors.accent),
-                            modifier = Modifier.weight(1f, fill = false),
-                        ) {
-                            Text(action.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                    FilledTonalButton(
-                        onClick = banner.primary.onClick,
-                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = colors.buttonFill, contentColor = colors.buttonInk),
-                        modifier = Modifier.weight(1f, fill = false),
+            banner.bar?.let { bar ->
+                Spacer(Modifier.height(AppSpacing.md))
+                PillBody(bar, fill = role.color, onFill = colors.icon, ink = ink, quiet = quiet)
+            }
+        }
+    }
+    val figurePanel: @Composable (Shape, Modifier, Boolean) -> Unit = { shape, modifier, fillHeight ->
+        if (figure != null) {
+            Panel(shape, colors.surface, ink, null, modifier, fillHeight, edge, shown) { FigureBody(figure, quiet) }
+        }
+    }
+
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Seam)) {
+        if (figure == null || stacked) {
+            info(TopPanel, Modifier.fillMaxWidth(), false)
+            if (figure != null) figurePanel(MiddlePanel, Modifier.fillMaxWidth(), false)
+        } else {
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Seam)) {
+                info(TopStartPanel, Modifier.weight(ProgressWeight).fillMaxHeight(), true)
+                figurePanel(TopEndPanel, Modifier.weight(FigureWeight).fillMaxHeight(), true)
+            }
+        }
+        Surface(Modifier.fillMaxWidth(), color = colors.surface, contentColor = ink, shape = StackedBottom, border = edge) {
+            Box(Modifier.padding(horizontal = AppSpacing.md, vertical = AppSpacing.xs)) {
+                if (plate) {
+                    Spacer(Modifier.fillMaxWidth().height(ActionRowHeight))
+                } else {
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = ActionRowHeight),
+                        horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm, Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(banner.primary.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        banner.secondary?.let { action ->
+                            TextButton(
+                                onClick = action.onClick,
+                                colors = ButtonDefaults.textButtonColors(contentColor = colors.accent),
+                                modifier = Modifier.weight(1f, fill = false),
+                            ) {
+                                Text(action.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                        // The main button is measured first and takes what it needs; the quieter one has what is left.
+                        FilledTonalButton(
+                            onClick = banner.primary.onClick,
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = colors.buttonFill, contentColor = colors.buttonInk),
+                        ) {
+                            Text(banner.primary.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
             }
@@ -224,3 +276,8 @@ private fun BannerFace(banner: Banner, plate: Boolean) {
     }
 }
 
+// The top row of the group sits on the action bar, so its lower corners are the small ones.
+private val TopPanel = RoundedCornerShape(topStart = Outer, topEnd = Outer, bottomStart = Inner, bottomEnd = Inner)
+private val TopStartPanel = RoundedCornerShape(topStart = Outer, topEnd = Inner, bottomStart = Inner, bottomEnd = Inner)
+private val TopEndPanel = RoundedCornerShape(topStart = Inner, topEnd = Outer, bottomStart = Inner, bottomEnd = Inner)
+private val MiddlePanel = RoundedCornerShape(Inner)

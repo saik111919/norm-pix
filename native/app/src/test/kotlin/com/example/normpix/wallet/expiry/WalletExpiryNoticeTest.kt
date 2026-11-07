@@ -1,10 +1,14 @@
 package com.example.normpix.wallet.expiry
 
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import com.example.normpix.screens.WalletScreen
 import com.example.normpix.settings.CardsLayout
@@ -77,31 +81,58 @@ class WalletExpiryNoticeTest {
         compose.waitForIdle()
     }
 
+    /** The notice is the Home page's banner, so it is one node for a screen reader: the lines as its description, the buttons as custom actions. */
+    private fun notice(text: String) = compose.onNode(hasContentDescription(text, substring = true))
+
+    private fun anywhere(text: String) =
+        compose.onAllNodes(hasText(text, substring = true) or hasContentDescription(text, substring = true)).fetchSemanticsNodes().size
+
+    private fun actionLabels(node: SemanticsNode): List<String> =
+        node.config.getOrNull(SemanticsActions.CustomActions).orEmpty().map { it.label }
+
+    /** How many notices offer "Mark as done" (one for each card that is expiring). */
+    private fun markDoneCount() = compose.onAllNodes(
+        SemanticsMatcher("offers Mark as done") { "Mark as done" in actionLabels(it) },
+    ).fetchSemanticsNodes().size
+
+    private fun press(text: String, label: String) {
+        val action = notice(text).fetchSemanticsNode().config[SemanticsActions.CustomActions].first { it.label == label }
+        compose.runOnUiThread { action.action() }
+        compose.waitForIdle()
+    }
+
     @Test
     fun inTheCarouselACardNotInFrontStillHasItsNoticeListed() {
         // The first card is in front and isn't expiring; the second, beside it, is. Its notice isn't waiting for a swipe.
         show(card("a", "HDFC Bank", "4242", later), card("b", "ICICI Bank", "0001", soon), layout = CardsLayout.Carousel)
-        compose.onNodeWithText("ICICI Bank •••• 0001 · Expires soon").performScrollTo().assertIsDisplayed()
-        assertEquals(1, compose.onAllNodesWithText("Mark as done").fetchSemanticsNodes().size)
+        notice("Expires soon. ICICI Bank •••• 0001").performScrollTo().assertIsDisplayed()
+        assertEquals(1, markDoneCount())
     }
 
     @Test
     fun onlyTheCardInItsWindowShowsANoticeAndItNamesTheCard() {
         show(card("a", "HDFC Bank", "4242", soon), card("b", "ICICI Bank", "0001", later))
-        compose.onNodeWithText("HDFC Bank •••• 4242 · Expires soon").performScrollTo().assertIsDisplayed()
-        assertEquals(1, compose.onAllNodesWithText("Mark as done").fetchSemanticsNodes().size, "the other card has none")
-        assertEquals(0, compose.onAllNodesWithText("ICICI Bank •••• 0001", substring = true).fetchSemanticsNodes().size)
+        notice("Expires soon. HDFC Bank •••• 4242").performScrollTo().assertIsDisplayed()
+        assertEquals(1, markDoneCount(), "the other card has none")
+        assertEquals(0, anywhere("ICICI Bank •••• 0001"))
+    }
+
+    @Test
+    fun theNoticeSaysWhenTheCardExpires() {
+        show(card("a", "HDFC Bank", "4242", soon))
+        val printed = "%02d/%02d".format(soon.monthValue, soon.year % 100)
+        notice("Valid thru $printed, next month").performScrollTo().assertIsDisplayed()
     }
 
     @Test
     fun markAsDoneClearsThatCardsNoticeOnly() {
         show(card("a", "HDFC Bank", "4242", soon), card("b", "ICICI Bank", "0001", soon))
-        assertEquals(2, compose.onAllNodesWithText("Mark as done").fetchSemanticsNodes().size)
+        assertEquals(2, markDoneCount())
 
-        compose.onAllNodesWithText("Mark as done")[0].performScrollTo().performClick()
-        compose.waitForIdle()
+        press("HDFC Bank •••• 4242", "Mark as done")
 
-        assertEquals(1, compose.onAllNodesWithText("Mark as done").fetchSemanticsNodes().size)
+        assertEquals(1, markDoneCount())
+        assertEquals(0, anywhere("HDFC Bank •••• 4242"), "its notice is gone")
         assertEquals(CardExpiryPhase.Completed, env.expiry.states.value["a"]!!.phase)
         assertEquals(CardExpiryPhase.ExpiringSoon, env.expiry.states.value["b"]!!.phase)
     }
@@ -109,29 +140,30 @@ class WalletExpiryNoticeTest {
     @Test
     fun anExpiredCardSaysSo() {
         show(card("a", "HDFC Bank", "4242", YearMonth.now().minusMonths(3)))
-        compose.onNodeWithText("HDFC Bank •••• 4242 · This card has expired").performScrollTo().assertIsDisplayed()
+        notice("This card has expired. HDFC Bank •••• 4242").performScrollTo().assertIsDisplayed()
     }
 
     @Test
     fun withNotificationsOffTheNoticeAdmitsItIsTheOnlyReminder() {
         notifier.enabled = false
         show(card("a", "HDFC Bank", "4242", soon))
-        compose.onNodeWithText("Notifications are off, so this is the only reminder.").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Turn on").assertIsDisplayed()
+        notice("Notifications are off").performScrollTo().assertIsDisplayed()
+        assertEquals(listOf("Turn on", "Mark as done"), actionLabels(notice("HDFC Bank •••• 4242").fetchSemanticsNode()))
     }
 
     @Test
     fun withNotificationsOnItDoesNotNag() {
         notifier.enabled = true
         show(card("a", "HDFC Bank", "4242", soon))
-        assertEquals(0, compose.onAllNodesWithText("Notifications are off", substring = true).fetchSemanticsNodes().size)
-        assertEquals(0, compose.onAllNodesWithText("Turn on").fetchSemanticsNodes().size)
+        assertEquals(0, anywhere("Notifications are off"))
+        assertEquals(listOf("Mark as done"), actionLabels(notice("HDFC Bank •••• 4242").fetchSemanticsNode()))
     }
 
     @Test
     fun theNoticeNeverPrintsTheNumberOrCvv() {
         show(card("a", "HDFC Bank", "4242", soon))
+        assertEquals(0, anywhere("4111"))
+        assertEquals(0, anywhere("737"))
         assertTrue(compose.onAllNodesWithText("4111", substring = true).fetchSemanticsNodes().isEmpty())
-        assertTrue(compose.onAllNodesWithText("737", substring = true).fetchSemanticsNodes().isEmpty())
     }
 }

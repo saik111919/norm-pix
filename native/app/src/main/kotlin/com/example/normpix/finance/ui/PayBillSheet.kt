@@ -53,12 +53,12 @@ import kotlinx.coroutines.launch
  * Pays a credit card's bill, shown as a bottom sheet. Paying a card is a *transfer* from another account onto the card - not
  * an expense - so the money is spent once, when it is charged to the card, and never again when the bill is settled.
  *
- * The amount starts at everything owed and can be changed (or set to half in one tap): a line under it works out what that
+ * The amount starts at the [suggested] bill (what a banner says is due, if that opened it) or else everything owed, and can be changed (or set to half in one tap): a line under it works out what that
  * leaves - a bill still to pay, the card cleared, or, if more than the bill is paid, the part that stays on the card as
  * credit. Calls [onDone] with true once saved, or null when closed without paying.
  */
 @Composable
-fun PayBillSheet(card: Account, onDone: (Boolean?) -> Unit) {
+fun PayBillSheet(card: Account, suggested: Long? = null, onDone: (Boolean?) -> Unit) {
     val controller = LocalFinance.current
     val finance = rememberFinanceState()
     val snackbars = LocalSnackbars.current
@@ -70,7 +70,9 @@ fun PayBillSheet(card: Account, onDone: (Boolean?) -> Unit) {
     val owed = maxOf(0L, -finance.balanceOf(card.id!!))
     val sources = finance.activeAccounts.filter { it.id != card.id }
 
-    var amount by remember { mutableStateOf(if (owed > 0) minorToInputText(owed, decimals) else "") }
+    // The bill a banner opened this for (what is unpaid of the last statement), else everything that is owed.
+    val start = suggested?.takeIf { it in 1..owed } ?: owed
+    var amount by remember { mutableStateOf(if (start > 0) minorToInputText(start, decimals) else "") }
     var sourceId by remember {
         mutableStateOf((finance.defaultAccount?.takeIf { it.id != card.id } ?: sources.firstOrNull())?.id)
     }
