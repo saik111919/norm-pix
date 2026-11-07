@@ -71,6 +71,7 @@ import androidx.compose.material3.TextFieldColors
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -111,6 +112,7 @@ import com.example.normpix.finance.domain.emojiOf
 import com.example.normpix.finance.domain.inTreeOrder
 import com.example.normpix.finance.domain.pathName
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.navigation.LocalAppPreferences
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppRadius
@@ -657,11 +659,30 @@ fun connectedFieldShapes(): Pair<RoundedCornerShape, RoundedCornerShape> {
 
 private const val NO_PERSON = -1L
 
+/** The most of a saved name the "For" field shows; a longer one is cut so that " (me)" is never the part that gets cut. */
+private const val MY_NAME_LIMIT = 24
+
 /**
- * Who an expense was spent on: one dropdown (their avatar and name), with "Me" first - the usual answer, and the one an expense
- * has until it is given someone (2026-11-08, owner: by default it should be me; before, "No one in particular"; nothing stored
- * changed: an expense on nobody is still one with no person) - and "New person" at the end of the menu (when [onCreate] is given).
- * [people] should hold the people that can be picked, plus the one already chosen if they have since been archived.
+ * What the "For" field calls the user (2026-11-08, owner): "Asha (me)" when a name is saved in the app (the welcome tour's
+ * profile step, Settings > Profile), a bare "Me" when there is none. The name says who "me" is and tells the user apart from a
+ * person added with the same first name. The field is one line, and a line is cut at its end, so a long name is shortened
+ * here, before " (me)" is added. Only the label changes: the expense is still on nobody.
+ */
+internal fun myLabel(profileName: String): String {
+    val name = profileName.trim().replace(Regex("\\s+"), " ")
+    if (name.isEmpty()) return "Me"
+    if (name.length <= MY_NAME_LIMIT) return "$name (me)"
+    var cut = MY_NAME_LIMIT - 1
+    if (Character.isHighSurrogate(name[cut - 1])) cut-- // never leave half of an emoji
+    return name.take(cut).trimEnd() + "… (me)"
+}
+
+/**
+ * Who an expense was spent on: one dropdown (their avatar and name), with the user first - the usual answer, and the one an
+ * expense has until it is given someone (2026-11-08, owner: by default it should be me; before, "No one in particular"; nothing
+ * stored changed: an expense on nobody is still one with no person) - labelled by [myLabel] ("Asha (me)", or "Me" with no saved
+ * name) - and "New person" at the end of the menu (when [onCreate] is given). [people] should hold the people that can be picked,
+ * plus the one already chosen if they have since been archived.
  */
 @Composable
 fun PersonSelector(
@@ -671,8 +692,9 @@ fun PersonSelector(
     onCreate: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
+    val me = myLabel(LocalAppPreferences.current?.state?.collectAsState()?.value?.profileName.orEmpty())
     val options = listOf(
-        ChoiceOption(NO_PERSON, "Me", Icons.Outlined.Person, avatar = { size -> PersonAvatar(null, size = size) }),
+        ChoiceOption(NO_PERSON, me, Icons.Outlined.Person, avatar = { size -> PersonAvatar(null, size = size) }),
     ) + people.map { person ->
         ChoiceOption(
             person.id!!,
@@ -687,7 +709,7 @@ fun PersonSelector(
         selected = selected ?: NO_PERSON,
         onSelect = { onSelect(if (it == NO_PERSON) null else it) },
         modifier = modifier,
-        placeholder = "Me",
+        placeholder = me,
         createLabel = "New person",
         onCreate = onCreate,
         emptyIcon = Icons.Outlined.Person,

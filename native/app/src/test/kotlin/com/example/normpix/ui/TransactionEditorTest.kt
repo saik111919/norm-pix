@@ -289,8 +289,30 @@ class TransactionEditorTest {
     fun forStartsOnMe_untilSomeoneElseIsChosen() {
         openEditor()
         // Owner, 2026-11-08: by default it is me ("No one in particular" before; the expense still has no person stored).
+        // (No name is saved in this test, so it is a bare "Me".)
         compose.onNodeWithText("Me").performScrollTo().assertIsDisplayed()
         assertTrue(compose.onAllNodesWithText("No one in particular").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun forShowsTheSavedName_andTheExpenseStillHasNoPerson() {
+        // Owner, 2026-11-08: the name saved in the app, as "Asha (me)" - only the label; the expense is still on nobody.
+        container.preferences.setProfile("Asha", "")
+        openEditor()
+        compose.onNodeWithText("Asha (me)").performScrollTo().assertIsDisplayed()
+        assertTrue(compose.onAllNodesWithText("Me").fetchSemanticsNodes().isEmpty())
+
+        typeAmount("60")
+        compose.onNodeWithText("Category").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Food & dining").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Save expense").performClick()
+        compose.waitUntil(timeoutMillis = 10_000) { compose.onAllNodesWithText("New expense").fetchSemanticsNodes().isEmpty() }
+
+        val stored = runBlocking { container.finance.repository.transactions(TransactionQuery(), limit = 5).items }
+        assertEquals(1, stored.size)
+        assertEquals(null, stored.single().personId)
     }
 
     @Test

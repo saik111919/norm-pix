@@ -214,8 +214,8 @@ jobs:
             echo "signed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # -PsplitAbis: one APK per phone CPU type (smaller: it holds only that type's libraries, the card scanner's above all)
-      # and a universal one with both, which an installed app too old to choose by CPU still downloads.
+      # -PsplitAbis is what makes the universal APK: the libraries of both phone CPU types in one file, the one APK a release
+      # publishes. It also makes one APK per CPU type; those stay in the build folder, unpublished (the release page shows one file).
       - name: Build the release APKs
         env:
           NORMPIX_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
@@ -235,8 +235,6 @@ jobs:
           SIGNED: ${{ steps.key.outputs.signed }}
           # The release key's certificate (README.md, Signing key): the one the installed app carries.
           RELEASE_CERT_SHA256: 96b30aae17b879b4854337043b458c2ce6f22ed67b7966384374e7bbb95a3488
-          # The phone CPU types a release has an APK for: the release build type's list in native/app/build.gradle.kts (releaseAbis).
-          ABIS: arm64-v8a armeabi-v7a
         run: |
           out=app/build/outputs/apk/release
           mkdir -p "$GITHUB_WORKSPACE/dist"
@@ -268,27 +266,9 @@ jobs:
             echo "$file: $package $name ($code), minSdk $min_sdk, native code: ${native:-none}"
           }
 
-          # An APK for each CPU type, holding that type's libraries and no other's.
-          apks='{}'
-          for abi in $ABIS; do
-            built="$GITHUB_WORKSPACE/native/$out/app-$abi-release.apk"
-            if [ ! -f "$built" ]; then
-              echo "::error::No $abi release APK was built"
-              exit 1
-            fi
-            file="${APK%.apk}-$abi.apk"
-            cp "$built" "$file"
-            check "$file"
-            if [ "$native" != "$abi" ]; then
-              echo "::error::$file has native code for '$native', expected only $abi"
-              exit 1
-            fi
-            apks=$(jq -c --arg abi "$abi" --arg apk "$file" --argjson size "$(stat -c %s "$file")" --arg sha "$(cut -d ' ' -f 1 "$file.sha256")" \
-              '. + {($abi): {apk: $apk, size: $size, sha256: $sha}}' <<< "$apks")
-          done
-          echo "$apks" > "$RUNNER_TEMP/apks.json"
-
-          # The universal APK, with every CPU type's libraries: what an installed app that doesn't choose by CPU downloads.
+          # The release's one APK: the universal one, with the libraries of both phone CPU types. (Until 2026-11-08 a release also
+          # carried an APK per CPU type; the owner asked for a release page that shows one file. update.json no longer lists "apks",
+          # and the updater falls back to this APK when it has none, so an installed copy keeps updating.)
           built="$GITHUB_WORKSPACE/native/$out/app-universal-release.apk"
           if [ ! -f "$built" ]; then
             echo "::error::No universal release APK was built"
@@ -369,9 +349,9 @@ jobs:
           jq -n \
             --arg app "$PACKAGE" --argjson code "$CODE" --arg name "$VERSION" --arg tag "$TAG" --arg apk "$APK" \
             --argjson size "$SIZE" --arg sha "$SHA256" --argjson minSdk "$MIN_SDK" --argjson mandatory "$mandatory" \
-            --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --rawfile notes "$notes" --slurpfile apks "$RUNNER_TEMP/apks.json" \
+            --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --rawfile notes "$notes" \
             '{schema: 1, applicationId: $app, versionCode: $code, versionName: $name, tag: $tag, apk: $apk, size: $size,
-              sha256: $sha, apks: $apks[0], minSdk: $minSdk, publishedAt: $at, mandatory: $mandatory, notes: ($notes | rtrimstr("\n"))}' \
+              sha256: $sha, minSdk: $minSdk, publishedAt: $at, mandatory: $mandatory, notes: ($notes | rtrimstr("\n"))}' \
             > "$GITHUB_WORKSPACE/dist/update.json"
           cat "$GITHUB_WORKSPACE/dist/update.json"
 
@@ -431,7 +411,9 @@ jobs:
           # The commit and generated notes only mean something in this repository; elsewhere the tag is made there.
           if [ "$UPDATE_REPOSITORY" = "$GITHUB_REPOSITORY" ]; then here=(--target "$GITHUB_SHA"); fi
           if [ "$KIND" = "release" ]; then
-            gh release create "$TAG" dist/*.apk dist/*.sha256 dist/update.json \
+            # The page shows the APK and update.json (the app's updater reads it): GitHub itself shows each file's SHA-256, so the
+            # .sha256 copies are not published.
+            gh release create "$TAG" dist/*.apk dist/update.json \
               --repo "$UPDATE_REPOSITORY" "${here[@]}" \
               --title "NormPix $VERSION" \
               --notes-file notes/release-notes.md \
@@ -447,7 +429,7 @@ jobs:
 
           $signing"
             if [ "$UPDATE_REPOSITORY" = "$GITHUB_REPOSITORY" ]; then here+=(--generate-notes); fi
-            gh release create "$TAG" dist/*.apk dist/*.sha256 \
+            gh release create "$TAG" dist/*.apk \
               --repo "$UPDATE_REPOSITORY" "${here[@]}" \
               --title "NormPix $VERSION (build $GITHUB_RUN_NUMBER)" \
               --notes "$notes" \

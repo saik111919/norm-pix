@@ -65,7 +65,7 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
   draws it and the default went back to Cards in `ec8a9cb3` - nothing in the log says the owner asked for that; ask before reviving or
   deleting it.** Each of the two has its own **"+ Add"** beside its heading (no dashed add tiles). NFC buttons show only
   while NFC is usable (section 4).
-- **People** (`PeoplePage`, `PersonDetailPage`): label expenses with who they were for; totals per person. The **For** field starts on **Me** (2026-11-08, owner: by default it should be me; it was "No one in particular"): an expense on nobody has no person stored, so nothing in the data changed, and the People page's other total reads "On me". **Categories**
+- **People** (`PeoplePage`, `PersonDetailPage`): label expenses with who they were for; totals per person. The **For** field starts on the user (2026-11-08, owner: by default it should be me; it was "No one in particular"): labelled **"Asha (me)"** when a name is saved in the app (`myLabel` in `FormSelectors.kt`: the profile name from the welcome tour / Settings > Profile, tidied and cut at 24 characters *before* " (me)" is added, so the end of a long name is what goes) and a bare **Me** without one; the system's own name is not used (Android gives apps none without a permission NormPix does not ask for). An expense on nobody has no person stored, so nothing in the data changed, and the People page's other total still reads "On me". The filter sheet lists real people only, so it has no such row. **Categories**
   (`CategoriesContent`, the Categories tab of Settings > Banks & Categories; `Routes.CATEGORIES` opens that page on it): two levels, ready-made set, 3D / emoji / outline icons with brand logos, archive, reorder. With the 3D style the main Settings list's groups wear 3D pictures too (`SettingsPage.emoji`, `SettingsRowEmoji`, drawn by `SettingsGlyph` on the group's tinted tile at 30 dp) unless **3D icons in Settings** (Appearance > Icons, pref `settings_icons_3d`, default on, disabled without the 3D style) is off; `LocalSettingsIcons3d` is provided by `ProvideAppEnvironment`, flat outside it; search results stay flat.
 - **Search** (`navigation/AppSearch.kt`): transactions, accounts (also by their bank's name), categories, people, settings.
 - **Settings** (`settings/ui/`): Appearance, Finance, Data & backup, Wallet & Cards, Notifications, Availability &
@@ -289,8 +289,10 @@ transaction and read again to fill the form.
 
 ## 7. Updates
 
-- Source: GitHub releases of `saik111919/norm-pix` (public, no token). `update.json` published by CI lists version, APK(s),
-  sizes, SHA-256, min SDK, notes, `mandatory`. A release is accepted only if tag, version, attached asset size and checksum all
+- Source: GitHub releases of `saik111919/norm-pix` (public, no token). `update.json` published by CI lists version, the APK,
+  size, SHA-256, min SDK, notes, `mandatory`. **A release is one APK + `update.json`** (2026-11-08, owner: "only show release apk in GitHub
+  release"): the universal APK, no per-CPU APKs and no `.sha256` files - GitHub shows each file's SHA-256 itself. `update.json` must stay (every
+  installed copy reads it) and has no `apks` now; `ReleaseMetadata` still reads `apks` from older releases and takes the universal APK without it. A release is accepted only if tag, version, attached asset size and checksum all
   agree (`ReleaseMetadata`). Prereleases/drafts are never offered.
 - Behaviour: check once a day in the background (JobScheduler `UpdateJobService`, not on low battery, Wi-Fi unless "Download
   on mobile data") and at launch, or on demand. What happens to an update found in the background: **Tell me** | **Download it,
@@ -463,7 +465,11 @@ the exit is 19 distinct frames over ~440 ms, 22 ms apart, one 66 ms gap. The qa 
 ## 9. About guide (`about/`)
 
 Settings > About NormPix opens a page (not a dialog): name, version, a **Feature guide** pill (`PagePill`, the same as the update page's
-Changelog; since 2026-11-01 - it was a heading, "How NormPix works", over a grid of every topic on About itself), your data, credits. The
+Changelog; since 2026-11-01 - it was a heading, "How NormPix works", over a grid of every topic on About itself), your data, crash log,
+welcome tour, version, **On GitHub** (2026-11-08, owner: "so it is easy to go there to check things": one row, "NormPix on GitHub", that
+opens `https://github.com/<BuildConfig.UPDATE_REPOSITORY>` in the browser with `ACTION_VIEW` (`url.toUri()`, the KTX form lint asks for) inside `runCatching`, the address written on
+the row; the same constant the updater reads, pinned by `AboutPageTest`; Android opens the page, NormPix connects to nothing new; found by
+searching "github", "source code", "repository" or "releases"), credits. The
 pill opens `GuideIndexPage` (route `guide`, `SettingsDetail.GuideIndex` in the tablet panes, `openGuideIndex()`): a card per topic (`GuideTopic`:
 AddTransaction, ShareReceipt, Home, Activity, Plans, Insights, Wallet, CardExchange, Widgets, LookAndFeel, Backup, Privacy), each opening its
 page; a topic's Back goes to the guide, the guide's to About. Topics are data (checked by `GuideTopicTest`). Pictures (`GuideArt`) are **real
