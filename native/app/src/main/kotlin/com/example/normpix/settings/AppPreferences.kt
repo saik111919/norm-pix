@@ -7,6 +7,7 @@ import com.materialkolor.PaletteStyle
 import com.example.normpix.availability.AvailabilityRule
 import com.example.normpix.availability.ScheduledFeature
 import com.example.normpix.availability.WeeklySchedule
+import com.example.normpix.backup.BackupFreshness
 import java.time.DayOfWeek
 import java.time.LocalTime
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -136,6 +137,16 @@ enum class BackButtonStyle(val label: String, val description: String) {
 enum class ProgressStyle(val label: String, val description: String) {
     Wavy("Wavy", "Bars that fill with a moving wave, and a loader that morphs between shapes"),
     Flat("Flat", "Straight bars, and a round spinner for waits"),
+}
+
+/**
+ * Which drawings the interface icons are (Settings > Appearance > Icons): [Material], the icons the app has always had, or
+ * [Lucide], the same icons drawn as Lucide's thin, even strokes (`ui/components/LucideIcons.kt`). Material is the default and the
+ * choice is the user's: both stay, and neither changes a category's or a bank's own picture.
+ */
+enum class IconStyle(val label: String, val description: String) {
+    Material("Material", "The rounded Material icons the app has always used"),
+    Lucide("Lucide", "Thin, even strokes with round ends, the same icons drawn lighter"),
 }
 
 /**
@@ -374,6 +385,11 @@ data class AppPrefsState(
     val walletCardsEnabled: Boolean = true,
     /** Blurs the background behind bottom sheets on supported devices. */
     val sheetBlurEnabled: Boolean = true,
+    /**
+     * Add and edit screens take their colours from the picture or card they show (Komikku's cover-based colours: one seed from the
+     * artwork, a generated scheme for that sheet only). Off, every sheet wears the app's own colours, exactly as before.
+     */
+    val artworkColors: Boolean = true,
     /** Blurs and fades the page under the floating dock and back row (the footer), where background blur is available. */
     val footerBlurEnabled: Boolean = true,
     /**
@@ -401,6 +417,8 @@ data class AppPrefsState(
     val showFooterLabels: Boolean = true,
     /** How progress bars and loaders look, wherever the app shows progress. */
     val progressStyle: ProgressStyle = ProgressStyle.Wavy,
+    /** Which drawings the interface icons are, wherever the app shows one (see [IconStyle]). */
+    val iconStyle: IconStyle = IconStyle.Material,
     /** Settings > Appearance > Layouts: Home's biggest categories as a stack or a carousel. */
     val topSpendingLayout: TopSpendingLayout = TopSpendingLayout.Stack,
     /** How Insights lists its categories; the ranked list unless chosen otherwise. */
@@ -410,6 +428,20 @@ data class AppPrefsState(
      * once on a new install), so nothing is ever shown to someone who already has NormPix.
      */
     val onboardingDone: Boolean = true,
+    /**
+     * When the last real backup was saved (epoch millis; 0 for never) - the small file, the full zip or the app backup, not the
+     * CSV and not a backup of the sample set. Only the time is kept. About this phone, so a backup file never carries it and
+     * resetting settings keeps it.
+     */
+    val lastBackupAt: Long = 0L,
+    /** Settings > Data & backup > Backup reminder: days without a backup before Home says so (0 is off). See `BackupFreshness`. */
+    val backupReminderDays: Int = BackupFreshness.DEFAULT_REMINDER_DAYS,
+    /** Until when "Later" on the backup banner has put it off (epoch millis; 0 for not at all). About this phone, like [lastBackupAt]. */
+    val backupNudgeSnoozedUntil: Long = 0L,
+    /** The newest crash report the user has seen or dismissed (epoch millis; 0 for none): a newer one is offered on Home. About this phone. */
+    val crashLogSeenAt: Long = 0L,
+    /** How far the system's record of how the app's processes ended has been read (epoch millis), so an ANR is reported once. About this phone. */
+    val crashExitsCheckedAt: Long = 0L,
     /** How the month a page shows is switched: one tonal track, or the earlier separate buttons. */
     val monthControlStyle: MonthControlStyle = MonthControlStyle.Track,
     /** The window each [ScheduledFeature] may be used in; a feature missing here has its default rule ([ScheduledFeature.defaultRule]). */
@@ -544,6 +576,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
             cardCvvEnabled = prefs.getBoolean(K_CARD_CVV, defaults.cardCvvEnabled),
             walletCardsEnabled = prefs.getBoolean(K_WALLET_CARDS, defaults.walletCardsEnabled),
             sheetBlurEnabled = prefs.getBoolean(K_SHEET_BLUR, defaults.sheetBlurEnabled),
+            artworkColors = prefs.getBoolean(K_ARTWORK_COLORS, defaults.artworkColors),
             footerBlurEnabled = prefs.getBoolean(K_FOOTER_BLUR, defaults.footerBlurEnabled),
             actionMenuLayout = prefs.getString(K_ACTION_MENU_LAYOUT, null) ?: defaults.actionMenuLayout,
             railCollapsed = prefs.getBoolean(K_RAIL_COLLAPSED, defaults.railCollapsed),
@@ -551,9 +584,15 @@ class AppPreferences(private val prefs: SharedPreferences) {
             bottomControls = prefs.getBoolean(K_BOTTOM_CONTROLS, defaults.bottomControls),
             showFooterLabels = prefs.getBoolean(K_FOOTER_LABELS, defaults.showFooterLabels),
             progressStyle = prefs.enum(K_PROGRESS_STYLE, defaults.progressStyle),
+            iconStyle = prefs.enum(K_ICON_STYLE, defaults.iconStyle),
             topSpendingLayout = prefs.enum(K_TOP_SPENDING_LAYOUT, defaults.topSpendingLayout),
             insightsCategoriesLayout = prefs.enum(K_INSIGHTS_CATEGORIES_LAYOUT, defaults.insightsCategoriesLayout),
             onboardingDone = prefs.getBoolean(K_ONBOARDING_DONE, defaults.onboardingDone),
+            lastBackupAt = prefs.getLong(K_LAST_BACKUP_AT, defaults.lastBackupAt).coerceAtLeast(0L),
+            backupReminderDays = BackupFreshness.normalise(prefs.getInt(K_BACKUP_REMINDER_DAYS, defaults.backupReminderDays)),
+            backupNudgeSnoozedUntil = prefs.getLong(K_BACKUP_NUDGE_SNOOZED_UNTIL, defaults.backupNudgeSnoozedUntil).coerceAtLeast(0L),
+            crashLogSeenAt = prefs.getLong(K_CRASH_LOG_SEEN_AT, defaults.crashLogSeenAt).coerceAtLeast(0L),
+            crashExitsCheckedAt = prefs.getLong(K_CRASH_EXITS_CHECKED_AT, defaults.crashExitsCheckedAt).coerceAtLeast(0L),
             monthControlStyle = prefs.enum(K_MONTH_CONTROL, defaults.monthControlStyle),
             categoryIconStyle = prefs.enum(K_CATEGORY_ICON_STYLE, defaults.categoryIconStyle),
             settingsIcons3d = prefs.getBoolean(K_SETTINGS_ICONS_3D, defaults.settingsIcons3d),
@@ -686,6 +725,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
     fun setSheetBlurEnabled(enabled: Boolean) =
         change({ copy(sheetBlurEnabled = enabled) }) { putBoolean(K_SHEET_BLUR, enabled) }
 
+    fun setArtworkColors(enabled: Boolean) =
+        change({ copy(artworkColors = enabled) }) { putBoolean(K_ARTWORK_COLORS, enabled) }
+
     fun setFooterBlurEnabled(enabled: Boolean) =
         change({ copy(footerBlurEnabled = enabled) }) { putBoolean(K_FOOTER_BLUR, enabled) }
 
@@ -708,6 +750,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
     fun setProgressStyle(style: ProgressStyle) =
         change({ copy(progressStyle = style) }) { putString(K_PROGRESS_STYLE, style.name) }
 
+    fun setIconStyle(style: IconStyle) =
+        change({ copy(iconStyle = style) }) { putString(K_ICON_STYLE, style.name) }
+
     fun setTopSpendingLayout(layout: TopSpendingLayout) =
         change({ copy(topSpendingLayout = layout) }) { putString(K_TOP_SPENDING_LAYOUT, layout.name) }
 
@@ -722,6 +767,39 @@ class AppPreferences(private val prefs: SharedPreferences) {
 
     /** The welcome tour has been seen (finished or left): it does not come again by itself. */
     fun finishOnboarding() = change({ copy(onboardingDone = true) }) { putBoolean(K_ONBOARDING_DONE, true) }
+
+    /** A real backup was just saved at [atMillis]: the nudge starts counting again, and a "Later" is forgotten. */
+    fun recordBackup(atMillis: Long) = change({ copy(lastBackupAt = atMillis, backupNudgeSnoozedUntil = 0L) }) {
+        putLong(K_LAST_BACKUP_AT, atMillis)
+        remove(K_BACKUP_NUDGE_SNOOZED_UNTIL)
+    }
+
+    /**
+     * A restorable backup was just saved: [recordBackup], unless the sample set is on - a backup of that is not a backup of the
+     * user's own data, and must not stop Home asking for one.
+     */
+    fun recordBackupSaved(atMillis: Long) {
+        if (!_state.value.dummyDataEnabled) recordBackup(atMillis)
+    }
+
+    /** Settings > Data & backup > Backup reminder: 0 (off) or one of [BackupFreshness.REMINDER_CHOICES]. */
+    fun setBackupReminderDays(days: Int) = BackupFreshness.normalise(days).let { chosen ->
+        change({ copy(backupReminderDays = chosen) }) { putInt(K_BACKUP_REMINDER_DAYS, chosen) }
+    }
+
+    /** The crash reports up to [atMillis] have been seen (or dismissed): only a newer one is offered again. Never moves back. */
+    fun markCrashLogSeen(atMillis: Long) {
+        if (atMillis <= _state.value.crashLogSeenAt) return
+        change({ copy(crashLogSeenAt = atMillis) }) { putLong(K_CRASH_LOG_SEEN_AT, atMillis) }
+    }
+
+    /** The system's record of how the app's processes ended has been read up to [atMillis]. */
+    fun setCrashExitsCheckedAt(atMillis: Long) =
+        change({ copy(crashExitsCheckedAt = atMillis) }) { putLong(K_CRASH_EXITS_CHECKED_AT, atMillis) }
+
+    /** "Later" on the backup banner: say nothing about backups until [untilMillis]. */
+    fun snoozeBackupNudge(untilMillis: Long) =
+        change({ copy(backupNudgeSnoozedUntil = untilMillis) }) { putLong(K_BACKUP_NUDGE_SNOOZED_UNTIL, untilMillis) }
 
     fun setMonthControlStyle(style: MonthControlStyle) =
         change({ copy(monthControlStyle = style) }) { putString(K_MONTH_CONTROL, style.name) }
@@ -876,9 +954,22 @@ class AppPreferences(private val prefs: SharedPreferences) {
      */
     fun resetToDefaults() {
         // The welcome tour is not a setting either: resetting settings must not bring it back, or take it away mid-way.
-        val keep = setOf(K_EXACT_ALARM_PROMPTED, K_PROFILE_NAME, K_PROFILE_EMOJI, K_PROFILE_PHOTO, K_ONBOARDING_DONE)
+        // Nor is when the last backup was made: forgetting it would say "never backed up" about data that was.
+        val keep = setOf(
+            K_EXACT_ALARM_PROMPTED, K_PROFILE_NAME, K_PROFILE_EMOJI, K_PROFILE_PHOTO, K_ONBOARDING_DONE,
+            K_LAST_BACKUP_AT, K_BACKUP_NUDGE_SNOOZED_UNTIL, K_CRASH_LOG_SEEN_AT, K_CRASH_EXITS_CHECKED_AT,
+        )
         _state.update {
-            AppPrefsState(profileName = it.profileName, profileEmoji = it.profileEmoji, profilePhoto = it.profilePhoto, onboardingDone = it.onboardingDone)
+            AppPrefsState(
+                profileName = it.profileName,
+                profileEmoji = it.profileEmoji,
+                profilePhoto = it.profilePhoto,
+                onboardingDone = it.onboardingDone,
+                lastBackupAt = it.lastBackupAt,
+                backupNudgeSnoozedUntil = it.backupNudgeSnoozedUntil,
+                crashLogSeenAt = it.crashLogSeenAt,
+                crashExitsCheckedAt = it.crashExitsCheckedAt,
+            )
         }
         prefs.edit {
             // Everything except the one-time system-prompt marker and the profile.
@@ -977,6 +1068,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_CARD_CVV = "card_cvv_enabled"
         const val K_WALLET_CARDS = "wallet_cards_enabled"
         const val K_SHEET_BLUR = "sheet_blur_enabled"
+        const val K_ARTWORK_COLORS = "artwork_colors"
         const val K_FOOTER_BLUR = "footer_blur_enabled"
         const val K_ACTION_MENU_LAYOUT = "action_menu_layout"
         const val K_RAIL_COLLAPSED = "rail_collapsed"
@@ -984,9 +1076,15 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_BOTTOM_CONTROLS = "bottom_controls"
         const val K_FOOTER_LABELS = "show_footer_labels"
         const val K_PROGRESS_STYLE = "progress_style"
+        const val K_ICON_STYLE = "icon_style"
         const val K_TOP_SPENDING_LAYOUT = "top_spending_layout"
         const val K_INSIGHTS_CATEGORIES_LAYOUT = "insights_categories_layout"
         const val K_ONBOARDING_DONE = "onboarding_done"
+        const val K_LAST_BACKUP_AT = "last_backup_at"
+        const val K_BACKUP_REMINDER_DAYS = "backup_reminder_days"
+        const val K_BACKUP_NUDGE_SNOOZED_UNTIL = "backup_nudge_snoozed_until"
+        const val K_CRASH_LOG_SEEN_AT = "crash_log_seen_at"
+        const val K_CRASH_EXITS_CHECKED_AT = "crash_exits_checked_at"
         const val K_MONTH_CONTROL = "month_control_style"
         const val K_CATEGORY_ICON_STYLE = "category_icon_style"
         const val K_SETTINGS_ICONS_3D = "settings_icons_3d"
@@ -1038,6 +1136,13 @@ class AppPreferences(private val prefs: SharedPreferences) {
             K_EXACT_ALARM_PROMPTED,
             // Whether this phone has had its welcome is about this phone, not about the data a backup carries.
             K_ONBOARDING_DONE,
+            // When a backup was last made from this phone, and a "Later" on its banner, are about this phone: a file made by
+            // another phone, or an old one, must not make this one think it was backed up (or hush it).
+            K_LAST_BACKUP_AT,
+            K_BACKUP_NUDGE_SNOOZED_UNTIL,
+            // Which crash reports this phone has shown, and how far it has read the system's record: about this phone too.
+            K_CRASH_LOG_SEEN_AT,
+            K_CRASH_EXITS_CHECKED_AT,
             K_DUMMY_DATA,
             K_WALLET_LOCK,
             K_LOCK_SCOPE,

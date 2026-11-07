@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -41,12 +43,14 @@ import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Remove
-import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -65,6 +69,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -82,10 +87,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.normpix.ui.components.FloatingActionBar
+import com.example.normpix.ui.components.FloatingActionBarDefaults
 import com.example.normpix.ui.components.InnerCorner
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.SheetHeader
 import com.example.normpix.ui.components.SplitGap
+import com.example.normpix.ui.components.fadingBottomEdge
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppRadius
@@ -189,13 +197,14 @@ fun DateSheet(initial: LocalDate, latest: LocalDate?, onPick: (LocalDate?) -> Un
         Column(
             Modifier
                 .weight(1f, fill = false)
+                .fadingBottomEdge()
                 .verticalScroll(rememberScrollState())
-                .padding(start = AppSpacing.xxl, end = AppSpacing.xxl),
+                .padding(start = AppSpacing.xxl, end = AppSpacing.xxl, bottom = FloatingActionBarDefaults.FadeHeight),
         ) {
             SheetHeader(title = "Choose a date", subtitle = "Currently ${dayLabel(initial)}")
             Spacer(Modifier.height(AppSpacing.lg))
 
-            QuickTileRow {
+            QuickTileRow(wrap = true) {
                 for (pick in picks) {
                     QuickTile(
                         label = pick.label,
@@ -289,8 +298,9 @@ fun TimeSheet(initial: LocalTime, is24Hour: Boolean, onPick: (LocalTime?) -> Uni
         Column(
             Modifier
                 .weight(1f, fill = false)
+                .fadingBottomEdge()
                 .verticalScroll(rememberScrollState())
-                .padding(start = AppSpacing.xxl, end = AppSpacing.xxl),
+                .padding(start = AppSpacing.xxl, end = AppSpacing.xxl, bottom = FloatingActionBarDefaults.FadeHeight),
         ) {
             SheetHeader(title = "Choose a time", subtitle = "Currently ${timeText(initial, is24Hour)}")
             Spacer(Modifier.height(AppSpacing.lg))
@@ -340,7 +350,7 @@ fun TimeSheet(initial: LocalTime, is24Hour: Boolean, onPick: (LocalTime?) -> Uni
             }
             Spacer(Modifier.height(AppSpacing.md))
 
-            QuickTileRow {
+            QuickTileRow(wrap = true) {
                 for (pick in picks) {
                     val spoken = "${pick.label}, ${timeText(pick.time, is24Hour)}"
                     QuickTile(
@@ -801,14 +811,26 @@ internal fun dayLabel(day: LocalDate): String = shortDate(day.atStartOfDay())
 // Pieces the sheets share
 // ---------------------------------------------------------------------------------------------------------------------
 
-/** A run of [QuickTile]s, side by side, scrolling sideways when they do not all fit; one is chosen at a time. */
+/**
+ * A run of [QuickTile]s, side by side; one is chosen at a time. With [wrap] they go on to a second line when they do not all fit
+ * (the day and time sheets: a tile cut off at the edge looked like a mistake, 2026-11-07); otherwise the row scrolls sideways
+ * (the range sheet, which has more of them).
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun QuickTileRow(content: @Composable RowScope.() -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
-        content = content,
-    )
+internal fun QuickTileRow(wrap: Boolean = false, content: @Composable () -> Unit) {
+    if (wrap) {
+        FlowRow(
+            Modifier.fillMaxWidth().selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+        ) { content() }
+    } else {
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+        ) { content() }
+    }
 }
 
 /** A ready-made choice as a tile, as the month sheet's: the one chosen filled and morphed to a full pill. [spoken] is what a screen reader says. */
@@ -842,13 +864,11 @@ internal fun QuickTile(label: String, spoken: String, selected: Boolean, onPick:
     }
 }
 
-/** The sheet's one action, full width at thumb height, under the part of the sheet that scrolls. */
+/** The sheet's one action: the floating pill Save is in every form, under the part of the sheet that scrolls (which fades out above it). */
 @Composable
 private fun SheetButton(label: String, onClick: () -> Unit) {
-    Box(Modifier.fillMaxWidth().padding(start = AppSpacing.xxl, top = AppSpacing.lg, end = AppSpacing.xxl, bottom = AppSpacing.xl)) {
-        Button(onClick = onClick, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-            Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        }
+    Box(Modifier.fillMaxWidth().padding(start = AppSpacing.xxl, top = AppSpacing.xs, end = AppSpacing.xxl, bottom = AppSpacing.md)) {
+        FloatingActionBar(primaryLabel = label, onPrimary = onClick)
     }
 }
 
@@ -902,54 +922,37 @@ internal fun RowScope.PickerSegment(
     }
 }
 
-/** One field of a [PickerFieldRow]: [label] ("Date"), its [value] ("12 Oct"), and what a tap does. */
+/**
+ * One field of a [PickerFieldRow]: [label] ("Date"), its [value] ("12 Oct"), the [icon] on its badge (a calendar unless it is
+ * given another, a clock for a time), and what a tap does.
+ */
 @Immutable
-class PickerField(val label: String, val value: String, val onOpen: () -> Unit)
+class PickerField(val label: String, val value: String, val icon: ImageVector? = null, val onOpen: () -> Unit)
 
 /**
- * The date and time fields of a form as the Insights date range is: a connected pair at 56dp (or a single field, when
- * there is no [second]), fully round at the outer ends, the corners where the two meet opening up under a finger. Each
- * field reads "Date, 12 Oct" to a screen reader and opens its sheet when tapped.
+ * The date and time fields of a form, in the look of the fields around them (2026-11-07, owner: the date and time did not match):
+ * the same tonal field as Category or Paid from - a badge with the icon, the label over the value, the dropdown arrow - as a
+ * connected pair that reads as one split pill (or a single field, when there is no [second]). Each field reads "Date, 12 Oct"
+ * to a screen reader and opens its sheet when tapped.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PickerFieldRow(first: PickerField, modifier: Modifier = Modifier, second: PickerField? = null) {
     val haptics = rememberAppHaptics()
-    val outer = CornerSize(50)
-    val firstPress = remember { MutableInteractionSource() }
-    val secondPress = remember { MutableInteractionSource() }
-    val firstInner = CornerSize(pressedCorner(firstPress))
-    val secondInner = CornerSize(pressedCorner(secondPress))
-    Row(modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(SplitGap)) {
-        if (second == null) {
-            PickerSegment(
-                label = first.label,
-                value = first.value,
-                shape = RoundedCornerShape(outer),
-                onSelect = {
+    val (left, right) = remember { connectedFieldShapes() }
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(SplitGap)) {
+        for ((field, shape) in listOfNotNull(first to (if (second == null) TonalFieldShape else left), second?.let { it to right })) {
+            TonalPickerField(
+                label = field.label,
+                value = field.value,
+                icon = field.icon ?: Icons.Outlined.CalendarMonth,
+                onClick = {
                     haptics.selection()
-                    first.onOpen()
+                    field.onOpen()
                 },
-            )
-        } else {
-            PickerSegment(
-                label = first.label,
-                value = first.value,
-                shape = RoundedCornerShape(topStart = outer, bottomStart = outer, topEnd = firstInner, bottomEnd = firstInner),
-                onSelect = {
-                    haptics.selection()
-                    first.onOpen()
-                },
-                interactionSource = firstPress,
-            )
-            PickerSegment(
-                label = second.label,
-                value = second.value,
-                shape = RoundedCornerShape(topStart = secondInner, bottomStart = secondInner, topEnd = outer, bottomEnd = outer),
-                onSelect = {
-                    haptics.selection()
-                    second.onOpen()
-                },
-                interactionSource = secondPress,
+                modifier = Modifier.weight(1f),
+                shape = shape,
+                trailing = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = false) },
             )
         }
     }

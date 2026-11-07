@@ -30,7 +30,7 @@ import androidx.compose.material.icons.outlined.ViewWeek
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedIconButton
@@ -84,6 +84,7 @@ import com.example.normpix.ui.components.EditorSheet
 import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
+import com.example.normpix.ui.components.ProvideArtworkSeed
 import com.example.normpix.ui.components.RevealVisibility
 import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.rememberAppHaptics
@@ -307,6 +308,8 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
 
     val accounts = finance.accounts.filter { !it.archived || it.id == accountId || it.id == toAccountId }
     val categories = finance.categories.filter { it.type == CategoryType.forTransaction(type) && (!it.archived || it.id == categoryId) }
+    // The sheet wears the colour of the category chosen; with none (or a transfer), of the account's card; else the app's own.
+    ProvideArtworkSeed(artworkSeedOf(finance.category(categoryId), null, accountArtworkSeed(accountId)))
     val now = LocalDateTime.now()
     val preview = draft()
     val upcoming = if (active) upcomingOccurrences(preview, 3) else emptyList()
@@ -323,20 +326,22 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
         onSave = ::save,
         saving = saving,
         saveColors = ButtonDefaults.buttonColors(containerColor = role.color, contentColor = role.onColor),
-        titleTrailing = if (isEditing) {
-            {
-                Row {
-                    // A reminder about this payment: attached to it, due when it next is, repeating the way it does.
-                    if (onRemind != null) {
-                        IconButton(onClick = { onRemind(existing) }) {
-                            Icon(Icons.Outlined.NotificationAdd, contentDescription = "Remind me about this payment")
-                        }
-                    }
-                    IconButton(onClick = ::delete) { Icon(Icons.Outlined.DeleteOutline, contentDescription = "Delete") }
+        actions = {
+            if (isEditing) {
+                // A reminder about this payment: attached to it, due when it next is, repeating the way it does.
+                if (onRemind != null) {
+                    com.example.normpix.ui.components.FloatingActionIconButton(
+                        icon = Icons.Outlined.NotificationAdd,
+                        contentDescription = "Remind me about this payment",
+                        onClick = { onRemind(existing) },
+                    )
                 }
+                com.example.normpix.ui.components.FloatingActionIconButton(
+                    icon = Icons.Outlined.DeleteOutline,
+                    contentDescription = "Delete",
+                    onClick = ::delete,
+                )
             }
-        } else {
-            null
         },
     ) {
         TransactionTypeSelector(type = type, onSelect = ::setType)

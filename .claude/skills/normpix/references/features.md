@@ -15,7 +15,10 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
   heat when the budget is nearly used or, with no budget, spending is 25%+ up on last month, rain over budget; Settings > Appearance >
   Effects > Hero weather, default on; see design-system "Live motion"), **Needs
   attention** banners (overdue, update available, ...; the page's own tonal surface, status said by icon and eyebrow colour,
-  never colour alone), quick add (expense / income / transfer), coming up, **Top spending** (stack or carousel by
+  never colour alone), quick add (expense / income / transfer), **Bill due / Bills due** (2026-11-07, owner's reference picture; **what is due is the unpaid part of the card's last statement** - `cardBill`, `CardStatement.kt`: owed at the end of the statement day less what was put onto the card since, never more than owed now; a card with no statement day keeps "Owed so far"; past the due date the bill is **Overdue** in the error colour - and nothing once it is paid; the pay sheet opens on that amount; one two-panel
+  `SplitStatBanner` for every active credit card that owes something and has a due day, soonest first - "Due date" with how far away it is, a pill
+  that fills from the last statement to the due date, "Total due" with the card's name; tapping opens `PayBillSheet`; `screens/HomeBills.kt`,
+  `billCycle` in `BillingCycle.kt`; the **Wallet** shows the same banners above its accounts; a card with nothing owed or no due day has none), coming up, **Top spending** (stack or carousel by
   `TopSpendingLayout`), cards on Home, **Recent** (the latest *as of today*; "See all" opens the whole history, All time),
   budgets tile. The account pill / profile button at the top opens Settings (or Profile, by choice). **The month's number collapses into the
   header as the page is scrolled** (2026-11-05, owner: "see how the number became small and then the same way it becomes big", after Google
@@ -62,7 +65,7 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
   draws it and the default went back to Cards in `ec8a9cb3` - nothing in the log says the owner asked for that; ask before reviving or
   deleting it.** Each of the two has its own **"+ Add"** beside its heading (no dashed add tiles). NFC buttons show only
   while NFC is usable (section 4).
-- **People** (`PeoplePage`, `PersonDetailPage`): label expenses with who they were for; totals per person. **Categories**
+- **People** (`PeoplePage`, `PersonDetailPage`): label expenses with who they were for; totals per person. The **For** field starts on **Me** (2026-11-08, owner: by default it should be me; it was "No one in particular"): an expense on nobody has no person stored, so nothing in the data changed, and the People page's other total reads "On me". **Categories**
   (`CategoriesContent`, the Categories tab of Settings > Banks & Categories; `Routes.CATEGORIES` opens that page on it): two levels, ready-made set, 3D / emoji / outline icons with brand logos, archive, reorder. With the 3D style the main Settings list's groups wear 3D pictures too (`SettingsPage.emoji`, `SettingsRowEmoji`, drawn by `SettingsGlyph` on the group's tinted tile at 30 dp) unless **3D icons in Settings** (Appearance > Icons, pref `settings_icons_3d`, default on, disabled without the 3D style) is off; `LocalSettingsIcons3d` is provided by `ProvideAppEnvironment`, flat outside it; search results stay flat.
 - **Search** (`navigation/AppSearch.kt`): transactions, accounts (also by their bank's name), categories, people, settings.
 - **Settings** (`settings/ui/`): Appearance, Finance, Data & backup, Wallet & Cards, Notifications, Availability &
@@ -246,7 +249,9 @@ transaction and read again to fill the form.
 - **Card expiry** (`wallet/expiry/`): alerts start on the 1st of the month before the expiry month, daily at 9:00 until the card
   is marked done; per-card state Normal / Expiring soon / Reminder active / Completed in its own store (bank, last four,
   expiry, done); renewal starts a fresh cycle; re-armed after reboot, update, clock or time-zone change; falls back to an
-  in-app notice when notifications are off.
+  in-app notice when notifications are off. The notice is **one banner design everywhere** (2026-11-07, owner: the Wallet's own plain
+  box "did not match"): `cardExpiryBanner` in `CardExpiryNotice.kt` builds it, Home's Needs attention stacks it, and
+  `CardExpiryNotice` shows it as a stack of one above the card it is about on the Wallet page (press = open the card).
 - Not built: a **re-alert until handled** for a reminder that does not repeat (one notification that stays in the shade is all it
   gets), and anything checked on a real phone - see the Phase 50 entry in `native/TASKS.md` for what was and was not tried.
 
@@ -278,6 +283,9 @@ transaction and read again to fill the form.
 - Loading sheets (`overlays.loading`) wrap anything slow or that changes data (reading a picture, reading/restoring a backup,
   check and recalculate); `cancellable = false` work runs to its end once begun.
 - "Reset all settings" and deletes go through confirm sheets (destructive in error colours); deletes of transactions offer Undo.
+
+- **Backup reminder** (2026-11-07, `backup/BackupFreshness.kt`): only the *time* of the last restorable backup is kept (`last_backup_at`: the small file, the full zip or the app backup saved from the real data - not the CSV, not the sample set); Home's Needs attention says "Back up your data" when it is older than the reminder (Settings > Data & backup > Backup reminder: every week / 2 weeks / month, default 2 weeks, or off) or there was never one 3 days after install, only when there is something to keep, "Later" puts it off 3 days. `last_backup_at` and the snooze are in `BACKUP_EXCLUDED` and survive Reset settings. Automatic backups to a folder are **not built**: a locked backup's password is stored nowhere (see above), so unattended locking would need a deliberate opt-in change to that rule - the owner's call.
+- **Crash log** (2026-11-07, `diagnostics/`; owner asked 2026-10-31): a default uncaught-exception handler (installed first in `NormPixApplication`) keeps a report - app and Android version, device model, thread, exception class and stack, **messages scrubbed** (4+ digit numbers, `name@bank` handles, anything in quotes taken out) - as one file each in `files/crash-log/`, the newest 20, 12,000 characters at most; the system's record of an app-not-responding or native crash (`ApplicationExitInfo`, Android 11+) is kept too, once. About > Crash log lists, shares (the newest 5, through Android's own share sheet) and clears (asks first); Home offers the last crash on the next start until seen or dismissed (`crash_log_seen_at`, excluded from backups). Nothing is sent by the app.
 
 ## 7. Updates
 
@@ -450,6 +458,8 @@ waits for the data **and** `CalmFrames`: 4 frames in a row, none later than 40 m
 the pace: a slow build draws at ~23 ms a frame, and a first version that wanted 22 ms never saw calm and always waited out the cap (+1 s on every start). Measured after:
 the exit is 19 distinct frames over ~440 ms, 22 ms apart, one 66 ms gap. The qa build is unoptimised: its cold start shows the system icon for ~1.5-2 s first.
 
+- **Quick add** (2026-11-07, `widgets/QuickAdd.kt`): Add expense, Add income and Transfer on the app icon's long-press menu (`QuickAddShortcuts`: three *dynamic* shortcuts, published in `MainActivity.onCreate` on a fresh start; dynamic and not static because the launcher entry is one of ten `activity-alias`es, and a static shortcut list (an XML resource) would have to be named on each) and an "Add expense" Quick Settings tile (`QuickAddTileService`, in the manifest with `BIND_QUICK_SETTINGS_TILE`, so only the system can bind it; the user adds it in the tile editor). Both open the app on the new-transaction sheet through `WidgetIntents.intent`, the same plain-word `WidgetRequest.Add` the Add widget sends, acted on once the app is unlocked - nothing of the ledger is on a shortcut or the intent. The tile launches with a `PendingIntent` from Android 14 on; the `Intent` form it needs before that is deprecated there and lint (`StartActivityAndCollapseDeprecated`) makes it an error unless it sits behind `SDK_INT < UPSIDE_DOWN_CAKE`. Tests: `QuickAddTest`.
+
 ## 9. About guide (`about/`)
 
 Settings > About NormPix opens a page (not a dialog): name, version, a **Feature guide** pill (`PagePill`, the same as the update page's
@@ -469,11 +479,11 @@ user-visible feature changes, update its topic text.**
 Theme (System/Light/Dark) + Colors (Wallpaper colors on Android 12+, or Other colors: Emerald, Ocean, Royal, Coral, Amber,
 **Volt** (default, hand-drawn), **Pure** (black/white, hand-drawn); each shown as a tile with the three colours it gives
 the app), App icon (ten launcher icons), Interface font (GS Flex presets Standard/Zenith/Neo/Impact/Airy or hand-set axes,
-Nunito, System, or the user's own .ttf/.otf/Google Fonts .zip), Icons (category style 3D/Emoji/Outline, bank logo style, shape behind), Progress
+Nunito, System, or the user's own .ttf/.otf/Google Fonts .zip), Icons (**interface icons Material | Lucide** - design-system "Interface icons: Material or Lucide"; category style 3D/Emoji/Outline, bank logo style, shape behind), Progress
 indicators (Wavy | Flat), Transitions (six page styles incl. **Linux window**, five sheet/dialog styles, "Try it", and since 2026-11-07 **Launch**:
 **Cookie** (default; `navigation/CookieSplash.kt`) | Name (the name written letter by letter, `LaunchSplash`), and **Dock**: **Glide** (default) | Fade in place, see
 `design-system.md` section 5), Effects
-(background blur, footer blur, card tilt), Navigation & controls (footer labels, Reset action menu - the "+" menu itself is
+(background blur, footer blur, card tilt), and under Colors **Artwork colors** (a switch, on: Add/Edit sheets take their colours from the picture or card they show - design-system "Artwork colors"), Navigation & controls (footer labels, Reset action menu - the "+" menu itself is
 arranged in its Edit mode, bottom controls, back button style, month control), Layouts (Top
 spending, Categories in Insights, Accounts, Cards). Search finds each choice by its own name.
 

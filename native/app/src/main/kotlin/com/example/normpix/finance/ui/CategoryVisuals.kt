@@ -45,7 +45,7 @@ import androidx.compose.material.icons.outlined.Wallet
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material.icons.outlined.WorkOutline
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -169,6 +169,9 @@ private val paletteSeeds = listOf(
 val paletteNames = listOf("Coral", "Green", "Blue", "Purple", "Amber", "Teal", "Pink", "Indigo")
 
 val paletteSize: Int get() = paletteSeeds.size
+
+/** The colour palette entry [index] is drawn from (the one a form's artwork colours are made from, see [ProvideArtworkSeed]). */
+internal fun paletteSeed(index: Int): Color = paletteSeeds[Math.floorMod(index, paletteSeeds.size)]
 
 /** Tonal colors for one palette entry. */
 @Immutable
@@ -341,7 +344,7 @@ fun TransferAvatar(modifier: Modifier = Modifier, size: Dp = 40.dp) {
 }
 
 /**
- * The stand-in for a category or a person not chosen (an "uncategorised" field, "No one in particular"): [icon] on the plain
+ * The stand-in for a category or a person not chosen (an "uncategorised" field, a person's "Me"): [icon] on the plain
  * neutral disc, in the shape the user chose for avatars ([LocalCategoryIconShape]) - or bare, a little larger, where there is no shape.
  */
 @Composable

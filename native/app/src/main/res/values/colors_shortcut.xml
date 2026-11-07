@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The disc behind the glyphs of the app-icon shortcuts (Add expense, Add income, Transfer): dark enough for the white glyph on any launcher. -->
+    <color name="shortcut_background">#FF2E3B33</color>
+</resources>

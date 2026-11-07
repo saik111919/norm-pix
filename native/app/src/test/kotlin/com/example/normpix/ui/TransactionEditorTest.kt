@@ -201,10 +201,9 @@ class TransactionEditorTest {
         compose.waitForIdle()
         compose.onNodeWithText("Restaurants").assertIsDisplayed()
         compose.onNodeWithText("Search categories").assertIsDisplayed()
-        // The rest are a scroll down the list, ending with "New category".
+        // The rest are a scroll down the list; "New category" is the action pill under it, in view whatever the list is doing.
         compose.onNodeWithTag(CATEGORY_PICKER_TAG).performScrollToNode(hasText("Groceries"))
         compose.onNodeWithText("Groceries").assertIsDisplayed()
-        compose.onNodeWithTag(CATEGORY_PICKER_TAG).performScrollToNode(hasText("New category"))
         compose.onNodeWithText("New category").assertIsDisplayed()
     }
 
@@ -286,6 +285,14 @@ class TransactionEditorTest {
         assertTrue(compose.onAllNodesWithText("Select a category").fetchSemanticsNodes().isEmpty())
         compose.onNodeWithText("Groceries").assertIsDisplayed()
     }
+    @Test
+    fun forStartsOnMe_untilSomeoneElseIsChosen() {
+        openEditor()
+        // Owner, 2026-11-08: by default it is me ("No one in particular" before; the expense still has no person stored).
+        compose.onNodeWithText("Me").performScrollTo().assertIsDisplayed()
+        assertTrue(compose.onAllNodesWithText("No one in particular").fetchSemanticsNodes().isEmpty())
+    }
+
     @Test
     fun typeSelector_reshapesTheForm() {
         openEditor()

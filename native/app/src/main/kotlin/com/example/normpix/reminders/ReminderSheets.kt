@@ -21,7 +21,7 @@ import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Snooze
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +56,7 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.LooksOne
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Today
 import androidx.compose.material.icons.outlined.ViewWeek
 import androidx.compose.material.icons.outlined.Work
@@ -408,7 +409,7 @@ fun AddReminderSheet(
         Spacer(Modifier.height(AppSpacing.lg))
         PickerFieldRow(
             first = PickerField("Date", dateLabel(dueAt)) { pickingDate = true },
-            second = PickerField("Time", timeText(dueAt, is24Hour)) { pickingTime = true },
+            second = PickerField("Time", timeText(dueAt, is24Hour), Icons.Outlined.Schedule) { pickingTime = true },
         )
         Spacer(Modifier.height(AppSpacing.lg))
         ChoiceDropdownField(

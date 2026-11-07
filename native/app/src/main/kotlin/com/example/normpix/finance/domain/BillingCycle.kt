@@ -67,6 +67,39 @@ fun ordinalDay(day: Int): String {
 fun billDateText(date: LocalDate, locale: Locale = Locale.getDefault()): String =
     date.format(DateTimeFormatter.ofPattern("d MMM", locale))
 
+/** The latest date on or before [from] that falls on [day] of its month (a short month's last day stands in for a day it lacks). */
+fun previousOnDay(day: Int, from: LocalDate): LocalDate {
+    val thisMonth = from.onDayOfMonth(day)
+    return if (thisMonth.isAfter(from)) from.withDayOfMonth(1).minusMonths(1).onDayOfMonth(day) else thisMonth
+}
+
+/**
+ * Where a card's bill stands in its month, for a bar that fills as the due date comes near: it runs from [start] (the last
+ * statement, or - with no statement day, or one so far back that a due date has passed since - a month before the due date) to the
+ * [due] date, and [fraction] of it has gone by today. Not stored: worked out from the card's two days and today each time.
+ */
+data class BillCycle(val start: LocalDate, val due: BillDue, val fraction: Float) {
+    /** The whole days left to pay it in: 0 on the due day itself. */
+    val daysLeft: Int get() = due.daysAway
+
+    companion object {
+        /** The longest a bill's bar spans: past this the bank's statement is not this bill's (a due date came between). */
+        const val LONGEST_CYCLE_DAYS = 31L
+    }
+}
+
+/** The bar for a card's next bill, or null for a card with no due day. */
+fun billCycle(statementDay: Int?, dueDay: Int?, today: LocalDate): BillCycle? {
+    val due = nextBillDue(dueDay, today) ?: return null
+    val statement = statementDay?.let { previousOnDay(it, today) }
+    val start = statement
+        ?.takeIf { it.isBefore(due.date) && ChronoUnit.DAYS.between(it, due.date) <= BillCycle.LONGEST_CYCLE_DAYS }
+        ?: due.date.minusMonths(1)
+    val span = ChronoUnit.DAYS.between(start, due.date).toFloat().coerceAtLeast(1f)
+    val gone = ChronoUnit.DAYS.between(start, today).toFloat()
+    return BillCycle(start, due, (gone / span).coerceIn(0f, 1f))
+}
+
 /**
  * The card's two days in one line - "Statement on the 5th · due on the 20th" - or null when it has neither. Says "every
  * month" once at the end so the line reads as a rhythm, not as one date.

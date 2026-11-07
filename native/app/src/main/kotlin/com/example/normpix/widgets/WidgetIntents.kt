@@ -16,13 +16,22 @@ object WidgetIntents {
      */
     fun open(context: Context, request: WidgetRequest): PendingIntent {
         val shown = (request as? WidgetRequest.Show)?.transactionId
+        val code = shown?.let { (it % Int.MAX_VALUE).toInt() } ?: 0
+        return PendingIntent.getActivity(context, code, intent(context, request), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+
+    /**
+     * The intent that opens NormPix to do [request]: explicit (it names MainActivity), carrying only the request's plain words. The
+     * home-screen shortcuts and the Quick Settings tile launch it directly; a widget wraps it ([open]).
+     */
+    fun intent(context: Context, request: WidgetRequest): Intent {
+        val shown = (request as? WidgetRequest.Show)?.transactionId
         val intent = Intent(context, MainActivity::class.java)
             .setAction("com.example.normpix.widget." + request.key)
             .putExtra(EXTRA_REQUEST, request.key)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         if (shown != null) intent.putExtra(EXTRA_TRANSACTION_ID, shown)
-        val code = shown?.let { (it % Int.MAX_VALUE).toInt() } ?: 0
-        return PendingIntent.getActivity(context, code, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        return intent
     }
 
     /**

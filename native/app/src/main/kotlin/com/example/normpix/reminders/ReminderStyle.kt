@@ -94,6 +94,18 @@ fun formatOverdueBy(dueAt: LocalDateTime, now: LocalDateTime = LocalDateTime.now
     }
 }
 
+/** How late, in words, for a figure on a banner: "3 days", "1 hour", "12 minutes", or "just now" within the first minute. */
+fun formatOverdueLong(dueAt: LocalDateTime, now: LocalDateTime = LocalDateTime.now()): String {
+    val diff = Duration.between(dueAt, now)
+    fun unit(n: Long, word: String) = "$n $word${if (n == 1L) "" else "s"}"
+    return when {
+        diff.toDays() >= 1 -> unit(diff.toDays(), "day")
+        diff.toHours() >= 1 -> unit(diff.toHours(), "hour")
+        diff.toMinutes() >= 1 -> unit(diff.toMinutes(), "minute")
+        else -> "just now"
+    }
+}
+
 /**
  * One-line "when" text for a reminder, as shown in lists: overdue ones say how
  * late they are, completed ones say so, everything else gets its relative due

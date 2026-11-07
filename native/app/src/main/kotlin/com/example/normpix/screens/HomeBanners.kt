@@ -4,9 +4,9 @@ import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.EventBusy
+import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.ReportProblem
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -17,9 +17,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.example.normpix.about.ui.CrashLogSheet
+import com.example.normpix.backup.BackupFreshness
+import com.example.normpix.diagnostics.CrashLog
 import com.example.normpix.finance.domain.BudgetHealth
 import com.example.normpix.finance.domain.BudgetOverview
 import com.example.normpix.finance.domain.BudgetStatus
+import com.example.normpix.finance.ui.FinanceStatus
 import com.example.normpix.finance.ui.budgetIcon
 import com.example.normpix.finance.ui.budgetTone
 import com.example.normpix.finance.ui.monthLabel
@@ -27,13 +31,17 @@ import com.example.normpix.finance.ui.rememberFinanceState
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.navigation.PlanSection
+import com.example.normpix.navigation.SettingsPage
 import com.example.normpix.reminders.LocalReminders
 import com.example.normpix.reminders.formatDueMoment
-import com.example.normpix.reminders.formatOverdueBy
+import com.example.normpix.reminders.formatOverdueLong
 import com.example.normpix.reminders.icon
 import com.example.normpix.reminders.rememberReminderFlows
 import com.example.normpix.ui.components.Banner
+import com.example.normpix.ui.components.BannerBar
+import com.example.normpix.ui.components.BannerFigure
 import com.example.normpix.ui.components.BannerStack
+import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.SectionHeader
 import com.example.normpix.ui.components.SnackbarKind
@@ -47,8 +55,7 @@ import com.example.normpix.updates.release
 import com.example.normpix.updates.ui.updateActionsFor
 import com.example.normpix.updates.ui.updateBannerFor
 import com.example.normpix.wallet.CardsState
-import com.example.normpix.wallet.expiry.printed
-import com.example.normpix.wallet.expiry.title
+import com.example.normpix.wallet.expiry.cardExpiryBanner
 import com.example.normpix.wallet.rememberCardFlows
 import kotlinx.coroutines.launch
 
@@ -60,7 +67,7 @@ import kotlinx.coroutines.launch
  */
 @Composable
 internal fun NeedsAttention(budgets: BudgetOverview) {
-    val stacks = listOf(reminderBanners(), budgetBanners(budgets), cardExpiryBanners(), updateBanners())
+    val stacks = listOf(reminderBanners(), budgetBanners(budgets), cardExpiryBanners(), crashBanners(), backupBanners(), updateBanners())
     // One for each kind of banner, since each is its own stack: the header's button gathers whichever are spread out.
     val decks = List(stacks.size) { rememberDeckStackState() }
     if (stacks.all { it.isEmpty() }) return
@@ -82,9 +89,14 @@ private fun reminderBanners(): List<Banner> {
             key = "reminder-${reminder.id ?: reminder.title}",
             tone = StatusTone.Error,
             icon = reminder.category.icon,
-            eyebrow = formatOverdueBy(reminder.effectiveDueAt),
+            eyebrow = "Overdue",
             title = reminder.title,
-            message = "Was due ${formatDueMoment(reminder.effectiveDueAt)}",
+            message = reminder.category.label,
+            figure = BannerFigure(
+                title = "Late by",
+                figure = formatOverdueLong(reminder.effectiveDueAt),
+                note = "Was due ${formatDueMoment(reminder.effectiveDueAt)}",
+            ),
             primary = StatusAction(reminder.doneLabel, onClick = { flows.complete(reminder) }),
             secondary = StatusAction("Snooze", onClick = { flows.snooze(reminder) }),
             onOpen = { flows.edit(reminder) },
@@ -114,11 +126,18 @@ private fun budgetBanners(budgets: BudgetOverview): List<Banner> {
                 icon = budgetIcon(status.health),
                 eyebrow = if (over) "Over budget" else "Nearly used",
                 title = name,
-                message = if (over) {
-                    "${finance.money.format(-status.remaining)} over for $month"
-                } else {
-                    "${finance.money.format(status.remaining)} left for $month"
-                },
+                message = "${finance.money.format(status.allocated, trimZeroFraction = true)} for $month",
+                // How much of it is used, as the pill; what is over or left, as the figure.
+                bar = BannerBar(
+                    fraction = status.utilization.toFloat().coerceIn(0f, 1f),
+                    label = "${status.usedPercent}% used",
+                    from = finance.money.format(0L),
+                    to = finance.money.format(status.allocated, trimZeroFraction = true),
+                ),
+                figure = BannerFigure(
+                    title = if (over) "Over by" else "Left",
+                    figure = finance.money.format(if (over) -status.remaining else status.remaining),
+                ),
                 primary = StatusAction("View budgets", onClick = open),
                 onOpen = open,
             )
@@ -179,27 +198,98 @@ private fun cardExpiryBanners(): List<Banner> {
             ),
         )
     }
+    // The same banner the Wallet page shows above the card (see cardExpiryBanner).
     return due.map { (card, state) ->
-        val valid = "Valid thru ${state.printed()}"
-        Banner(
+        cardExpiryBanner(
             key = "card-${card.id}",
-            tone = StatusTone.Warning,
-            icon = if (state.expired) Icons.Outlined.EventBusy else Icons.Outlined.Schedule,
-            eyebrow = state.title(),
-            title = "${card.bankName} •••• ${card.last4}",
-            // With notifications off this banner is the only reminder there is, and says so.
-            message = if (notificationsOn) valid else "$valid · Notifications are off",
-            primary = StatusAction(
-                "Mark as done",
-                onClick = {
-                    haptics.success()
-                    container.expiry.markDone(card.id)
-                },
-            ),
-            secondary = if (notificationsOn) null else StatusAction("Turn on", onClick = flows::turnOnExpiryNotifications),
+            card = "${card.bankName} •••• ${card.last4}",
+            state = state,
+            notificationsOn = notificationsOn,
+            onMarkDone = {
+                haptics.success()
+                container.expiry.markDone(card.id)
+            },
+            onTurnOnNotifications = flows::turnOnExpiryNotifications,
             onOpen = { flows.showCard(card) },
         )
     }
+}
+
+/**
+ * The last time NormPix closed unexpectedly, offered on the next start (see `diagnostics/CrashLog.kt`): one banner while there is a
+ * report newer than the last one seen. View opens the reports (which counts as seeing them); Dismiss just says they were seen.
+ */
+@Composable
+private fun crashBanners(): List<Banner> {
+    val container = LocalAppContainer.current
+    val prefs by container.preferences.state.collectAsState()
+    val context = LocalContext.current
+    val overlays = LocalOverlays.current
+    val scope = rememberCoroutineScope()
+    // Read from storage once, and again after the user has seen what is there.
+    val newest = remember(prefs.crashLogSeenAt) { CrashLog.of(context).newestAt() }
+    if (newest == 0L || newest <= prefs.crashLogSeenAt) return emptyList()
+    val open: () -> Unit = { scope.launch { overlays.sheet<Unit>(expandable = true) { done -> CrashLogSheet { done(Unit) } } } }
+    return listOf(
+        Banner(
+            key = "crash-$newest",
+            tone = StatusTone.Warning,
+            icon = Icons.Outlined.ReportProblem,
+            eyebrow = "Closed unexpectedly",
+            title = "NormPix stopped working last time",
+            message = "A report was kept on this phone",
+            primary = StatusAction("View", onClick = open),
+            secondary = StatusAction("Dismiss", onClick = { container.preferences.markCrashLogSeen(newest) }),
+            onOpen = open,
+        ),
+    )
+}
+
+/**
+ * "Back up your data": one banner, or none (see [BackupFreshness.nudge] for when). Everything NormPix keeps is on this one phone,
+ * so a month without a copy is the way to lose it all. Its button opens Settings > Data & backup, where the three kinds of backup
+ * are (each is saved where the user chooses, and asks whether to lock it); "Later" puts it off for a few days. Never for the
+ * sample set, and never while there is nothing worth keeping.
+ */
+@Composable
+private fun backupBanners(): List<Banner> {
+    val container = LocalAppContainer.current
+    val prefs by container.preferences.state.collectAsState()
+    val finance = rememberFinanceState()
+    val navigator = LocalNavigator.current
+    val context = LocalContext.current
+    val installedAt = remember(context) {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).firstInstallTime }.getOrDefault(0L)
+    }
+    if (prefs.dummyDataEnabled || finance.status != FinanceStatus.Ready) return emptyList()
+    // Worth keeping: the starting Cash account alone, with nothing in it, is not.
+    val hasData = finance.accounts.size > 1 || finance.people.isNotEmpty() || finance.balances.values.any { it != 0L }
+    val nudge = BackupFreshness.nudge(prefs.lastBackupAt, installedAt, System.currentTimeMillis(), prefs.backupReminderDays, hasData, prefs.backupNudgeSnoozedUntil)
+    val open: () -> Unit = { navigator.openSettings(SettingsPage.Data) }
+    val (tone, eyebrow, message) = when (nudge) {
+        BackupFreshness.Nudge.None -> return emptyList()
+        is BackupFreshness.Nudge.Never -> Triple(StatusTone.Warning, "Never backed up", "Nothing is saved elsewhere")
+        is BackupFreshness.Nudge.Stale ->
+            Triple(if (nudge.overdue) StatusTone.Warning else StatusTone.Info, "Backup", "Last backup ${BackupFreshness.ago(prefs.lastBackupAt, System.currentTimeMillis())}")
+    }
+    return listOf(
+        Banner(
+            key = "backup",
+            tone = tone,
+            icon = Icons.Outlined.Backup,
+            eyebrow = eyebrow,
+            title = "Back up your data",
+            message = message,
+            figure = BannerFigure(
+                title = "Last backup",
+                figure = if (nudge is BackupFreshness.Nudge.Stale) "${nudge.days} days" else "Never",
+                note = "Asks ${BackupFreshness.words(prefs.backupReminderDays)}",
+            ),
+            primary = StatusAction("Back up", onClick = open),
+            secondary = StatusAction("Later", onClick = { container.preferences.snoozeBackupNudge(BackupFreshness.snoozeUntil(System.currentTimeMillis())) }),
+            onOpen = open,
+        ),
+    )
 }
 
 /**

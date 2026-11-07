@@ -153,7 +153,7 @@ class CategoryPickerCollapseTest {
         open("Food & dining")
         compose.onNodeWithText("Pizza").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("Apply (1)").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Apply (1)").assertIsDisplayed()
 
         // Closed, the family still says one of its own is picked.
         close("Food & dining")

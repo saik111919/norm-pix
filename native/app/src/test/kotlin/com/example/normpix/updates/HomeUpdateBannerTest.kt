@@ -243,7 +243,11 @@ class UpdateBannerTest {
         val banner = assertNotNull(bannerFor(UpdateState.Available(release)))
         assertEquals("App update", banner.eyebrow)
         assertEquals("NormPix 1.0.3 is available", banner.title)
-        assertEquals("You have 1.0.2 · 12 MB", banner.message)
+        assertEquals("You have 1.0.2", banner.message)
+        // The size is the banner's figure, beside the lines.
+        assertEquals("Size", banner.figure?.title)
+        assertEquals("12 MB", banner.figure?.figure)
+        assertEquals("Update to 1.0.3", banner.figure?.note)
         assertEquals(StatusTone.Info, banner.tone)
         assertEquals("Update", banner.primary.label)
         assertEquals("Later", banner.secondary?.label)
@@ -270,8 +274,13 @@ class UpdateBannerTest {
     @Test
     fun `a download says how far it is, offers Cancel, and is shown even after Later`() {
         val banner = assertNotNull(bannerFor(UpdateState.Downloading(release, release.size / 4, release.size), offered = false))
-        assertEquals("Downloading 1.0.3 · 25%", banner.title)
-        assertEquals("3 MB of 12 MB", banner.message)
+        assertEquals("Downloading 1.0.3", banner.title)
+        // How far it is, as the banner's pill: the percent inside, and how much of how much under it.
+        val bar = assertNotNull(banner.bar)
+        assertEquals(0.25f, bar.fraction, 0.001f)
+        assertEquals("25%", bar.label)
+        assertEquals("3 MB", bar.from)
+        assertEquals("12 MB", bar.to)
         assertEquals("Cancel", banner.secondary?.label)
         assertEquals("Details", banner.primary.label)
         banner.secondary?.onClick?.invoke()

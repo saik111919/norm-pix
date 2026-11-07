@@ -31,7 +31,7 @@ import androidx.compose.material.icons.outlined.Wallpaper
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -69,6 +69,7 @@ import com.example.normpix.settings.ThemeMode
 import com.example.normpix.settings.WallpaperPalette
 import com.example.normpix.ui.components.AppHaptics
 import com.example.normpix.ui.components.ListSection
+import com.example.normpix.ui.components.SwitchRow
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.AppTheme
@@ -177,6 +178,24 @@ internal fun ColorsSection(prefs: AppPrefsState, preferences: AppPreferences, ha
         if (wallpaperColors) {
             Spacer(Modifier.height(AppSpacing.lg))
             ColorSourceChoice(prefs, preferences)
+        }
+
+        Spacer(Modifier.height(AppSpacing.lg))
+        ListSection(
+            footer = "A picture's colour (or a card's, a category's, a person's) tints the sheet it is in, softly, and follows it as " +
+                "it changes. Amounts, bills and warnings keep their own colours. Off, every sheet wears the colours above.",
+        ) {
+            item {
+                SwitchRow(
+                    headline = "Artwork colors",
+                    supporting = "Add and edit screens take their colors from the picture or card they show",
+                    checked = prefs.artworkColors,
+                    onCheckedChange = { on ->
+                        haptics.selection()
+                        preferences.setArtworkColors(on)
+                    },
+                )
+            }
         }
     }
 }

@@ -354,7 +354,16 @@ jobs:
           if [ ! -s "$notes" ] || ! grep -q '[^[:space:]]' "$notes"; then
             previous=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' "$ref^" 2>/dev/null || true)
             if [ -n "$previous" ]; then range="$previous..$ref"; else range="$ref"; fi
-            git log --no-merges -n 60 --pretty='- %s' "$range" > "$notes"
+            # Notes written by hand for this release (native/release-notes.md, one line for each change) are used when that file has
+            # changed since the last release, so a release never repeats the last one's notes; its comment lines are left out.
+            curated="native/release-notes.md"
+            if [ -s "$curated" ] && { [ -z "$previous" ] || ! git diff --quiet "$previous" "$ref" -- "$curated"; }; then
+              grep -v '^[[:space:]]*<!--' "$curated" > "$notes" || true
+            fi
+            # Otherwise (no such file, or nothing in it yet) the release lists the commits since the one before it.
+            if [ ! -s "$notes" ] || ! grep -q '[^[:space:]]' "$notes"; then
+              git log --no-merges -n 60 --pretty='- %s' "$range" > "$notes"
+            fi
           fi
           cp "$notes" "$GITHUB_WORKSPACE/release-notes.md"
           jq -n \

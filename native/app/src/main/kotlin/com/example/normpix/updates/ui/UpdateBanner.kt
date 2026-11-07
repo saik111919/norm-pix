@@ -7,6 +7,8 @@ import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.normpix.ui.components.Banner
+import com.example.normpix.ui.components.BannerBar
+import com.example.normpix.ui.components.BannerFigure
 import com.example.normpix.ui.components.StatusAction
 import com.example.normpix.ui.theme.StatusTone
 import com.example.normpix.updates.UpdateRelease
@@ -43,6 +45,8 @@ internal fun updateBannerFor(
         message: String,
         primary: StatusAction,
         secondary: StatusAction? = if (release.mandatory) null else StatusAction("Later", onClick = actions.later),
+        bar: BannerBar? = null,
+        figure: BannerFigure? = null,
     ) = Banner(
         key = UPDATE_BANNER_KEY,
         tone = StatusTone.Info,
@@ -52,6 +56,8 @@ internal fun updateBannerFor(
         message = message,
         primary = primary,
         secondary = secondary,
+        bar = bar,
+        figure = figure,
         onOpen = open,
     )
 
@@ -59,8 +65,9 @@ internal fun updateBannerFor(
         release,
         Icons.Outlined.SystemUpdate,
         title = "NormPix ${release.versionName} is available",
-        message = "You have $installedVersion · ${bytes(release.size)}",
+        message = "You have $installedVersion",
         primary = StatusAction("Update", onClick = actions.update),
+        figure = BannerFigure(title = "Size", figure = bytes(release.size), note = "Update to ${release.versionName}"),
     )
 
     fun downloaded(release: UpdateRelease) = banner(
@@ -69,6 +76,7 @@ internal fun updateBannerFor(
         title = "Ready to install",
         message = "NormPix ${release.versionName} is downloaded and checked",
         primary = StatusAction("Install", onClick = actions.install),
+        figure = BannerFigure(title = "Version", figure = release.versionName, note = "From $installedVersion"),
     )
 
     return when (state) {
@@ -91,10 +99,17 @@ internal fun updateBannerFor(
         is UpdateState.Downloading -> banner(
             state.release,
             Icons.Outlined.Download,
-            title = "Downloading ${state.release.versionName} · ${(state.fraction * 100).toInt()}%",
-            message = "${bytes(state.done)} of ${bytes(state.total)}",
+            title = "Downloading ${state.release.versionName}",
+            message = "Checked before it installs",
             primary = StatusAction("Details", onClick = open),
             secondary = StatusAction("Cancel", onClick = actions.cancelDownload),
+            // The download as the pill: how far it is, and how much of how much.
+            bar = BannerBar(
+                fraction = state.fraction.coerceIn(0f, 1f),
+                label = "${(state.fraction * 100).toInt()}%",
+                from = bytes(state.done),
+                to = bytes(state.total),
+            ),
         )
         UpdateState.Idle, UpdateState.Checking, is UpdateState.UpToDate, is UpdateState.Installing, is UpdateState.Failed -> null
     }

@@ -43,7 +43,7 @@ import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface

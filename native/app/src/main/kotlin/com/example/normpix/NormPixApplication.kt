@@ -8,6 +8,7 @@ import com.example.normpix.widgets.RecentWidget
 import android.app.Application
 import android.content.Context
 import com.example.normpix.availability.ScheduledFeature
+import com.example.normpix.diagnostics.CrashReporting
 import com.example.normpix.availability.availabilityAt
 import com.example.normpix.finance.data.FinanceDatabase
 import com.example.normpix.finance.data.FinanceRepository
@@ -130,10 +131,14 @@ class NormPixApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // First, so that a failure while the app is starting is kept too: a report of every exception nothing catches, on this phone.
+        CrashReporting.install(this)
         // Read before anything opens it: whether NormPix has kept a ledger on this phone yet (it is made on the first launch, with
         // the Cash account in it), plain or encrypted. None: a new install, or one whose storage was cleared.
         val hadData = EncryptedDatabases.exists(this, FinanceDatabase.DB_NAME)
         container = buildContainer(this)
+        // What the system recorded of the last run ending badly (not responding, a native crash), which the handler cannot see.
+        CrashReporting.takeProcessExits(this, container.preferences)
         welcomeNewInstall(hadData)
         ReminderNotifications.createChannel(this)
         CardExpiryNotifications.createChannel(this)

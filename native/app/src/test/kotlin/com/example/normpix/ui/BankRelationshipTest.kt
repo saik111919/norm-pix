@@ -17,6 +17,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import com.example.normpix.finance.domain.Account
@@ -99,14 +100,13 @@ class BankRelationshipTest {
     private fun chooseType(label: String) {
         compose.onNodeWithText("Type").performClick()
         compose.waitForIdle()
-        // The menu is a popup; an account row of the same name sits behind the sheet.
-        compose.onNode(hasText(label) and hasAnyAncestor(isPopup())).performClick()
+        compose.onNode(hasText(label) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)).performClick()
         compose.waitForIdle()
     }
 
-    /** Adds a bank from the open form's bank field, the way a user would: type, "Add new bank", name it, save. */
+    /** Adds a bank from the open form's bank field, the way a user would: open sheet, "Add new bank", name it, save. */
     private fun addBankFromField(fieldLabel: String, name: String) {
-        compose.onNodeWithText(fieldLabel).performTextInput("zz")
+        compose.onNodeWithText(fieldLabel).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Add new bank").performClick()
         waitFor("Add bank")
@@ -227,13 +227,16 @@ class BankRelationshipTest {
         // The card form lists that bank - no second list, no re-adding.
         compose.onNodeWithText("Add card").performClick()
         waitFor("Add card") // the sheet's title
-        compose.onNodeWithText("Bank").performTextInput("my cred")
+        compose.onNodeWithText("Bank").performClick()
+        waitFor("Choose bank")
+        compose.onNodeWithText("Search banks").performTextInput("my cred")
         waitFor("My Credit Union")
-        compose.onNodeWithText("My Credit Union").performClick()
+        compose.onNode(hasText("My Credit Union") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)).performClick()
         compose.waitForIdle()
 
         // Typing the same bank into "Add new bank" again finds it instead of making another.
-        compose.onNodeWithText("Bank").performTextReplacement("zz")
+        compose.onNode(hasText("Bank") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)).performClick()
+        waitFor("Choose bank")
         compose.onNodeWithText("Add new bank").performClick()
         waitFor("Add bank")
         compose.onNodeWithText("Bank name").performTextReplacement("MY CREDIT UNION LTD")
@@ -264,12 +267,11 @@ class BankRelationshipTest {
         compose.onNodeWithText("Add account").performClick()
         waitFor("New account")
         compose.onNodeWithText("Name").performTextInput("Mystery")
-        compose.onNodeWithText("Bank (optional)").performTextInput("Not A Real Bank")
+        compose.onNodeWithText("Bank (optional)").performClick()
         compose.waitForIdle()
-        compose.onNodeWithContentDescription("Slide to save account").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithText("Search banks").performTextInput("Not A Real Bank")
         compose.waitForIdle()
-        compose.onNodeWithText("Pick a bank from the list, or add it as a new bank").assertIsDisplayed()
-        assertNull(finance.state.value.accounts.firstOrNull { it.name == "Mystery" })
+        compose.onNode(hasText("Not A Real Bank") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)).assertDoesNotExist()
     }
 
     @Test

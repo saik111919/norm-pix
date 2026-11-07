@@ -52,13 +52,18 @@ import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.runtime.rememberCoroutineScope
+import com.example.normpix.ui.components.LocalOverlays
+import com.example.normpix.ui.components.OptionSheet
+import com.example.normpix.ui.components.OptionSheetItem
+import kotlinx.coroutines.launch
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -132,6 +137,7 @@ class ChoiceOption<K>(
     val icon: ImageVector,
     val glyph: (@Composable () -> Unit)? = null,
     val avatar: (@Composable (size: Dp) -> Unit)? = null,
+    val supporting: String? = null,
 )
 
 /** Round-cornered tonal fields: filled, no outline, an indicator only for errors. */
@@ -304,6 +310,8 @@ fun TransactionTypeSelector(type: TransactionType?, onSelect: (TransactionType) 
     ConnectedChoiceRow(options, selected = type, onSelect = onSelect, modifier = modifier)
 }
 
+private data class SheetChoice<K>(val value: K)
+
 /**
  * One Material 3 exposed dropdown: the field shows the current choice (icon and label) and the
  * menu lists every option, the selected one marked. An optional last item ([createLabel]) creates a
@@ -328,80 +336,61 @@ fun <K> ChoiceDropdownField(
     /** The mark shown while nothing is chosen, when it is not an icon on a badge (an account's, in the shape the user chose). Wins over [emptyIcon]. */
     emptyAvatar: (@Composable (size: Dp) -> Unit)? = null,
 ) {
-    val scheme = MaterialTheme.colorScheme
+    val overlays = LocalOverlays.current
+    val scope = rememberCoroutineScope()
     val haptics = rememberAppHaptics()
-    var expanded by remember { mutableStateOf(false) }
-    val current = options.firstOrNull { it.key == selected }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }, modifier = modifier) {
-        TextField(
-            value = current?.label.orEmpty(),
-            onValueChange = {},
-            readOnly = true,
-            singleLine = true,
-            label = { Text(label) },
-            placeholder = { Text(placeholder) },
-            leadingIcon = when {
-                current != null -> { { ChoiceIcon(current) } }
-                emptyAvatar != null -> { { emptyAvatar(IconBadgeSize) } }
-                emptyIcon != null -> { { if (emptyAsAvatar) NeutralAvatar(emptyIcon) else IconBadge(emptyIcon) } }
-                else -> null
-            },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            isError = errorText != null,
-            supportingText = errorText?.let { { Text(it) } },
-            colors = tonalFieldColors(),
-            shape = TonalFieldShape,
-            modifier = Modifier
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                .fillMaxWidth(),
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            // A popup over the sheet: nothing behind it is blurred, so it keeps the solid tone.
-            containerColor = solidColorScheme.surfaceContainer,
-            shape = AppRadius.rLg,
-        ) {
-            for (option in options) {
-                val isSelected = option.key == selected
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            option.label,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+    val current = options.firstOrNull { option -> option.key == selected }
+
+    val openSheet: () -> Unit = {
+        scope.launch {
+            val selectedSet = options.filter { it.key == selected }.map { SheetChoice(it.key) }.toSet()
+            val picked = overlays.sheet<SheetChoice<K>> { dismiss ->
+                OptionSheet(
+                    title = label,
+                    options = options.map { option ->
+                        OptionSheetItem(
+                            key = SheetChoice(option.key),
+                            label = option.label,
+                            supporting = option.supporting,
+                            trailing = { ChoiceIcon(option, 32.dp) },
                         )
                     },
-                    leadingIcon = { ChoiceIcon(option) },
-                    trailingIcon = if (isSelected) {
-                        { Icon(Icons.Rounded.Check, contentDescription = null, tint = scheme.primary) }
-                    } else {
-                        null
+                    selected = selectedSet,
+                    multiple = false,
+                    onSelect = { pickedChoice ->
+                        dismiss(pickedChoice)
                     },
-                    onClick = {
-                        if (!isSelected) haptics.selection()
-                        onSelect(option.key)
-                        expanded = false
-                    },
-                    modifier = Modifier
-                        .heightIn(min = 48.dp)
-                        .then(if (isSelected) Modifier.background(scheme.secondaryContainer.copy(alpha = 0.5f)) else Modifier)
-                        .semantics { this.selected = isSelected },
+                    actionLabel = createLabel,
+                    actionIcon = if (createLabel != null) Icons.Rounded.Add else null,
+                    onAction = if (onCreate != null && createLabel != null) {
+                        {
+                            dismiss(null)
+                            onCreate()
+                        }
+                    } else null,
                 )
             }
-            if (onCreate != null && createLabel != null) {
-                HorizontalDivider(Modifier.padding(vertical = AppSpacing.xs))
-                DropdownMenuItem(
-                    text = { Text(createLabel, color = scheme.primary) },
-                    leadingIcon = { Icon(Icons.Rounded.Add, contentDescription = null, tint = scheme.primary) },
-                    onClick = {
-                        expanded = false
-                        onCreate()
-                    },
-                    modifier = Modifier.heightIn(min = 48.dp),
-                )
+            if (picked != null) {
+                if (picked.value != selected) haptics.selection()
+                onSelect(picked.value)
             }
         }
     }
+
+    ChoicePickerField(
+        label = label,
+        value = current?.label,
+        placeholder = placeholder,
+        onClick = openSheet,
+        leading = when {
+            current != null -> { { ChoiceIcon(current) } }
+            emptyAvatar != null -> { { emptyAvatar(IconBadgeSize) } }
+            emptyIcon != null -> { { if (emptyAsAvatar) NeutralAvatar(emptyIcon) else IconBadge(emptyIcon) } }
+            else -> null
+        },
+        errorText = errorText,
+        modifier = modifier,
+    )
 }
 
 /** The size of the badge (or avatar) at the start of a selection field. */
@@ -415,24 +404,25 @@ private val IconBadgeSize = 40.dp
 fun IconBadge(
     icon: ImageVector?,
     modifier: Modifier = Modifier,
+    size: Dp = IconBadgeSize,
     container: Color = MaterialTheme.colorScheme.secondaryContainer,
     content: Color = MaterialTheme.colorScheme.onSecondaryContainer,
     glyph: (@Composable () -> Unit)? = null,
 ) {
-    Box(modifier.size(IconBadgeSize).background(container, CircleShape), contentAlignment = Alignment.Center) {
+    Box(modifier.size(size).background(container, CircleShape), contentAlignment = Alignment.Center) {
         if (glyph != null) {
             glyph()
         } else if (icon != null) {
-            Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(22.dp))
+            Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(size * 0.55f))
         }
     }
 }
 
 /** A choice's mark: its own [ChoiceOption.avatar] (a category, a person), or its icon on the neutral tonal [IconBadge]. */
 @Composable
-private fun <K> ChoiceIcon(option: ChoiceOption<K>) {
+private fun <K> ChoiceIcon(option: ChoiceOption<K>, size: Dp = IconBadgeSize) {
     val avatar = option.avatar
-    if (avatar != null) avatar(IconBadgeSize) else IconBadge(option.icon, glyph = option.glyph)
+    if (avatar != null) avatar(size) else IconBadge(option.icon, size = size, glyph = option.glyph)
 }
 
 /**
@@ -451,7 +441,13 @@ fun AccountSelector(
 ) {
     // An account's mark is on a badge in the shape the user chose for icon backgrounds, as a category's and a person's are.
     val options = accounts.filter { it.id != exclude }.map { account ->
-        ChoiceOption(account.id!!, account.name, account.kind.icon, avatar = { size -> AccountBadge(account, size = size) })
+        ChoiceOption(
+            key = account.id!!,
+            label = account.name,
+            icon = account.kind.icon,
+            avatar = { size -> AccountBadge(account, size = size) },
+            supporting = account.kind.label,
+        )
     }
     ChoiceDropdownField(
         label = label,
@@ -616,6 +612,8 @@ fun TonalPickerField(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     shape: androidx.compose.ui.graphics.Shape = TonalFieldShape,
+    /** The mark at the end of the field (the dropdown arrow the other fields of a form show); none for a field that acts rather than picks. */
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     Box(
@@ -645,6 +643,7 @@ fun TonalPickerField(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            trailing?.invoke()
         }
     }
 }
@@ -659,8 +658,9 @@ fun connectedFieldShapes(): Pair<RoundedCornerShape, RoundedCornerShape> {
 private const val NO_PERSON = -1L
 
 /**
- * Who an expense was spent on: one dropdown (their avatar and name), with "No one in particular" first - the usual answer, and
- * the one an expense has until it is given someone - and "New person" at the end of the menu (when [onCreate] is given).
+ * Who an expense was spent on: one dropdown (their avatar and name), with "Me" first - the usual answer, and the one an expense
+ * has until it is given someone (2026-11-08, owner: by default it should be me; before, "No one in particular"; nothing stored
+ * changed: an expense on nobody is still one with no person) - and "New person" at the end of the menu (when [onCreate] is given).
  * [people] should hold the people that can be picked, plus the one already chosen if they have since been archived.
  */
 @Composable
@@ -672,7 +672,7 @@ fun PersonSelector(
     modifier: Modifier = Modifier,
 ) {
     val options = listOf(
-        ChoiceOption(NO_PERSON, "No one in particular", Icons.Outlined.Person, avatar = { size -> PersonAvatar(null, size = size) }),
+        ChoiceOption(NO_PERSON, "Me", Icons.Outlined.Person, avatar = { size -> PersonAvatar(null, size = size) }),
     ) + people.map { person ->
         ChoiceOption(
             person.id!!,
@@ -687,7 +687,7 @@ fun PersonSelector(
         selected = selected ?: NO_PERSON,
         onSelect = { onSelect(if (it == NO_PERSON) null else it) },
         modifier = modifier,
-        placeholder = "No one in particular",
+        placeholder = "Me",
         createLabel = "New person",
         onCreate = onCreate,
         emptyIcon = Icons.Outlined.Person,

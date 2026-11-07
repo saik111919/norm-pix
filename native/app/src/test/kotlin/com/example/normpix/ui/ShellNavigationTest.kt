@@ -178,7 +178,12 @@ class ShellNavigationTest {
         compose.onNode(hasContentDescription("Back", substring = true)).performClick()
         compose.waitForIdle()
         compose.waitUntilAtLeastOneExists(hasText("HDFC Savings"), timeoutMillis = 10_000)
-        compose.onNodeWithText("ICICI Credit Card").assertIsDisplayed()
+        // The sample's two credit cards owe bills, whose banners sit between the totals and the accounts: scroll to the row.
+        // (Rows arrive with a short staggered entrance, so under load the row can exist a moment before it is on screen: wait for it.)
+        compose.waitUntil(10_000) {
+            compose.waitForIdle()
+            runCatching { compose.onNodeWithText("ICICI Credit Card").performScrollTo().assertIsDisplayed() }.isSuccess
+        }
 
         // Plans & Transactions shows the sample plans too.
         open("Plans & Activity")

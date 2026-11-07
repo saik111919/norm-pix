@@ -93,6 +93,8 @@ class AppOverlays {
         /** Tall content opens compact and can be dragged to full height; otherwise it opens at once at its full height. */
         val expandable: Boolean = false,
         val guard: SheetDismissGuard = SheetDismissGuard(),
+        /** Where a form that shows artwork says what colour it is (see [ProvideArtworkSeed]); the host dresses the whole sheet in it. */
+        val tint: ArtworkTint = ArtworkTint(),
         val content: @Composable (dismiss: (Any?) -> Unit) -> Unit,
     )
 
@@ -154,7 +156,13 @@ class AppOverlays {
      */
     suspend fun <T> sheet(expandable: Boolean = false, content: @Composable (dismiss: (T?) -> Unit) -> Unit): T? {
         @Suppress("UNCHECKED_CAST")
-        val request = SheetRequest(expandable = expandable, content = { dismiss -> content { value -> dismiss(value) } })
+        // A sheet opened over a form that wears its artwork's colours (a date, a category, an account to pick) starts in the same
+        // ones, so the two read as one thing; it is only where it starts, and a form of its own that shows artwork says its own.
+        val request = SheetRequest(
+            expandable = expandable,
+            tint = ArtworkTint().also { it.seed = sheets.lastOrNull()?.tint?.seed },
+            content = { dismiss -> content { value -> dismiss(value) } },
+        )
         sheets += request
         try {
             @Suppress("UNCHECKED_CAST")
@@ -334,7 +342,9 @@ fun OverlayHost(overlays: AppOverlays) {
     val sheetMotionOn = !rememberReducedMotion()
 
     for (request in overlays.sheets) {
-        key(request) {
+        // The sheet is dressed in the colours of the artwork its form shows, if it shows any (ArtworkTheme.kt): the surface, the
+        // handle and the content alike, since all of it is made from the scheme in force out here.
+        key(request) { ArtworkScope(request.tint) {
             val scope = rememberCoroutineScope()
             val guard = request.guard
             val stateRef = remember { arrayOfNulls<SheetState>(1) }
@@ -428,7 +438,7 @@ fun OverlayHost(overlays: AppOverlays) {
                     }
                 }
             }
-        }
+        } }
     }
     // Decisions are sheets too (not dialogs): one kind of surface, anchored where the thumb is, easier to reach and to
     // hear for a screen reader. Swipe, scrim and back all mean "no". Listed after the sheets, so one that asks "discard

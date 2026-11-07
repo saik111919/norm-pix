@@ -3,16 +3,18 @@ package com.example.normpix.settings.ui
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.FactCheck
 import androidx.compose.material.icons.outlined.FolderZip
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material.icons.outlined.TableView
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.SaveAlt
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.normpix.backup.AppBackupArchive
 import com.example.normpix.backup.LockedFile
+import com.example.normpix.backup.BackupFreshness
 import com.example.normpix.finance.data.FinanceBackupArchive
 import com.example.normpix.finance.data.FinanceBackupCodec
 import com.example.normpix.finance.data.FinanceSnapshot
@@ -40,7 +43,9 @@ import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.ui.components.AppLoadingIndicator
 import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.ListRow
+import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListSection
+import com.example.normpix.ui.components.RadioRow
 import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
@@ -132,6 +137,7 @@ fun DataSettingsPage() {
         if (saved) {
             haptics.success()
             val prefix = if (prefs.dummyDataEnabled) "Sample data backup saved" else "Backup saved"
+            container.preferences.recordBackupSaved(System.currentTimeMillis())
             snackbars.show("$prefix${lock.said}: ${describe(snapshot)}")
         }
     }
@@ -159,6 +165,7 @@ fun DataSettingsPage() {
         if (saved) {
             haptics.success()
             val prefix = if (prefs.dummyDataEnabled) "Sample data backup saved" else "Backup saved"
+            container.preferences.recordBackupSaved(System.currentTimeMillis())
             snackbars.show("$prefix with ${if (pictures == 1) "1 picture" else "$pictures pictures"}${lock.said}: ${describe(snapshot)}")
         }
     }
@@ -392,6 +399,42 @@ fun DataSettingsPage() {
                     }
                     item {
                         Row("csv", Icons.Outlined.TableView, "Transactions as a spreadsheet", "A .csv for Excel or Sheets. Not restorable.", ::exportCsv)
+                    }
+                }
+                ListSection(
+                    title = "Backup reminder",
+                    footer = "Everything NormPix keeps is on this phone, so a copy is what saves it if the phone is lost or broken. " +
+                        "Home asks for one when the last is older than this. Only the day you last backed up is remembered, never " +
+                        "the file, and a spreadsheet or a backup of sample data doesn't count.",
+                    modifier = Modifier.selectableGroup(),
+                ) {
+                    item {
+                        ListRow(
+                            headline = "Last backup",
+                            supporting = if (prefs.lastBackupAt > 0) {
+                                BackupFreshness.ago(prefs.lastBackupAt, System.currentTimeMillis()).replaceFirstChar(Char::uppercase)
+                            } else {
+                                "Never, on this phone"
+                            },
+                            leading = { LeadingIcon(Icons.Outlined.History) },
+                        )
+                    }
+                    for (days in BackupFreshness.REMINDER_CHOICES + 0) {
+                        item {
+                            RadioRow(
+                                headline = when (days) {
+                                    0 -> "Don't remind me"
+                                    7 -> "Every week"
+                                    14 -> "Every 2 weeks"
+                                    else -> "Every month"
+                                },
+                                selected = prefs.backupReminderDays == days,
+                                onClick = {
+                                    haptics.selection()
+                                    container.preferences.setBackupReminderDays(days)
+                                },
+                            )
+                        }
                     }
                 }
                 ListSection(title = "Restore") {

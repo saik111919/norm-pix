@@ -9,7 +9,7 @@ import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.ViewCarousel
 import androidx.compose.material.icons.rounded.SaveAlt
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState

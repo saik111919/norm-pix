@@ -12,7 +12,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -83,6 +83,8 @@ fun AboutPage() {
                     }
                 }
                 Spacer(Modifier.height(AppSpacing.lg))
+                CrashLogSection()
+                Spacer(Modifier.height(AppSpacing.lg))
                 ListSection(title = "Welcome") {
                     item {
                         ListRow(
@@ -134,6 +136,21 @@ fun AboutPage() {
                         )
                     }
                     item {
+                        // Its licence asks for its notice to travel with the icons: the row opens it in full (it is ISC, with the
+                        // icons Lucide took from Feather under the MIT licence).
+                        ListRow(
+                            headline = "Lucide icons",
+                            supporting = "The Lucide set of interface icons (Settings > Appearance > Icons). By Lucide Contributors and Cole Bemis, under the ISC and MIT licences.",
+                            trailing = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
+                            supportingMaxLines = 5,
+                            onClick = {
+                                scope.launch {
+                                    overlays.sheet<Unit>(expandable = true) { done -> LicenceSheet("Lucide icons", LUCIDE_LICENCE) { done(Unit) } }
+                                }
+                            },
+                        )
+                    }
+                    item {
                         // Its licence asks for its notice to be shown in the app: the row opens it in full.
                         ListRow(
                             headline = "SQLCipher",
@@ -155,6 +172,9 @@ fun AboutPage() {
 
 /** SQLCipher's licence, as its repository gives it (`assets/licenses/sqlcipher.txt`). */
 private const val SQLCIPHER_LICENCE = "licenses/sqlcipher.txt"
+
+/** Lucide's licence file at the release the icons are from (`assets/licenses/lucide.txt`, unchanged). */
+private const val LUCIDE_LICENCE = "licenses/lucide.txt"
 
 /** A licence in full, read from the app's [asset] and laid out for the phone's width. */
 @Composable

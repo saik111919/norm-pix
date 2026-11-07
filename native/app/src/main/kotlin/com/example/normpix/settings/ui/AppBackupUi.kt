@@ -101,6 +101,7 @@ internal class AppBackupFlows(
         }
         if (!saved) return
         haptics.success()
+        container.preferences.recordBackupSaved(System.currentTimeMillis())
         val contents = buildList {
             add(if (pictures > 0) "finance data with ${count(pictures, "picture")}" else "finance data")
             add("settings")

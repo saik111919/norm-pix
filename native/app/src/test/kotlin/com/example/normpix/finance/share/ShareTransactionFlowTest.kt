@@ -16,9 +16,11 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
@@ -27,6 +29,7 @@ import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.finance.ui.CATEGORY_PICKER_TAG
 import com.example.normpix.finance.ui.shortDate
 import com.example.normpix.navigation.NormPixRoot
 import com.example.normpix.testing.TestEnvironment
@@ -93,6 +96,8 @@ class ShareTransactionFlowTest {
 
     private fun pickCategory(name: String) {
         click("Category")
+        // The picker's rows are taller (a radio, a name, an avatar), so a category lower in the list is scrolled to first.
+        compose.onNodeWithTag(CATEGORY_PICKER_TAG).performScrollToNode(hasText(name))
         compose.onNodeWithText(name).performClick()
         compose.waitForIdle()
     }
@@ -140,7 +145,8 @@ class ShareTransactionFlowTest {
         compose.onNodeWithText("Paid to").performTextInput("Swiggy Instamart")
         compose.waitForIdle()
         // The message said money went out; the user says it came in.
-        compose.onNode(hasText("Income") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)).performClick()
+        // Typing above left the form scrolled down, so the type row is scrolled back into view before it is pressed.
+        compose.onNode(hasText("Income") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)).performScrollTo().performClick()
         compose.waitForIdle()
         pickCategory("Freelance")
         compose.onNodeWithText("Save income").performClick()

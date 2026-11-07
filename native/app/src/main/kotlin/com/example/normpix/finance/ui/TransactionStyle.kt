@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Icon
+import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -16,6 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.ui.components.appColorScheme
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.StatusColorRole
 import com.example.normpix.ui.theme.StatusTone
@@ -29,7 +30,9 @@ import com.example.normpix.ui.theme.resolve
  */
 @Composable
 fun TransactionType.role(): StatusColorRole {
-    val scheme = MaterialTheme.colorScheme
+    // The app's own scheme, not an artwork sheet's: a transfer's neutral is as meaningful as the expense's warm and the income's
+    // positive (those come from the status colours, which no picture touches), so none of the three follows the picture.
+    val scheme = appColorScheme
     return when (this) {
         TransactionType.Expense -> StatusTone.Warning.resolve()
         TransactionType.Income -> StatusTone.Success.resolve()
