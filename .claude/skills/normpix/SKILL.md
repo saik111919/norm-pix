@@ -5,7 +5,7 @@ description: "Everything about the NormPix project - a private, offline-first An
 
 # NormPix project skill
 
-Stamp: verified against commit `99d6c0f3` (v1.5.0 in the working tree; v1.4.1 is the last release) on 2026-11-06. If `git log` shows newer commits on source paths, or
+Stamp: verified against commit `6a16c45d` (`versionName` 1.5.0 in the tree; CI has released up to v1.5.7) on 2026-11-07. If `git log` shows newer commits on source paths, or
 `bash .claude/skills/normpix/scripts/verify.sh` reports drift, trust the code and fix the skill (`references/maintenance.md`).
 
 ## 1. The 60-second picture
@@ -93,7 +93,7 @@ reference rather than exploring. For the history or reasoning behind a feature, 
 | `wallet/motion/` | `CardTilt` (every card on screen leans) |
 | `reminders/` | Model, `RemindersDatabase` (v2), alarms, notifications, alert screen, links; delivery (`ReminderDelivery`, `ReminderOverlay` floating card, `ReminderOverlayPolicy`, `ReminderAccess`, `ReminderAlertActivity`); `RecurringReminders` (a repeating payment and its reminder kept in step); `ClockAlarms` (a reminder as the Clock app's alarm, on request) |
 | `screens/` | The tabs' screens: `HomeScreen`, `HomeBanners`, `HeroCollapse` (Home's number shrinking into the header on scroll), `PlansAndTransactionsScreen`, `WalletScreen` |
-| `navigation/` | `NormPixRoot` (`Routes`, `ShellState`, locals), `AppShell`, `AppNavigator`, `FloatingNavBar` (+ `DockGlide`: the pill that flies between tabs), `ActionMenu` (the "+" bento panel), `PageTransitions`, `LinuxWindowMotion`, `AppSearch`, `AppearanceSection`, splash (`CookieSplash`, `LaunchSplash`) |
+| `navigation/` | `NormPixRoot` (`Routes`, `ShellState`, locals), `AppShell`, `AppNavigator`, `FloatingNavBar` (+ `DockGlide`: the pill that flies between tabs), `ActionMenu` (the "+" bento panel), `PageTransitions`, `LinuxWindowMotion`, `AppSearch`, `AppearanceSection`, splash (`CookieSplash`, `LaunchSplash`, `LaunchScreen`: what Android's own launch screen - which plays the cookie's intro - is doing) |
 | `settings/` | `AppPreferences` (`AppPrefsState`, all choice enums), app icons, notifications, custom font (`CustomFont`, `FontFile`: zip and variable fonts), profile photos (GIFs, avatar presets) |
 | `onboarding/` | `OnboardingTour`: the welcome tour of a new install (four steps in a pager); `TourArt`: each step's 3D-sticker picture and its motion |
 | `settings/ui/` | Settings pages, `SettingsCatalog` (search), `SettingsTwoPane`, Appearance sections, backup UI, ledger-check UI |
@@ -111,7 +111,7 @@ reference rather than exploring. For the history or reasoning behind a feature, 
 | `about/` | About page, its Feature guide pill and page (`GuideIndexPage`) and the topics (`GuideTopic`, `GuideArt`: real screenshots `GuideShots`, drawings as fallback) |
 
 Outside it: tests mirror these packages in `native/app/src/test/kotlin/...` (`testing/TestEnvironment.kt` is the harness);
-`native/app/src/qa/` is the qa build's manifest label; `native/design/` generates icons and widget art (`clock-widget/` Python, `cookie-clock/` Java: `java CookieFace.java`); `.github/workflows/`
+`native/app/src/qa/` is the qa build's manifest label; `native/design/` generates icons and widget art (`clock-widget/` Python, `cookie-clock/` Java: `java CookieFace.java`) and the launch screen's animated cookie (`launch-splash/LaunchSplashAvd.py`, stdlib Python: `avd_splash.xml` + `splash_icon.xml`, re-run it when `CookieMotion` changes); `.github/workflows/`
 (`android.yml` verify/build/release, `screenshots.yml`).
 
 ## 5. Working with the owner (full detail: `references/owner-working-style.md`)

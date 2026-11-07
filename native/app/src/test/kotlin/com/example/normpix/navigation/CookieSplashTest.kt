@@ -1,9 +1,13 @@
 package com.example.normpix.navigation
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color as AndroidColor
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -18,7 +22,11 @@ import androidx.compose.ui.test.onRoot
 import com.example.normpix.settings.AccentColor
 import com.example.normpix.settings.ThemeMode
 import com.example.normpix.testing.TestEnvironment
+import com.example.normpix.ui.theme.VoltInk
+import java.io.File
+import kotlin.math.abs
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -70,6 +78,20 @@ class CookieMotionTest {
         assertEquals(1f, exit.fill)
         assertEquals(last.logoScale, exit.logoScale, 0.0001f)
         assertEquals(last.logoAlpha, exit.logoAlpha, 0.0001f)
+    }
+
+    @Test
+    fun byTheTimeTheLaunchScreenIsLetGoNothingVisibleIsLeftToMoveInTheIntro() {
+        // The launch screen is let go from INTRO_SETTLED_MS, not from the end of the intro (the rest is only the springs' unseen tail),
+        // so the cookie under it must be within a hundredth of the settled one by then or the hand-over would show a change.
+        val settled = CookieMotion.intro(CookieMotion.INTRO_MS)
+        val s = CookieMotion.intro(CookieMotion.INTRO_SETTLED_MS)
+        assertTrue(CookieMotion.INTRO_SETTLED_MS < CookieMotion.INTRO_MS)
+        assertEquals(settled.scale, s.scale, 0.01f)
+        assertEquals(settled.lobes, s.lobes, 0.01f)
+        assertEquals(settled.logoScale, s.logoScale, 0.01f)
+        assertEquals(settled.logoAlpha, s.logoAlpha, 0.01f)
+        assertEquals(settled.rotation, s.rotation, 0.01f)
     }
 
     @Test
@@ -187,25 +209,48 @@ class CookieSplashTest {
 
     private val appColor = Color(0xFFE8A33D)
 
-    private fun show(ready: State<Boolean>, events: MutableList<String>, systemGone: State<Boolean> = mutableStateOf(true)) {
+    /** The palette's surface, which is the app's page and so the colour the cookie's ground ends as. */
+    private var paletteSurface = 0
+
+    private fun show(
+        ready: State<Boolean>,
+        events: MutableList<String>,
+        launchScreen: State<LaunchScreen> = mutableStateOf(LaunchScreen.None),
+    ) {
         val environment = TestEnvironment(prefsName = "cookie_splash_test").also { env = it }
         environment.preferences.setAccent(AccentColor.Volt)
         environment.preferences.setMode(ThemeMode.Light)
         compose.mainClock.autoAdvance = false
         compose.setContent {
             environment.Content {
+                paletteSurface = androidx.compose.material3.MaterialTheme.colorScheme.surface.toArgb()
                 Box(Modifier.fillMaxSize()) {
                     Box(Modifier.fillMaxSize().background(appColor))
                     CookieSplash(
                         ready = ready.value,
                         onFinished = { events += "finished" },
                         onWritten = { events += "written" },
-                        systemSplashGone = systemGone.value,
+                        launchScreen = launchScreen.value,
                     )
                 }
             }
         }
     }
+
+    /** Android's launch screen, held over the app, whose own intro ends [introEndsInMs] from now; letting it go is noted in [events]. */
+    private fun held(events: MutableList<String>, introEndsInMs: Long = 0): LaunchScreen.Held =
+        LaunchScreen.Held((compose.mainClock.currentTime + introEndsInMs) * 1_000_000L) { events += "released" }
+
+    private fun handOver(screen: MutableState<LaunchScreen>, to: LaunchScreen) {
+        screen.value = to
+        // The clock is by hand, so the write has to be handed to the composition by hand too.
+        androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+    }
+
+    private val context get() = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+
+    /** A spot in the cookie's body, left of the mark: 140 px (70 dp at xhdpi) from the middle of the screen. */
+    private fun body() = pixel(411 - 140, 891)
 
     private fun pixel(x: Int, y: Int): Int = compose.onRoot().captureToImage().asAndroidBitmap().getPixel(x, y)
 
@@ -230,28 +275,171 @@ class CookieSplashTest {
     }
 
     @Test
-    fun theIntroDoesNotStartBehindAndroidsLaunchScreen_butDoesNotWaitForeverForIt() {
-        // Seen on a phone: the cookie's spin-in played under the system's launch screen, which then faded to a cookie already full size.
+    fun whileAndroidHasNotHandedOverItsLaunchScreenTheSettledCookieIsAlreadyUnderItAndNothingStarts() {
+        // On Android 12 and later the intro is Android's. Until the launch screen is handed over the cookie it ends on is already
+        // drawn under it - in its colours, on its ground - so where the system swaps its screen for the app's (a phone showed an
+        // empty frame there) the cookie is what shows, not an empty ground. No intro of ours plays and nothing starts.
         val events = mutableListOf<String>()
-        val gone = mutableStateOf(false)
-        show(mutableStateOf(true), events, systemGone = gone)
+        show(mutableStateOf(true), events, launchScreen = mutableStateOf(LaunchScreen.Pending))
+        compose.mainClock.advanceTimeBy(20)
+        assertEquals(context.getColor(com.example.normpix.R.color.splash_cookie), body(), "the settled cookie, from the very first frame")
+        assertEquals(context.getColor(com.example.normpix.R.color.window_background), pixel(5, 5), "on the launch screen's ground")
         compose.mainClock.advanceTimeBy(1_000)
         assertEquals(emptyList(), events, "the intro has not begun while the launch screen is up")
-
-        gone.value = true
-        androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
-        compose.mainClock.advanceTimeBy((CookieMotion.INTRO_MS + 100).toLong())
-        assertEquals(listOf("written"), events, "it plays once the launch screen has gone")
+        assertEquals(context.getColor(com.example.normpix.R.color.splash_cookie), body(), "and it has not moved")
     }
 
     @Test
-    fun ifTheLaunchScreenNeverReportsGoingTheCookieStartsAnyway() {
+    fun ifNoLaunchScreenIsEverHandedOverTheCookiePlaysItsOwnIntroAnyway() {
+        // No launch screen was shown (some launches have none): after a short wait the cookie spins in by itself, and holds for the data.
         val events = mutableListOf<String>()
-        show(mutableStateOf(false), events, systemGone = mutableStateOf(false))
-        compose.mainClock.advanceTimeBy(CookieMotion.SYSTEM_SPLASH_WAIT_MS - 100)
+        show(mutableStateOf(false), events, launchScreen = mutableStateOf(LaunchScreen.Pending))
+        compose.mainClock.advanceTimeBy(CookieMotion.HANDOVER_WAIT_MS - 200)
         assertEquals(emptyList(), events)
-        compose.mainClock.advanceTimeBy(100 + CookieMotion.INTRO_MS.toLong() + 100)
+        compose.mainClock.advanceTimeBy(200 + CookieMotion.INTRO_MS.toLong() + 100)
         assertEquals(listOf("written"), events, "after the wait it plays, and holds for the data as usual")
+    }
+
+    @Test
+    fun aHeldLaunchScreenIsCoveredByTheSettledCookieAtOnceAndOnlyThenReleased() {
+        // The system plays the intro itself. Here the cookie it ends on is drawn under it - no intro of ours to play, no beat to wait -
+        // and the launch screen is taken away after it has been drawn, so there is nothing to see change. It fades (over the identical
+        // cookie), and the app is told it may start once the fade is done.
+        val events = mutableListOf<String>()
+        val screen = mutableStateOf<LaunchScreen>(LaunchScreen.Pending)
+        show(mutableStateOf(false), events, launchScreen = screen)
+        compose.mainClock.advanceTimeBy(100)
+        handOver(screen, held(events))
+        compose.mainClock.advanceTimeBy(100)
+        assertEquals(listOf("released"), events, "covered first; the fade is still going")
+        compose.mainClock.advanceTimeBy(CookieMotion.RELEASE_FADE_MS + 100)
+        assertEquals(listOf("released", "written"), events, "then the app may start; no intro of its own to play")
+        assertTrue(body() != context.getColor(com.example.normpix.R.color.window_background), "the cookie is already full size, not growing")
+    }
+
+    @Test
+    fun theCookieIsDrawnInTheColourTheLaunchScreenEndedInAndThenTurnsIntoThePalettes() {
+        // The launch screen's colours are the wallpaper's accent; the app's palette may be another (Volt here). No jump between them.
+        val events = mutableListOf<String>()
+        val screen = mutableStateOf<LaunchScreen>(LaunchScreen.Pending)
+        show(mutableStateOf(false), events, launchScreen = screen)
+        compose.mainClock.advanceTimeBy(100)
+        handOver(screen, held(events))
+        compose.mainClock.advanceTimeBy(40)
+        val launchFill = context.getColor(com.example.normpix.R.color.splash_cookie)
+        assertEquals(launchFill, body(), "as the system drew it, as it is let go")
+        compose.mainClock.advanceTimeBy(CookieMotion.TINT_MS.toLong() + 100)
+        assertEquals(VoltInk.toArgb(), body(), "then the palette's own")
+    }
+
+    @Test
+    fun theCookieUnderTheLaunchScreenIsThePictureTheLaunchScreenEndsOn() {
+        // The two have to be the same picture - size, place, shape, mark, colour - or taking the launch screen away would show a change.
+        val events = mutableListOf<String>()
+        val screen = mutableStateOf<LaunchScreen>(LaunchScreen.Pending)
+        show(mutableStateOf(false), events, launchScreen = screen)
+        compose.mainClock.advanceTimeBy(100)
+        handOver(screen, held(events))
+        compose.mainClock.advanceTimeBy(40)
+        val ours = compose.onRoot().captureToImage().asAndroidBitmap()
+
+        // Android draws the icon (288 dp) in the middle of the window, on the window's colour.
+        val side = (288 * context.resources.displayMetrics.density).roundToInt()
+        val theirs = Bitmap.createBitmap(ours.width, ours.height, Bitmap.Config.ARGB_8888)
+        theirs.eraseColor(context.getColor(com.example.normpix.R.color.window_background))
+        val left = (ours.width - side) / 2
+        val top = (ours.height - side) / 2
+        val icon = context.getDrawable(com.example.normpix.R.drawable.splash_icon)!!
+        icon.setBounds(left, top, left + side, top + side)
+        icon.draw(Canvas(theirs))
+
+        var differing = 0
+        val diff = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+        for (y in 0 until side) for (x in 0 until side) {
+            val a = ours.getPixel(left + x, top + y)
+            val b = theirs.getPixel(left + x, top + y)
+            val far = maxOf(abs(AndroidColor.red(a) - AndroidColor.red(b)), abs(AndroidColor.green(a) - AndroidColor.green(b)), abs(AndroidColor.blue(a) - AndroidColor.blue(b))) > 48
+            if (far) differing++
+            diff.setPixel(x, y, if (far) AndroidColor.RED else AndroidColor.rgb(AndroidColor.red(b) / 3, AndroidColor.green(b) / 3, AndroidColor.blue(b) / 3))
+        }
+        // Kept for looking at: ours | the launch screen's | where they differ.
+        val sheet = Bitmap.createBitmap(side * 3, side, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(sheet)
+        canvas.drawBitmap(Bitmap.createBitmap(ours, left, top, side, side), 0f, 0f, null)
+        canvas.drawBitmap(Bitmap.createBitmap(theirs, left, top, side, side), side.toFloat(), 0f, null)
+        canvas.drawBitmap(diff, 2f * side, 0f, null)
+        File("build/launch-splash").apply { mkdirs() }.resolve("cookie-vs-launch-screen.png")
+            .outputStream().use { sheet.compress(Bitmap.CompressFormat.PNG, 100, it) }
+
+        assertTrue(differing < side * side / 500, "$differing of ${side * side} pixels differ: the cookie is not the launch screen's")
+    }
+
+    @Test
+    fun aHeldLaunchScreenIsNotTakenAwayBeforeItsOwnIntroHasEnded() {
+        // A fast start hands the screen over while its cookie is still spinning in: taking it away then would jump to the settled one.
+        val events = mutableListOf<String>()
+        val screen = mutableStateOf<LaunchScreen>(LaunchScreen.Pending)
+        show(mutableStateOf(false), events, launchScreen = screen)
+        compose.mainClock.advanceTimeBy(100)
+        handOver(screen, held(events, introEndsInMs = 400))
+        compose.mainClock.advanceTimeBy(300)
+        assertEquals(emptyList(), events, "its intro has 100 ms to go")
+        compose.mainClock.advanceTimeBy(200)
+        assertEquals(listOf("released"), events)
+        compose.mainClock.advanceTimeBy(CookieMotion.RELEASE_FADE_MS + 100)
+        assertEquals(listOf("released", "written"), events)
+    }
+
+    @Test
+    fun afterAHeldLaunchScreenTheCookieStillHoldsForTheDataAndOpensOntoTheApp() {
+        val events = mutableListOf<String>()
+        val ready = mutableStateOf(false)
+        val screen = mutableStateOf<LaunchScreen>(LaunchScreen.Pending)
+        show(ready, events, launchScreen = screen)
+        compose.mainClock.advanceTimeBy(100)
+        handOver(screen, held(events))
+        compose.mainClock.advanceTimeBy(600)
+        assertEquals(listOf("released", "written"), events, "still up: the data has not come")
+        assertTrue(pixel(5, 5) != appColor.toArgb())
+
+        ready.value = true
+        androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        compose.mainClock.advanceTimeBy(300)
+        compose.mainClock.advanceTimeBy(CookieMotion.EXIT_MS.toLong() + 100)
+        assertEquals(listOf("released", "written", "finished"), events)
+        assertEquals(appColor.toArgb(), pixel(5, 5), "opened onto the app")
+    }
+
+    @Test
+    fun theGroundStartsAsTheLaunchScreensAndEndsAsThePalettesSurface_soTheOpeningRevealsAScreenOfItsOwnColour() {
+        // The ground is the launch screen's (the window's colour: no change where one gives way to the other) and turns into the
+        // palette's surface, which is the page. Recorded on a phone: a greenish ground round a pinkish page, a ring of another shade.
+        val events = mutableListOf<String>()
+        val screen = mutableStateOf<LaunchScreen>(LaunchScreen.Pending)
+        show(mutableStateOf(false), events, launchScreen = screen)
+        compose.mainClock.advanceTimeBy(100)
+        assertEquals(context.getColor(com.example.normpix.R.color.window_background), pixel(5, 5), "the launch screen's ground at first")
+        handOver(screen, held(events))
+        compose.mainClock.advanceTimeBy(CookieMotion.RELEASE_FADE_MS + CookieMotion.TINT_MS + 200)
+        assertEquals(paletteSurface, pixel(5, 5), "then the palette's surface")
+        assertEquals(paletteSurface, pixel(411, 40), "all over the screen the cookie is not on")
+    }
+
+    @Test
+    fun withNoLaunchScreenTheGroundIsThePalettesSurfaceFromTheStart() {
+        show(mutableStateOf(false), mutableListOf())
+        compose.mainClock.advanceTimeBy(900)
+        assertEquals(paletteSurface, pixel(5, 5))
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h891dp-night-xhdpi")
+    fun andItFollowsTheSystemsDarkNotTheAppsLightWhichIsWhatTheLaunchScreenDoes() {
+        show(mutableStateOf(false), mutableListOf(), launchScreen = mutableStateOf(LaunchScreen.Pending))
+        compose.mainClock.advanceTimeBy(900)
+        val ground = pixel(5, 5)
+        assertEquals(context.getColor(com.example.normpix.R.color.window_background), ground, "the window's dark colour, though the app here is set to Light")
+        assertTrue(AndroidColor.red(ground) < 0x40 && AndroidColor.green(ground) < 0x40 && AndroidColor.blue(ground) < 0x40, "and it is dark")
     }
 
     @Test

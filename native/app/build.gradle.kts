@@ -140,6 +140,17 @@ android {
             applicationIdSuffix = ".qa"
             matchingFallbacks += listOf("debug")
         }
+        // The release build (R8, not debuggable) under the QA id and the debug key, with screen capture left on: for timing
+        // a cold start and recording it, which a debug build is far too slow for and a real release (FLAG_SECURE) blanks.
+        // Installs beside the real app and over an installed qa build; never over the real app.
+        create("qaRelease") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".qa"
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            buildConfigField("boolean", "SECURE_WINDOW", "false")
+            buildConfigField("boolean", "UPDATES_ENABLED", "false")
+        }
     }
     splits {
         abi {

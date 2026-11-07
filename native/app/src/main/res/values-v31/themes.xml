@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!--
+      The window theme on Android 12 and later, whose launch screen Android draws from the very first moment of a cold start - before
+      the process, the activity or a first frame exist. The cookie's whole intro lives there (avd_splash.xml, played by the system
+      itself, so it is on screen at once and cannot stutter behind a busy main thread); the app then keeps that screen up, draws the
+      same settled cookie under it and opens it onto the app (see MainActivity and CookieSplash). Before 12 there is no such screen:
+      the window background alone shows, and the cookie is drawn by the app.
+    -->
+    <style name="Theme.NormPix" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowSplashScreenBackground">@color/window_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/avd_splash</item>
+        <!-- Ignored from Android 13 (the duration is the animation's own); 12 reads it. -->
+        <item name="android:windowSplashScreenAnimationDuration">600</item>
+    </style>
+
+    <!--
+      The same window with an empty launch screen (no icon): for the Name splash, which writes the app's name itself and would
+      otherwise follow a cookie. Android 13 and later are told to use it for the next start (MainActivity); the name here must not
+      change between versions, as Android keeps it.
+    -->
+    <style name="Theme.NormPix.LaunchBlank">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon_empty</item>
+    </style>
+</resources>

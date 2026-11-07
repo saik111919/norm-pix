@@ -204,8 +204,11 @@ fun rememberShellState(): ShellState = rememberSaveable(saver = ShellState.Saver
 fun NormPixRoot(
     container: AppContainer,
     showSplash: Boolean = false,
-    /** Android's own launch screen has gone (12 and later keep it over the app until it has drawn); the splash starts only then. */
-    systemSplashGone: Boolean = true,
+    /**
+     * What Android's own launch screen (12 and later) is doing: the cookie's intro is played there, from the first moment of the
+     * start, and the splash takes over from it; the name's splash starts only once it has gone (see [LaunchScreen]).
+     */
+    launchScreen: LaunchScreen = LaunchScreen.None,
     onDarkChanged: (Boolean) -> Unit = {},
 ) {
     val prefs by container.preferences.state.collectAsStateWithLifecycle()
@@ -218,7 +221,16 @@ fun NormPixRoot(
     var splashing by remember { mutableStateOf(showSplash && !reducedMotion) }
     // The app below the splash is first composed once the name is written, not while its letters move: that composition is
     // the heaviest thing a cold start does on the main thread, and a frame lost among the letters shows (see LaunchSplash).
-    var splashWritten by remember { mutableStateOf(!splashing) }
+    // The cookie's intro is not drawn here but by Android's launch screen, which nothing the app is busy with can make stutter, so
+    // the app composes at once, under it, and that work overlaps the intro instead of waiting behind it.
+    var splashWritten by remember {
+        mutableStateOf(!splashing || (prefs.launchAnimation == LaunchAnimation.Cookie && launchScreen !is LaunchScreen.None))
+    }
+    // A launch screen held for the cookie, with no cookie to take over from it (animations off, another splash chosen meanwhile), is let go.
+    val heldScreen = launchScreen as? LaunchScreen.Held
+    LaunchedEffect(heldScreen, splashing, prefs.launchAnimation) {
+        if (heldScreen != null && (!splashing || prefs.launchAnimation != LaunchAnimation.Cookie)) heldScreen.release()
+    }
     val splashLeaving = remember { Animatable(0f) }
     val finance by data.finance.state.collectAsStateWithLifecycle()
     // The user's own font file (Settings > Appearance > Interface font), made ready off the main thread; null for any other font.
@@ -269,14 +281,14 @@ fun NormPixRoot(
                         ready = finance.status != FinanceStatus.Loading,
                         onFinished = { splashing = false },
                         onWritten = { splashWritten = true },
-                        systemSplashGone = systemSplashGone,
+                        launchScreen = launchScreen,
                     )
                     LaunchAnimation.Name -> LaunchSplash(
                         ready = finance.status != FinanceStatus.Loading,
                         leaving = splashLeaving,
                         onFinished = { splashing = false },
                         onWritten = { splashWritten = true },
-                        systemSplashGone = systemSplashGone,
+                        systemSplashGone = launchScreen !is LaunchScreen.Pending,
                     )
                 }
             }

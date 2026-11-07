@@ -22,7 +22,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -34,11 +36,11 @@ import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /*
@@ -86,8 +88,44 @@ internal object CookieMotion {
     /** How small the cookie and the mark squish to before the cookie opens. */
     const val SQUISH = 0.82f
 
-    /** The cookie's radius as a share of the shorter side of the screen. */
-    const val RADIUS_OF_SCREEN = 0.21f
+    /**
+     * The cookie's radius in dp. Fixed, not a share of the screen: the launch screen's own cookie (`avd_splash.xml`, drawn by Android
+     * from the first moment of a cold start) cannot grow with the screen, and this one takes over from it, so they are the same size.
+     * 80 keeps the cookie, at its largest as it overshoots, inside the 192 dp circle Android shows of the launch screen's icon.
+     */
+    const val RADIUS_DP = 80f
+
+    /**
+     * The longest the app waits, once it has drawn, for Android to hand over its launch screen: it does within a frame or two of the
+     * first draw, so past this there is none (it was not shown) and the cookie plays its own intro.
+     */
+    const val HANDOVER_WAIT_MS = 1_200L
+
+    /** Frames the settled cookie is drawn under the launch screen before the launch screen is taken away, so nothing is missing between them. */
+    const val COVER_FRAMES = 2
+
+    /**
+     * How long into the intro nothing visible is left to move: the springs are within a hundredth of where they rest (tested) well
+     * before [INTRO_MS], which is only their last, unseen tail. The launch screen is let go from here, not from the end.
+     */
+    const val INTRO_SETTLED_MS = 420f
+
+    /**
+     * How long the launch screen's intro waits before it starts moving (every animator in `avd_splash.xml` has it as its start
+     * offset; the generator's `START_DELAY_MS` is the same number). Android starts the icon when it makes the launch screen, but the
+     * window is on screen only once the launcher's opening has run, so the first ~100 ms of an intro that began at once were not seen.
+     */
+    const val LAUNCH_DELAY_MS = 100
+
+    /**
+     * How long the launch screen takes to fade once it is let go. The settled cookie under it is the same picture, so the fade is
+     * invisible - but where the system swaps its own screen for the app's it can drop a frame (a phone showed an empty one), and
+     * a fade between two identical pictures has nothing to show for it.
+     */
+    const val RELEASE_FADE_MS = 90L
+
+    /** How long the cookie takes to turn from the launch screen's colours (the wallpaper's accent) into the palette's, when they differ. */
+    const val TINT_MS = 240
 
     /** How wide the mark's drawing is, against the cookie's radius (the drawing has room round the cards in it). */
     const val LOGO_OF_RADIUS = 2.6f
@@ -198,6 +236,9 @@ internal object CookieMotion {
     fun newPoints(): Pair<FloatArray, FloatArray> = FloatArray(POINTS) to FloatArray(POINTS)
 }
 
+/** A little more than the launch screen's fade, so its last frames are gone before the opening begins. */
+private const val FADE_SLACK_MS = 16L
+
 /**
  * Frames that come on time again: [onFrame] is told each frame's time and says whether [needed] in a row came no more than
  * [gapMs] after the one before. Kept apart from the clock so it can be checked with made-up times.
@@ -220,10 +261,14 @@ private suspend fun awaitCalmFrames() {
 }
 
 /**
- * The cold start's cookie: it spins in (once Android's own launch screen has gone, [systemSplashGone]: it would play behind it),
- * holds until the app is [ready] (up to [CookieMotion.MAX_WAIT_MS]) and has its frames on time, then opens onto the app and
- * calls [onFinished]. [onWritten] is called when the intro is done, which is when the app below may do its heavy work (as with
- * the name's splash, [LaunchSplash]: not while the cookie moves). Nothing under it can be touched, and a screen reader hears
+ * The cold start's cookie. On Android 12 and later the intro is played by Android's own launch screen from the first moment of
+ * the start ([launchScreen] is [LaunchScreen.Held]: the system's cookie is over the app, and the intro is done when it ends): this
+ * draws the same settled cookie under it - the same size, place and shape - and takes the launch screen away, so nothing changes
+ * where it was. Where there is no such screen (older phones) it plays the intro itself, once it is drawing, as before.
+ *
+ * Either way it then holds until the app is [ready] (up to [CookieMotion.MAX_WAIT_MS]) and has its frames on time, opens onto the
+ * app, and calls [onFinished]. [onWritten] is called when the intro is done, which is when the app below may do its heavy work (as
+ * with the name's splash, [LaunchSplash]: not while the cookie moves). Nothing under it can be touched, and a screen reader hears
  * the name once. It is not shown with animations removed; the app just opens.
  */
 @Composable
@@ -231,39 +276,72 @@ internal fun CookieSplash(
     ready: Boolean,
     onFinished: () -> Unit,
     onWritten: () -> Unit = {},
-    systemSplashGone: Boolean = true,
+    launchScreen: LaunchScreen = LaunchScreen.None,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val intro = remember { Animatable(0f) }
+    // With a launch screen to take over from (Android 12 and later) the cookie is settled from its first frame: it is under the launch
+    // screen, and where the system swaps one for the other (an empty frame, seen on a phone) it is what shows, not an empty ground.
+    val underLaunchScreen = launchScreen !is LaunchScreen.None
+    val intro = remember { Animatable(if (underLaunchScreen) CookieMotion.INTRO_MS else 0f) }
     val exit = remember { Animatable(0f) }
+    // 1 for the palette's colours, 0 for the launch screen's: under a launch screen the cookie starts as the system drew it.
+    val tint = remember { Animatable(if (underLaunchScreen) 0f else 1f) }
     val isReady by rememberUpdatedState(ready)
-    val isSystemSplashGone by rememberUpdatedState(systemSplashGone)
+    val currentLaunchScreen by rememberUpdatedState(launchScreen)
     val finished by rememberUpdatedState(onFinished)
     val written by rememberUpdatedState(onWritten)
     val reducedMotion = rememberReducedMotion()
     val logo = painterResource(R.drawable.ic_launcher_monochrome)
+    val launchFill = colorResource(R.color.splash_cookie)
+    val launchInk = colorResource(R.color.splash_cookie_ink)
     val path = remember { Path().apply { fillType = PathFillType.NonZero } }
     val frame = remember { Path().apply { fillType = PathFillType.EvenOdd } }
     val points = remember { CookieMotion.newPoints() }
-    val background = scheme.surface
-    val fill = scheme.primary
-    val ink = scheme.onPrimary
+    // The ground starts as the window's own colour (the launch screen's ground, see values-v31/themes.xml: no change of colour where
+    // one gives way to the other; it follows the system's light or dark, as the launch screen does, whatever the app is set to) and
+    // ends as the palette's surface, which is the app's page, so the opening reveals a screen of the colour of the ground.
+    val launchGround = colorResource(R.color.window_background)
+    val paletteGround = scheme.surface
+    val paletteFill = scheme.primary
+    val paletteInk = scheme.onPrimary
 
     LaunchedEffect(Unit) {
+        var held: LaunchScreen.Held? = null
         if (reducedMotion) {
             intro.snapTo(CookieMotion.INTRO_MS)
         } else {
-            // Not before Android's own launch screen has gone: on 12 and later it stays over the app until the app has drawn, and the
-            // spin-in played behind it (a phone showed the cookie already full size when the launch screen went).
-            withTimeoutOrNull(CookieMotion.SYSTEM_SPLASH_WAIT_MS) { snapshotFlow { isSystemSplashGone }.first { it } }
-            // Nor until the splash has been drawn twice: the first frame of a cold start is the busiest, and the start of the
-            // spin would be spent on work the user cannot see.
+            // Not until the splash has been drawn twice: the first frame of a cold start is the busiest, and what Android does with
+            // its launch screen is only known once the app has drawn.
             withFrameNanos { }
             withFrameNanos { }
-            intro.animateTo(CookieMotion.INTRO_MS, tween(CookieMotion.INTRO_MS.toInt(), easing = LinearEasing))
+            // Android 12 and later hand over their launch screen a frame or two after the app's first draw; if none comes there was
+            // none, and the intro is played here.
+            val handedOver = withTimeoutOrNull(CookieMotion.HANDOVER_WAIT_MS) {
+                snapshotFlow { currentLaunchScreen }.first { it !is LaunchScreen.Pending }
+            }
+            held = handedOver as? LaunchScreen.Held
+            if (held != null) {
+                // The system's cookie is over the app and plays the intro itself, from before this app existed. The settled cookie
+                // has been drawn under it since the first frame, in the colours it ends in; wait until nothing visible is left to
+                // move in the system's (a slow start is long past it), then fade it away over the identical cookie below.
+                val left = held.introEndsAtNanos - withFrameNanos { it }
+                if (left > 0) delay(left / 1_000_000L + 1)
+                repeat(CookieMotion.COVER_FRAMES) { withFrameNanos { } }
+                held.release()
+                // A palette that is not the wallpaper's accent takes over from the launch screen's colours without a jump.
+                launch { tint.animateTo(1f, tween(CookieMotion.TINT_MS, easing = LinearEasing)) }
+                // The opening starts once the launch screen is gone, never while its ghost is over the cookie that squishes.
+                delay(CookieMotion.RELEASE_FADE_MS + FADE_SLACK_MS)
+            } else {
+                // No launch screen came (there was none): the cookie plays its own intro, from nothing and in the palette's colours.
+                tint.snapTo(1f)
+                intro.snapTo(0f)
+                intro.animateTo(CookieMotion.INTRO_MS, tween(CookieMotion.INTRO_MS.toInt(), easing = LinearEasing))
+            }
         }
         written()
-        delay(CookieMotion.HOLD_MS)
+        // The held cookie has been still since the launch screen began to hold it: no beat is needed before the app may open.
+        if (held == null) delay(CookieMotion.HOLD_MS)
         withTimeoutOrNull(CookieMotion.MAX_WAIT_MS) { snapshotFlow { isReady }.first { it } }
         // The app below has just been given the main thread for its first frames: the opening waits for them to come on time.
         withTimeoutOrNull(CookieMotion.SETTLE_MAX_MS) { awaitCalmFrames() }
@@ -280,7 +358,13 @@ internal fun CookieSplash(
     ) {
         val cx = size.width / 2f
         val cy = size.height / 2f
-        val radius = min(size.width, size.height) * CookieMotion.RADIUS_OF_SCREEN
+        val radius = CookieMotion.RADIUS_DP * density
+        val fill = lerp(launchFill, paletteFill, tint.value)
+        val ink = lerp(launchInk, paletteInk, tint.value)
+        // The ground is what the launch screen's is (the window's colour; on Android 14 and later the system's own surface colour,
+        // which is the app's surface for the wallpaper palette) and turns into the palette's surface: the opening then reveals a
+        // screen of the very colour the ground was, and its edge is only the cookie's - not a ring of another shade.
+        val background = lerp(launchGround, paletteGround, tint.value)
         val exitMs = exit.value
         if (exitMs <= 0f) {
             val s = CookieMotion.intro(intro.value)

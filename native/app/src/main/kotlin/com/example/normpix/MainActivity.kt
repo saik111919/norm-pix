@@ -1,11 +1,15 @@
 package com.example.normpix
 
 import android.content.Intent
+import android.content.res.Resources
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.WindowManager
+import android.window.SplashScreenView
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.annotation.RequiresApi
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -13,36 +17,60 @@ import androidx.compose.runtime.setValue
 import com.example.normpix.ui.components.LocalLiveMotion
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
+import com.example.normpix.navigation.CookieMotion
+import com.example.normpix.navigation.LaunchScreen
 import com.example.normpix.navigation.NormPixRoot
 import com.example.normpix.reminders.ReminderNotifications
 import com.example.normpix.reminders.ReminderOverlay
+import com.example.normpix.settings.LaunchAnimation
 import com.example.normpix.updates.SystemUpdateNotifier
 import com.example.normpix.wallet.BiometricAuthenticator
 import com.example.normpix.wallet.expiry.CardExpiryNotifications
 import com.example.normpix.widgets.WidgetIntents
+import java.time.Duration
+import java.time.Instant
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
-/** How long Android's own launch screen takes to fade once the app lets it go: short, so the app's splash is not hidden behind it. */
+/** How long Android's own launch screen takes to fade once the app lets it go (when it is not the cookie's): short, so a splash is not hidden behind it. */
 private const val SYSTEM_SPLASH_FADE_MS = 90L
+
+/** The cookie's intro in the launch screen's icon (`avd_splash.xml`) has nothing visible left to move this long after Android starts it. */
+private const val LAUNCH_INTRO_MS = CookieMotion.LAUNCH_DELAY_MS + CookieMotion.INTRO_SETTLED_MS.toLong()
+
+/** How long the launch screen takes to fade once the splash lets it go (see [CookieMotion.RELEASE_FADE_MS]). */
+private const val LAUNCH_SCREEN_FADE_MS = CookieMotion.RELEASE_FADE_MS
+
+/** The most the app keeps a held launch screen if nothing takes it away (the splash that should have is gone, or never came). */
+private const val LAUNCH_SCREEN_FAILSAFE_MS = 4_000L
 
 // BiometricPrompt needs a FragmentActivity host.
 class MainActivity : FragmentActivity() {
     private val container get() = (application as NormPixApplication).container
 
+    private val launchScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     /**
-     * Android 12 and later keep their own launch screen (the app's icon) over the app until it has drawn its first frame, and
-     * then fade it away at a pace of their own: the app's splash began under it, and a phone showed its cookie already full
-     * size when the icon went. So the app takes the launch screen away itself, with a short fade, and its splash starts only
-     * once it is going. Earlier versions have no such screen to wait for.
+     * Android 12 and later draw their own launch screen over every cold start, from the first moment - before this process, this
+     * activity or a first frame exist - and hand it to the app once it has drawn. The cookie's intro is played *there* (the icon is
+     * an animated vector, `avd_splash.xml`), so there is no empty screen while the app starts and nothing the app is busy with can
+     * make it stutter; the app keeps that screen up, draws the same settled cookie under it, and takes it away when it is ready to
+     * open onto the app (see [LaunchScreen] and CookieSplash). Earlier versions have no such screen: the app draws the cookie itself.
      */
-    private var systemSplashGone by mutableStateOf(Build.VERSION.SDK_INT < Build.VERSION_CODES.S)
+    private var launchScreen by mutableStateOf<LaunchScreen>(
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) LaunchScreen.None else LaunchScreen.Pending,
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            splashScreen.setOnExitAnimationListener { view ->
-                systemSplashGone = true
-                view.animate().alpha(0f).setDuration(SYSTEM_SPLASH_FADE_MS).withEndAction { view.remove() }.start()
-            }
+            splashScreen.setOnExitAnimationListener { view -> onLaunchScreen(view, coldStart = savedInstanceState == null) }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) keepLaunchScreenThemeInStep()
         }
         if (BuildConfig.SECURE_WINDOW) {
             // Card numbers, CVVs and cardholder names render on screen: block
@@ -69,7 +97,7 @@ class MainActivity : FragmentActivity() {
                     container = container,
                     // A fresh start writes the app's name out first; coming back to a restored activity doesn't.
                     showSplash = savedInstanceState == null,
-                    systemSplashGone = systemSplashGone,
+                    launchScreen = launchScreen,
                     onDarkChanged = { dark ->
                         // The app's own light/dark choice can differ from the system's.
                         val transparent = android.graphics.Color.TRANSPARENT
@@ -79,6 +107,47 @@ class MainActivity : FragmentActivity() {
                         )
                     },
                 )
+            }
+        }
+    }
+
+    /**
+     * Android hands over its launch screen. When it is the cookie's - a cold start, the Cookie launch choice, animations on - it is
+     * kept over the app, and the splash is told when its intro ends and how to take it away. Otherwise (the name's splash, a start
+     * that is not a cold one, animations off) it fades away at once, as it always did.
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun onLaunchScreen(view: SplashScreenView, coldStart: Boolean) {
+        val animatedIcon = (view.iconAnimationDuration?.toMillis() ?: 0L) > 0L
+        val animationsOn = Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f
+        val cookie = coldStart && animatedIcon && animationsOn &&
+            container.preferences.state.value.launchAnimation == LaunchAnimation.Cookie
+        if (!cookie) {
+            launchScreen = LaunchScreen.None
+            view.animate().alpha(0f).setDuration(SYSTEM_SPLASH_FADE_MS).withEndAction { view.remove() }.start()
+            return
+        }
+        // How much of the intro is left to play: none when the app was slower than it is long.
+        val played = view.iconAnimationStart?.let { Duration.between(it, Instant.now()).toMillis() } ?: LAUNCH_INTRO_MS
+        val left = (LAUNCH_INTRO_MS - played).coerceAtLeast(0L)
+        launchScreen = LaunchScreen.Held(System.nanoTime() + left * 1_000_000L) {
+            view.animate().alpha(0f).setDuration(LAUNCH_SCREEN_FADE_MS).withEndAction { view.remove() }.start()
+        }
+        view.postDelayed({ view.remove() }, LAUNCH_SCREEN_FAILSAFE_MS)
+    }
+
+    /**
+     * Tells Android which launch screen to use for the next start (from Android 13; it keeps the choice): the cookie's is the
+     * manifest's own, so for it the choice is cleared, and the name's splash gets an empty one, as it writes the name itself.
+     */
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private fun keepLaunchScreenThemeInStep() {
+        val screen = splashScreen
+        launchScope.launch {
+            container.preferences.state.map { it.launchAnimation }.distinctUntilChanged().collect { animation ->
+                val theme = if (animation == LaunchAnimation.Cookie) Resources.ID_NULL else R.style.Theme_NormPix_LaunchBlank
+                // A call into the system, kept off the main thread.
+                runCatching { screen.setSplashScreenTheme(theme) }
             }
         }
     }
@@ -160,6 +229,7 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
+        launchScope.cancel()
         if (container.host.activity === this) {
             container.host.activity = null
             container.lock.authenticator = null
