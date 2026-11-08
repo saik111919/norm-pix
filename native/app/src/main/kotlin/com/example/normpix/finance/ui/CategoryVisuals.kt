@@ -249,11 +249,11 @@ private fun AvatarArt(colors: PaletteColors?, art: CategoryArt?, modifier: Modif
 
 /** How much of an avatar's disc a 3D picture spans, and a flat icon. */
 private const val PICTURE_IN_DISC = 0.62f
-private const val ICON_IN_DISC = 0.5f
+internal const val ICON_IN_DISC = 0.5f
 
 /** ... and without a disc, where the art has the whole box to itself. */
 private const val PICTURE_IN_BOX = 0.95f
-private const val BARE_ICON_IN_BOX = 0.72f
+internal const val BARE_ICON_IN_BOX = 0.72f
 
 /** How much of an avatar's box [art] fills: a logo all of it, a picture or an icon what suits them, more without a disc ([bare]). */
 private fun artFill(art: CategoryArt, bare: Boolean): Float = when (art) {

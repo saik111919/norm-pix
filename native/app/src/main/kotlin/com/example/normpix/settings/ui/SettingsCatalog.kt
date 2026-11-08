@@ -100,6 +100,7 @@ object SettingsCatalog {
         SettingsEntry("Categories in Insights", SettingsPage.Appearance, listOf("insights", "categories", "carousel", "list", "ranked", "where your money went", "spending", "layout"), appearance = AppearanceSection.Layouts),
         SettingsEntry("Accounts layout", SettingsPage.Appearance, listOf("accounts", "stack", "stacked", "cards", "list", "rows", "compact", "carousel", "swipe", "layout", "wallet"), appearance = AppearanceSection.Layouts),
         SettingsEntry("Cards layout", SettingsPage.Appearance, listOf("cards", "stack", "stacked", "list", "rows", "compact", "carousel", "swipe", "layout", "wallet"), appearance = AppearanceSection.Layouts, cardsOnly = true),
+        SettingsEntry("Card design", SettingsPage.Appearance, listOf("card design", "card face", "banner", "ledger", "tinted", "classic", "cards", "accounts", "style", "layout", "wallet"), appearance = AppearanceSection.Layouts),
         SettingsEntry("Bank logo style", SettingsPage.Appearance, listOf("logo", "brand", "icon", "compact", "full", "bank", "wallet"), appearance = AppearanceSection.CategoryIcons),
         SettingsEntry("Hero weather", SettingsPage.Appearance, listOf("weather", "hero", "animation", "rain", "snow", "sun", "heat", "home", "month card", "overcast", "motion", "effects"), appearance = AppearanceSection.Effects),
         SettingsEntry("Card tilt", SettingsPage.Appearance, listOf("tilt", "motion", "gyroscope", "sensor", "parallax", "animation", "accounts", "cards"), appearance = AppearanceSection.Effects),

@@ -168,9 +168,25 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
   `NavHost`. `AppShell` is the tab host: **Home, Plans & Activity, Insights, Wallet** (`AppDestination`), a floating dock
   (`FloatingNavBar`) on phones and a rail on wide windows, hiding on scroll (`ScrollAwareBar`). `ShellState` (hoisted:
   tab index, section, plans tab) survives navigation. Settings is not a tab.
-- Routes (`Routes` object in `NormPixRoot.kt`): `main`, `categories`, `budget-history`, `people`, `person/{id}`,
+  **The shell is not a NavHost page** (since 2026-11-08): `PersistentShell` (`AppShell.kt`) composes it *beneath* the NavHost and keeps it
+  composed under every pushed page; the `main` route is `shellPage` (`PageTransitions.kt`), an empty entry whose navigation transition
+  - which the back gesture seeks - becomes `ShellBeneath.progress`, so the shell is drawn as the page beneath (`BackPreview.revealed`).
+  Under a page (`covered`) it takes no touch (a page's empty corners must not reach it), no screen reading and no back
+  (`PredictiveBackHandler` / the menu's `BackHandler` stand down, the More menu closes), and its tabs' sensors stop
+  (`LocalShellCovered` into `LocalTabVisible`). Why: a page used to dispose it, so the back gesture had nothing under the page but
+  the background until let go, and then waited for the whole shell to be composed again (a 450-550 ms frame backing out of Settings,
+  measured on the phone and the emulator). A new thing that must not run under a page checks `LocalShellCovered`/`LocalTabVisible`.
+- Routes (`Routes` object in `NormPixRoot.kt`): `main`, `notifications`, `categories`, `budget-history`, `people`, `person/{id}`,
   `category/{id}/{month}?from&to`, `account/{id}`, `settings`, `settings/{page}`, `appearance/{section}`, `profile`,
   `search`, `reminder/{id}`, `update`, `changelog`, `about`, `about/{topic}`.
+- **Notifications** (`notifications/`, 2026-11-08): one gathering of what needs the user, provided once above the NavHost
+  (`ProvideNotifications` / `LocalNotifications`, in `rememberNotifications()`): the same banners Home's Needs attention is made
+  of (`screens/HomeBanners.kt`, now `internal`: `reminderBanners`, `budgetBanners`, `cardExpiryBanners`, `crashBanners`,
+  `backupBanners`, `updateBanners`), as `AppNotification(kind, banner)` in `Notifications`. The bell on every top-level page is
+  `LocalTopBarExtras` (design system `Pages.kt`, which does not know what it is) provided as `NotificationBellExtra`; the
+  Notifications page is `Routes.NOTIFICATIONS`, and the strip above the "+" menu's panel is `navigation/NotificationStrip.kt`.
+  **Seen is not history**: `Notifications.seen` is `notifications_seen` in preferences (a `\n`-joined string, never backed up,
+  kept by "reset to defaults"); opening the page writes what is listed now, so a gone key is new again if it comes back.
 - Screens depend on the `AppNavigator` interface (`navigation/AppNavigator.kt`), not on the navigation library;
   `NavControllerNavigator` implements it. Newer methods have a default body (`= Unit` or a fallback) so test doubles keep
   compiling; **a new abstract method must also be added to `RecordingNavigator`** (in `testing/TestEnvironment.kt`).

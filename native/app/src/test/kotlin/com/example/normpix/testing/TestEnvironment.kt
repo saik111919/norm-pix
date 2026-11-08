@@ -64,6 +64,10 @@ class RecordingNavigator : AppNavigator {
     override fun openPeople() {
         peopleOpened++
     }
+    var notificationsOpened = 0
+    override fun openNotifications() {
+        notificationsOpened++
+    }
     override fun openPerson(personId: Long) {
         people += personId
     }

@@ -75,8 +75,8 @@ private fun LogoText(text: String, size: TextUnit, weight: FontWeight, spacing: 
  * beside the name - never an empty or broken logo.
  */
 @Composable
-fun BankLogoView(bankName: String, theme: BankBrandTheme, compact: Boolean, modifier: Modifier = Modifier) {
-    val file = remember(bankName, compact) { BankLogoResolver.logoFor(bankName)?.pick(compact, onDark = true) }
+fun BankLogoView(bankName: String, theme: BankBrandTheme, compact: Boolean, modifier: Modifier = Modifier, onDark: Boolean = true) {
+    val file = remember(bankName, compact, onDark) { BankLogoResolver.logoFor(bankName)?.pick(compact, onDark = onDark) }
     val aspectRatio = file?.let { rememberBankArtAspectRatio(it) }
     if (file == null || aspectRatio == null) {
         Box(modifier.semantics { contentDescription = theme.displayName }) { HandDrawnLogo(theme.logo) }

@@ -96,6 +96,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.normpix.settings.DockSelectionStyle
+import com.example.normpix.notifications.LocalNotifications
 import com.example.normpix.ui.components.FrostedBackdrop
 import com.example.normpix.ui.components.LocalFrostedBackdrop
 import com.example.normpix.ui.components.frostedGlass
@@ -201,6 +202,8 @@ fun FloatingNavigationRow(
     onDestinationSelected: (AppDestination) -> Unit,
     modifier: Modifier = Modifier,
     onOpenSettings: () -> Unit = {},
+    /** What the "See all" under the notifications above the menu does. */
+    onOpenNotifications: () -> Unit = {},
     actions: List<FooterAction> = emptyList(),
     isMoreOpen: Boolean = false,
     onMoreToggle: () -> Unit = {},
@@ -249,6 +252,19 @@ fun FloatingNavigationRow(
             verticalArrangement = Arrangement.spacedBy(ActionMenuGap),
         ) {
             if (panelShown) {
+                // What is new and needs the user, above the panel (see NotificationStrip).
+                NotificationStrip(
+                    notifications = LocalNotifications.current,
+                    progress = progress,
+                    onOpen = { item ->
+                        onMoreToggle()
+                        item.banner.onOpen()
+                    },
+                    onSeeAll = {
+                        onMoreToggle()
+                        onOpenNotifications()
+                    },
+                )
                 ActionMenuPanel(
                     actions = actions,
                     layout = actionLayout,

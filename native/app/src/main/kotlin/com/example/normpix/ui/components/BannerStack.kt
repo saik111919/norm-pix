@@ -2,6 +2,7 @@ package com.example.normpix.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
@@ -37,6 +39,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -109,6 +117,38 @@ fun BannerStack(banners: List<Banner>, state: DeckStackState, modifier: Modifier
 /** How much darker each banner behind the front one is: a pale surface needs a hint of shade to read as a card behind, not a slab. */
 private const val BehindDim = 0.06f
 
+/**
+ * One banner on its own, in full, with nothing laid over it: what a page that lists banners shows (the Notifications page). It is
+ * one thing to read and press, as in a [BannerStack]: the lines are spoken together and its buttons are offered as actions, so a
+ * screen reader never lands on a button inside it by mistake.
+ */
+@Composable
+fun BannerCard(banner: Banner, modifier: Modifier = Modifier) {
+    val spoken = remember(banner) { banner.spoken() }
+    val actions = remember(banner) {
+        listOfNotNull(banner.secondary, banner.primary).map { action ->
+            CustomAccessibilityAction(action.label) {
+                action.onClick()
+                true
+            }
+        }
+    }
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(Outer))
+            .clickable(onClickLabel = "Opens the details", onClick = banner.onOpen)
+            .clearAndSetSemantics {
+                contentDescription = spoken
+                role = Role.Button
+                onClick(label = "Opens the details") { banner.onOpen(); true }
+                if (actions.isNotEmpty()) customActions = actions
+            },
+    ) {
+        BannerFace(banner, plate = false)
+    }
+}
+
 /** How much of the status colour washes the banner's surface: enough to tell an overdue one from a budget one at a glance, not a slab. */
 private const val CardWash = 0.08f
 
@@ -151,15 +191,18 @@ internal fun readableOn(fill: Color, preferred: Color, fallback: Color): Color {
     return if ((maxOf(a, b) + 0.05f) / (minOf(a, b) + 0.05f) >= 4.5f) preferred else fallback
 }
 
-private fun Banner.spoken(index: Int, count: Int): String = buildString {
+/** What a screen reader says of one banner: its three lines, then its bar or figure where it has one. */
+internal fun Banner.spoken(): String = buildString {
     append("$eyebrow. $title. $message")
     figure?.let {
         append(". ${it.title} ${it.figure}")
         it.note?.let { note -> append(", $note") }
     }
     bar?.let { append(". ${it.label}") }
-    if (count > 1) append(", ${index + 1} of $count")
 }
+
+private fun Banner.spoken(index: Int, count: Int): String =
+    if (count > 1) "${spoken()}, ${index + 1} of $count" else spoken()
 
 /**
  * The banner itself, in the summary banner's design (`SplitStatBanner`): two panels joined by a seam - what it is on the left, with

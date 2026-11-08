@@ -260,6 +260,14 @@ enum class CardsLayout(val label: String, val description: String) {
     Carousel("Carousel", "One card in the middle, the next ones peeking in from the sides. Swipe across to change card; its details and buttons are underneath, whichever Card actions style is chosen"),
 }
 
+/** Visual design of saved cards and account cards across the app. */
+enum class CardDesign(val label: String, val description: String) {
+    Classic("Classic", "The printed bank card look, with brand colors, embossed numbers, and glossy highlights"),
+    Banner("Banner", "Panels like the bill banners: the name and number on top, the details in two small panels under it"),
+    Ledger("Ledger", "A flat, quiet surface with a thin outline and big, easy numbers"),
+    Tinted("Tinted", "Subtle single-tone tint seeded from the bank's brand color, with an outlined chip"),
+}
+
 /**
  * How the app's built-in category icons are drawn: as 3D pictures, as the phone's own emoji, or as the outlined Material
  * icons. A brand is shown by its logo in the first two. A category the user gave an emoji of their own shows that emoji in
@@ -355,6 +363,7 @@ data class AppPrefsState(
     val bankIconStyle: BankIconStyle = BankIconStyle.Full,
     val accountsLayout: AccountsLayout = AccountsLayout.Stack,
     val cardsLayout: CardsLayout = CardsLayout.Cards,
+    val cardDesign: CardDesign = CardDesign.Classic,
     val nfcTagRevealEnabled: Boolean = false,
     /** Revealing a card asks for one of the tags the user registered, not just any tag or phone. */
     val nfcRevealRegisteredOnly: Boolean = false,
@@ -440,6 +449,8 @@ data class AppPrefsState(
     val backupNudgeSnoozedUntil: Long = 0L,
     /** The newest crash report the user has seen or dismissed (epoch millis; 0 for none): a newer one is offered on Home. About this phone. */
     val crashLogSeenAt: Long = 0L,
+    /** Which notifications (see `notifications/`) have been seen on this phone: their keys, as the Notifications page last showed them. */
+    val notificationsSeen: Set<String> = emptySet(),
     /** How far the system's record of how the app's processes ended has been read (epoch millis), so an ANR is reported once. About this phone. */
     val crashExitsCheckedAt: Long = 0L,
     /** How the month a page shows is switched: one tonal track, or the earlier separate buttons. */
@@ -562,6 +573,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
             bankIconStyle = prefs.enum(K_BANK_ICON_STYLE, defaults.bankIconStyle),
             accountsLayout = prefs.enum(K_ACCOUNTS_LAYOUT, defaults.accountsLayout),
             cardsLayout = prefs.enum(K_CARDS_LAYOUT, defaults.cardsLayout),
+            cardDesign = prefs.enum(K_CARD_DESIGN, defaults.cardDesign),
             nfcTagRevealEnabled = prefs.getBoolean(K_NFC_REVEAL, defaults.nfcTagRevealEnabled),
             nfcRevealRegisteredOnly = prefs.getBoolean(K_NFC_REVEAL_REGISTERED, defaults.nfcRevealRegisteredOnly),
             walletLockEnabled = prefs.getBoolean(K_WALLET_LOCK, defaults.walletLockEnabled),
@@ -592,6 +604,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
             backupReminderDays = BackupFreshness.normalise(prefs.getInt(K_BACKUP_REMINDER_DAYS, defaults.backupReminderDays)),
             backupNudgeSnoozedUntil = prefs.getLong(K_BACKUP_NUDGE_SNOOZED_UNTIL, defaults.backupNudgeSnoozedUntil).coerceAtLeast(0L),
             crashLogSeenAt = prefs.getLong(K_CRASH_LOG_SEEN_AT, defaults.crashLogSeenAt).coerceAtLeast(0L),
+            // One string, a key to a line: a set of strings is a value type the backup codec does not carry (and this is never backed up).
+            notificationsSeen = prefs.getString(K_NOTIFICATIONS_SEEN, null).orEmpty().split('\n').filter { it.isNotEmpty() }.toSet(),
             crashExitsCheckedAt = prefs.getLong(K_CRASH_EXITS_CHECKED_AT, defaults.crashExitsCheckedAt).coerceAtLeast(0L),
             monthControlStyle = prefs.enum(K_MONTH_CONTROL, defaults.monthControlStyle),
             categoryIconStyle = prefs.enum(K_CATEGORY_ICON_STYLE, defaults.categoryIconStyle),
@@ -682,6 +696,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
     fun setAccountsLayout(layout: AccountsLayout) = change({ copy(accountsLayout = layout) }) { putString(K_ACCOUNTS_LAYOUT, layout.name) }
 
     fun setCardsLayout(layout: CardsLayout) = change({ copy(cardsLayout = layout) }) { putString(K_CARDS_LAYOUT, layout.name) }
+
+    fun setCardDesign(design: CardDesign) = change({ copy(cardDesign = design) }) { putString(K_CARD_DESIGN, design.name) }
 
     fun setAppLockScope(scope: AppLockScope) = change({ copy(appLockScope = scope) }) { putString(K_LOCK_SCOPE, scope.name) }
 
@@ -788,6 +804,15 @@ class AppPreferences(private val prefs: SharedPreferences) {
     }
 
     /** The crash reports up to [atMillis] have been seen (or dismissed): only a newer one is offered again. Never moves back. */
+    /**
+     * Says these notifications were seen, and only these: a key that is no longer among them is forgotten, so a budget that is over
+     * again next month, or a reminder that is overdue again, is new again. No write when nothing changes.
+     */
+    fun markNotificationsSeen(keys: Set<String>) {
+        if (keys == _state.value.notificationsSeen) return
+        change({ copy(notificationsSeen = keys) }) { putString(K_NOTIFICATIONS_SEEN, keys.sorted().joinToString("\n")) }
+    }
+
     fun markCrashLogSeen(atMillis: Long) {
         if (atMillis <= _state.value.crashLogSeenAt) return
         change({ copy(crashLogSeenAt = atMillis) }) { putLong(K_CRASH_LOG_SEEN_AT, atMillis) }
@@ -957,7 +982,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         // Nor is when the last backup was made: forgetting it would say "never backed up" about data that was.
         val keep = setOf(
             K_EXACT_ALARM_PROMPTED, K_PROFILE_NAME, K_PROFILE_EMOJI, K_PROFILE_PHOTO, K_ONBOARDING_DONE,
-            K_LAST_BACKUP_AT, K_BACKUP_NUDGE_SNOOZED_UNTIL, K_CRASH_LOG_SEEN_AT, K_CRASH_EXITS_CHECKED_AT,
+            K_LAST_BACKUP_AT, K_BACKUP_NUDGE_SNOOZED_UNTIL, K_CRASH_LOG_SEEN_AT, K_CRASH_EXITS_CHECKED_AT, K_NOTIFICATIONS_SEEN,
         )
         _state.update {
             AppPrefsState(
@@ -968,6 +993,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
                 lastBackupAt = it.lastBackupAt,
                 backupNudgeSnoozedUntil = it.backupNudgeSnoozedUntil,
                 crashLogSeenAt = it.crashLogSeenAt,
+                notificationsSeen = it.notificationsSeen,
                 crashExitsCheckedAt = it.crashExitsCheckedAt,
             )
         }
@@ -1053,6 +1079,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_BANK_ICON_STYLE = "bank_icon_style"
         const val K_ACCOUNTS_LAYOUT = "accounts_layout"
         const val K_CARDS_LAYOUT = "cards_layout"
+        const val K_CARD_DESIGN = "card_design"
         const val K_NFC_REVEAL = "nfc_tag_reveal_enabled"
         const val K_NFC_REVEAL_REGISTERED = "nfc_reveal_registered_only"
         const val K_WALLET_LOCK = "wallet_lock_enabled"
@@ -1084,6 +1111,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_BACKUP_REMINDER_DAYS = "backup_reminder_days"
         const val K_BACKUP_NUDGE_SNOOZED_UNTIL = "backup_nudge_snoozed_until"
         const val K_CRASH_LOG_SEEN_AT = "crash_log_seen_at"
+        const val K_NOTIFICATIONS_SEEN = "notifications_seen"
         const val K_CRASH_EXITS_CHECKED_AT = "crash_exits_checked_at"
         const val K_MONTH_CONTROL = "month_control_style"
         const val K_CATEGORY_ICON_STYLE = "category_icon_style"
@@ -1143,6 +1171,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
             // Which crash reports this phone has shown, and how far it has read the system's record: about this phone too.
             K_CRASH_LOG_SEEN_AT,
             K_CRASH_EXITS_CHECKED_AT,
+            // Which notifications this phone has shown as seen: its own, as reminder ids and the like differ from phone to phone.
+            K_NOTIFICATIONS_SEEN,
             K_DUMMY_DATA,
             K_WALLET_LOCK,
             K_LOCK_SCOPE,

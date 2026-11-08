@@ -59,7 +59,13 @@ Use these before writing anything new:
   Expense|Income - one pill track with the chosen choice as a pill inside; 2 dp gaps, radio semantics), `ButtonGroup.kt`,
   `AppSplitButton` (`SplitButton.kt`), `OptionSheet` (`ui/components/OptionSheet.kt`: replaces exposed dropdown menus and floating chip grids across `AccountSelector`, `CategoryPicker`, `BankSelector`, `ChoiceDropdownField`, and `TransactionFilterSheet`),
   tonal selection cards with a 40 dp circular icon badge (Category, Paid from, From/To), split date/time chips.
-- **Progress**: `AppLinearProgress`, `AppLoadingIndicator` (`Progress.kt`) in Wavy or Flat (`ProgressStyle`).
+- **Card designs** (`wallet/CardDesigns.kt`, 2026-11-08): User-selectable card styles under Settings > Appearance > Card design (`CardDesign`: `Classic`, `Banner`, `Ledger`, `Tinted`). Applied uniformly to stored cards (`WalletCardView`) and account cards (`AccountCardView`), stack views, and carousels.
+  - `Classic`: byte-for-byte legacy design with bank brand theme gradient, chip, masked digits, bank logo, cardholder, expiry, and kind pill.
+  - `Banner`: a 2 x 2 grid of `secondaryContainer` panels (the card's 16 dp outer corners, 4 dp inner, 3 dp seam); layout and known gaps in features.md section 4.
+  - `Ledger`: statement-inspired face (`surfaceContainerHigh`, 1 dp `outlineVariant` border, 28 dp bank avatar, monospace tabular digits, uppercase cardholder, signature & CVV strip on back).
+  - `Tinted`: Classic's layout on the bank's own hue (`tintedCardScheme`: `ArtworkColors.scheme`, `primaryContainer`; the theme's own when the Artwork colors switch is off); no gradient or gloss.
+  - All designs keep `CARD_ASPECT`, `holdFocus`, `focusRing`, `CardTilt`, zero shadow and one TalkBack sentence. **A face must fill its own corners inside the card's `AppRadius.lg` clip** (everything around a card clips at that radius; `CardDesignRenderTest` checks it). A person's avatar, like a category's, fills 72% of its box with no disc behind it (`BARE_ICON_IN_BOX`) and 50% inside a disc (`ICON_IN_DISC`).
+- **Progress**: `AppLinearProgress`, `AppLoadingIndicator` (`Progress.kt`) in Wavy or Flat (`ProgressStyle`). **Every bar in a list row is `calm = true`** (budgets, category shares, people): the wave is for a bar that stands on its own, and at a small share a wavy row bar is still rising and shows as a slanted stub under the name (the People rows had it, 2026-11-08).
 - **Decks**: `DeckCarousel` (a **flat** overlapping row since 2026-10-31: the front card whole, its neighbours at 0.9 and shaded, about 44 dp of
   each showing - inside Material's 40-56 dp peek - snapping on `AppMotion.spatial()`, Material's default spatial spring 0.8 / 380; it was fanned 46
   degrees in 3D, which the owner did not like; the details panel slides, shrinks and fades but no longer turns), `DeckStack`, `DeckFacts`
@@ -88,6 +94,9 @@ Use these before writing anything new:
   as the pill with how much of how much; the **crash** report has neither (one full-width panel). Large text stacks the panels. The pieces
   (`Panel`, `FigureBody`, `PillBody`, `CyclePill`, the shapes) are the summary banner's, made `internal`. `spoken()` says the figure and the pill too. Items of a
   deck must be the same size, so keep each line to one line (the title excepted as above). The ratchet counts hand-set spacing: `BannerStack.kt` is now clean.
+  **`BannerCard`** (2026-11-08) is the same banner on its own, not in a deck - what the Notifications page lists: it keeps the one-thing-to-read
+  semantics of a stacked banner (`contentDescription` of the three lines, `Role.Button`, the open action, and the two buttons as custom
+  accessibility actions), so the `Panel`s' `clearAndSetSemantics` can never leave a banner unreadable, but it draws nothing over or behind it.
 - **Summary banner** (`SplitStatBanner.kt`, 2026-11-07, from the owner's reference picture - a "Due date" panel with a progress pill beside a
   "Total" panel): two panels in one `secondaryContainer`, big outer corners (`AppRadius.xxl`) and 8 dp where they meet, a 4 dp seam as the divider (the
   hero's language), fine curved lines drawn over both at 7% of the ink (`curvedLines`, 16 dp apart). Left (`BannerProgress`): title, a line under it, a

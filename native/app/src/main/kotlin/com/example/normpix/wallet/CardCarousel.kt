@@ -13,6 +13,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.example.normpix.settings.BankIconStyle
+import com.example.normpix.settings.CardDesign
 import com.example.normpix.ui.components.DeckCarousel
 import com.example.normpix.ui.components.DeckDetail
 import com.example.normpix.ui.components.DeckFact
@@ -48,6 +49,7 @@ fun CardCarousel(
     onDelete: (StoredCard) -> Unit,
     onCopy: (StoredCard, CardField?) -> Unit,
     modifier: Modifier = Modifier,
+    cardDesign: CardDesign = CardDesign.Classic,
 ) {
     DeckCarousel(
         items = cards,
@@ -73,6 +75,7 @@ fun CardCarousel(
                 tilt = tilt.takeIf { inFront },
                 onCopy = { field -> onCopy(card, field) },
                 deck = space,
+                cardDesign = cardDesign,
             )
         },
         details = { card -> CardDetails(card, revealed = card.id in revealed) },

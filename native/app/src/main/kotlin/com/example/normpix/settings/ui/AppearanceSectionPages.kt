@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,12 +33,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
 import com.example.normpix.banks.ui.BankBadge
+import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.ui.CategoryAvatarSample
 import com.example.normpix.finance.ui.CategoryGlyph
@@ -56,6 +63,7 @@ import com.example.normpix.settings.AppPreferences
 import com.example.normpix.settings.AppPrefsState
 import com.example.normpix.settings.BackButtonStyle
 import com.example.normpix.settings.BankIconStyle
+import com.example.normpix.settings.CardDesign
 import com.example.normpix.settings.CardsLayout
 import com.example.normpix.settings.CategoryIconShape
 import com.example.normpix.settings.CategoryIconStyle
@@ -84,7 +92,15 @@ import com.example.normpix.ui.components.SwitchRow
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
+import com.example.normpix.wallet.AccountCardData
+import com.example.normpix.wallet.AccountCardFacePreview
+import com.example.normpix.wallet.CARD_ASPECT
+import com.example.normpix.wallet.CardKind
+import com.example.normpix.wallet.PrintReferenceWidth
+import com.example.normpix.wallet.StoredCard
+import com.example.normpix.wallet.WalletCardFacePreview
 import java.time.LocalDateTime
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 /** One screen of Settings > Appearance: [section]'s own choices, under its name. */
@@ -763,6 +779,81 @@ private fun WalletLayoutSections(prefs: AppPrefsState, preferences: AppPreferenc
                         },
                     )
                 }
+            }
+        }
+    }
+    ListSection(
+        title = "Card design",
+        footer = "Your saved cards and your accounts both wear the design you pick. The pictures are made-up cards.",
+        modifier = Modifier.selectableGroup(),
+    ) {
+        for (design in CardDesign.entries) {
+            item {
+                val choose = {
+                    haptics.selection()
+                    preferences.setCardDesign(design)
+                }
+                Column {
+                    RadioRow(
+                        headline = design.label,
+                        supporting = design.description,
+                        selected = prefs.cardDesign == design,
+                        onClick = choose,
+                    )
+                    CardDesignPreview(design, onClick = choose, modifier = Modifier.padding(start = AppSpacing.lg, end = AppSpacing.lg, bottom = AppSpacing.lg))
+                }
+            }
+        }
+    }
+}
+
+/** A made-up card and account for [CardDesignPreview]: nothing of the user's, and a test number no bank issues. */
+private val PreviewCard = StoredCard(
+    id = "design-preview", bankName = "Sample Bank", cardholderName = "YOUR NAME", cardNumber = "4111111111111111", expiryMonth = "12",
+    expiryYear = "29", cvv = "", kind = CardKind.Credit, createdAt = LocalDateTime.of(2026, 1, 1, 0, 0), cardName = "",
+)
+
+private val PreviewAccount = AccountCardData(
+    id = 0L, name = "Everyday", kind = AccountKind.Bank, bankName = "Sample Bank", balance = "₹24,500", standing = null, isDefault = true,
+    archived = false, cards = 1, credit = null, creditSpoken = null, overLimit = false, creditUsed = null, due = null, dueSoon = false,
+    dueSpoken = null, share = "", hidden = false,
+)
+
+/**
+ * What a card design looks like: a saved card and an account drawn in [design] - the real faces, with made-up details - whichever
+ * design is chosen. A touch on it chooses the design rather than operating the sample, and a screen reader skips it (the row
+ * above says what it is). The faces are drawn for a card 328 dp wide, so each is laid out at that size and scaled down to half the
+ * row.
+ */
+@Composable
+private fun CardDesignPreview(design: CardDesign, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    BoxWithConstraints(modifier.fillMaxWidth().clearAndSetSemantics {}) {
+        val gap = AppSpacing.sm
+        val scale = ((maxWidth - gap) / 2) / PrintReferenceWidth
+        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+            ScaledCard(scale) { WalletCardFacePreview(PreviewCard, revealed = false, cardDesign = design) }
+            ScaledCard(scale) { AccountCardFacePreview(PreviewAccount, cardDesign = design) }
+        }
+        // A tap, and nothing a keyboard could land on (see MonthControlPreview).
+        Box(Modifier.matchParentSize().pointerInput(onClick) { detectTapGestures { onClick() } })
+    }
+}
+
+/**
+ * [content] laid out at the size a card is printed for ([PrintReferenceWidth] wide) and drawn at [scale] of it, from its top left,
+ * taking only the scaled room. (A fixed size on a smaller parent would be centred on it, not pinned to a corner.)
+ */
+@Composable
+private fun ScaledCard(scale: Float, content: @Composable () -> Unit) {
+    Layout(content = content, modifier = Modifier.clipToBounds()) { measurables, _ ->
+        val width = PrintReferenceWidth.roundToPx()
+        val height = (width / CARD_ASPECT).roundToInt()
+        val face = measurables.first().measure(Constraints.fixed(width, height))
+        layout((width * scale).roundToInt(), (height * scale).roundToInt()) {
+            face.placeWithLayer(0, 0) {
+                scaleX = scale
+                scaleY = scale
+                transformOrigin = TransformOrigin(0f, 0f)
             }
         }
     }

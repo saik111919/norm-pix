@@ -86,6 +86,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
@@ -170,6 +171,8 @@ private const val BACK_FINISH_MS = 160
 fun AppShell(
     container: AppContainer,
     shell: ShellState = rememberShellState(),
+    /** Under a pushed page (see [PersistentShell]): its back handlers stand down, and its menu is closed. */
+    covered: Boolean = false,
 ) {
     val navigator = LocalNavigator.current
     val snackbars = LocalSnackbars.current
@@ -218,7 +221,7 @@ fun AppShell(
     val hasHistory = tabHistory.size > 1
     val handlesBack = canClimbWithinTab() || hasHistory
 
-    PredictiveBackHandler(enabled = handlesBack) { progress ->
+    PredictiveBackHandler(enabled = handlesBack && !covered) { progress ->
         if (backFinishing) {
             progress.collect { }
             return@PredictiveBackHandler
@@ -280,6 +283,8 @@ fun AppShell(
 
     // Expandable More / Actions control state
     var isMoreOpen by remember { mutableStateOf(false) }
+    // A page opened from the menu (Settings is) leaves it open under the page otherwise, and it would still be open on coming back.
+    LaunchedEffect(covered) { if (covered) isMoreOpen = false }
 
     // Dismiss More menu when switching tabs or plans tab
     LaunchedEffect(shell.selected, shell.plansTab) { isMoreOpen = false }
@@ -290,7 +295,7 @@ fun AppShell(
     val actionLayout = remember(prefs.actionMenuLayout) { ActionMenuLayout.from(prefs.actionMenuLayout) }
 
     // Hardware or predictive back closes the More menu first before navigating back
-    BackHandler(enabled = isMoreOpen) { if (editingActions) editingActions = false else isMoreOpen = false }
+    BackHandler(enabled = isMoreOpen && !covered) { if (editingActions) editingActions = false else isMoreOpen = false }
 
     // The menu's one clock: the panel, the "+" turning into a cross, the dock stepping back and the page's dim all follow it.
     val menuProgress = rememberActionMenuProgress(isMoreOpen)
@@ -724,6 +729,7 @@ fun AppShell(
                     overdueCount = overdue,
                     onDestinationSelected = { shell.selected = it.ordinal },
                     onOpenSettings = { navigator.openSettings() },
+                    onOpenNotifications = { navigator.openNotifications() },
                     actions = allActions,
                     isMoreOpen = isMoreOpen,
                     onMoreToggle = { isMoreOpen = !isMoreOpen },
@@ -886,6 +892,67 @@ private fun DestinationIcon(destination: AppDestination, selected: Boolean, over
 /** Whether the tab this content lives in is the one on screen. Tabs stay composed when hidden, so ongoing work (sensors) checks this. */
 val LocalTabVisible = staticCompositionLocalOf { true }
 
+/** Whether the shell is under a pushed page: still composed and drawn, but it takes no touch, back, reading or sensor work. */
+val LocalShellCovered = staticCompositionLocalOf { false }
+
+/**
+ * How far the shell is uncovered while pages open and close over it: 1 at rest on the shell, 0 under a page. Written by the
+ * shell's own entry in the navigation graph ([shellPage]) from that entry's transition - which the back gesture seeks to where
+ * the finger is - and read in the draw phase, so a gesture moves a layer and recomposes nothing.
+ */
+@Stable
+internal class ShellBeneath {
+    var progress by mutableFloatStateOf(1f)
+}
+
+/**
+ * The shell, kept composed under every page that is pushed over it. A page opened over it used to dispose it, so the back
+ * gesture had nothing to show under the page - the plain background - until the gesture was let go, and then waited for the
+ * whole shell to be composed again (measured: a 450-550 ms frame backing out of Settings). Tabs never had this: they stay
+ * composed, so the tab being gone back to is there from the first frame. Now the shell is too.
+ *
+ * Under a page ([covered]) it takes no touch (a page's empty corners must not reach it), no screen reading, no back, and its
+ * tabs' ongoing work stops ([LocalShellCovered]); and while pages open and close over it, it is drawn as the page beneath
+ * ([BackPreview.revealed], the same motion the tabs give the tab beneath) by [beneath].
+ */
+@Composable
+internal fun PersistentShell(
+    container: AppContainer,
+    shell: ShellState,
+    covered: Boolean,
+    beneath: ShellBeneath,
+    hidden: Boolean,
+) {
+    val animation = LocalPageAnimation.current
+    val reduced = rememberReducedMotion()
+    Box(
+        Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                val uncovered = beneath.progress
+                if (!reduced && uncovered < 1f) {
+                    applyBackPose(BackPreview.revealed(animation, uncovered, 1f))
+                    // Drawn as a window while it recedes, as a page leaving is (see PageWindow): its corners round as it goes.
+                    val round = ((1f - uncovered) / BackPreview.CORNERS_BY).coerceAtMost(1f)
+                    if (round > 0f && !clip) {
+                        clip = true
+                        shape = RoundedCornerShape(PageCornerRadius.toPx() * round)
+                    }
+                }
+            }
+            .then(
+                if (covered || hidden) {
+                    // Swallows what a page lets through, as the lock screen does.
+                    Modifier.clearAndSetSemantics {}.pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
+        CompositionLocalProvider(LocalShellCovered provides covered) { AppShell(container, shell, covered = covered) }
+    }
+}
+
 /**
  * Cross-fade wrapper for a top-level tab. Stays in the tree so scroll and nested state survive;
  * zero-sized and non-interactive when hidden so it costs nothing to lay out or draw.
@@ -976,7 +1043,7 @@ internal fun TabHost(
                 },
             ),
         contentAlignment = Alignment.TopStart,
-    ) { CompositionLocalProvider(LocalTabVisible provides visible) { content() } }
+    ) { CompositionLocalProvider(LocalTabVisible provides (visible && !LocalShellCovered.current)) { content() } }
 }
 
 /**

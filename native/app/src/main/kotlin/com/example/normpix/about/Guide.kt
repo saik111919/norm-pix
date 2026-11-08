@@ -6,6 +6,7 @@ package com.example.normpix.about
  */
 enum class GuideLink(val label: String) {
     Home("Open Home"),
+    Notifications("Open Notifications"),
     Activity("Open Activity"),
     Plans("Open Plans"),
     Insights("Open Insights"),
@@ -83,6 +84,23 @@ enum class GuideTopic(
             "The top card wears the month's weather: snow before anything is spent, sun while you are on track, heat as the budget runs low, rain once it is over. Settings > Appearance > Effects > Hero weather turns it off.",
         ),
         link = GuideLink.Home,
+    ),
+    Notifications(
+        title = "Notifications",
+        summary = "Everything that needs you in one place, and a bell on every screen for what is new.",
+        hue = 1,
+        steps = listOf(
+            "The bell at the top of Home, Activity, Insights and Wallet counts what is new; tap it to open Notifications.",
+            "Opening the page is seeing it all: the bell goes quiet until something new comes up.",
+            "Notifications are grouped by what they are about: Reminders, Budgets, Cards, Backup and NormPix itself.",
+            "Each one says what is wrong and has its own buttons - mark a reminder done, open the budget, renew the card.",
+        ),
+        tips = listOf(
+            "There is no history: a notification stays while the thing it says is true, and goes once you deal with it.",
+            "Opening the + menu shows the newest ones above its tiles, so what needs you is in front of you when you reach for an action.",
+            "Settings > Notifications decides what NormPix may notify you about, and whether a reminder can float over another app.",
+        ),
+        link = GuideLink.Notifications,
     ),
     Activity(
         title = "Activity",

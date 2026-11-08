@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.emojiIcon
+import com.example.normpix.settings.CategoryIconShape
 
 /** The letter a person without a picture is shown by: their name's first character, in capitals. */
 fun personInitial(name: String): String {
@@ -35,11 +36,14 @@ fun personInitial(name: String): String {
 @Composable
 fun PersonAvatar(person: Person?, modifier: Modifier = Modifier, size: Dp = 40.dp) {
     val colors = person?.let { paletteColor(it.color) }
+    // As a category's icon: with no disc behind it (the default shape) the emoji or initial has most of the box, not the half a
+    // disc would leave around it - at half size it read as a speck beside the name.
+    val glyph = size * if (LocalCategoryIconShape.current == CategoryIconShape.None) BARE_ICON_IN_BOX else ICON_IN_DISC
     AvatarDisc(colors, modifier, size) {
         if (person == null) {
-            Icon(Icons.Outlined.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(size / 2))
+            Icon(Icons.Outlined.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(glyph))
         } else {
-            PersonGlyph(person, colors?.onContainer ?: MaterialTheme.colorScheme.onSurfaceVariant, size / 2)
+            PersonGlyph(person, colors?.onContainer ?: MaterialTheme.colorScheme.onSurfaceVariant, glyph)
         }
     }
 }

@@ -13,6 +13,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -140,6 +141,55 @@ class BackNavigationTest {
 
         // Only now does back go to where you came from.
         systemBack()
+        navItem("Home").assertIsSelected()
+    }
+
+    /**
+     * A page opened over the shell used to dispose it, so the back gesture had nothing under the page and waited for the whole
+     * shell to come back (a 450-550 ms frame). The shell now stays composed under it - and out of reach: nothing of it is in what
+     * a screen reader reads while a page is open.
+     */
+    @Test
+    fun aPushedPage_leavesTheShellComposedUnderneath_butOutOfReach() {
+        compose.setContent { NormPixRoot(container = container) }
+        compose.waitForIdle()
+        compose.onAllNodesWithContentDescription("Account and settings").assertCountEquals(1)
+
+        compose.onNodeWithContentDescription("Account and settings").performClick()
+        compose.waitForIdle()
+        compose.onAllNodesWithText("Search settings").onFirst().assertIsDisplayed()
+
+        // Composed: its button is still in the tree. Out of reach: it is not in what is read or touched.
+        assertTrue(
+            compose.onAllNodesWithContentDescription("Account and settings", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(),
+            "the shell was disposed by the page",
+        )
+        compose.onAllNodesWithContentDescription("Account and settings").assertCountEquals(0)
+
+        // And it is the shell again, whole, once the page is gone.
+        systemBack()
+        compose.onAllNodesWithText("Search settings").assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("Account and settings").assertCountEquals(1)
+    }
+
+    /** Back on a page closes the page: the shell under it, with a tab history of its own, must not take it. */
+    @Test
+    fun backOnAPage_isThePagesToTake_notTheCoveredShellsTabHistory() {
+        compose.setContent { NormPixRoot(container = container) }
+        compose.waitForIdle()
+        // Home -> Insights -> Home: the shell has a history to step back through, which is when it would claim back.
+        navItem("Insights").performClick()
+        compose.waitForIdle()
+        navItem("Home").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithContentDescription("Account and settings").performClick()
+        compose.waitForIdle()
+        compose.onAllNodesWithText("Search settings").onFirst().assertIsDisplayed()
+
+        systemBack()
+
+        compose.onAllNodesWithText("Search settings").assertCountEquals(0)
         navItem("Home").assertIsSelected()
     }
 

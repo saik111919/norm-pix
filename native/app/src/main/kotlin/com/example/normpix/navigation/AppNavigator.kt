@@ -44,6 +44,9 @@ interface AppNavigator {
     /** The People page: what is spent on each person. */
     fun openPeople()
 
+    /** The Notifications page: everything that needs the user, in one place. */
+    fun openNotifications() = Unit
+
     /** One person's page: what has been spent on them and their expenses. */
     fun openPerson(personId: Long)
 

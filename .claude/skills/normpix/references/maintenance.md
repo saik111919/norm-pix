@@ -21,7 +21,7 @@ When a fact drifts: fix the prose that mentions it **first**, then change the va
 nothing needed changing.
 
 <!-- facts:begin -->
-verified_commit=5b1bc0dd
+verified_commit=0ffc5a43
 verified_date=2026-11-08
 versionName=1.5.0
 finance_db_version=12
@@ -38,7 +38,7 @@ compose_bom=2026.09.00
 gradle=9.3.1
 robolectric=4.17
 launcher_icon_aliases=10
-guide_topics=12
+guide_topics=13
 <!-- facts:end -->
 
 Identifiers the skill names (each must still exist somewhere under `native/app`):
@@ -180,6 +180,23 @@ RELEASE_FADE_MS
 LAUNCH_DELAY_MS
 keepLaunchScreenThemeInStep
 LaunchSplashAvdTest
+CardDesign
+CardDesignsVisualQaTest
+CardDesignRenderTest
+AccountFlagsTest
+DesignBankMark
+accountFlags
+AccountFlagPills
+CardDesignPreview
+PersistentShell
+ScaledToCard
+shellPage
+ShellBeneath
+LocalShellCovered
+tintedCardScheme
+PrintReferenceWidth
+BARE_ICON_IN_BOX
+ICON_IN_DISC
 <!-- symbols:end -->
 
 ## 2. What to update when
@@ -200,6 +217,7 @@ LaunchSplashAvdTest
 | `settings/` (new setting, default, page), `SettingsCatalog`, `AppearanceSection` | `architecture.md` sections 6-7; `features.md` section 10 |
 | `onboarding/` (the welcome tour, its pictures and their motion) | `features.md` section 8, the **Welcome tour** paragraph; `design-system.md` sections 2 and 6 |
 | `navigation/` (routes, shell, navigator interface) | `architecture.md` section 5 |
+| `notifications/`, the bell, `LocalTopBarExtras` | `features.md` section 1; `architecture.md` section 5; `design-system.md` banners (`BannerCard`) |
 | `ui/components`, `ui/theme`, blur, sheets, motion | `design-system.md` |
 | A new top-level package | the package map in `SKILL.md` (verify.sh fails otherwise) |
 | Test infrastructure (`testing/`, `robolectric.properties`) | `architecture.md` section 8; `build-test-release.md` section 5 |

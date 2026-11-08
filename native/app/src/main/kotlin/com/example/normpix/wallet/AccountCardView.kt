@@ -1,6 +1,7 @@
 package com.example.normpix.wallet
 
 import com.example.normpix.finance.domain.percentLabel
+import com.example.normpix.settings.CardDesign
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -341,6 +342,7 @@ fun AccountCardFacePreview(
     bankIconStyle: BankIconStyle = BankIconStyle.Full,
     /** Who it is and nothing more - bank, kind, name, flags - for the carousel's card, whose panel says its figures. */
     compact: Boolean = false,
+    cardDesign: CardDesign = CardDesign.Classic,
 ) {
     // Card art keeps a card's proportions, so it ignores the system font scale (as the bank cards do).
     val density = LocalDensity.current
@@ -348,16 +350,28 @@ fun AccountCardFacePreview(
     val theme = remember(data.bankName, data.kind) { AccountCardDesign.themeFor(data.bankName, data.kind) }
     CompositionLocalProvider(LocalDensity provides fixedDensity) {
         Box(modifier.fillMaxWidth().aspectRatio(CARD_ASPECT).alpha(if (data.archived) 0.72f else 1f)) {
-            AccountFront(data, theme, bankIconStyle, compact)
+            when (cardDesign) {
+                CardDesign.Classic -> AccountFront(data, theme, bankIconStyle, compact)
+                CardDesign.Banner -> ScaledToCard { AccountFrontBanner(data, theme, bankIconStyle, compact = compact) }
+                CardDesign.Ledger -> ScaledToCard { AccountFrontLedger(data, theme, bankIconStyle, compact = compact) }
+                CardDesign.Tinted -> ScaledToCard { AccountFrontTinted(data, theme, bankIconStyle, compact = compact) }
+            }
         }
     }
 }
 
 /** An account card's colours and pattern with nothing printed on it: all that shows of a card that lies behind another. */
 @Composable
-fun AccountCardPlate(data: AccountCardData, modifier: Modifier = Modifier) {
+fun AccountCardPlate(data: AccountCardData, modifier: Modifier = Modifier, cardDesign: CardDesign = CardDesign.Classic) {
     val theme = remember(data.bankName, data.kind) { AccountCardDesign.themeFor(data.bankName, data.kind) }
-    Box(modifier.fillMaxWidth().aspectRatio(CARD_ASPECT)) { CardFace(theme) {} }
+    Box(modifier.fillMaxWidth().aspectRatio(CARD_ASPECT)) {
+        when (cardDesign) {
+            CardDesign.Classic -> CardFace(theme) {}
+            CardDesign.Banner -> CardPlateBanner()
+            CardDesign.Ledger -> CardPlateLedger()
+            CardDesign.Tinted -> CardPlateTinted(theme)
+        }
+    }
 }
 
 /**
@@ -375,6 +389,7 @@ fun AccountCardView(
     compact: Boolean = false,
     /** The phone's motion as a lean, as the saved cards have it (see [WalletCardView]); null keeps the card flat. */
     tilt: CardTiltState? = null,
+    cardDesign: CardDesign = CardDesign.Classic,
 ) {
     val press = remember { MutableInteractionSource() }
     val density = LocalDensity.current.density
@@ -408,7 +423,7 @@ fun AccountCardView(
                 onLongClick(label = "Manage account") { onManage(); true }
             },
     ) {
-        AccountCardFacePreview(data, bankIconStyle = bankIconStyle, compact = compact)
+        AccountCardFacePreview(data, bankIconStyle = bankIconStyle, compact = compact, cardDesign = cardDesign)
     }
 }
 
@@ -425,6 +440,7 @@ fun AccountStack(
     state: DeckStackState,
     modifier: Modifier = Modifier,
     bankIconStyle: BankIconStyle = BankIconStyle.Full,
+    cardDesign: CardDesign = CardDesign.Classic,
 ) {
     DeckStack(
         items = accounts,
@@ -438,7 +454,7 @@ fun AccountStack(
         modifier = modifier,
         onItemLongPress = onManage,
         itemLongPressLabel = "Manage account",
-        plate = { AccountCardPlate(it) },
-        face = { AccountCardFacePreview(it, bankIconStyle = bankIconStyle) },
+        plate = { AccountCardPlate(it, cardDesign = cardDesign) },
+        face = { AccountCardFacePreview(it, bankIconStyle = bankIconStyle, cardDesign = cardDesign) },
     )
 }

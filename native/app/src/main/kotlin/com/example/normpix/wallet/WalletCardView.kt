@@ -43,6 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import com.example.normpix.settings.CardDesign
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -147,6 +148,8 @@ fun WalletCardView(
     onCopy: ((CardField?) -> Unit)? = null,
     /** Set for a card standing in a deck: where it is drawn, so its print is scaled to the card's width and kept clear of the panel. */
     deck: DeckCardSpace? = null,
+    /** The visual design chosen in Settings > Appearance > Layouts. */
+    cardDesign: CardDesign = CardDesign.Classic,
 ) {
     val haptics = rememberAppHaptics()
     val scope = rememberCoroutineScope()
@@ -225,9 +228,21 @@ fun WalletCardView(
                     .then(if (tilt != null) Modifier.drawWithContent { drawContent(); drawSheen(tilt) } else Modifier),
             ) {
                 if (angle > 90f) {
-                    Box(Modifier.fillMaxSize().graphicsLayer { rotationY = 180f }) { CardBack(card, theme, revealed, underlap) }
+                    Box(Modifier.fillMaxSize().graphicsLayer { rotationY = 180f }) {
+                        when (cardDesign) {
+                            CardDesign.Classic -> CardBack(card, theme, revealed, underlap)
+                            CardDesign.Banner -> ScaledToCard { s -> CardBackBanner(card, theme, revealed, bottomInset = underlap / s) }
+                            CardDesign.Ledger -> ScaledToCard { s -> CardBackLedger(card, theme, revealed, bottomInset = underlap / s) }
+                            CardDesign.Tinted -> ScaledToCard { s -> CardBackTinted(card, theme, revealed, bottomInset = underlap / s) }
+                        }
+                    }
                 } else {
-                    CardFront(card, theme, revealed, bankIconStyle, underlap)
+                    when (cardDesign) {
+                        CardDesign.Classic -> CardFront(card, theme, revealed, bankIconStyle, underlap)
+                        CardDesign.Banner -> ScaledToCard { s -> CardFrontBanner(card, theme, revealed, bankIconStyle, bottomInset = underlap / s) }
+                        CardDesign.Ledger -> ScaledToCard { s -> CardFrontLedger(card, theme, revealed, bankIconStyle, bottomInset = underlap / s) }
+                        CardDesign.Tinted -> ScaledToCard { s -> CardFrontTinted(card, theme, revealed, bankIconStyle, bottomInset = underlap / s) }
+                    }
                 }
             }
         }
@@ -638,7 +653,7 @@ private fun Modifier.cardProportions(extraHeightPx: Int): Modifier =
     }
 
 /** The width a card's print is drawn for: a card of the list on a 360dp phone. A deck's narrower card shrinks the print to fit. */
-private val PrintReferenceWidth = 328.dp
+internal val PrintReferenceWidth = 328.dp
 
 /** The type on a shrunken card is never smaller than this share of its size on a card of the list. */
 private const val MinTypeScale = 0.9f
@@ -704,12 +719,13 @@ private val badgeShadow = Shadow(Color.Black.copy(alpha = 0.27f), Offset(0f, 1f)
 
 /** A vector badge for the card network. */
 @Composable
-fun CardNetworkBadge(network: CardNetwork, height: androidx.compose.ui.unit.Dp) {
+fun CardNetworkBadge(network: CardNetwork, height: androidx.compose.ui.unit.Dp, tint: Color? = null) {
     val unit = height.value
+    val textColor = tint ?: Color.White
     when (network) {
         CardNetwork.Visa -> Text(
             "VISA",
-            style = TextStyle(color = Color.White, fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic, fontSize = (unit * 0.9f).sp, letterSpacing = 1.5.sp, shadow = badgeShadow),
+            style = TextStyle(color = textColor, fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic, fontSize = (unit * 0.9f).sp, letterSpacing = 1.5.sp, shadow = if (tint != null) null else badgeShadow),
         )
         CardNetwork.Mastercard -> Canvas(Modifier.size(height * 1.55f, height)) {
             val r = size.height / 2
@@ -723,28 +739,28 @@ fun CardNetworkBadge(network: CardNetwork, height: androidx.compose.ui.unit.Dp) 
         CardNetwork.Rupay -> Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "RuPay",
-                style = TextStyle(color = Color.White, fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic, fontSize = (unit * 0.85f).sp, letterSpacing = 0.3.sp, shadow = badgeShadow),
+                style = TextStyle(color = textColor, fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic, fontSize = (unit * 0.85f).sp, letterSpacing = 0.3.sp, shadow = if (tint != null) null else badgeShadow),
             )
             Spacer(Modifier.width(4.dp))
             Canvas(Modifier.size(height * 0.8f, height * 0.75f)) { drawRupayChevrons() }
         }
         CardNetwork.Amex -> Box(
             Modifier
-                .shadow(2.dp, RoundedCornerShape(3.dp))
+                .then(if (tint == null) Modifier.shadow(2.dp, RoundedCornerShape(3.dp)) else Modifier)
                 .clip(RoundedCornerShape(3.dp))
-                .background(Color(0xFF0070D2))
-                .border(1.dp, Color.White, RoundedCornerShape(3.dp))
+                .background(if (tint == null) Color(0xFF0070D2) else MaterialTheme.colorScheme.primary)
+                .border(1.dp, if (tint == null) Color.White else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(3.dp))
                 .padding(horizontal = 6.dp, vertical = 3.dp),
-        ) { Text("AMEX", style = TextStyle(color = Color.White, fontWeight = FontWeight.Black, fontSize = 11.sp, letterSpacing = 0.8.sp)) }
+        ) { Text("AMEX", style = TextStyle(color = if (tint == null) Color.White else MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Black, fontSize = 11.sp, letterSpacing = 0.8.sp)) }
         CardNetwork.Discover -> Row(verticalAlignment = Alignment.CenterVertically) {
-            val style = TextStyle(color = Color.White, fontWeight = FontWeight.Black, fontSize = (unit * 0.75f).sp, letterSpacing = 0.5.sp, shadow = badgeShadow)
+            val style = TextStyle(color = textColor, fontWeight = FontWeight.Black, fontSize = (unit * 0.75f).sp, letterSpacing = 0.5.sp, shadow = if (tint != null) null else badgeShadow)
             Text("DISC", style = style)
             Box(Modifier.padding(horizontal = 1.dp).size(height * 0.65f).clip(CircleShape).background(Color(0xFFE87722)))
             Text("VER", style = style)
         }
         CardNetwork.DinersClub -> Text(
             "Diners Club",
-            style = TextStyle(color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = (unit * 0.65f).sp, letterSpacing = 0.3.sp, shadow = badgeShadow),
+            style = TextStyle(color = textColor, fontWeight = FontWeight.ExtraBold, fontSize = (unit * 0.65f).sp, letterSpacing = 0.3.sp, shadow = if (tint != null) null else badgeShadow),
         )
         CardNetwork.Unknown -> Unit
     }
@@ -778,18 +794,33 @@ fun WalletCardFacePreview(
     modifier: Modifier = Modifier,
     revealed: Boolean = true,
     bankIconStyle: BankIconStyle = BankIconStyle.Full,
+    cardDesign: CardDesign = CardDesign.Classic,
 ) {
     val density = LocalDensity.current
     val fixedDensity = remember(density) { Density(density.density, fontScale = 1f) }
     val theme = remember(card.bankName, card.bankKey, card.cardName) { BankCardDesign.forCard(card) }
     CompositionLocalProvider(LocalDensity provides fixedDensity) {
-        Box(modifier.fillMaxWidth().aspectRatio(CARD_ASPECT)) { CardFront(card, theme, revealed, bankIconStyle) }
+        Box(modifier.fillMaxWidth().aspectRatio(CARD_ASPECT)) {
+            when (cardDesign) {
+                CardDesign.Classic -> CardFront(card, theme, revealed, bankIconStyle)
+                CardDesign.Banner -> ScaledToCard { CardFrontBanner(card, theme, revealed, bankIconStyle) }
+                CardDesign.Ledger -> ScaledToCard { CardFrontLedger(card, theme, revealed, bankIconStyle) }
+                CardDesign.Tinted -> ScaledToCard { CardFrontTinted(card, theme, revealed, bankIconStyle) }
+            }
+        }
     }
 }
 
 /** A card's colours and pattern with nothing printed on it: all that shows of a card that lies behind another. */
 @Composable
-fun WalletCardPlate(card: StoredCard, modifier: Modifier = Modifier) {
+fun WalletCardPlate(card: StoredCard, modifier: Modifier = Modifier, cardDesign: CardDesign = CardDesign.Classic) {
     val theme = remember(card.bankName, card.bankKey, card.cardName) { BankCardDesign.forCard(card) }
-    Box(modifier.fillMaxWidth().aspectRatio(CARD_ASPECT)) { CardFace(theme) {} }
+    Box(modifier.fillMaxWidth().aspectRatio(CARD_ASPECT)) {
+        when (cardDesign) {
+            CardDesign.Classic -> CardFace(theme) {}
+            CardDesign.Banner -> CardPlateBanner()
+            CardDesign.Ledger -> CardPlateLedger()
+            CardDesign.Tinted -> CardPlateTinted(theme)
+        }
+    }
 }

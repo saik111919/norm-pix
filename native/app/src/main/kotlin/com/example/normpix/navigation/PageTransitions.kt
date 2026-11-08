@@ -5,6 +5,9 @@ import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.animateDp
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.runtime.SideEffect
 import androidx.compose.animation.core.snap
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -361,6 +364,36 @@ internal fun NavGraphBuilder.page(
     arguments: List<NamedNavArgument> = emptyList(),
     content: @Composable (NavBackStackEntry) -> Unit,
 ) = composable(route, arguments) { entry -> PageWindow { content(entry) } }
+
+/**
+ * The shell's own entry in the navigation graph. Nothing is drawn here: the shell is drawn beneath the graph and stays composed
+ * ([PersistentShell]), so a page opened over it never has to bring it back. What this entry does is say how far the shell is
+ * uncovered: its navigation transition - which the back gesture seeks to where the finger is - becomes [beneath]'s progress
+ * (1 on the shell, 0 under a page), which the shell draws as the page beneath ([BackPreview.revealed]).
+ */
+internal fun NavGraphBuilder.shellPage(route: String, beneath: ShellBeneath) = composable(route) {
+    val reduced = rememberReducedMotion()
+    val animation = LocalPageAnimation.current
+    val progress by transition.animateFloat(
+        transitionSpec = {
+            if (reduced) {
+                snap<Float>()
+            } else {
+                // The timing of the page's own: a window opens in one time and closes in another, the other styles in one.
+                val coming = targetState == EnterExitState.Visible
+                val ms = if (animation == PageAnimationType.LinuxWindow) {
+                    if (coming) LinuxWindowMotion.CLOSE_MS else LinuxWindowMotion.OPEN_MS
+                } else {
+                    AppMotion.MEDIUM_MS
+                }
+                tween<Float>(ms, easing = LinearEasing)
+            }
+        },
+        label = "shell_beneath",
+    ) { state -> if (state == EnterExitState.Visible) 1f else 0f }
+    SideEffect { beneath.progress = progress }
+    Spacer(Modifier.fillMaxSize())
+}
 
 /**
  * A page drawn as a window while it moves: its corners round as soon as it starts to leave - or to be previewed by the

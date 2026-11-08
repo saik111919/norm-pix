@@ -25,7 +25,7 @@ import kotlin.math.sqrt
  * How far the cards lean, in degrees: a hint of depth, not a toy. The card rotates by at most this much about
  * either axis however far the phone is turned.
  */
-const val MAX_CARD_TILT_DEGREES = 6f
+const val MAX_CARD_TILT_DEGREES = 4f
 
 /**
  * Turns the phone's attitude into a few degrees of card tilt.
@@ -38,7 +38,9 @@ const val MAX_CARD_TILT_DEGREES = 6f
  */
 class TiltFilter(
     private val maxDegrees: Float = MAX_CARD_TILT_DEGREES,
-    private val gain: Float = 0.5f,
+    // 0.3: a twist of the phone of about 13 degrees is the whole lean. At 0.5 (and a 6 degree limit) an ordinary hand movement swung
+    // the card to its limit and back, and the owner found it "tilting way too much" (2026-11-08).
+    private val gain: Float = 0.3f,
     private val restSeconds: Float = 1.5f,
     private val smoothingSeconds: Float = 0.1f,
     private val deadZoneDegrees: Float = 0.3f,

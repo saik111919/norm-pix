@@ -180,6 +180,15 @@ fun AppPage(
     val railBeside = !LocalFloatingDock.current
     val listBottomPadding = if (railBeside) AppLayout.railBottomClearance else bottomPadding
     val listInsetBottom = insetBottom || railBeside
+    // A top-level page also carries what the app puts beside the account circle (the notification bell): in the floating header
+    // below, and in the app bar of the other styles. A pushed page has its own actions and nothing else.
+    val extras = LocalTopBarExtras.current
+    val topActions: @Composable RowScope.() -> Unit =
+        if (onBack == null && extras != null) {
+            { actions?.invoke(this); extras() }
+        } else {
+            actions ?: {}
+        }
     val floatsItself = !floatingTopBar && rememberBackButtonStyle() == BackButtonStyle.TopFloatingCircle
     if (!floatsItself) {
         val dockedSearch = bottomSearch != null && onBack == null && rememberBottomControls()
@@ -191,7 +200,7 @@ fun AppPage(
                     title = title,
                     modifier = Modifier,
                     navigationIcon = navigationIcon,
-                    actions = actions ?: {},
+                    actions = topActions,
                     pinnedHeader = pinnedHeader,
                     maxWidth = maxWidth,
                     listState = listState,
@@ -213,7 +222,7 @@ fun AppPage(
             title = title,
             modifier = modifier,
             navigationIcon = if (onBack != null) ({ BackButton(onBack) }) else navigationIcon,
-            actions = actions ?: {},
+            actions = topActions,
             pinnedHeader = pinnedHeader,
             maxWidth = maxWidth,
             listState = listState,
@@ -264,6 +273,7 @@ fun AppPage(
             } else {
                 {
                     actions?.invoke(this)
+                    LocalTopBarExtras.current?.invoke()
                     AccountButton()
                 }
             },
@@ -720,6 +730,12 @@ private fun AccountButton() {
         )
     }
 }
+
+/**
+ * Something the app puts on every top-level page's top row, beside the account circle - the notification bell. The design system
+ * does not know what it is; null (no app around it, as in a test of one page) puts nothing.
+ */
+val LocalTopBarExtras = staticCompositionLocalOf<(@Composable () -> Unit)?> { null }
 
 /** What a screen reader calls the account circle: where it leads. */
 fun accountButtonLabel(target: AccountButtonTarget): String = when (target) {

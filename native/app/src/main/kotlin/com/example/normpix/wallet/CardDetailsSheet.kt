@@ -91,6 +91,7 @@ fun CardDetailsSheet(cardId: String, flows: CardFlows, onDismiss: () -> Unit) {
             },
             tilt = tilt,
             onCopy = { field -> if (field == null) reveal.copy(card, null) else copy(field) },
+            cardDesign = prefs.cardDesign,
         )
         RevealVisibility(visible = noticeShown) {
             Text(

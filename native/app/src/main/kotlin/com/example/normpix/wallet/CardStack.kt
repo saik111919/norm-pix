@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
 import com.example.normpix.settings.BankIconStyle
+import com.example.normpix.settings.CardDesign
 import com.example.normpix.ui.components.DeckStack
 import com.example.normpix.ui.components.DeckStackState
 import com.example.normpix.ui.theme.AppRadius
@@ -27,6 +28,7 @@ fun CardStack(
     modifier: Modifier = Modifier,
     bankIconStyle: BankIconStyle = BankIconStyle.Full,
     tilt: CardTiltState? = null,
+    cardDesign: CardDesign = CardDesign.Classic,
 ) {
     DeckStack(
         items = cards,
@@ -40,7 +42,7 @@ fun CardStack(
         onOpen = onOpen,
         state = state,
         modifier = modifier,
-        plate = { WalletCardPlate(it) },
+        plate = { WalletCardPlate(it, cardDesign = cardDesign) },
         face = { card ->
             Box(
                 Modifier
@@ -52,7 +54,7 @@ fun CardStack(
                     }
                     .then(if (tilt != null) Modifier.drawWithContent { drawContent(); drawSheen(tilt) } else Modifier),
             ) {
-                WalletCardFacePreview(card, revealed = false, bankIconStyle = bankIconStyle)
+                WalletCardFacePreview(card, revealed = false, bankIconStyle = bankIconStyle, cardDesign = cardDesign)
             }
         },
     )

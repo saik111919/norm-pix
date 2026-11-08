@@ -358,7 +358,7 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
             InlineNotice(tone, message, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             Spacer(Modifier.height(AppSpacing.md))
         }
-        WalletCardFacePreview(liveCard, revealed = true)
+        WalletCardFacePreview(liveCard, revealed = true, cardDesign = prefs.cardDesign)
         Spacer(Modifier.height(AppSpacing.lg))
         ConnectedChoiceRow(kinds, selected = kind, onSelect = { kind = it })
         Spacer(Modifier.height(AppSpacing.lg))
