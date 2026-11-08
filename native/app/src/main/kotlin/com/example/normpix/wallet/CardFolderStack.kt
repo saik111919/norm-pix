@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Contactless
+import com.example.normpix.settings.CardDesign
 import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -92,6 +93,7 @@ fun CardFolderStack(
     modifier: Modifier = Modifier,
     bankIconStyle: BankIconStyle = BankIconStyle.Full,
     tilt: CardTiltState? = null,
+    cardDesign: CardDesign = CardDesign.Classic,
 ) {
     if (cards.isEmpty()) return
     val haptics = rememberAppHaptics()
@@ -208,10 +210,10 @@ fun CardFolderStack(
                                     }
                                     .then(if (tilt != null) Modifier.drawWithContent { drawContent(); drawSheen(tilt) } else Modifier),
                             ) {
-                                WalletCardFacePreview(card, revealed = false, bankIconStyle = bankIconStyle)
+                                WalletCardFacePreview(card, revealed = false, bankIconStyle = bankIconStyle, cardDesign = cardDesign)
                             }
                         } else {
-                            FolderCard(card)
+                            FolderCard(card, cardDesign = cardDesign)
                         }
                     }
                 }
@@ -232,11 +234,17 @@ internal fun folderDescription(card: StoredCard, index: Int, count: Int): String
  * that shows of it. Nothing else is printed, so a card's number stays one card's worth on screen.
  */
 @Composable
-private fun FolderCard(card: StoredCard) {
+private fun FolderCard(card: StoredCard, cardDesign: CardDesign = CardDesign.Classic) {
     val theme = remember(card.bankName, card.bankKey, card.cardName) { BankCardDesign.forCard(card) }
-    val ink = theme.badgeTextColor
+    val ink = when (cardDesign) {
+        CardDesign.Banner -> MaterialTheme.colorScheme.onSecondaryContainer
+        CardDesign.Ledger -> MaterialTheme.colorScheme.onSurface
+        // The same colours the plate under the strip is painted in (see tintedCardScheme), so the text always sits on its own colour.
+        CardDesign.Tinted -> (tintedCardScheme(theme) ?: MaterialTheme.colorScheme).onPrimaryContainer
+        CardDesign.Classic -> theme.badgeTextColor
+    }
     Box {
-        WalletCardPlate(card)
+        WalletCardPlate(card, cardDesign = cardDesign)
         Row(
             Modifier
                 .fillMaxWidth(FolderTab)
@@ -244,7 +252,7 @@ private fun FolderCard(card: StoredCard) {
                 .height(FolderStep),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CardNetworkBadge(CardNetwork.fromNumber(card.cardNumber), 18.dp)
+            CardNetworkBadge(CardNetwork.fromNumber(card.cardNumber), 18.dp, tint = if (cardDesign != CardDesign.Classic) ink else null)
             Spacer(Modifier.width(12.dp))
             Text(
                 "•••• ${card.last4}",

@@ -96,6 +96,7 @@ fun GuidePage(topic: GuideTopic) {
 internal fun GuideLink.open(navigator: AppNavigator) {
     when (this) {
         GuideLink.Home -> navigator.go(AppDestination.Home)
+        GuideLink.Notifications -> navigator.openNotifications()
         GuideLink.Activity -> navigator.openTransactions()
         GuideLink.Plans -> navigator.openPlans()
         GuideLink.Insights -> navigator.go(AppDestination.Insights)

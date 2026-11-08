@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FolderZip
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.rounded.Add
@@ -73,6 +74,7 @@ import com.example.normpix.settings.AccentColor
 import com.example.normpix.settings.ui.SwatchCircle
 import com.example.normpix.ui.components.AssetImage
 import com.example.normpix.ui.theme.AppRadius
+import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.AppTheme
 import com.example.normpix.ui.theme.isDark
 
@@ -177,6 +179,7 @@ internal fun GuideArt(topic: GuideTopic, modifier: Modifier = Modifier, shape: S
                     GuideTopic.AddTransaction -> AddTransactionArt()
                     GuideTopic.ShareReceipt -> ShareReceiptArt()
                     GuideTopic.Home -> HomeArt()
+                    GuideTopic.Notifications -> NotificationsArt()
                     GuideTopic.Activity -> ActivityArt()
                     GuideTopic.Plans -> PlansArt()
                     GuideTopic.Insights -> InsightsArt()
@@ -388,6 +391,45 @@ private fun BoxScope.HomeArt() {
         TxnRow(hue = 1)
         TxnRow(hue = 4, amount = 24.dp)
         TxnRow(hue = 6, amount = 36.dp)
+    }
+}
+
+@Composable
+private fun BoxScope.NotificationsArt() {
+    val scheme = MaterialTheme.colorScheme
+    MockScreen {
+        // The row every page has: its name, and the bell with what is new on it.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Bar(68.dp, 11.dp, strong = true)
+            Spacer(Modifier.weight(1f))
+            Box {
+                RoundIcon(Icons.Outlined.Notifications, scheme.surfaceContainerHighest, scheme.onSurfaceVariant, size = 24.dp)
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .size(9.dp)
+                        .background(scheme.error, CircleShape)
+                        .border(1.dp, scheme.surface, CircleShape),
+                )
+            }
+        }
+        // Three things that need the user, each with its way to deal with it.
+        for ((hue, line) in listOf(3 to 46.dp, 5 to 38.dp, 1 to 52.dp)) {
+            val tone = paletteColor(hue)
+            Column(
+                Modifier.fillMaxWidth().background(tone.container.copy(alpha = 0.55f), AppRadius.rMd).padding(horizontal = 8.dp, vertical = 7.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppSpacing.xs)) {
+                    RoundIcon(Icons.Outlined.Notifications, tone.accent, tone.onContainer, size = 16.dp)
+                    Bar(28.dp, 5.dp)
+                }
+                Bar(line, 7.dp, strong = true)
+                Box(
+                    Modifier.align(Alignment.End).height(12.dp).width(44.dp).background(tone.accent.copy(alpha = 0.22f), CircleShape),
+                )
+            }
+        }
     }
 }
 

@@ -104,6 +104,7 @@ import com.example.normpix.ui.components.LockGate
 import com.example.normpix.settings.AccountsLayout
 import com.example.normpix.settings.CardsLayout
 import com.example.normpix.settings.BankIconStyle
+import com.example.normpix.settings.CardDesign
 import com.example.normpix.ui.components.RevealVisibility
 import com.example.normpix.ui.components.SheetHeader
 import com.example.normpix.ui.components.SnackbarKind
@@ -266,6 +267,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                 bankIconStyle = prefs.bankIconStyle,
                 tilt = tilt,
                 overview = overview,
+                cardDesign = prefs.cardDesign,
             )
         }
         // Cards are shown only while NormPix stores them (Settings > Wallet & Cards > Store cards). Their blocks, in the order
@@ -387,7 +389,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                             if (prefs.cardsLayout == CardsLayout.Stack) {
                                 block("cards-stack") {
                                     Column(Modifier.padding(horizontal = AppSpacing.lg).padding(bottom = AppSpacing.lg)) {
-                                        CardStack(cards = visible, onOpen = flows::showCard, state = cardsDeck, bankIconStyle = prefs.bankIconStyle, tilt = tilt)
+                                        CardStack(cards = visible, onOpen = flows::showCard, state = cardsDeck, bankIconStyle = prefs.bankIconStyle, tilt = tilt, cardDesign = prefs.cardDesign)
                                     }
                                 }
                             } else if (prefs.cardsLayout == CardsLayout.Carousel) {
@@ -399,6 +401,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                             nfcGated = prefs.nfcTagRevealEnabled,
                                             bankIconStyle = prefs.bankIconStyle,
                                             tilt = tilt,
+                                            cardDesign = prefs.cardDesign,
                                             onToggleReveal = { reveal.toggle(it.id) },
                                             onShareNfc = if (nfcOn) { { flows.openNfcExchange(ExchangeTab.Outlet, it) } } else null,
                                             onEdit = { flows.editCard(it) },
@@ -471,6 +474,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                                                     },
                                                     tilt = tilt,
                                                     onCopy = { field -> reveal.copy(card, field) },
+                                                    cardDesign = prefs.cardDesign,
                                                 )
                                             }
                                         }
@@ -605,6 +609,7 @@ private fun AccountsSection(
     bankIconStyle: BankIconStyle,
     tilt: CardTiltState?,
     overview: Boolean = true,
+    cardDesign: CardDesign = CardDesign.Classic,
 ) {
     val controller = LocalFinance.current
     val finance = rememberFinanceState()
@@ -685,7 +690,7 @@ private fun AccountsSection(
         } else if (layout == AccountsLayout.Rows) {
             ListSection { for (a in active) item { AccountTile(a, cardsPerBank) } }
         } else {
-            AccountCards(active, layout, cardsPerBank, bankIconStyle, accountsDeck, tilt)
+            AccountCards(active, layout, cardsPerBank, bankIconStyle, accountsDeck, tilt, cardDesign = cardDesign)
         }
         if (archived.isNotEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -707,7 +712,7 @@ private fun AccountsSection(
                 if (layout == AccountsLayout.Rows) {
                     ListSection { for (a in archived) item { AccountTile(a, cardsPerBank) } }
                 } else {
-                    AccountCards(archived, layout, cardsPerBank, bankIconStyle, archivedDeck, tilt)
+                    AccountCards(archived, layout, cardsPerBank, bankIconStyle, archivedDeck, tilt, cardDesign = cardDesign)
                 }
             }
         }
@@ -737,6 +742,7 @@ private fun AccountCards(
     deck: DeckStackState,
     /** The phone's motion as a lean for the cards you can see whole (the carousel's front card, the list's cards). */
     tilt: CardTiltState?,
+    cardDesign: CardDesign = CardDesign.Classic,
 ) {
     val finance = rememberFinanceState()
     val actions = rememberFinanceActions()
@@ -779,6 +785,7 @@ private fun AccountCards(
             onManage = { actions.manageAccount(accountOf(it)) },
             state = deck,
             bankIconStyle = bankIconStyle,
+            cardDesign = cardDesign,
         )
     } else if (layout == AccountsLayout.Carousel) {
         AccountCarousel(
@@ -787,6 +794,7 @@ private fun AccountCards(
             onManage = { actions.manageAccount(accountOf(it)) },
             bankIconStyle = bankIconStyle,
             tilt = tilt,
+            cardDesign = cardDesign,
         )
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.lg)) {
@@ -802,6 +810,7 @@ private fun AccountCards(
                                     onManage = { actions.manageAccount(accountOf(card)) },
                                     bankIconStyle = bankIconStyle,
                                     tilt = tilt,
+                                    cardDesign = cardDesign,
                                 )
                             }
                         }

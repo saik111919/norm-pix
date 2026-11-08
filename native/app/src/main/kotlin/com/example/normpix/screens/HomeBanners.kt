@@ -81,7 +81,7 @@ internal fun NeedsAttention(budgets: BudgetOverview) {
 
 /** Every overdue reminder, the longest overdue first. */
 @Composable
-private fun reminderBanners(): List<Banner> {
+internal fun reminderBanners(): List<Banner> {
     val remindersState by LocalReminders.current.state.collectAsState()
     val flows = rememberReminderFlows()
     return remindersState.overdue().map { reminder ->
@@ -106,7 +106,7 @@ private fun reminderBanners(): List<Banner> {
 
 /** Every budget that is over or nearly used: exceeded before approaching, then the most used first. */
 @Composable
-private fun budgetBanners(budgets: BudgetOverview): List<Banner> {
+internal fun budgetBanners(budgets: BudgetOverview): List<Banner> {
     val finance = rememberFinanceState()
     val navigator = LocalNavigator.current
     val open: () -> Unit = { navigator.openPlans(PlanSection.Budgets) }
@@ -149,7 +149,7 @@ private fun budgetBanners(budgets: BudgetOverview): List<Banner> {
  * banner asking to unlock instead - which card, by bank and last digits, is the wallet's to say, not Home's.
  */
 @Composable
-private fun cardExpiryBanners(): List<Banner> {
+internal fun cardExpiryBanners(): List<Banner> {
     val container = LocalAppContainer.current
     val prefs by container.preferences.state.collectAsState()
     val cardsState by container.cards.state.collectAsState()
@@ -220,7 +220,7 @@ private fun cardExpiryBanners(): List<Banner> {
  * report newer than the last one seen. View opens the reports (which counts as seeing them); Dismiss just says they were seen.
  */
 @Composable
-private fun crashBanners(): List<Banner> {
+internal fun crashBanners(): List<Banner> {
     val container = LocalAppContainer.current
     val prefs by container.preferences.state.collectAsState()
     val context = LocalContext.current
@@ -252,7 +252,7 @@ private fun crashBanners(): List<Banner> {
  * sample set, and never while there is nothing worth keeping.
  */
 @Composable
-private fun backupBanners(): List<Banner> {
+internal fun backupBanners(): List<Banner> {
     val container = LocalAppContainer.current
     val prefs by container.preferences.state.collectAsState()
     val finance = rememberFinanceState()
@@ -298,7 +298,7 @@ private fun backupBanners(): List<Banner> {
  * build that doesn't update itself, and nothing for a release the user said Later to (as at launch).
  */
 @Composable
-private fun updateBanners(): List<Banner> {
+internal fun updateBanners(): List<Banner> {
     val updater = LocalAppContainer.current.updates?.takeIf { it.enabled } ?: return emptyList()
     val navigator = LocalNavigator.current
     val context = LocalContext.current

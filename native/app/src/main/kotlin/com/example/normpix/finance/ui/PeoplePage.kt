@@ -181,7 +181,8 @@ fun PeoplePage() {
         }
 
         item(key = "summary") {
-            Column(Modifier.padding(AppSpacing.page)) {
+            // The page gutter is horizontal only, so without this the card sat flush under the month switcher.
+            Column(Modifier.padding(AppSpacing.page).padding(top = AppSpacing.md)) {
                 SpendingSummary(totals = totals, periodLabel = periodLabel, loaded = loaded)
             }
         }
@@ -371,7 +372,9 @@ private fun PersonRow(
                 Text(summary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (count > 0) {
                     Spacer(Modifier.height(AppSpacing.xs))
-                    AppLinearProgress(Modifier.fillMaxWidth().alpha(0.9f), progress = { share.toFloat() }, thickness = 4.dp)
+                    // Calm, as every other row of a list is (budgets, category shares): at a small share the wave is still rising and
+                    // showed as a slanted stub under the name.
+                    AppLinearProgress(Modifier.fillMaxWidth().alpha(0.9f), progress = { share.toFloat() }, thickness = 4.dp, calm = true)
                 }
             }
         },

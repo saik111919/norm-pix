@@ -325,7 +325,7 @@ internal fun CardsOnHome(padding: PaddingValues = HomeSectionPadding) {
         }
         return
     }
-    CardStack(cards = cards, onOpen = flows::showCard, state = deck, bankIconStyle = prefs.bankIconStyle)
+    CardStack(cards = cards, onOpen = flows::showCard, state = deck, bankIconStyle = prefs.bankIconStyle, cardDesign = prefs.cardDesign)
 }
 
 /**

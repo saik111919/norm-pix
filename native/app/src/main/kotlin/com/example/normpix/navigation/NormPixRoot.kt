@@ -53,6 +53,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
+import com.example.normpix.notifications.NotificationBellExtra
+import com.example.normpix.notifications.NotificationsPage
+import com.example.normpix.notifications.ProvideNotifications
+import com.example.normpix.ui.components.LocalTopBarExtras
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.normpix.AppContainer
@@ -118,6 +123,7 @@ private const val NO_DAY = -1L
 
 object Routes {
     const val MAIN = "main"
+    const val NOTIFICATIONS = "notifications"
     const val CATEGORIES = "categories"
     const val BUDGET_HISTORY = "budget-history"
     const val PEOPLE = "people"
@@ -519,7 +525,17 @@ private fun AppNavigation(
       // The app's own background behind every page: while one page leaves and another arrives (or a tab is still
       // composing for the first time) it is what shows between them, never the window's - which follows the
       // *system's* light or dark, not the app's.
+      // What needs the user, gathered once for the bell on every top-level page, the Notifications page and the "+" menu; and the
+      // bell itself, which the design system's pages put on their top row.
+      ProvideNotifications {
+      CompositionLocalProvider(LocalTopBarExtras provides NotificationBellExtra) {
       Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+        // The shell is drawn beneath the pages and never leaves the composition (see PersistentShell): a page opened over it
+        // used to dispose it, so the back gesture had nothing to show under the page and waited for the shell to come back.
+        val backStackEntry by nav.currentBackStackEntryAsState()
+        val onShell = backStackEntry?.destination?.route.let { it == null || it == Routes.MAIN }
+        val shellBeneath = remember { ShellBeneath() }
+        PersistentShell(container, shell, covered = !onShell, beneath = shellBeneath, hidden = appLocked)
         NavHost(
             navController = nav,
             startDestination = Routes.MAIN,
@@ -533,10 +549,11 @@ private fun AppNavigation(
             popEnterTransition = transitions.popEnter,
             popExitTransition = transitions.popExit,
         ) {
-            page(Routes.MAIN) { AppShell(container, shell) }
+            shellPage(Routes.MAIN, shellBeneath)
             page(Routes.CATEGORIES) { BanksAndCategoriesPage(BanksAndCategoriesTab.Categories) }
             page(Routes.BUDGET_HISTORY) { BudgetHistoryPage() }
             page(Routes.PEOPLE) { PeoplePage() }
+            page(Routes.NOTIFICATIONS) { NotificationsPage() }
             page(
                 Routes.PERSON,
                 arguments = listOf(navArgument("personId") { type = NavType.LongType }),
@@ -612,6 +629,8 @@ private fun AppNavigation(
         }
         if (appLocked) AppLockScreen(container, prompt = !splashing)
       }
+      }
+      }
      }
     }
 }
@@ -662,6 +681,10 @@ class NavControllerNavigator(private val nav: NavHostController, private val she
 
     override fun openPeople() {
         nav.navigate(Routes.PEOPLE) { launchSingleTop = true }
+    }
+
+    override fun openNotifications() {
+        nav.navigate(Routes.NOTIFICATIONS) { launchSingleTop = true }
     }
 
     override fun openPerson(personId: Long) {

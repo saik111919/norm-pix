@@ -21,6 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.ui.label
 import com.example.normpix.settings.BankIconStyle
+import com.example.normpix.settings.CardDesign
 import com.example.normpix.ui.components.DeckCarousel
 import com.example.normpix.ui.components.DeckFact
 import com.example.normpix.ui.components.DeckFacts
@@ -47,6 +48,7 @@ fun AccountCarousel(
     bankIconStyle: BankIconStyle = BankIconStyle.Full,
     /** The phone's motion as a lean for the card in front, as the saved cards have it; null keeps it flat. */
     tilt: CardTiltState? = null,
+    cardDesign: CardDesign = CardDesign.Classic,
 ) {
     DeckCarousel(
         items = accounts,
@@ -66,9 +68,10 @@ fun AccountCarousel(
                     bankIconStyle = bankIconStyle,
                     compact = true,
                     tilt = tilt,
+                    cardDesign = cardDesign,
                 )
             } else {
-                AccountCardFacePreview(account, bankIconStyle = bankIconStyle, compact = true)
+                AccountCardFacePreview(account, bankIconStyle = bankIconStyle, compact = true, cardDesign = cardDesign)
             }
         },
         details = { account -> AccountDetails(account) },

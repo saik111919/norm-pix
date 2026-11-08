@@ -5,7 +5,7 @@ description: "Everything about the NormPix project - a private, offline-first An
 
 # NormPix project skill
 
-Stamp: verified against commit `5b1bc0dd` (`versionName` 1.5.0 in the tree; CI has released up to v1.5.9) on 2026-11-08. If `git log` shows newer commits on source paths, or
+Stamp: verified against commit `0ffc5a43` (`versionName` 1.5.0 in the tree; CI has released up to v1.5.9) on 2026-11-08. If `git log` shows newer commits on source paths, or
 `bash .claude/skills/normpix/scripts/verify.sh` reports drift, trust the code and fix the skill (`references/maintenance.md`).
 
 ## 1. The 60-second picture
@@ -110,6 +110,7 @@ reference rather than exploring. For the history or reasoning behind a feature, 
 | `storage/` | How the databases are opened: `DatabaseEngine` (`Plain` = framework SQLite for tests/sample data/fallback), `EncryptedDatabases` (SQLCipher + the one-time move from a plain file), `SqlCipherEngine` (the only SQLCipher calls), `DatabaseKey` (Keystore-sealed key), `DatabaseDigest`, `Sql.kt` (`rawQuery`/`insertOrThrow`/... on `SupportSQLiteDatabase`) |
 | `widgets/` | Watch-dial and cookie clocks (`ClockWidgets`, `ClockOptions` + Widget settings activity, `SimpleClock`), Recent, Add widgets, `HomeWidget` (the Settings > Widgets list, previews, pinning), `WidgetIntents`/`WidgetRequest`, `QuickAdd` (the app icon's Add expense / income / Transfer shortcuts and the Add-expense Quick Settings tile) |
 | `about/` | About page, its Feature guide pill and page (`GuideIndexPage`) and the topics (`GuideTopic`, `GuideArt`: real screenshots `GuideShots`, drawings as fallback) |
+| `notifications/` | The notification centre (`Notifications`: the banners Home's Needs attention is made of, as one list; `NotificationsPage`; the bell `NotificationBell`), provided above the NavHost (`ProvideNotifications` / `LocalNotifications`) |
 
 Outside it: tests mirror these packages in `native/app/src/test/kotlin/...` (`testing/TestEnvironment.kt` is the harness);
 `native/app/src/qa/` is the qa build's manifest label; `native/design/` generates icons and widget art (`clock-widget/` Python, `cookie-clock/` Java: `java CookieFace.java`), the Lucide icon data (`lucide/LucideBuild.java`: `lucide_map.txt` + the release's SVGs -> `lucide_icons.txt`) and the launch screen's animated cookie (`launch-splash/LaunchSplashAvd.py`, stdlib Python: `avd_splash.xml` + `splash_icon.xml`, re-run it when `CookieMotion` changes); `.github/workflows/`
