@@ -115,6 +115,8 @@ class RecurringEditorTest {
         compose.waitForIdle()
         tab("Recurring").performClick()
         compose.waitForIdle()
+        // The list is read on the database's own thread: on a slow runner the button is not there yet when the tab has just opened.
+        compose.waitUntil(timeoutMillis = 10_000) { compose.onAllNodesWithText("Add recurring payment").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Add recurring payment").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("New recurring expense").assertIsDisplayed()
