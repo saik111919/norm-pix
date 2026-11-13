@@ -117,13 +117,15 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
   move. `EncryptedDatabases.exists(context, name)` is what "has this phone a ledger" checks now.
 - **Migrations are additive.** `FinanceDatabase.onUpgrade` is a chain of `if (oldVersion < N) { ... }` steps (v2 banks,
   v3 sub-categories, v4 credit limits, v5 people, v6 rule people, v7 brand icons, v8 transaction pictures, v9 billing days,
-  v10 account numbers/card link, v11 later default categories, v12 account number start). `ALTER TABLE` / new tables only;
+  v10 account numbers/card link, v11 later default categories, v12 account number start, v13 the money-sent / money-received
+  families: `addDefaultFamilies`). `ALTER TABLE` / new tables only;
   never drop or recreate; existing rows stay exactly as they were. A new migration needs a test that opens a database
   hand-built at the previous version (see `BankMigrationTest`, `PeopleMigrationTest`, `PictureMigrationTest`). `onOpen` also runs
   `ensureAccountColumns` (adds any account column a database of the current version lacks, empty; `AccountColumnsGuardTest`): a
   safety net so a mis-numbered database never refuses every account write.
 - Backup formats are versioned and **additive**; old files must still restore:
-  full finance backup `FinanceBackupCodec.FORMAT_VERSION = 2` (`.json`, or `.zip` with pictures); app backup
+  full finance backup `FinanceBackupCodec.FORMAT_VERSION = 3` (`.json`, or `.zip` with pictures; 3 = may leave out unused default
+  categories and names the removed ones, see features.md section 6; 1 and 2 still restore exactly); app backup
   `AppBackupManifest.VERSION = 1` (zip: finance json, pictures, `app/manifest.json`, `app/settings.json`,
   `app/reminders.json`, `app/profile/`, `app/fonts/`, `app/cards.json`); cards file `CardsTransfer.VERSION = 1`
   (AES-256-GCM, PBKDF2 password, min 8 chars); locked backup `LockedFile.VERSION = 1` (`backup/LockedFile.kt`: any of the
@@ -180,9 +182,12 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
   `category/{id}/{month}?from&to`, `account/{id}`, `settings`, `settings/{page}`, `appearance/{section}`, `profile`,
   `search`, `reminder/{id}`, `update`, `changelog`, `about`, `about/{topic}`.
 - **Notifications** (`notifications/`, 2026-11-08): one gathering of what needs the user, provided once above the NavHost
-  (`ProvideNotifications` / `LocalNotifications`, in `rememberNotifications()`): the same banners Home's Needs attention is made
-  of (`screens/HomeBanners.kt`, now `internal`: `reminderBanners`, `budgetBanners`, `cardExpiryBanners`, `crashBanners`,
-  `backupBanners`, `updateBanners`), as `AppNotification(kind, banner)` in `Notifications`. The bell on every top-level page is
+  (`ProvideNotifications` / `LocalNotifications`, in `rememberNotifications()`): the banners made by `screens/HomeBanners.kt`
+  (`internal`: `reminderBanners`, `budgetBanners`, `cardExpiryBanners`, `crashBanners`, `backupBanners`, `updateBanners`), gathered
+  once by `notificationItems(budgets)` as `AppNotification(kind, banner)` in `Notifications`. Home's `NeedsAttention` reads the same
+  `notificationItems`: everything but `NotificationKind.Update` folds into the one `attentionBanner(items, open)` (count, `attentionSummary`,
+  worst tone; opens `openNotifications`), the update stays its own `BannerStack` (a deck of one). `Banner.detailLine()` is the page's
+  second line. The bell on every top-level page is
   `LocalTopBarExtras` (design system `Pages.kt`, which does not know what it is) provided as `NotificationBellExtra`; the
   Notifications page is `Routes.NOTIFICATIONS`, and the strip above the "+" menu's panel is `navigation/NotificationStrip.kt`.
   **Seen is not history**: `Notifications.seen` is `notifications_seen` in preferences (a `\n`-joined string, never backed up,

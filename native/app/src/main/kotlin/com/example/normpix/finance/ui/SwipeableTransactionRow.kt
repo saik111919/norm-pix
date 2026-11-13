@@ -31,10 +31,10 @@ import com.example.normpix.ui.theme.AppSpacing
 
 /**
  * A transaction in the history list, swiped the way Gmail's rows are (see [SwipeActionRow]): to the left for Edit, which opens
- * the editor and lets the row spring back, to the right for Delete, which sends the row off and folds it away and offers Undo.
- * The swipe is only a shortcut: it runs the same flows as the details sheet - except that [onSwipeDelete] does not ask first, as
- * the Undo is the way back - and both actions are always exposed to TalkBack as custom actions, whether or not swiping is on
- * ([onDelete], which asks).
+ * the editor and lets the row spring back, to the right for Delete. Delete asks first, as it does in the details sheet
+ * ([swipeDeleteAsks], the default since 2026-11-11); with that setting off it is Gmail's way - the row is sent off, folded away and
+ * Undo is offered ([onSwipeDelete]). The swipe is only a shortcut: both actions are always exposed to TalkBack as custom actions,
+ * whether or not swiping is on ([onDelete], which asks).
  *
  * [swipe] null (or an empty choice) turns the gesture off and leaves the plain row; with one action chosen, only that side moves.
  */
@@ -47,8 +47,13 @@ fun SwipeableTransactionRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
-    /** What a swipe to the right does; the question [onDelete] asks is left out, the Undo that follows being the way back. */
+    /** What a swipe to the right does when it does not ask ([swipeDeleteAsks] off): gone at once, the Undo that follows being the way back. */
     onSwipeDelete: () -> Unit = onDelete,
+    /**
+     * A swipe to delete asks first (Settings > Finance > Lists, on by default): the row springs back and [onDelete]'s question comes up,
+     * so "no" leaves the row where it was. Off, the row flies off and [onSwipeDelete] deletes it at once.
+     */
+    swipeDeleteAsks: Boolean = true,
     /** Shows the date in the row (lists that are not grouped under day headings). */
     showDate: Boolean = false,
     /** The account whose list this is, if it is one account's: its transfers show as money in or out of it. */
@@ -77,8 +82,9 @@ fun SwipeableTransactionRow(
             onContainer = scheme.onErrorContainer,
             armed = scheme.error,
             onArmed = scheme.onError,
-            leaves = true,
-            onTrigger = onSwipeDelete,
+            // Asked first, the row stays: it only goes once the answer is yes (the list drops it then).
+            leaves = !swipeDeleteAsks,
+            onTrigger = if (swipeDeleteAsks) onDelete else onSwipeDelete,
         )
     } else {
         null
@@ -145,6 +151,7 @@ fun SwipeableTransactionSection(
                         onEdit = { actions.editTransaction(t) },
                         onDelete = { actions.deleteTransaction(t) },
                         onSwipeDelete = { actions.deleteTransactionSwiped(t) },
+                        swipeDeleteAsks = prefs.swipeDeleteAsks,
                         showDate = true,
                     )
                 }

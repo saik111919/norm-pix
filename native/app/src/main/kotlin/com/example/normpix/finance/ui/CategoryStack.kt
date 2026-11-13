@@ -43,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -73,6 +74,8 @@ import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.isInProgress
 import com.example.normpix.finance.domain.percentLabel
 import com.example.normpix.finance.domain.relativeChange
+import com.example.normpix.navigation.LocalAppPreferences
+import com.example.normpix.settings.CardDesign
 import com.example.normpix.ui.components.AppLinearProgress
 import com.example.normpix.ui.components.DeckStack
 import com.example.normpix.ui.components.DeckStackState
@@ -115,7 +118,7 @@ class CategorySpend(
 }
 
 /** A category card is this much wider than tall. */
-private const val SPEND_ASPECT = 1.9f
+internal const val SPEND_ASPECT = 1.9f
 
 /** The text on a category card grows with the system font only this far: the card keeps its proportions. */
 private const val MAX_FONT_SCALE = 1.15f
@@ -127,6 +130,7 @@ private const val MAX_FONT_SCALE = 1.15f
 @Composable
 fun CategoryStack(spends: List<CategorySpend>, onOpen: (CategorySpend) -> Unit, state: DeckStackState, modifier: Modifier = Modifier) {
     val money = rememberFinanceState().money
+    val design = rememberCardDesign()
     val density = LocalDensity.current
     val capped = remember(density) { Density(density.density, fontScale = minOf(density.fontScale, MAX_FONT_SCALE)) }
     DeckStack(
@@ -137,9 +141,17 @@ fun CategoryStack(spends: List<CategorySpend>, onOpen: (CategorySpend) -> Unit, 
         onOpen = onOpen,
         state = state,
         modifier = modifier,
-        plate = { spend -> SpendSurface(spendTone(spend.category)) {} },
-        face = { spend -> CompositionLocalProvider(LocalDensity provides capped) { SpendFace(spend) } },
+        plate = { spend -> SpendCardPlate(design, spend.category) },
+        face = { spend -> CompositionLocalProvider(LocalDensity provides capped) { SpendCardFace(design, spend, compact = false) } },
     )
+}
+
+/** The Card design the user chose (Settings > Appearance > Layouts): what a card, an account and a category card are drawn in. */
+@Composable
+internal fun rememberCardDesign(): CardDesign {
+    val preferences = LocalAppPreferences.current ?: return CardDesign.Classic
+    val prefs by preferences.state.collectAsState()
+    return prefs.cardDesign
 }
 
 /**
@@ -157,6 +169,7 @@ fun CategoryCarousel(
     modifier: Modifier = Modifier,
 ) {
     val money = rememberFinanceState().money
+    val design = rememberCardDesign()
     val palette = categoryPalette()
     val density = LocalDensity.current
     val capped = remember(density) { Density(density.density, fontScale = minOf(density.fontScale, MAX_FONT_SCALE)) }
@@ -179,9 +192,9 @@ fun CategoryCarousel(
                                 role = Role.Button
                                 onClick(label = "Opens the details") { onOpen(spend); true }
                             },
-                    ) { SpendCarouselFace(spend) }
+                    ) { SpendCardFace(design, spend, compact = true) }
                 } else {
-                    SpendCarouselFace(spend)
+                    SpendCardFace(design, spend, compact = true)
                 }
             }
         },
@@ -204,7 +217,7 @@ fun CategoryCarousel(
 
 /** A category's card in the carousel: who it is at the top, what it came to at the foot, on the category's own colour. */
 @Composable
-private fun SpendCarouselFace(spend: CategorySpend) {
+internal fun SpendCarouselFace(spend: CategorySpend) {
     val money = rememberFinanceState().money
     val tone = spendTone(spend.category)
     val type = MaterialTheme.typography
@@ -284,14 +297,14 @@ private fun CategorySpend.spoken(money: MoneyFormatter, index: Int, count: Int):
 }
 
 @Composable
-private fun spendTone(category: Category?): PaletteColors {
+internal fun spendTone(category: Category?): PaletteColors {
     val scheme = MaterialTheme.colorScheme
     return if (category == null) PaletteColors(scheme.outline, scheme.surfaceContainerHighest, scheme.onSurfaceVariant) else paletteColor(category.color)
 }
 
 /** The card itself: the category's own tonal colour, lit from its top right, with a hairline edge. */
 @Composable
-private fun SpendSurface(tone: PaletteColors, content: @Composable () -> Unit) {
+internal fun SpendSurface(tone: PaletteColors, content: @Composable () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
@@ -319,7 +332,7 @@ private fun SpendSurface(tone: PaletteColors, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun SpendFace(spend: CategorySpend) {
+internal fun SpendFace(spend: CategorySpend) {
     val money = rememberFinanceState().money
     val tone = spendTone(spend.category)
     val type = MaterialTheme.typography
@@ -378,7 +391,7 @@ private fun SpendFace(spend: CategorySpend) {
 
 /** The category's icon on a soft disc of its own ink - on the card the tonal avatar would vanish into the card's colour. */
 @Composable
-private fun SpendAvatar(category: Category?, tone: PaletteColors) {
+internal fun SpendAvatar(category: Category?, tone: PaletteColors) {
     Box(Modifier.size(40.dp).background(tone.onContainer.copy(alpha = 0.14f), CircleShape), contentAlignment = Alignment.Center) {
         if (category == null) {
             Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = null, tint = tone.onContainer, modifier = Modifier.size(22.dp))
@@ -390,7 +403,7 @@ private fun SpendAvatar(category: Category?, tone: PaletteColors) {
 
 /** "▲ 18%": whether it was more or less than the month before - a fact, not a verdict, so no red or green. */
 @Composable
-private fun ChangePill(change: Double, ink: Color) {
+internal fun ChangePill(change: Double, ink: Color) {
     val percent = (abs(change) * 100).roundToInt()
     if (percent == 0) return
     Row(

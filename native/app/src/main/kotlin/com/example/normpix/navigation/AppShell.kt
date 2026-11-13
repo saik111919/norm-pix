@@ -154,9 +154,6 @@ val AppDestination.selectedIcon: ImageVector
 /** The shadow under the tab the back gesture is moving, at the end of the gesture. */
 private val BACK_LIFT = 8.dp
 
-/** How long a committed back gesture takes to finish the tab's close, from wherever the finger let go. */
-private const val BACK_FINISH_MS = 160
-
 /**
  * The app frame: the top-level destinations with a floating navigation bar on
  * phones and a navigation rail on larger windows (a wide one, with each label beside its icon, on a Large window) - each
@@ -202,7 +199,9 @@ fun AppShell(
     // page, scrubbed by the finger, over the tab it goes back to.
     val backPreview = remember { TabBackPreview() }
     val backSettle = tween<Float>(AppMotion.duration(AppMotion.SHORT_MS), easing = AppMotion.standard)
-    val backFinish = tween<Float>(AppMotion.duration(BACK_FINISH_MS), easing = AppMotion.standard)
+    // How long a back gesture's close takes from start to end (the Back gesture speed; nothing with animations off): the finger
+    // plays the start of it and letting go the rest, as for a pushed page (see BackGesture).
+    val backGestureMs = AppMotion.duration(LocalBackGestureMs.current)
     // The ease back to rest after a gesture is let go early, so a new gesture can stop it.
     val backSettling = remember { arrayOfNulls<Job>(1) }
     // True from a committed gesture until the tab it went back to has taken over; a gesture started then is let go by.
@@ -235,19 +234,27 @@ fun AppShell(
                 backPreview.target = TabBackPreview.NO_TAB
             }
         }
+        // How far the finger has gone (0..1). What is drawn is BackGesture.eased of it: the start of the close, not all of it.
+        var raw = 0f
         try {
             progress.collect { backEvent ->
                 backPreview.direction = BackPreview.directionOf(backEvent.swipeEdge == BackEventCompat.EDGE_RIGHT)
-                backPreview.progress = backEvent.progress
+                raw = backEvent.progress
+                backPreview.progress = BackGesture.eased(raw)
             }
             // Gesture completed.
             if (toPreviousTab) {
                 // The close is finished from where the finger let go, and the switch is made when the tab is gone: the tab
                 // it returns to is already on screen, whole, so it is switched to without arriving - nothing flashes.
                 backFinishing = true
+                val from = raw
                 scope.launch {
                     try {
-                        animate(backPreview.progress, 1f, animationSpec = backFinish) { value, _ -> backPreview.progress = value }
+                        // The rest of the close, in what is left of the gesture's clock and along the curve the finger was on -
+                        // not a fixed 160 ms from wherever it was, which after a quick swipe was most of the close in a blink.
+                        animate(from, 1f, animationSpec = tween(BackGesture.finishMs(from, backGestureMs), easing = LinearEasing)) { value, _ ->
+                            backPreview.progress = BackGesture.eased(value)
+                        }
                         tabHandoff = true
                         Snapshot.withMutableSnapshot {
                             tabHistory.removeAt(tabHistory.lastIndex)
@@ -903,6 +910,19 @@ val LocalShellCovered = staticCompositionLocalOf { false }
 @Stable
 internal class ShellBeneath {
     var progress by mutableFloatStateOf(1f)
+
+    /**
+     * Whether the transition under way is the back gesture's (see `BackGestureTransitions`), and the side it came from. Set by the
+     * navigation host as it asks for the transition - before [progress] moves - and read where [progress] is, so they need not be
+     * states of their own: the shell is then drawn in the Back gesture style, on the gesture's clock, not the page style's.
+     */
+    var byGesture = false
+    var direction = 1f
+
+    fun gestureFrom(swipeEdge: Int) {
+        byGesture = true
+        direction = BackGesture.directionOf(swipeEdge)
+    }
 }
 
 /**
@@ -924,6 +944,7 @@ internal fun PersistentShell(
     hidden: Boolean,
 ) {
     val animation = LocalPageAnimation.current
+    val backAnimation = LocalBackAnimation.current
     val reduced = rememberReducedMotion()
     Box(
         Modifier
@@ -931,7 +952,13 @@ internal fun PersistentShell(
             .graphicsLayer {
                 val uncovered = beneath.progress
                 if (!reduced && uncovered < 1f) {
-                    applyBackPose(BackPreview.revealed(animation, uncovered, 1f))
+                    // Under the back gesture: the page beneath of the Back gesture style, as far along as the gesture's curve puts it.
+                    val pose = if (beneath.byGesture) {
+                        BackPreview.revealed(backAnimation, BackGesture.eased(uncovered), beneath.direction)
+                    } else {
+                        BackPreview.revealed(animation, uncovered, 1f)
+                    }
+                    applyBackPose(pose)
                     // Drawn as a window while it recedes, as a page leaving is (see PageWindow): its corners round as it goes.
                     val round = ((1f - uncovered) / BackPreview.CORNERS_BY).coerceAtMost(1f)
                     if (round > 0f && !clip) {
@@ -970,8 +997,10 @@ internal fun TabHost(
     content: @Composable () -> Unit,
 ) {
     val animation = LocalPageAnimation.current
+    // What the back gesture plays: the page style's own close, or the one the Back gesture style names.
+    val backAnimation = LocalBackAnimation.current
     val reduced = rememberReducedMotion()
-    // While the back gesture is taking the app to the previous tab: the tab on screen is moved as the page style closes a page,
+    // While the back gesture is taking the app to the previous tab: the tab on screen is moved as that style closes a page,
     // and the tab it goes back to is laid out, whole, beneath it. Reduced motion shows neither: the gesture just goes back.
     val preview = back?.takeIf { !reduced && it.target != TabBackPreview.NO_TAB }
     // What the tab being left is drawn on, so the tab beneath does not show through it as it fades or slides away.
@@ -1006,7 +1035,7 @@ internal fun TabHost(
             .then(
                 when {
                     visible && preview != null -> Modifier
-                        .graphicsLayer { applyBackPose(BackPreview.leaving(animation, preview.progress, preview.direction)) }
+                        .graphicsLayer { applyBackPose(BackPreview.leaving(backAnimation, preview.progress, preview.direction)) }
                         .background(surface)
                     visible -> Modifier.graphicsLayer {
                         val t = arrival.value
@@ -1025,7 +1054,7 @@ internal fun TabHost(
                         }
                     }
                     preview != null && preview.target == ordinal -> Modifier
-                        .graphicsLayer { applyBackPose(BackPreview.revealed(animation, preview.progress, preview.direction)) }
+                        .graphicsLayer { applyBackPose(BackPreview.revealed(backAnimation, preview.progress, preview.direction)) }
                         .clearAndSetSemantics {}
                     departing -> Modifier
                         .graphicsLayer {

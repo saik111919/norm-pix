@@ -35,7 +35,8 @@ import org.robolectric.annotation.Config
 
 /**
  * A transaction row is swiped as Gmail's are: to the left for Edit (the editor opens and the row comes back), to the right for
- * Delete (the row goes and folds away, with no question - the Undo is the way back). A short pull does nothing.
+ * Delete - which asks first by default (the row stays), or with that setting off sends the row away and folds it, the Undo being
+ * the way back. A short pull does nothing.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
@@ -65,7 +66,8 @@ class SwipeableTransactionRowTest {
     @After
     fun tearDown() = env.close()
 
-    private fun show(swipe: TransactionSwipeActions?) = compose.setContent {
+    /** [asks] is the Settings > Finance choice: a swipe to delete asks first (the app's default), or deletes at once with Undo. */
+    private fun show(swipe: TransactionSwipeActions?, asks: Boolean = false) = compose.setContent {
         CompositionLocalProvider(LocalReducedMotionOverride provides true) {
             env.Content {
                 Column {
@@ -78,6 +80,7 @@ class SwipeableTransactionRowTest {
                         onEdit = { log += "edit" },
                         onDelete = { log += "delete (asks first)" },
                         onSwipeDelete = { log += "delete" },
+                        swipeDeleteAsks = asks,
                     )
                 }
             }
@@ -116,6 +119,21 @@ class SwipeableTransactionRowTest {
         // The swipe's own delete, not the one that asks: the Undo that follows is the way back.
         assertEquals(listOf("delete"), log)
         assertEquals(0f, slot().getUnclippedBoundsInRoot().height.value, "the row folds its height away")
+    }
+
+    @Test
+    fun aSwipeToTheRightAsksFirstAndTheRowStaysWhereItWas() {
+        show(TransactionSwipeActions.EditAndDelete, asks = true)
+        val height = slot().getUnclippedBoundsInRoot().height.value
+        val rest = left()
+
+        row().performTouchInput { swipeRight() }
+        compose.waitForIdle()
+
+        // The delete that asks, and the row is not sent off: "no" must leave it exactly where it was.
+        assertEquals(listOf("delete (asks first)"), log)
+        assertEquals(height, slot().getUnclippedBoundsInRoot().height.value, "the row keeps its height")
+        assertEquals(rest, left(), "and springs back to its place")
     }
 
     @Test

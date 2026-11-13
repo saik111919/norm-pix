@@ -41,7 +41,7 @@ enum class GuideTopic(
         hue = 1,
         steps = listOf(
             "Tap the + button in the bar at the bottom. Its menu has Expense, Income and every other add. Tap Edit in it to put the tiles in your own order, and drag a tile's handle to make it wide or small.",
-            "Type the amount, then choose a category and the account the money moved through.",
+            "Type the amount, then choose a category and the account the money moved through. Money you send to someone has Money sent (to friends, lent, repaid, a split bill), and money that comes from someone has Money received.",
             "Add a payee, a note, the person it was for, or a picture of the bill if you like.",
             "Switch the type to Transfer to move money between two of your accounts, or to pay a credit card's bill.",
             "Save. Home, Insights and your budgets update straight away.",
@@ -74,13 +74,13 @@ enum class GuideTopic(
         hue = 3,
         steps = listOf(
             "The top card shows what came in, what went out and your total balance.",
-            "Needs attention gathers overdue reminders, budgets that are nearly used or over, cards about to expire and an update waiting to install.",
+            "Needs attention is one banner that says how many things are waiting - overdue reminders, budgets nearly used or over, cards about to expire, a backup due - and opens Notifications. An update waiting to install keeps its own banner here, with its own buttons.",
             "Top spending shows where most of the month went.",
             "Next 7 days lists what is coming up. Recent shows your latest transactions; See all opens the whole history.",
         ),
         tips = listOf(
-            "Press and hold a stack of cards or banners to spread it out.",
-            "Choose how Top spending is laid out in Settings > Appearance > Layouts.",
+            "Press and hold a stack of cards to spread it out.",
+            "Choose how Top spending is laid out in Settings > Appearance > Layouts. Its cards wear the same Card design as your saved cards and accounts, and pulling the front one shows what is under it.",
             "The top card wears the month's weather: snow before anything is spent, sun while you are on track, heat as the budget runs low, rain once it is over. Settings > Appearance > Effects > Hero weather turns it off.",
         ),
         link = GuideLink.Home,
@@ -90,10 +90,10 @@ enum class GuideTopic(
         summary = "Everything that needs you in one place, and a bell on every screen for what is new.",
         hue = 1,
         steps = listOf(
-            "The bell at the top of Home, Activity, Insights and Wallet counts what is new; tap it to open Notifications.",
+            "The bell at the top of Home, Activity, Insights and Wallet counts what is new; tap it, or the Needs attention banner on Home, to open Notifications.",
             "Opening the page is seeing it all: the bell goes quiet until something new comes up.",
             "Notifications are grouped by what they are about: Reminders, Budgets, Cards, Backup and NormPix itself.",
-            "Each one says what is wrong and has its own buttons - mark a reminder done, open the budget, renew the card.",
+            "Each is a row that says what is wrong, with its own buttons - mark a reminder done, open the budget, renew the card - and pressing the row opens what it is about.",
         ),
         tips = listOf(
             "There is no history: a notification stays while the thing it says is true, and goes once you deal with it.",
@@ -110,10 +110,10 @@ enum class GuideTopic(
             "Open Plans & Activity and stay on Activity.",
             "Move between months, or choose All time or a range of days.",
             "Filter by type, account, category, person, amount or dates, or search.",
-            "Tap a row for its details. Swipe it to edit or delete.",
+            "Tap a row for its details. Swipe it to edit or delete; a swipe to delete asks first.",
         ),
         tips = listOf(
-            "Choose which swipe actions you want in Settings > Finance.",
+            "Choose which swipe actions you want in Settings > Finance, and whether a swipe to delete asks first or deletes at once with Undo.",
             "A repeating payment is recorded by itself on its day, and shows up here like any other.",
         ),
         link = GuideLink.Activity,
@@ -137,13 +137,14 @@ enum class GuideTopic(
     ),
     Insights(
         title = "Insights",
-        summary = "Where the money went, and what changed since last month.",
+        summary = "Where the money went, how it built up, and what changed since last month.",
         hue = 6,
         steps = listOf(
             "Pick a month, or choose your own range of days.",
-            "The snapshot shows income, spending and how the month is trending.",
-            "Where your money went breaks spending down by category, as a ranked list or - in Settings > Appearance > Layouts - as a carousel; What changed compares it with the month before.",
-            "See what you spend on each person, and the month day by day.",
+            "The top card says what went out and how that compares with the same days last month, in rupees and as a share; income and what you saved are under it.",
+            "How this month built up draws the month day by day against last month's dashed line - touch or drag along it to read a day.",
+            "Where your money went ranks your categories, each with what changed in it since last month (or, in Settings > Appearance > Layouts, as a carousel).",
+            "See what you spend on each person, then the months around this one, and - one tap away - the month day by day.",
         ),
         tips = listOf(
             "Add a person to an expense when you record it, and Insights totals them for you.",
@@ -162,6 +163,7 @@ enum class GuideTopic(
         ),
         tips = listOf(
             "Scan the card number with the camera. It is read on the phone.",
+            "Several credit-card bills are a stack under Bills due: swipe for the next one, press and hold to lay them all out, and Stack gathers them again.",
             "Accounts and saved cards lean a little as you move your phone (Settings > Appearance > Effects > Card tilt).",
             "Don't want cards in NormPix? Turn off Store cards in Settings > Wallet & Cards and the Wallet shows accounts only.",
         ),
@@ -210,7 +212,7 @@ enum class GuideTopic(
             "Open Settings > Appearance and choose Light, Dark or the system's theme.",
             "In Colors, choose Wallpaper colors (Android 12 and later) or Other colors. Each palette shows the colors it gives the app: primary above, container and accent below.",
             "Choose Pure for black and white with greys between: black surfaces in dark, white in light.",
-            "Fonts, icon shapes, transitions (pages, sheets, the animation the app starts with and how the dock's pill moves between tabs) and the app icon each have a screen of their own in Appearance. Interface font has GS Flex, Nunito, your phone's font, or a font file - or the zip you download from Google Fonts, with every weight of the family. With 3D category icons the Settings list is in 3D too; Appearance > Icons > 3D icons in Settings keeps it flat. Appearance > Icons > Interface icons draws the app's icons as Material's or as the thinner Lucide set.",
+            "Fonts, icon shapes, transitions (pages, the back gesture - what it shows as you swipe back and how long its close takes -, sheets, the animation the app starts with and how the dock's pill moves between tabs) and the app icon each have a screen of their own in Appearance. Interface font has GS Flex, Nunito, your phone's font, or a font file - or the zip you download from Google Fonts, with every weight of the family. With 3D category icons the Settings list is in 3D too; Appearance > Icons > 3D icons in Settings keeps it flat. Appearance > Icons > Interface icons draws the app's icons as Material's or as the thinner Lucide set.",
         ),
         tips = listOf(
             "Every theme works in light and dark, and the pictures in this guide follow whichever you pick.",
@@ -229,6 +231,7 @@ enum class GuideTopic(
         ),
         tips = listOf(
             "NormPix can't recover a forgotten backup password, so keep it somewhere safe.",
+            "A backup holds your categories - the ones you made or changed, and the ones your entries use. The app's own, untouched and unused, are left out and are there again after a restore.",
             "Saved cards are left out unless you choose to include them, and then they are locked with a password.",
             "Check and recalculate works every balance out again from your entries.",
             "Sample data lets you explore NormPix without entering your own.",

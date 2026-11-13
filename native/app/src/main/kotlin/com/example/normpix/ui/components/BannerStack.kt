@@ -2,7 +2,6 @@ package com.example.normpix.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ColorScheme
@@ -30,7 +30,6 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
@@ -39,11 +38,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.customActions
-import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -85,16 +80,23 @@ class Banner(
 /** The row of buttons is at least this tall, whatever is in it: the face and the plate behind it must agree. */
 private val ActionRowHeight = 48.dp
 
+/** The room round the buttons inside the bar they are in. */
+private val BarInset = AppSpacing.xs
+
 /**
  * Banners of one kind as a stack - the one [DeckStack] the cards and the top spending use: the first in front in full, the
  * others a hair of colour behind it. Pressing and holding the front one lays them all out, each with its own buttons.
+ *
+ * What stacks and moves is the banner's panels ([BannerTop]). Its bar of buttons ([BannerActions]) is the deck's footer: it stays
+ * where it is while the panels above it are swiped, and is the front banner's (owner, 2026-11-11).
  */
 @Composable
 fun BannerStack(banners: List<Banner>, state: DeckStackState, modifier: Modifier = Modifier) {
     DeckStack(
         items = banners,
         itemKey = { it.key },
-        shape = AppRadius.rXxl,
+        // The outline of what moves: the panels, whose lower corners are the small ones that sit on the bar.
+        shape = StackedTop,
         description = { banner, index, count -> banner.spoken(index, count) },
         onOpen = { it.onOpen() },
         state = state,
@@ -109,45 +111,15 @@ fun BannerStack(banners: List<Banner>, state: DeckStackState, modifier: Modifier
             }
         },
         behindDim = BehindDim,
-        plate = { banner -> BannerFace(banner, plate = true) },
-        face = { banner -> BannerFace(banner, plate = false) },
+        footerGap = Seam,
+        footer = { banner -> BannerActions(banner) },
+        plate = { banner -> BannerTop(banner, plate = true) },
+        face = { banner -> BannerTop(banner, plate = false) },
     )
 }
 
 /** How much darker each banner behind the front one is: a pale surface needs a hint of shade to read as a card behind, not a slab. */
 private const val BehindDim = 0.06f
-
-/**
- * One banner on its own, in full, with nothing laid over it: what a page that lists banners shows (the Notifications page). It is
- * one thing to read and press, as in a [BannerStack]: the lines are spoken together and its buttons are offered as actions, so a
- * screen reader never lands on a button inside it by mistake.
- */
-@Composable
-fun BannerCard(banner: Banner, modifier: Modifier = Modifier) {
-    val spoken = remember(banner) { banner.spoken() }
-    val actions = remember(banner) {
-        listOfNotNull(banner.secondary, banner.primary).map { action ->
-            CustomAccessibilityAction(action.label) {
-                action.onClick()
-                true
-            }
-        }
-    }
-    Column(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Outer))
-            .clickable(onClickLabel = "Opens the details", onClick = banner.onOpen)
-            .clearAndSetSemantics {
-                contentDescription = spoken
-                role = Role.Button
-                onClick(label = "Opens the details") { banner.onOpen(); true }
-                if (actions.isNotEmpty()) customActions = actions
-            },
-    ) {
-        BannerFace(banner, plate = false)
-    }
-}
 
 /** How much of the status colour washes the banner's surface: enough to tell an overdue one from a budget one at a glance, not a slab. */
 private const val CardWash = 0.08f
@@ -158,15 +130,19 @@ private const val EdgeTint = 0.28f
 /** How much of the status colour fills the banner's main button (over the washed surface). */
 private const val ButtonTint = 0.18f
 
-/** Every colour a banner of one status wears (see [BannerFace]). */
+/** Every colour a banner of one status wears (see [BannerTop] and [BannerActions]). */
 internal class BannerColors(
     val surface: Color,
     val edge: Color,
-    /** The icon's disc, and the eyebrow and the quieter button's ink. */
+    /** The icon's disc and the eyebrow. */
     val accent: Color,
     val icon: Color,
+    /** The quieter button of the bar's group: a tint of the status colour, and the ink on it. */
     val buttonFill: Color,
     val buttonInk: Color,
+    /** The main button of the group: the status colour itself, and the ink that reads on it. */
+    val solid: Color,
+    val onSolid: Color,
 )
 
 internal fun bannerColors(role: StatusColorRole, scheme: ColorScheme): BannerColors {
@@ -181,6 +157,9 @@ internal fun bannerColors(role: StatusColorRole, scheme: ColorScheme): BannerCol
         icon = role.onColor,
         buttonFill = buttonFill,
         buttonInk = readableOn(buttonFill, role.color, scheme.onSurface),
+        solid = role.color,
+        // The role's own pairing, unless a generated one falls short: then whichever of black and white reads.
+        onSolid = readableOn(role.color, role.onColor, if (role.color.luminance() > 0.5f) Color.Black else Color.White),
     )
 }
 
@@ -205,10 +184,10 @@ private fun Banner.spoken(index: Int, count: Int): String =
     if (count > 1) "${spoken()}, ${index + 1} of $count" else spoken()
 
 /**
- * The banner itself, in the summary banner's design (`SplitStatBanner`): two panels joined by a seam - what it is on the left, with
- * its bar if it has one, and one figure on the right if it has one - and the way to deal with it in a bar underneath, all in the
- * status colour: the surface washed with it and edged with a hairline of it, curved lines across, the icon white-on-colour in a solid
- * disc of it, the eyebrow in it, the pill filled with it, and the main button filled with a tint of it. The title and its detail stay
+ * The banner's panels, in the summary banner's design (`SplitStatBanner`): two panels joined by a seam - what it is on the left, with
+ * its bar if it has one, and one figure on the right if it has one - over the bar with the way to deal with it ([BannerActions]), all
+ * in the status colour: the surface washed with it and edged with a hairline of it, curved lines across, the icon white-on-colour in a
+ * solid disc of it, the eyebrow in it, the pill filled with it, and the main button filled with it. The title and its detail stay
  * the page's ink. Every one of those is the status *colour* at a fixed strength, never the status *container*: the roles'
  * containers differ in strength (an error's is pale, a warning's deep), which made one banner louder than the next.
  *
@@ -222,7 +201,7 @@ private fun Banner.spoken(index: Int, count: Int): String =
  * be pressed by mistake - which is the same size by construction, not by measurement.
  */
 @Composable
-private fun BannerFace(banner: Banner, plate: Boolean) {
+private fun BannerTop(banner: Banner, plate: Boolean) {
     val role = banner.tone.resolve()
     val scheme = MaterialTheme.colorScheme
     val text = MaterialTheme.typography
@@ -286,36 +265,46 @@ private fun BannerFace(banner: Banner, plate: Boolean) {
                 figurePanel(TopEndPanel, Modifier.weight(FigureWeight).fillMaxHeight(), true)
             }
         }
-        Surface(Modifier.fillMaxWidth(), color = colors.surface, contentColor = ink, shape = StackedBottom, border = edge) {
-            Box(Modifier.padding(horizontal = AppSpacing.md, vertical = AppSpacing.xs)) {
-                if (plate) {
-                    Spacer(Modifier.fillMaxWidth().height(ActionRowHeight))
-                } else {
-                    Row(
-                        Modifier.fillMaxWidth().heightIn(min = ActionRowHeight),
-                        horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        banner.secondary?.let { action ->
-                            TextButton(
-                                onClick = action.onClick,
-                                colors = ButtonDefaults.textButtonColors(contentColor = colors.accent),
-                                modifier = Modifier.weight(1f, fill = false),
-                            ) {
-                                Text(action.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                        // The main button is measured first and takes what it needs; the quieter one has what is left.
-                        FilledTonalButton(
-                            onClick = banner.primary.onClick,
-                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = colors.buttonFill, contentColor = colors.buttonInk),
-                        ) {
-                            Text(banner.primary.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                }
-            }
-        }
+    }
+}
+
+/**
+ * The bar under a banner's panels: its buttons as one connected group across the whole bar (the app's button group, as Home's Add
+ * income | Transfer and a transaction's Edit | Delete are) - the quieter one first in a tint of the status colour, the main one filled
+ * with the colour itself. It is the same bar whichever banner of a stack is in front, so it does not move with them
+ * ([BannerStack]). Its buttons are pressed by touch; a screen reader has them as actions on the banner, which is one thing to read.
+ */
+@Composable
+private fun BannerActions(banner: Banner) {
+    val role = banner.tone.resolve()
+    val scheme = MaterialTheme.colorScheme
+    val colors = remember(role, scheme) { bannerColors(role, scheme) }
+    val edge = remember(colors) { BorderStroke(1.dp, colors.edge) }
+    Surface(
+        Modifier.fillMaxWidth().clearAndSetSemantics {},
+        color = colors.surface,
+        contentColor = scheme.onSurface,
+        shape = StackedBottom,
+        border = edge,
+    ) {
+        val secondary = banner.secondary
+        ConnectedButtonGroup(
+            buttons = if (secondary == null) {
+                // On its own the button is the whole bar: in the tint, as a bar of solid colour that wide shouts (rendered and seen).
+                listOf(GroupButton(banner.primary.label, banner.primary.icon, colors.buttonFill, colors.buttonInk, banner.primary.onClick))
+            } else {
+                listOf(
+                    GroupButton(secondary.label, secondary.icon, colors.buttonFill, colors.buttonInk, secondary.onClick),
+                    GroupButton(banner.primary.label, banner.primary.icon, colors.solid, colors.onSolid, banner.primary.onClick),
+                )
+            },
+            modifier = Modifier.fillMaxWidth().padding(BarInset),
+            height = ActionRowHeight,
+            // Concentric with the bar it is set into: the bar's top corners are the small ones (it sits under the panels), its
+            // bottom ones the banner's large ones, each less the inset - so the buttons follow the bar's shape, not a pill's.
+            outerTop = CornerSize(Inner - BarInset),
+            outerBottom = CornerSize(Outer - BarInset),
+        )
     }
 }
 

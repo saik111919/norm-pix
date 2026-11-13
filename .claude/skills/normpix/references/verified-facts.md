@@ -169,6 +169,24 @@ Format: `claim - applies to - source - status/date`.
   then a spring (LowBouncy, MediumLow) brings the content in from 48 dp, alpha 0 to 1 and scale 0.96 to 1; pushed pages slide on `spring(0.9, 500)` (`AppNavTransitions`).
   Every press has a haptic (`HapticUtil`). Source: the repository at tag v20.3-beta.1 - verified by reading.
 
+## Charts and Insights design (2026-11-13: two research runs, checked against the pages)
+
+- Apple HIG "Charts" (developer.apple.com/design/human-interface-guidelines/charts.md, page dated 2022-09-23, read in full 2026-11-13): "Let people
+  interact with the data when it makes sense, but don't require interaction to reveal critical information" (Stocks: drag a vertical indicator through
+  the line); "consider expanding the hit target to include the entire plot area, letting people scrub across the area"; bars "work well ... to compare values
+  in different categories or view the relative proportions of various parts in a whole", lines for change over time; "bar charts can work well when you use
+  zero for the lower bound"; "Prefer familiar sequences of values in the tick and grid-line labels"; "if people can inspect individual data points by
+  interacting ... you might use fewer grid lines and light label colors"; "Summarize the main message of your chart"; "In a compact environment, maximize
+  the width of the plot area"; "Avoid relying solely on color ... use different shapes or patterns"; hide axis and tick labels from assistive technology and
+  describe values, not colours; "highlight the changes in other ways, too, ... people who turn off animations". Verified by opening the page.
+- Datawrapper: "Truncated y-axes in column charts and bar charts are considered deceptive and misleading" (datawrapper.de/academy/why-our-column-and-bar-charts-start-at-zero) -
+  verified 2026-11-13.
+- **A researcher's [SOURCE-CHECKED] label was wrong once**: Gemini 3.8 Flash High cited `m3.material.io/blog/data-accessibility` as checked; it is HTTP 404. Haiku 5.5's report
+  (with its own UNVERIFIED marks - Material's data-visualisation page returned only its title; Monzo's help page says nothing about bars) was the reliable one.
+  Anything resting only on Gemini's Material, Monzo or "Copilot Money" citations was dropped. Open the pages before building on a "checked" label.
+- A child session in this checkout runs the project's Stop hook too: Haiku's final message answered the "skill may be out of date" reminder instead of the question;
+  its report was earlier in its thread (`t3_thread_read`, `afterPosition`). Read the whole child thread, not only the delivered summary.
+
 ## How to add an entry
 
 `claim - applies to (library/API level/version) - source (URL or path:line) - status/date`. If a fact is later disproved, delete it

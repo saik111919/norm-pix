@@ -19,6 +19,16 @@ object CategorySuggestions {
         "Family support", "Donations",
     )
 
+    /**
+     * The families added on 2026-11-12 (FinanceDatabase version 13; owner: "so many categories are missing, like if I sent money to
+     * someone ... and when received"): money between people in both directions, presents given, what a bank or a card charges, what
+     * work costs, what investments pay back and what is sold. A phone that already has NormPix is given them once, as [addedLater]'s
+     * were - never a second one where a category of that kind already goes by the name.
+     */
+    val addedIn13: Set<String> = setOf(
+        "Money sent", "Gifts given", "Fees & charges", "Work expenses", "Money received", "Investment returns", "Sold items",
+    )
+
     /** Of [addedLater], the names the first release seeded as sub-categories (under Groceries and Other). */
     val formerSubCategories: Set<String> = setOf("Personal care", "Donations")
 
@@ -278,6 +288,33 @@ object CategorySuggestions {
             SuggestedSubCategory("Crowdfunding", "emoji:🤝"),
             SuggestedSubCategory("Offerings", "donation"),
         ),
+        "Money sent" to listOf(
+            SuggestedSubCategory("Sent to friends", "emoji:🤝"),
+            SuggestedSubCategory("Lent to someone", "loan"),
+            SuggestedSubCategory("Repaid to someone", "refund"),
+            SuggestedSubCategory("Bill splits paid", "bills"),
+        ),
+        "Gifts given" to listOf(
+            SuggestedSubCategory("Birthday presents", "emoji:🎂"),
+            SuggestedSubCategory("Wedding presents", "wedding"),
+            SuggestedSubCategory("Festival presents", "party"),
+            SuggestedSubCategory("Gift cards", "emoji:💳"),
+        ),
+        "Fees & charges" to listOf(
+            SuggestedSubCategory("Bank charges", "bank_fees"),
+            SuggestedSubCategory("ATM fees", "atm"),
+            SuggestedSubCategory("Late fees", "fines"),
+            SuggestedSubCategory("Card annual fee", "credit_card"),
+            SuggestedSubCategory("Currency conversion", "emoji:💱"),
+            SuggestedSubCategory("Convenience fees", "bills"),
+        ),
+        "Work expenses" to listOf(
+            SuggestedSubCategory("Office supplies", "stationery"),
+            SuggestedSubCategory("Work travel", "flight"),
+            SuggestedSubCategory("Client meals", "restaurant"),
+            SuggestedSubCategory("Tools & software", "software"),
+            SuggestedSubCategory("Co-working", "emoji:🏢"),
+        ),
         "Other" to listOf(
             SuggestedSubCategory("Legal fees", "legal"),
             SuggestedSubCategory("Fines & penalties", "fines"),
@@ -312,6 +349,23 @@ object CategorySuggestions {
             SuggestedSubCategory("Cash gifts", "cash"),
             SuggestedSubCategory("Festival gifts", "gift"),
             SuggestedSubCategory("Wedding gifts", "wedding"),
+        ),
+        "Money received" to listOf(
+            SuggestedSubCategory("Received from friends", "emoji:🤝"),
+            SuggestedSubCategory("Received from family", "family"),
+            SuggestedSubCategory("Loan repaid to me", "refund"),
+            SuggestedSubCategory("Borrowed money", "loan"),
+            SuggestedSubCategory("Bill splits received", "bills"),
+        ),
+        "Investment returns" to listOf(
+            SuggestedSubCategory("Capital gains", "stocks"),
+            SuggestedSubCategory("Redemptions", "mutual_funds"),
+            SuggestedSubCategory("Maturity payouts", "savings"),
+        ),
+        "Sold items" to listOf(
+            SuggestedSubCategory("Second-hand sales", "shopping"),
+            SuggestedSubCategory("Scrap & recycling", "emoji:♻️"),
+            SuggestedSubCategory("Old gadgets", "electronics"),
         ),
         "Other income" to listOf(
             SuggestedSubCategory("Dividends", "dividend"),

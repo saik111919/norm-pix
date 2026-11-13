@@ -1,14 +1,20 @@
 package com.example.normpix.screens
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.FinanceTransaction
@@ -30,7 +36,8 @@ import org.robolectric.annotation.Config
 /**
  * Home's "Bill due": a banner for a credit card with a bill to pay - what is unpaid of its last statement (not everything on the card),
  * when it falls due, how far through its month it is - and none for a card that is paid, owes nothing or has no due day. A bill past its
- * due date is said to be late. With amounts hidden the total is not said.
+ * due date is said to be late. With amounts hidden the total is not said. Several bills are a stack: the soonest in front, the next
+ * brought forward by a swipe, all laid out by a long press and gathered again by the heading's Stack button.
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -186,14 +193,44 @@ class HomeBillsTest {
     }
 
     @Test
-    fun `several bills each have a banner under Bills due`() {
+    fun `several bills are a stack under Bills due, the soonest in front, and holding it lays them all out`() {
         card("Later", owed = 1_000_00, dueDay = today.plusDays(10).dayOfMonth)
         card("Sooner", owed = 2_000_00, dueDay = tomorrow.dayOfMonth)
         showHome()
 
+        // One stack: the soonest due is in front and says its place; the other waits behind it and is not something to read.
+        val front = billOf("Sooner")
+        assertTrue(front.endsWith(", 1 of 2"), front)
+        noBillOf("Later")
+        compose.onNodeWithText("Bills due").assertExists()
+        compose.onAllNodes(hasContentDescription("Stack them again")).assertCountEquals(0)
+
+        // The next one is brought forward (a swipe does this; a screen reader has it as an action).
+        val next = compose.onNode(hasContentDescription("Sooner bill", substring = true)).fetchSemanticsNode()
+            .config[SemanticsActions.CustomActions].first { it.label == "Show next" }
+        compose.runOnUiThread { next.action() }
+        assertTrue(billOf("Later").endsWith(", 2 of 2"))
+        noBillOf("Sooner")
+
+        // Pressing and holding lays them all out, each to read and to pay; the heading's button gathers them again.
+        compose.onNode(hasContentDescription("Later bill", substring = true)).performTouchInput { longClick() }
         billOf("Sooner")
         billOf("Later")
-        compose.onNodeWithText("Bills due").assertExists()
+        compose.onNodeWithContentDescription("Stack them again").performClick()
+        compose.waitUntil(10_000) {
+            compose.waitForIdle()
+            spoken().count { it.contains(" bill, ") } == 1
+        }
+    }
+
+    @Test
+    fun `one bill is a plain banner, not a stack of one`() {
+        card("Sapphire", owed = 8_450_00, dueDay = tomorrow.dayOfMonth, statementDay = today.dayOfMonth)
+        showHome()
+
+        val said = billOf("Sapphire")
+        assertTrue(" of " !in said, "nothing to count: $said")
+        compose.onAllNodes(hasContentDescription("Stack them again")).assertCountEquals(0)
     }
 
     @Test

@@ -61,7 +61,64 @@ data class FinanceSnapshot(
     val banks: List<CustomBank> = emptyList(),
     /** The people expenses were spent on; backups from before people existed simply have none. */
     val people: List<Person> = emptyList(),
+    /**
+     * Null: [categories] is every category there is - a backup from before 2026-11-12, or the ledger as it stands (what an undo
+     * puts back). Not null: [categories] leaves out the app's own default categories that nothing used and nobody changed
+     * ([trimmedForBackup]), and these are the defaults the user had removed - so putting it back gives the app's defaults
+     * again, all but these.
+     */
+    val removedDefaults: List<DefaultCategoryRef>? = null,
 )
+
+/** A default category by what the app calls it: its kind ("expense" / "income"), its name and, for a sub-category, its family's. */
+data class DefaultCategoryRef(val type: String, val name: String, val parent: String? = null)
+
+/**
+ * This ledger as a backup holds it (owner, 2026-11-12: "why include all the categories when it is related to the app; if the user
+ * added any then they can be exported"): without the default categories that are still exactly as the app made them and that
+ * nothing refers to - no transaction, budget or repeating payment, and no sub-category that is itself kept. Those are the app's, not
+ * the user's, and a restore makes them again (`FinanceDatabase.addMissingDefaults`). Of some 250 categories a new ledger keeps a
+ * handful.
+ *
+ * Everything else is kept whole, with its id, so the file still stands on its own for all that is the user's: a category they
+ * made, renamed, recoloured, gave another icon, moved or archived, and every default category in use. A default they removed is
+ * named in [FinanceSnapshot.removedDefaults] - by the name no category goes by any more - so it does not come back.
+ */
+fun FinanceSnapshot.trimmedForBackup(): FinanceSnapshot {
+    val plan = FinanceDatabase.defaultSeedPlan
+    val byId = categories.associateBy { it.id }
+    val seeds = plan.associateBy { Triple(it.type, it.parent, it.name) }
+    // How many categories of a kind go by a name. A default is only made again where its name is free (nothing is ever doubled),
+    // so one that shares its name - the user made a "Hobbies" of their own beside the app's, under Entertainment - could not be
+    // made again, and is kept in the file instead. Found by BackupCategoriesTest: left out, it was gone after a restore.
+    val namesakes = categories.groupingBy { it.type.key to it.name.trim().lowercase() }.eachCount()
+    fun alone(c: Category) = namesakes[c.type.key to c.name.trim().lowercase()] == 1
+
+    /**
+     * Whether [c] is a default category exactly as the app makes it - its name, family, icon and colour, and not archived - and
+     * can be made again on a restore: the only one of its name, under a family that is the only one of its own.
+     */
+    fun untouched(c: Category): Boolean {
+        val family = c.parentId?.let { byId[it] ?: return false }
+        if (family != null && (family.parentId != null || !alone(family))) return false
+        val seed = seeds[Triple(c.type.key, family?.name, c.name)] ?: return false
+        return alone(c) && !c.archived && c.icon == seed.icon && c.color == seed.color
+    }
+
+    val used = HashSet<Long>()
+    transactions.mapNotNullTo(used) { it.categoryId }
+    budgets.mapNotNullTo(used) { it.categoryId }
+    recurringRules.mapNotNullTo(used) { it.categoryId }
+    val dropped = categories.filter { it.id !in used && untouched(it) }.mapNotNullTo(HashSet()) { it.id }
+    // A family stays while anything under it does.
+    for (c in categories) if (c.id !in dropped) c.parentId?.let { dropped -= it }
+
+    val names = categories.mapTo(HashSet()) { it.type.key to it.name.trim().lowercase() }
+    return copy(
+        categories = categories.filter { it.id !in dropped },
+        removedDefaults = plan.filter { (it.type to it.name.lowercase()) !in names }.map { DefaultCategoryRef(it.type, it.name, it.parent) },
+    )
+}
 
 /**
  * Result of reading a backup file: either a validated snapshot or a list of
@@ -85,8 +142,12 @@ object FinanceBackupCodec {
     /**
      * 2 adds people and the person on an expense. Version 1 files still read (they just have no people); a file with a newer
      * version than this is refused, so an older app never restores a backup and silently drops who the spending was on.
+     *
+     * 3 (2026-11-12): the file may leave out the default categories nothing used ([trimmedForBackup]) and names the ones the
+     * user removed ("removedDefaultCategories"). Version 1 and 2 files list every category and are restored exactly as before;
+     * an app from before this refuses a version 3 file rather than restoring it short of the categories it left out.
      */
-    const val FORMAT_VERSION = 2
+    const val FORMAT_VERSION = 3
 
     private val prettyJson = Json { prettyPrint = true }
     private val isoLocal: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")
@@ -181,6 +242,24 @@ object FinanceBackupCodec {
                     }
                 },
             )
+            // Only in a file that leaves the unused default categories out: the defaults the user had removed, so that putting
+            // the file back does not bring them back with the rest.
+            s.removedDefaults?.let { removed ->
+                put(
+                    "removedDefaultCategories",
+                    buildJsonArray {
+                        for (r in removed) {
+                            add(
+                                buildJsonObject {
+                                    put("type", r.type)
+                                    put("name", r.name)
+                                    put("parent", r.parent)
+                                },
+                            )
+                        }
+                    },
+                )
+            }
             put(
                 "transactions",
                 buildJsonArray {
@@ -289,9 +368,23 @@ object FinanceBackupCodec {
             return value.map { it as? JsonObject ?: throw BackupFormatError("\"$key\" contains an invalid entry.") }
         }
 
+        // Absent in every file that lists all its categories (versions 1 and 2, and a version 3 file that was not trimmed).
+        val removedDefaults = if (root["removedDefaultCategories"].let { it == null || it is JsonNull }) {
+            null
+        } else {
+            list("removedDefaultCategories").map { m ->
+                DefaultCategoryRef(
+                    type = m.requireString("type", "removed category"),
+                    name = m.requireString("name", "removed category"),
+                    parent = m.stringOrNull("parent"),
+                )
+            }
+        }
+
         return FinanceSnapshot(
             currencyCode = currency,
             defaultAccountId = defaultAccountId,
+            removedDefaults = removedDefaults,
             accounts = list("accounts").map { m ->
                 Account(
                     id = m.requireLong("id", "account"),

@@ -94,6 +94,8 @@ object SettingsCatalog {
         SettingsEntry("Launch animation", SettingsPage.Appearance, listOf("splash", "startup", "start", "intro", "cookie", "name", "opening", "animation", "motion"), appearance = AppearanceSection.Transitions),
         SettingsEntry("Dock animation", SettingsPage.Appearance, listOf("dock", "footer", "navigation", "tab", "pill", "glide", "fade", "indicator", "animation", "motion"), appearance = AppearanceSection.Transitions),
         SettingsEntry("Page transitions", SettingsPage.Appearance, listOf("animation", "motion", "shared axis", "slide", "fade"), appearance = AppearanceSection.Transitions),
+        SettingsEntry("Back gesture", SettingsPage.Appearance, listOf("back", "gesture", "predictive", "swipe back", "preview", "shrink", "slide", "fade", "animation", "motion"), appearance = AppearanceSection.Transitions),
+        SettingsEntry("Back gesture speed", SettingsPage.Appearance, listOf("back", "gesture", "predictive", "speed", "timing", "fast", "slow", "relaxed", "brisk", "animation", "motion"), appearance = AppearanceSection.Transitions),
         SettingsEntry("Sheet & dialog transitions", SettingsPage.Appearance, listOf("sheet", "dialog", "bottom sheet", "decision", "popup", "overlay", "animation", "motion", "transition", "window", "linux", "desktop", "gnome", "slide", "fade", "scale"), appearance = AppearanceSection.Transitions),
         SettingsEntry("Top spending", SettingsPage.Appearance, listOf("top spending", "categories", "carousel", "stack", "home", "biggest", "spending cards", "layout"), appearance = AppearanceSection.Layouts),
         SettingsEntry("Month control", SettingsPage.Appearance, listOf("month", "switcher", "picker", "steps", "track", "split", "buttons", "classic", "earlier", "previous", "old", "date", "dates", "all time", "by month", "style"), appearance = AppearanceSection.Controls),
@@ -121,6 +123,7 @@ object SettingsCatalog {
         SettingsEntry("Currency", SettingsPage.Finance, listOf("currency", "rupee", "inr", "indian", "money", "symbol", "dollar", "euro")),
         SettingsEntry("Default account", SettingsPage.Finance, listOf("default account", "preferred account")),
         SettingsEntry("Swipe actions", SettingsPage.Finance, listOf("swipe", "edit", "delete", "gesture", "list")),
+        SettingsEntry("Ask before a swipe deletes", SettingsPage.Finance, listOf("swipe", "delete", "confirm", "confirmation", "ask", "undo", "remove")),
         SettingsEntry("Financial year start", SettingsPage.Finance, listOf("financial year", "fiscal", "april", "january")),
 
         // Data & backup

@@ -7,7 +7,10 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
@@ -147,17 +150,49 @@ class SwipeOnEveryTransactionListTest {
         compose.onNodeWithText("Save changes").assertIsDisplayed()
     }
 
+    /** The question a swipe to delete asks by default, answered with [label] ("Delete" or "Cancel"). */
+    private fun answerTheQuestion(label: String) {
+        compose.waitUntil(timeoutMillis = 10_000) {
+            compose.waitForIdle()
+            compose.onAllNodes(hasText("Delete this expense?")).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onAllNodesWithText(label).onLast().performClick()
+        compose.waitForIdle()
+    }
+
     @Test
-    fun homesRecentRowsSwipeRightToDelete() {
+    fun homesRecentRowsSwipeRightToDelete_afterAsking() {
         showHome()
         swipeToDelete()
+        // Nothing is removed until the answer is yes.
+        assertEquals(1, stored().size)
+        answerTheQuestion("Delete")
         waitForRowToGo()
         assertEquals(emptyList<FinanceTransaction>(), stored())
     }
 
     @Test
-    fun searchResultsSwipeRightToDelete() {
+    fun sayingNoToTheQuestionKeepsTheTransaction() {
+        showHome()
+        swipeToDelete()
+        answerTheQuestion("Cancel")
+        assertEquals(1, stored().size)
+        assert(rowShown())
+    }
+
+    @Test
+    fun searchResultsSwipeRightToDelete_afterAsking() {
         showSearch()
+        swipeToDelete()
+        answerTheQuestion("Delete")
+        waitForRowToGo()
+        assertEquals(emptyList<FinanceTransaction>(), stored())
+    }
+
+    @Test
+    fun withAskingOffASwipeDeletesAtOnce() {
+        env.container.preferences.setSwipeDeleteAsks(false)
+        showHome()
         swipeToDelete()
         waitForRowToGo()
         assertEquals(emptyList<FinanceTransaction>(), stored())
@@ -181,6 +216,7 @@ class SwipeOnEveryTransactionListTest {
         assert(!editorShown())
         assertEquals(1, stored().size)
         swipeToDelete()
+        answerTheQuestion("Delete")
         waitForRowToGo()
         assertEquals(emptyList<FinanceTransaction>(), stored())
     }

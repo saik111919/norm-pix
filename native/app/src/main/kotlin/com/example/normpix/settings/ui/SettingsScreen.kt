@@ -61,8 +61,26 @@ import kotlinx.coroutines.launch
 /** The space under the search field, in the same list item: not part of the field, so not counted when asking if it is in view. */
 private val SEARCH_GAP = AppSpacing.sm
 
-/** The groups listed on the main Settings screen. Automatic updates is not one: it is reached from the Updates page, under System. */
-val SettingsGroups = SettingsPage.entries - SettingsPage.Updates
+/**
+ * The main Settings list, in the groups it is shown in (owner, 2026-11-11: "settings screens are a little bit confusing, can you
+ * rearrange them"). It was one block of nine rows in no order a reader could use - how it looks, then money, then data, then
+ * cards, notifications, schedules, the lock. Now each row sits with what it is about, under a heading that says so: what the app
+ * looks like, the money, the cards, and what alerts and protects. Only where a row is shown changes: every page is the same page,
+ * opened by the same route and found by the same search.
+ */
+internal enum class SettingsListGroup(val title: String, val pages: List<SettingsPage>) {
+    Look("Look & feel", listOf(SettingsPage.Appearance, SettingsPage.Widgets)),
+    Money("Money", listOf(SettingsPage.Finance, SettingsPage.Banks)),
+    /** When cards may be handed over by a tap is a setting of the cards. */
+    Cards("Cards", listOf(SettingsPage.Wallet, SettingsPage.Availability)),
+    Safety("Alerts & safety", listOf(SettingsPage.Notifications, SettingsPage.Security, SettingsPage.Data)),
+}
+
+/**
+ * The pages listed on the main Settings screen, in the order they are shown. Automatic updates is not one: it is reached from the
+ * Updates page, under System.
+ */
+val SettingsGroups: List<SettingsPage> = SettingsListGroup.entries.flatMap { it.pages }
 
 /** The list item holding the search field, found by this key to tell whether the field is on screen. */
 private const val SEARCH_ITEM_KEY = "search"
@@ -224,32 +242,25 @@ internal fun SettingsListContent(
                 }
                 Spacer(Modifier.height(AppSpacing.md))
             }
-            ListSection(style = groupStyle) {
-                for (group in SettingsGroups) {
-                    item {
-                        SettingsRow(
-                            headline = group.title,
-                            supporting = summary(group, prefs, finance, is24Hour),
-                            icon = group.icon,
-                            hue = group.hue,
-                            emoji = group.emoji,
-                            onClick = { navigator.openSettings(group) },
-                            selected = selected?.let { it.group == group },
-                        )
+            // Each page with what it is about, under a heading that says so (see SettingsListGroup).
+            for (section in SettingsListGroup.entries) {
+                ListSection(title = section.title, style = groupStyle) {
+                    for (group in section.pages) {
+                        item {
+                            SettingsRow(
+                                headline = group.title,
+                                supporting = summary(group, prefs, finance, is24Hour),
+                                icon = group.icon,
+                                hue = group.hue,
+                                emoji = group.emoji,
+                                onClick = { navigator.openSettings(group) },
+                                selected = selected?.let { it.group == group },
+                            )
+                        }
                     }
                 }
             }
             ListSection(title = "System", style = groupStyle) {
-                item {
-                    SettingsRow(
-                        headline = "Reset settings",
-                        supporting = "Back to defaults. Your data isn't touched.",
-                        icon = Icons.Outlined.SettingsBackupRestore,
-                        hue = 5,
-                        emoji = SettingsRowEmoji.RESET,
-                        onClick = { system.resetSettings() },
-                    )
-                }
                 // One row for everything about updating: it opens the update page, which holds the check, what
                 // is new, the changelog and the way to Automatic updates.
                 container.updates?.let { updater ->
@@ -287,6 +298,17 @@ internal fun SettingsListContent(
                         emoji = SettingsRowEmoji.ABOUT,
                         onClick = navigator::openAbout,
                         selected = selected?.isAbout,
+                    )
+                }
+                // Last: the one row here that undoes something. It led the group until 2026-11-11, above the rows that only show.
+                item {
+                    SettingsRow(
+                        headline = "Reset settings",
+                        supporting = "Back to defaults. Your data isn't touched.",
+                        icon = Icons.Outlined.SettingsBackupRestore,
+                        hue = 5,
+                        emoji = SettingsRowEmoji.RESET,
+                        onClick = { system.resetSettings() },
                     )
                 }
             }

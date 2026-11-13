@@ -475,6 +475,10 @@ private fun AppNavigation(
     val navigator = remember(nav, shell) { NavControllerNavigator(nav, shell) }
 
     val prefs by container.preferences.state.collectAsStateWithLifecycle()
+    // The back gesture: which close it plays (the pages' own, or the one the Back gesture style names) and how long it takes.
+    val backAnimation = prefs.backGestureStyle.animation(pageAnimation)
+    val backGestureMs = prefs.backGestureSpeed.ms
+    val gesture = remember(backAnimation, backGestureMs, reduced) { BackGestureTransitions(backAnimation, backGestureMs, reduced) }
     val lockVersion by container.lock.version.collectAsStateWithLifecycle()
     val appLocked = remember(prefs, lockVersion) { container.lock.isAppLocked(prefs) }
     val walletLocked = remember(prefs, lockVersion) { container.lock.isWalletLocked(prefs) }
@@ -507,7 +511,13 @@ private fun AppNavigation(
         navigator.go(AppDestination.Wallet)
     }
 
-    CompositionLocalProvider(LocalNavigator provides navigator, LocalShellState provides shell, LocalPageAnimation provides pageAnimation) {
+    CompositionLocalProvider(
+        LocalNavigator provides navigator,
+        LocalShellState provides shell,
+        LocalPageAnimation provides pageAnimation,
+        LocalBackAnimation provides backAnimation,
+        LocalBackGestureMs provides backGestureMs,
+    ) {
      // Reminders are one tap from what they are about (an expense's receipt, a repeating payment, an account), so those
      // screens can start one; the flows need the navigator, so they are made here, once it is provided.
      CompositionLocalProvider(LocalReminderLauncher provides rememberReminderFlows()) {
@@ -536,18 +546,19 @@ private fun AppNavigation(
         val onShell = backStackEntry?.destination?.route.let { it == null || it == Routes.MAIN }
         val shellBeneath = remember { ShellBeneath() }
         PersistentShell(container, shell, covered = !onShell, beneath = shellBeneath, hidden = appLocked)
-        NavHost(
+        // The pages' own motion, and the back gesture's over a pushed page in the Back gesture style, as the tabs draw theirs (see
+        // AppNavHost: without the gesture's transitions the library plays its own default, whatever the page style is).
+        AppNavHost(
             navController = nav,
             startDestination = Routes.MAIN,
-            // Nothing behind the lock screen is reachable by touch or by TalkBack.
-            modifier = if (appLocked) Modifier.clearAndSetSemantics {} else Modifier,
+            pages = transitions,
+            gesture = gesture,
+            beneath = shellBeneath,
             // A Linux window opens from a strip along the bottom edge and sinks back into it: a page that is only a strip high is
             // a strip at the bottom of the screen (the other styles' pages are always the whole screen, wherever they are put).
             contentAlignment = if (pageAnimation == PageAnimationType.LinuxWindow) Alignment.BottomCenter else Alignment.Center,
-            enterTransition = transitions.enter,
-            exitTransition = transitions.exit,
-            popEnterTransition = transitions.popEnter,
-            popExitTransition = transitions.popExit,
+            // Nothing behind the lock screen is reachable by touch or by TalkBack.
+            modifier = if (appLocked) Modifier.clearAndSetSemantics {} else Modifier,
         ) {
             shellPage(Routes.MAIN, shellBeneath)
             page(Routes.CATEGORIES) { BanksAndCategoriesPage(BanksAndCategoriesTab.Categories) }

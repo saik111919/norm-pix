@@ -1499,6 +1499,9 @@ class FinanceRepository(
             for (c in snapshot.categories.sortedBy { it.parentId != null }) {
                 insertOrThrow(FinanceDatabase.CATEGORIES, null, FinanceRows.category(c))
             }
+            // A backup that left out the default categories nothing used (see trimmedForBackup): they are the app's, and are made
+            // again as it has them now - all but the ones the user had removed. A file that lists every category has none to add.
+            snapshot.removedDefaults?.let { removed -> FinanceDatabase.addMissingDefaults(this, clock(), removed.toSet()) }
             for (r in snapshot.recurringRules) {
                 insertOrThrow(FinanceDatabase.RECURRING_RULES, null, FinanceRows.recurring(r))
             }

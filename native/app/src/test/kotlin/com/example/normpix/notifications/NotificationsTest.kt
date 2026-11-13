@@ -18,6 +18,7 @@ import com.example.normpix.navigation.NotificationStrip
 import com.example.normpix.settings.AppPreferences
 import com.example.normpix.testing.TestEnvironment
 import com.example.normpix.ui.components.Banner
+import com.example.normpix.ui.components.BannerFigure
 import com.example.normpix.ui.components.StatusAction
 import com.example.normpix.ui.theme.StatusTone
 import kotlin.test.AfterTest
@@ -46,17 +47,29 @@ class NotificationsTest {
     @AfterTest
     fun tearDown() = env.close()
 
-    private fun note(kind: NotificationKind, key: String, title: String) = AppNotification(
+    private fun note(
+        kind: NotificationKind,
+        key: String,
+        title: String,
+        tone: StatusTone = StatusTone.Error,
+        message: String = "About $title",
+        figure: BannerFigure? = null,
+        onPrimary: () -> Unit = {},
+        onSecondary: (() -> Unit)? = null,
+        onOpen: () -> Unit = {},
+    ) = AppNotification(
         kind,
         Banner(
             key = key,
-            tone = StatusTone.Error,
+            tone = tone,
             icon = Icons.Outlined.Notifications,
             eyebrow = "Overdue",
             title = title,
-            message = "About $title",
-            primary = StatusAction("Open $title", onClick = {}),
-            onOpen = {},
+            message = message,
+            figure = figure,
+            primary = StatusAction("Open $title", onClick = onPrimary),
+            secondary = onSecondary?.let { StatusAction("Later $title", onClick = it) },
+            onOpen = onOpen,
         ),
     )
 
@@ -114,15 +127,137 @@ class NotificationsTest {
             env.Content { CompositionLocalProvider(LocalNotifications provides notifications(*items) { saw = it }) { NotificationsPage() } }
         }
         compose.waitForIdle()
+        // A titled group for each kind, as every list on the other pages is, and a row in it for each notification.
         for (heading in listOf("Reminders", "Budgets", "Cards")) compose.onAllNodesWithText(heading).assertCountEquals(1)
-        // A banner is one thing to read, as on Home: its lines are spoken together, and its buttons are its actions.
         for (title in listOf("Pay rent", "Food budget", "HDFC card")) {
-            compose.onNodeWithContentDescription("Overdue. $title. About $title").assertIsDisplayed()
+            compose.onNodeWithText(title).assertIsDisplayed()
+            compose.onNodeWithText("About $title").assertIsDisplayed()
+            compose.onNodeWithText("Open $title").assertIsDisplayed()
         }
+        // What it is stays a word on each row, not only a colour.
+        compose.onAllNodesWithText("Overdue").assertCountEquals(3)
         assertEquals(setOf("r1", "b1", "c1"), saw, "opening the page is seeing it all")
         // The way to Settings is at the foot of the page, past the notifications: scrolled to, as it is composed then.
         compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Notification settings"))
         compose.onNodeWithText("Notification settings").assertIsDisplayed()
+    }
+
+    @Test
+    fun aCrashReportAndAnUpdateShareOneHeading() {
+        val items = arrayOf(note(NotificationKind.App, "crash", "Stopped working"), note(NotificationKind.Update, "update", "NormPix 1.5.10"))
+        compose.setContent { env.Content { CompositionLocalProvider(LocalNotifications provides notifications(*items)) { NotificationsPage() } } }
+        compose.waitForIdle()
+        compose.onAllNodesWithText("NormPix").assertCountEquals(1)
+        compose.onNodeWithText("Stopped working").assertIsDisplayed()
+        compose.onNodeWithText("NormPix 1.5.10").assertIsDisplayed()
+    }
+
+    @Test
+    fun aRowOpensWhatItIsAbout_andItsButtonsDoTheirOwnThings() {
+        val calls = mutableListOf<String>()
+        val item = note(
+            NotificationKind.Reminders, "r1", "Pay rent",
+            onPrimary = { calls += "primary" }, onSecondary = { calls += "secondary" }, onOpen = { calls += "open" },
+        )
+        compose.setContent { env.Content { CompositionLocalProvider(LocalNotifications provides notifications(item)) { NotificationsPage() } } }
+        compose.waitForIdle()
+
+        compose.onNodeWithText("Later Pay rent").performClick()
+        compose.onNodeWithText("Open Pay rent").performClick()
+        // The row itself is the way in: pressing its text is opening it, not pressing one of the buttons.
+        compose.onNodeWithText("Pay rent").performClick()
+        assertEquals(listOf("secondary", "primary", "open"), calls)
+    }
+
+    @Test
+    fun theSummarySaysWhatIsWaiting_kindByKind() {
+        fun of(vararg kinds: NotificationKind) = attentionSummary(kinds.mapIndexed { i, kind -> note(kind, "k$i", "T$i") })
+        assertEquals("", attentionSummary(emptyList()))
+        assertEquals("1 reminder", of(NotificationKind.Reminders))
+        assertEquals("2 reminders", of(NotificationKind.Reminders, NotificationKind.Reminders))
+        assertEquals("2 reminders and 1 budget", of(NotificationKind.Budgets, NotificationKind.Reminders, NotificationKind.Reminders))
+        assertEquals(
+            "1 reminder, 1 budget and 1 card",
+            of(NotificationKind.Cards, NotificationKind.Budgets, NotificationKind.Reminders),
+        )
+        // A fourth kind is not a line any more: the rest are counted, not named.
+        assertEquals(
+            "1 reminder, 1 budget, 1 card and 2 more",
+            of(NotificationKind.Reminders, NotificationKind.Budgets, NotificationKind.Cards, NotificationKind.Backup, NotificationKind.App),
+        )
+    }
+
+    @Test
+    fun homesOneBannerCountsThemAll_inTheColourOfTheWorst_andOpensThePage() {
+        var opened = 0
+        val warning = note(NotificationKind.Backup, "b", "Back up", tone = StatusTone.Warning)
+        val info = note(NotificationKind.Cards, "c", "Card", tone = StatusTone.Info)
+        val error = note(NotificationKind.Reminders, "r", "Rent", tone = StatusTone.Error)
+
+        val one = attentionBanner(listOf(warning), open = { opened++ })
+        assertEquals("1 thing needs attention", one.title)
+        assertEquals(StatusTone.Warning, one.tone)
+        assertNull(one.figure, "one full-width panel: the count is the title, and the width is for what it is made of")
+
+        val several = attentionBanner(listOf(info, warning, error), open = { opened++ })
+        assertEquals("3 things need attention", several.title)
+        assertEquals(StatusTone.Error, several.tone, "the worst of them decides the colour")
+        assertEquals("1 reminder, 1 card and 1 backup due", several.message, "kind by kind, in the page's order")
+        assertEquals(StatusTone.Info, attentionBanner(listOf(info), open = {}).tone)
+
+        // Pressing the banner and its button both go to the page.
+        several.onOpen()
+        several.primary.onClick()
+        assertEquals(2, opened)
+    }
+
+    @Test
+    fun aRowShowsItsFigureAtItsEnd_unlessTheWordsAlreadySayIt() {
+        val late = note(NotificationKind.Reminders, "r", "Rent", message = "Payments", figure = BannerFigure("Late by", "3 days")).banner
+        assertEquals("3 days", late.rowFigure()?.figure)
+        val backup = note(NotificationKind.Backup, "b", "Back up", message = "Last backup 30 days ago", figure = BannerFigure("Last backup", "30 days")).banner
+        assertNull(backup.rowFigure(), "the figure is in the sentence already")
+        assertNull(note(NotificationKind.Reminders, "r", "Rent").banner.rowFigure())
+
+        compose.setContent {
+            env.Content {
+                CompositionLocalProvider(LocalNotifications provides notifications(AppNotification(NotificationKind.Reminders, late))) { NotificationsPage() }
+            }
+        }
+        compose.waitForIdle()
+        // Beside the lines, not under them: what it is, and the figure.
+        compose.onNodeWithText("Late by").assertIsDisplayed()
+        compose.onNodeWithText("3 days").assertIsDisplayed()
+    }
+
+    @Test
+    fun aRowWhoseOnlyButtonOpensIt_hasNoButton_theRowIsTheButton() {
+        var opened = 0
+        val open: () -> Unit = { opened++ }
+        val budget = Banner(
+            key = "budget-food",
+            tone = StatusTone.Warning,
+            icon = Icons.Outlined.Notifications,
+            eyebrow = "Nearly used",
+            title = "Food budget",
+            message = "Rs 8,000 for November",
+            primary = StatusAction("View budgets", onClick = open),
+            onOpen = open,
+        )
+        assertEquals(emptyList(), budget.rowActions())
+        // With a second button, or a main one that does something else, both are there, the quieter one first.
+        val reminder = note(NotificationKind.Reminders, "r", "Rent", onSecondary = {}).banner
+        assertEquals(listOf("Later Rent", "Open Rent"), reminder.rowActions().map { it.label })
+
+        compose.setContent {
+            env.Content {
+                CompositionLocalProvider(LocalNotifications provides notifications(AppNotification(NotificationKind.Budgets, budget))) { NotificationsPage() }
+            }
+        }
+        compose.waitForIdle()
+        compose.onAllNodesWithText("View budgets").assertCountEquals(0)
+        compose.onNodeWithText("Food budget").performClick()
+        assertEquals(1, opened)
     }
 
     @Test
