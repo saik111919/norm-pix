@@ -444,6 +444,7 @@ fun TransactionHistory(
                     onEdit = financeActions::editTransaction,
                     onDelete = financeActions::deleteTransaction,
                     onSwipeDelete = financeActions::deleteTransactionSwiped,
+                    swipeDeleteAsks = prefs.swipeDeleteAsks,
                     keyPrefix = "up-",
                     complete = true,
                     money = finance.money,
@@ -514,6 +515,7 @@ fun TransactionHistory(
                     onEdit = financeActions::editTransaction,
                     onDelete = financeActions::deleteTransaction,
                     onSwipeDelete = financeActions::deleteTransactionSwiped,
+                    swipeDeleteAsks = prefs.swipeDeleteAsks,
                     // A day's total is only said once all of its entries are here: the last day of a page may go on in the next.
                     complete = next == null,
                     money = finance.money,
@@ -574,6 +576,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.timeline(
     onEdit: (FinanceTransaction) -> Unit,
     onDelete: (FinanceTransaction) -> Unit,
     onSwipeDelete: (FinanceTransaction) -> Unit,
+    swipeDeleteAsks: Boolean,
     money: MoneyFormatter,
     complete: Boolean,
     keyPrefix: String = "",
@@ -605,6 +608,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.timeline(
                         onEdit = { onEdit(t) },
                         onDelete = { onDelete(t) },
                         onSwipeDelete = { onSwipeDelete(t) },
+                        swipeDeleteAsks = swipeDeleteAsks,
                         perspectiveAccountId = perspectiveAccountId,
                         modifier = Modifier.fillMaxWidth(),
                     )

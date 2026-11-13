@@ -5,7 +5,7 @@ description: "Everything about the NormPix project - a private, offline-first An
 
 # NormPix project skill
 
-Stamp: verified against commit `0ffc5a43` (`versionName` 1.5.0 in the tree; CI has released up to v1.5.9) on 2026-11-08. If `git log` shows newer commits on source paths, or
+Stamp: verified against commit `df2dff40` (`versionName` 1.5.0 in the tree; CI has released up to v1.5.9) on 2026-11-13. If `git log` shows newer commits on source paths, or
 `bash .claude/skills/normpix/scripts/verify.sh` reports drift, trust the code and fix the skill (`references/maintenance.md`).
 
 ## 1. The 60-second picture
@@ -82,10 +82,10 @@ reference rather than exploring. For the history or reasoning behind a feature, 
 |---|---|
 | (root) | `MainActivity` (intents, lock lifecycle, FLAG_SECURE), `NormPixApplication` + `AppContainer` (all services), `DummyData` (sample-data container) |
 | `finance/` | The money core, in four layers - |
-| `finance/data/` | `FinanceDatabase` (SQLite v12), `FinanceRepository` (all queries/commands, `TransactionQuery`, `checkAndRepair`), backup codec/archive, `TransactionPictures`, `CategorySuggestions` |
+| `finance/data/` | `FinanceDatabase` (SQLite v13), `FinanceRepository` (all queries/commands, `TransactionQuery`, `checkAndRepair`), backup codec/archive, `TransactionPictures`, `CategorySuggestions` |
 | `finance/domain/` | Pure rules: `Entities`, `Ledger` (balances, budgets), `Period` (months, "as of today"), `Insights`, `LedgerCheck`, `BillingCycle`, `CardBills`, `CardStatement` (what is due on a card: the unpaid part of its last statement), `Recurrence`, `RepeatEnd`, `Money`/`CurrencySpec`, `CategoryTree` |
 | `finance/share/` | Receipts shared in: `ShareTransactionActivity`, `SharedPictureReader` (ML Kit), one reader per payment app + `ReceiptVocabulary`, `SharedTransactionParser` fallback, `AccountMatching`, `SelfTransfers`, `SharedTransactionImport` |
-| `finance/ui/` | `FinanceController`/`FinanceState`, `FinanceActions`, `TransactionsScreen`, `InsightsScreen`, `TransactionEditor`, `RecurringEditor`, forms/pickers/selectors, categories/people pages, month/day/date-range controls, charts |
+| `finance/ui/` | `FinanceController`/`FinanceState`, `FinanceActions`, `TransactionsScreen`, `InsightsScreen`, `TransactionEditor`, `RecurringEditor`, forms/pickers/selectors, categories/people pages, month/day/date-range controls, charts, the category card (`CategoryStack`; `CategoryCardDesigns` = it in the four Card designs) |
 | `wallet/` | Cards and accounts as cards: `CardVault` (AES-GCM, Keystore), `CardsController`, `CardsPolicy`, `AppLock`, bank directory/designs/logos, `CardStack`/`CardCarousel`/`AccountCarousel`, `CardScan`, `CardsTransfer`, `WalletOverview` |
 | `wallet/nfc/` | `NfcTagReader` (add by tap), `NfcCardExchange` + HCE `NfcCardOutletService`, tag registration, tap guide/sheets |
 | `wallet/clipboard/` | `SecureClipboard` (per-copy token, timed clear), copy sheet |

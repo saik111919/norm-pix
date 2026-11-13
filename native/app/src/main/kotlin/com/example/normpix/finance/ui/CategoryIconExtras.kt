@@ -29,7 +29,10 @@ import androidx.compose.material.icons.outlined.CurrencyBitcoin
 import androidx.compose.material.icons.outlined.DeliveryDining
 import androidx.compose.material.icons.outlined.Diamond
 import androidx.compose.material.icons.automirrored.outlined.DirectionsBike
+import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.outlined.DirectionsBus
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material.icons.outlined.DirectionsRailway
 import androidx.compose.material.icons.outlined.DirectionsSubway
 import androidx.compose.material.icons.outlined.Dns
@@ -240,4 +243,9 @@ internal val extraCategoryIcons: List<Pair<String, CategoryIconSpec>> = listOf(
     "fines" to CategoryIconSpec(Icons.Outlined.ReportProblem, "Fines", "🚨"),
     "membership" to CategoryIconSpec(Icons.Outlined.CardMembership, "Membership", "🔖"),
     "vet" to CategoryIconSpec(Icons.Outlined.Pets, "Vet", "🐕"),
+
+    // Money between people, and things sold (2026-11-12, with the families of the same names in `defaultCategories`)
+    "money_sent" to CategoryIconSpec(Icons.Outlined.Upload, "Money Sent", "📤"),
+    "money_received" to CategoryIconSpec(Icons.Outlined.Download, "Money Received", "📥"),
+    "sold_items" to CategoryIconSpec(Icons.AutoMirrored.Outlined.Label, "Sold Items", "🏷️"),
 )

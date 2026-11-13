@@ -34,6 +34,11 @@ import androidx.compose.ui.unit.dp
 import com.example.normpix.notifications.AppNotification
 import com.example.normpix.notifications.Notifications
 import com.example.normpix.ui.components.Icon
+import com.example.normpix.ui.components.LocalFrostedBackdrop
+import com.example.normpix.ui.components.frostedGlass
+import com.example.normpix.ui.components.rememberFrostedChrome
+import com.example.normpix.ui.components.solidColorScheme
+import com.example.normpix.ui.theme.AppFrostedTokens
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.resolve
@@ -45,6 +50,10 @@ internal const val NOTIFICATION_STRIP_MAX = 3
  * The newest unread notifications, above the "+" menu's panel and on the menu's own clock ([progress]: they come up with the panel and
  * go with it): what needs the user is in front of them when they reach for an action. Each opens what it is about (the menu closes
  * first); the last row opens the whole page. Nothing at all when nothing is unread.
+ *
+ * They sit on one container of their own (owner, 2026-11-13: "give background to this and follow the same blur background as
+ * sheets"): the surface a sheet has - the page behind it blurred and a 62% tint of the sheet's tone over it, solid where nothing is
+ * blurred (blur off in Settings, before Android 12, or switched off by the system) - with the rows as tonal items on it.
  */
 @Composable
 internal fun NotificationStrip(
@@ -56,7 +65,12 @@ internal fun NotificationStrip(
 ) {
     val shown = notifications.unread.take(NOTIFICATION_STRIP_MAX)
     if (shown.isEmpty()) return
-    val container = actionMenuPanelColor(MaterialTheme.colorScheme)
+    val scheme = solidColorScheme
+    val backdrop = LocalFrostedBackdrop.current
+    val glass = rememberFrostedChrome(backdrop)
+    val shape = AppRadius.rXxl
+    // What the rows are made of: solid tones, so they read the same over any part of the blurred page behind the container.
+    val row = scheme.surfaceContainerHigh
     Column(
         modifier
             .fillMaxWidth()
@@ -64,15 +78,19 @@ internal fun NotificationStrip(
                 val p = progress().coerceIn(0f, 1f)
                 alpha = p
                 translationY = (1f - p) * 16.dp.toPx()
-            },
+            }
+            .clip(shape)
+            .frostedGlass(backdrop, shape)
+            .background(if (glass) scheme.surfaceContainerLow.copy(alpha = AppFrostedTokens.surfaceAlpha) else scheme.surfaceContainerLow)
+            .padding(AppSpacing.sm),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.xs),
     ) {
-        for (item in shown) StripRow(item, container, onClick = { onOpen(item) })
+        for (item in shown) StripRow(item, row, onClick = { onOpen(item) })
         val more = notifications.unread.size - shown.size
         Surface(
             onClick = onSeeAll,
             shape = AppRadius.rFull,
-            color = container,
+            color = Color.Transparent,
             modifier = Modifier.fillMaxWidth().semantics { role = Role.Button },
         ) {
             Text(
@@ -93,6 +111,7 @@ private fun StripRow(item: AppNotification, container: Color, onClick: () -> Uni
     val scheme = MaterialTheme.colorScheme
     Surface(
         onClick = onClick,
+        // Rows inside the container's large corners are the next size down, as the segments of a list are inside theirs.
         shape = AppRadius.rXl,
         color = container,
         modifier = Modifier

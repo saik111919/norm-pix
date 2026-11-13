@@ -2,10 +2,8 @@ package com.example.normpix.about.ui
 
 import android.content.Context
 import androidx.activity.ComponentActivity
-import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
@@ -14,7 +12,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.example.normpix.diagnostics.CrashLog
-import com.example.normpix.screens.HomeScreen
+import com.example.normpix.notifications.NotificationsPage
+import com.example.normpix.notifications.ProvideNotifications
 import com.example.normpix.testing.TestEnvironment
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -26,8 +25,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * The crash log in the app: About says what is kept, the sheet shows it (and counts as seeing it), Home offers the last one on the next
- * start until it has been seen or dismissed, and Clear empties it after asking. Nothing is sent: Share only opens Android's own sheet.
+ * The crash log in the app: About says what is kept, the sheet shows it (and counts as seeing it), the notifications (Home's Needs attention
+ * banner, and the page it opens) offer the last one on the next start until it has been seen or dismissed, and Clear empties it after asking. Nothing is sent: Share only opens Android's own sheet.
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -102,26 +101,21 @@ class CrashLogUiTest {
     }
 
     @Test
-    fun `Home offers the last crash until it is seen, and Dismiss says it was`() {
+    fun `the notifications offer the last crash until it is seen, and Dismiss says it was`() {
         val at = System.currentTimeMillis()
         keepACrash(at)
-        compose.setContent { env.Content { HomeScreen() } }
+        compose.setContent { env.Content { ProvideNotifications { NotificationsPage() } } }
         compose.waitUntil(10_000) {
             compose.waitForIdle()
-            compose.onAllNodes(hasContentDescription("NormPix stopped working last time", substring = true)).fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("NormPix stopped working last time").fetchSemanticsNodes().isNotEmpty()
         }
 
-        val dismiss = compose.onNode(hasContentDescription("NormPix stopped working last time", substring = true)).fetchSemanticsNode()
-            .config[SemanticsActions.CustomActions].first { it.label == "Dismiss" }
-        compose.runOnUiThread { dismiss.action() }
+        compose.onNodeWithText("Dismiss").performClick()
         compose.waitForIdle()
 
         assertEquals(at, env.preferences.state.value.crashLogSeenAt)
         assertEquals(1, log.count(), "dismissed, not deleted")
-        assertTrue(
-            compose.onAllNodes(hasContentDescription("NormPix stopped working last time", substring = true)).fetchSemanticsNodes().isEmpty(),
-            "gone once seen",
-        )
+        assertTrue(compose.onAllNodesWithText("NormPix stopped working last time").fetchSemanticsNodes().isEmpty(), "gone once seen")
     }
 
     @Test
@@ -129,16 +123,16 @@ class CrashLogUiTest {
         val earlier = System.currentTimeMillis() - 60_000
         keepACrash(earlier)
         env.preferences.markCrashLogSeen(earlier)
-        compose.setContent { env.Content { HomeScreen() } }
-        compose.waitUntil(10_000) { compose.waitForIdle(); compose.onAllNodesWithText("Add income").fetchSemanticsNodes().isNotEmpty() }
-        assertTrue(compose.onAllNodes(hasContentDescription("NormPix stopped working", substring = true)).fetchSemanticsNodes().isEmpty())
+        compose.setContent { env.Content { ProvideNotifications { NotificationsPage() } } }
+        compose.waitUntil(10_000) { compose.waitForIdle(); compose.onAllNodesWithText("Notification settings").fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(compose.onAllNodesWithText("NormPix stopped working", substring = true).fetchSemanticsNodes().isEmpty())
 
         compose.runOnIdle { keepACrash(System.currentTimeMillis()) }
-        // The banner reads the log when what it has seen changes (or Home is opened): a new crash is for the next start.
+        // The notification reads the log when what it has seen changes (or the page is opened): a new crash is for the next start.
         compose.runOnIdle { env.preferences.markCrashLogSeen(earlier + 1) }
         compose.waitUntil(10_000) {
             compose.waitForIdle()
-            compose.onAllNodes(hasContentDescription("NormPix stopped working", substring = true)).fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("NormPix stopped working", substring = true).fetchSemanticsNodes().isNotEmpty()
         }
     }
 }

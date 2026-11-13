@@ -32,6 +32,11 @@ import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.navigation.PlanSection
 import com.example.normpix.navigation.SettingsPage
+import com.example.normpix.notifications.LocalNotifications
+import com.example.normpix.notifications.NotificationKind
+import com.example.normpix.notifications.Notifications
+import com.example.normpix.notifications.attentionBanner
+import com.example.normpix.notifications.notificationItems
 import com.example.normpix.reminders.LocalReminders
 import com.example.normpix.reminders.formatDueMoment
 import com.example.normpix.reminders.formatOverdueLong
@@ -45,7 +50,6 @@ import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.SectionHeader
 import com.example.normpix.ui.components.SnackbarKind
-import com.example.normpix.ui.components.StackButton
 import com.example.normpix.ui.components.StatusAction
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.components.rememberDeckStackState
@@ -60,22 +64,29 @@ import com.example.normpix.wallet.rememberCardFlows
 import kotlinx.coroutines.launch
 
 /**
- * What needs attention, right under the month: one stack of banners for each kind of thing - overdue reminders, budgets that
- * are over or nearly used, cards about to expire, an update to install - the most pressing in front of each stack. Pressing and
- * holding a stack lays its banners out, each with its own buttons, the way the cards and the top spending do. Nothing at all
- * when nothing needs it.
+ * What needs attention, right under the month: **one banner** saying how many things are waiting and in what (overdue reminders,
+ * budgets over or nearly used, cards about to expire, a crash report, a backup due), which opens the Notifications page where
+ * each is dealt with (owner, 2026-11-09). An update to install is the exception and stays its own banner, with its own buttons,
+ * as it always was. Nothing at all when nothing needs it.
  */
 @Composable
 internal fun NeedsAttention(budgets: BudgetOverview) {
-    val stacks = listOf(reminderBanners(), budgetBanners(budgets), cardExpiryBanners(), crashBanners(), backupBanners(), updateBanners())
-    // One for each kind of banner, since each is its own stack: the header's button gathers whichever are spread out.
-    val decks = List(stacks.size) { rememberDeckStackState() }
-    if (stacks.all { it.isEmpty() }) return
-    SectionHeader(title = "Needs attention", padding = HomeSectionPadding, trailing = { StackButton(*decks.toTypedArray()) })
+    val navigator = LocalNavigator.current
+    // What the app has already gathered for the bell, where it has (the running app provides it above every page): until
+    // 2026-11-12 Home gathered the same six sources a second time - each with its own reads of the reminders, the cards, the
+    // settings and the crash log - to show one banner. On its own (a test, a preview) Home still gathers them itself.
+    val gathered = LocalNotifications.current
+    val items = if (gathered !== Notifications.None) gathered.items else notificationItems(budgets)
+    val waiting = items.filter { it.kind != NotificationKind.Update }
+    val update = items.filter { it.kind == NotificationKind.Update }.map { it.banner }
+    // Each banner is a stack of its own (of one), so each has its own state.
+    val waitingDeck = rememberDeckStackState()
+    val updateDeck = rememberDeckStackState()
+    if (items.isEmpty()) return
+    SectionHeader(title = "Needs attention", padding = HomeSectionPadding)
     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.md)) {
-        stacks.forEachIndexed { index, banners ->
-            if (banners.isNotEmpty()) BannerStack(banners, decks[index])
-        }
+        if (waiting.isNotEmpty()) BannerStack(listOf(attentionBanner(waiting, open = navigator::openNotifications)), waitingDeck)
+        if (update.isNotEmpty()) BannerStack(update, updateDeck)
     }
 }
 

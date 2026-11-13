@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -109,6 +110,7 @@ import com.example.normpix.ui.components.RevealVisibility
 import com.example.normpix.ui.components.SheetHeader
 import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.StackButton
+import com.example.normpix.ui.components.StackButtonHeight
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.components.rememberDeckStackState
 import com.example.normpix.ui.theme.AppIconSizes
@@ -642,11 +644,19 @@ private fun AccountsSection(
         if (overview) WalletTotals(amountsHidden)
         // The bills owed on credit cards, as banners, between the totals and the accounts they come from.
         val bills = rememberDueBills()
+        val billsDeck = rememberDeckStackState()
         if (bills.isNotEmpty()) {
             Spacer(Modifier.height(AppSpacing.xxl))
-            WalletSectionHeader(title = if (bills.size == 1) "Bill due" else "Bills due", summary = null)
+            // Several bills are a stack; laid out (press and hold), the heading's button gathers them again. The heading keeps the
+            // button's room whenever there is a stack, so showing it moves nothing.
+            WalletSectionHeader(
+                title = if (bills.size == 1) "Bill due" else "Bills due",
+                summary = null,
+                modifier = if (bills.size > 1) Modifier.heightIn(min = StackButtonHeight) else Modifier,
+                action = { StackButton(billsDeck) },
+            )
             Spacer(Modifier.height(AppSpacing.sm))
-            BillBanners(bills)
+            BillBanners(bills, billsDeck)
         }
         Spacer(Modifier.height(AppSpacing.xxl))
         // The way to add one more is beside the heading, as for the cards - in every layout, and not a tile after the last.

@@ -60,6 +60,7 @@ class FinanceDatabase(
                 if (oldVersion < 10) addAccountNumbers(db)
                 if (oldVersion < 11) addNewDefaultCategories(db, clock())
                 if (oldVersion < 12) addAccountNumberStarts(db)
+                if (oldVersion < 13) addDefaultFamilies(db, clock(), CategorySuggestions.addedIn13)
             }
 
             override fun onOpen(db: SupportSQLiteDatabase) {
@@ -80,7 +81,7 @@ class FinanceDatabase(
 
     companion object {
         const val DB_NAME = "normpix_finance.db"
-        const val VERSION = 12
+        const val VERSION = 13
 
         /** The columns an account has beyond its first ones, as the migrations from version 2 on add them, with their types. */
         private val ACCOUNT_EXTRA_COLUMNS = listOf(
@@ -341,13 +342,23 @@ class FinanceDatabase(
          */
         fun addNewDefaultCategories(db: SupportSQLiteDatabase, now: LocalDateTime) {
             if (seededWithLaterDefaults(db)) return
+            addDefaultFamilies(db, now, CategorySuggestions.addedLater)
+        }
+
+        /**
+         * Gives a database the default families named in [names], each with its sub-categories, after everything it has - the
+         * rule of [addNewDefaultCategories], for whichever families a version brings (version 13: `CategorySuggestions.addedIn13`).
+         * Nothing is doubled or moved: a family, and each of its sub-categories, is added only where no category of its kind
+         * already goes by its name.
+         */
+        fun addDefaultFamilies(db: SupportSQLiteDatabase, now: LocalDateTime, names: Set<String>) {
             val stamp = now.toStorage()
             val taken = mutableSetOf<Pair<String, String>>()
             db.rawQuery("SELECT type, name FROM $CATEGORIES", null).use { cursor ->
                 while (cursor.moveToNext()) taken += cursor.getString(0) to cursor.getString(1).trim().lowercase()
             }
             var order = db.rawQuery("SELECT MAX(sort_order) FROM $CATEGORIES", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
-            for (family in defaultCategories.filter { it.name in CategorySuggestions.addedLater }) {
+            for (family in defaultCategories.filter { it.name in names }) {
                 if (!taken.add(family.type to family.name.lowercase())) continue
                 val parentId = db.insertOrThrow(
                     CATEGORIES,
@@ -527,6 +538,71 @@ class FinanceDatabase(
 
         data class DefaultCategory(val name: String, val type: String, val icon: String, val color: Int)
 
+        /**
+         * One default category as [seedDefaults] writes it: a family ([parent] null) or a sub-category of the family named
+         * [parent], with the place ([order]) it has among them all.
+         */
+        data class DefaultSeed(val type: String, val name: String, val parent: String?, val icon: String, val color: Int, val order: Int)
+
+        /**
+         * Every default category, in the order and with the values [seedDefaults] gives them: the families first, then each
+         * family's sub-categories in its colour. It is what a backup compares a category with to tell the app's own from the
+         * user's (`trimmedForBackup`), and what [addMissingDefaults] makes again.
+         */
+        val defaultSeedPlan: List<DefaultSeed> by lazy {
+            buildList {
+                var order = 0
+                for (family in defaultCategories) add(DefaultSeed(family.type, family.name, null, family.icon, family.color, order++))
+                val families = defaultCategories.associateBy { it.name }
+                for ((parentName, subs) in CategorySuggestions.byParent) {
+                    val family = families[parentName] ?: continue
+                    for (sub in subs) add(DefaultSeed(family.type, sub.name, parentName, sub.icon, family.color, order++))
+                }
+            }
+        }
+
+        /**
+         * After a backup that left the unused default categories out has been put back (`FinanceRepository.restore`): gives the
+         * database every default it does not have, except those in [removed] - the ones the user had removed, which stay
+         * removed. As everywhere, nothing is doubled: a default is added only where no category of its kind goes by its name,
+         * and a sub-category only under a family that is there at the top level by its own name. Each takes the place it has in
+         * a new ledger ([DefaultSeed.order]), so in a ledger that began with these defaults the list reads as it did.
+         */
+        fun addMissingDefaults(db: SupportSQLiteDatabase, now: LocalDateTime, removed: Set<DefaultCategoryRef>) {
+            val stamp = now.toStorage()
+            val taken = mutableSetOf<Pair<String, String>>()
+            val families = mutableMapOf<Pair<String, String>, Long>()
+            db.rawQuery("SELECT id, type, name, parent_id FROM $CATEGORIES", null).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val key = cursor.getString(1) to cursor.getString(2).trim().lowercase()
+                    taken += key
+                    if (cursor.isNull(3)) families[key] = cursor.getLong(0)
+                }
+            }
+            for (seed in defaultSeedPlan) {
+                val key = seed.type to seed.name.lowercase()
+                if (key in taken || DefaultCategoryRef(seed.type, seed.name, seed.parent) in removed) continue
+                val parentId = if (seed.parent == null) null else families[seed.type to seed.parent.lowercase()] ?: continue
+                val id = db.insertOrThrow(
+                    CATEGORIES,
+                    null,
+                    ContentValues().apply {
+                        put("name", seed.name)
+                        put("type", seed.type)
+                        put("icon", seed.icon)
+                        put("color", seed.color)
+                        put("archived", 0)
+                        put("sort_order", seed.order)
+                        put("created_at", stamp)
+                        put("updated_at", stamp)
+                        if (parentId != null) put("parent_id", parentId)
+                    },
+                )
+                taken += key
+                if (seed.parent == null) families[key] = id
+            }
+        }
+
         /** name, type, icon key, palette index */
         val defaultCategories = listOf(
             DefaultCategory("Food & dining", "expense", "restaurant", 0),
@@ -551,12 +627,21 @@ class FinanceDatabase(
             DefaultCategory("Investments", "expense", "investment", 1),
             DefaultCategory("Family support", "expense", "family", 6),
             DefaultCategory("Donations", "expense", "charity", 0),
+            // Version 13 (see CategorySuggestions.addedIn13): money between people, presents, charges, and what work costs.
+            DefaultCategory("Money sent", "expense", "money_sent", 2),
+            DefaultCategory("Gifts given", "expense", "gift", 7),
+            DefaultCategory("Fees & charges", "expense", "bank_fees", 6),
+            DefaultCategory("Work expenses", "expense", "work", 5),
             DefaultCategory("Other", "expense", "other", 4),
             DefaultCategory("Salary", "income", "salary", 1),
             DefaultCategory("Freelance", "income", "work", 0),
             DefaultCategory("Business", "income", "business", 5),
             DefaultCategory("Interest", "income", "interest", 6),
             DefaultCategory("Gifts", "income", "gift", 7),
+            // Version 13: money from people, what investments pay back, and what is sold.
+            DefaultCategory("Money received", "income", "money_received", 3),
+            DefaultCategory("Investment returns", "income", "dividend", 4),
+            DefaultCategory("Sold items", "income", "sold_items", 0),
             DefaultCategory("Other income", "income", "refund", 2),
         )
     }

@@ -237,7 +237,7 @@ fun HomeScreen(listState: LazyListState = rememberLazyListState()) {
                         )
                         is AsyncValue.Data -> {
                             val data = value.value
-                            // The month first, then whatever needs attention (stacked by kind), then the rest in sections.
+                            // The month first, then whatever needs attention (one banner to Notifications, and an update's own), then the rest in sections.
                             val seeInsights: () -> Unit = { navigator.go(AppDestination.Insights) }
                             val seePlans: (PlanSection) -> Unit = { section -> navigator.openPlans(section) }
                             AdaptiveColumns(

@@ -72,7 +72,9 @@ class BannerColorsTest {
                 for ((tone, c) in colors) {
                     val at = "$mode/$accent/$tone"
                     assertTrue(contrast(c.accent, c.surface) >= 4.5f, "$at: the eyebrow reads on the banner (${contrast(c.accent, c.surface)})")
-                    assertTrue(contrast(c.buttonInk, c.buttonFill) >= 4.5f, "$at: the main button's label reads (${contrast(c.buttonInk, c.buttonFill)})")
+                    assertTrue(contrast(c.buttonInk, c.buttonFill) >= 4.5f, "$at: the tinted button's label reads (${contrast(c.buttonInk, c.buttonFill)})")
+                    // The main button of the bar's group is the status colour itself (2026-11-11).
+                    assertTrue(contrast(c.onSolid, c.solid) >= 4.5f, "$at: the main button's label reads on the solid colour (${contrast(c.onSolid, c.solid)})")
                     assertTrue(contrast(c.icon, c.accent) >= 3f, "$at: the icon reads on its disc (${contrast(c.icon, c.accent)})")
                 }
                 // Coloured, not grey: an overdue banner's surface is not a warning's, and neither is the page's plain surface.

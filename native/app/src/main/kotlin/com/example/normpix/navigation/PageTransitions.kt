@@ -19,7 +19,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NamedNavArgument
@@ -374,10 +377,14 @@ internal fun NavGraphBuilder.page(
 internal fun NavGraphBuilder.shellPage(route: String, beneath: ShellBeneath) = composable(route) {
     val reduced = rememberReducedMotion()
     val animation = LocalPageAnimation.current
+    val gestureMs = LocalBackGestureMs.current
     val progress by transition.animateFloat(
         transitionSpec = {
             if (reduced) {
                 snap<Float>()
+            } else if (beneath.byGesture && targetState == EnterExitState.Visible) {
+                // Uncovered by the back gesture: on the gesture's clock, as the page on top is (see BackGestureTransitions).
+                tween<Float>(gestureMs, easing = LinearEasing)
             } else {
                 // The timing of the page's own: a window opens in one time and closes in another, the other styles in one.
                 val coming = targetState == EnterExitState.Visible
@@ -416,18 +423,28 @@ internal fun AnimatedVisibilityScope.PageWindow(content: @Composable () -> Unit)
     ) { state -> if (state == EnterExitState.Visible) 0.dp else PageCornerRadius }
     // [visible height, full height]: a page that opens from, or closes into, a strip at the bottom (the Linux window style) is
     // shown through a window of that height, so its rounded corners belong to the strip's top edge - where the eye is - and not
-    // to the page's own top, which is off the screen's other end. Known after layout, read as it is drawn.
-    val heights = remember { intArrayOf(0, 0) }
+    // to the page's own top, which is off the screen's other end. Known as the page is placed, read as it is drawn.
+    var shownShare by remember { mutableFloatStateOf(1f) }
     Box(
         Modifier
             .fillMaxSize()
-            .onGloballyPositioned { coordinates ->
-                heights[0] = coordinates.parentLayoutCoordinates?.size?.height ?: coordinates.size.height
-                heights[1] = coordinates.size.height
+            // Each time the host places the page in its window - every frame the window's height changes, as the page is kept
+            // against its bottom edge. (onGloballyPositioned was here until 2026-11-11: it is not told of every such frame, the
+            // page not having moved on the screen - measured, the last it heard of a gesture was its first frame - and it read the
+            // parent's own size, which is the page's whatever the window does. So this was always "all of it", and a sinking page
+            // had its four corners rounded where a tab rounds the edge that sinks.)
+            .onPlaced { coordinates ->
+                // What shows of the page is what the shrinking window leaves of it: its bounds as its ancestors cut them. Only a
+                // window sinking counts - as wide as the page and less high: a page that is scaled is smaller both ways, and one
+                // that slides is cut by the screen's edge, not uncovered.
+                val shown = coordinates.boundsInRoot()
+                val full = coordinates.size
+                val sinking = full.height > 0 && shown.width >= full.width - 1f && shown.height < full.height - 1f
+                shownShare = if (sinking) (shown.height / full.height).coerceIn(0f, 1f) else 1f
             }
             .graphicsLayer {
                 val corner = radius.toPx()
-                val reveal = if (heights[1] > 0) (heights[0].toFloat() / heights[1]).coerceIn(0f, 1f) else 1f
+                val reveal = shownShare
                 clip = corner > 0f || reveal < 1f
                 shape = when {
                     reveal < 1f -> BottomRevealShape(reveal, corner)

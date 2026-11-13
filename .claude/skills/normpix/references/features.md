@@ -16,7 +16,8 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
   Effects > Hero weather, default on; see design-system "Live motion"), **Needs
   attention** banners (overdue, update available, ...; the page's own tonal surface, status said by icon and eyebrow colour,
   never colour alone), quick add (expense / income / transfer), **Bill due / Bills due** (2026-11-07, owner's reference picture; **what is due is the unpaid part of the card's last statement** - `cardBill`, `CardStatement.kt`: owed at the end of the statement day less what was put onto the card since, never more than owed now; a card with no statement day keeps "Owed so far"; past the due date the bill is **Overdue** in the error colour - and nothing once it is paid; the pay sheet opens on that amount; one two-panel
-  `SplitStatBanner` for every active credit card that owes something and has a due day, soonest first - "Due date" with how far away it is, a pill
+  `SplitStatBanner` for every active credit card that owes something and has a due day, soonest first (**several are a stack** since 2026-11-11:
+  swipe for the next, hold to lay them all out, the heading's Stack button gathers them; one bill stays a plain banner) - "Due date" with how far away it is, a pill
   that fills from the last statement to the due date, "Total due" with the card's name; tapping opens `PayBillSheet`; `screens/HomeBills.kt`,
   `billCycle` in `BillingCycle.kt`; the **Wallet** shows the same banners above its accounts; a card with nothing owed or no due day has none), coming up, **Top spending** (stack or carousel by
   `TopSpendingLayout`), cards on Home, **Recent** (the latest *as of today*; "See all" opens the whole history, All time),
@@ -45,12 +46,18 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
 - **Notifications** (`notifications/`, 2026-11-08): a bell on the top row of every top-level page (Home, Plans & Transactions,
   Insights, Wallet, Settings) - top-level only (owner, 2026-11-08: a pushed page keeps its back button and its own actions
   instead), in all three top-bar styles through `LocalTopBarExtras`. It carries how many are new; tapping it opens a
-  **Notifications page** that lists everything Home's Needs attention would show -
+  **Notifications page** that lists everything that needs the user -
   overdue reminders, budgets over or nearly used, cards about to expire, a crash report, a backup due, an update waiting - **grouped by
-  kind** (Reminders, Budgets, Cards, Backup, NormPix) and each banner in full, with its own buttons. There is **no history**: a
+  kind** (Reminders, Budgets, Cards, Backup, NormPix = crash report + update) as the pages' own list pattern (2026-11-09, owner: "not
+  following the design patterns"): a `ListSection` per kind, one tonal row per notification (status disc, the status word in the status
+  colour as the overline, title, what it is about, its figure at the row's end, a bar when it has one, its buttons as one connected
+  group - none when the only one would do what pressing the row does; pressing the row opens what it is about). **Home's Needs attention is one banner** ("4 things need attention", the kinds in a line, the
+  colour of the worst) that opens this page (owner, 2026-11-09); **an update keeps its own banner on Home** with its own buttons, as before,
+  and is also listed on the page. There is **no history**: a
   notification lives as long as the thing it says does. **Opening the page is seeing it all** (all keys listed are written as seen;
   the keys of things that have gone are dropped, so the same budget over again next month is new again); the bell then shows none
-  until something new arrives. The **+ menu shows the newest three unread above its panel**, each opening what it is about, with
+  until something new arrives. The **+ menu shows the newest three unread above its panel** (on a container of their own with the sheets'
+  blurred-glass surface, 2026-11-13), each opening what it is about, with
   "All notifications (n more)" opening the page; nothing at all when nothing is new. Phone dock only: the wide-window rail has
   no + menu, so no strip there (owner, 2026-11-08), just the bell. Settings > Notifications (reminder delivery)
   is linked at the foot of the page. Tests: `NotificationsTest`, `NotificationsRenderTest` (pictures in
@@ -60,17 +67,26 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
   **by day** (`DaySwitcher`; a day heading shows what went out and opens that day), an **Upcoming** row for entries dated
   after today, search + filters (type, account, category, person, amount, dates: `TransactionFilterSheet`,
   `DateRangeSheet`), Gmail-style swipe (`SwipeableTransactionRow` on `SwipeActionRow`, a setting): left = Edit (opens the editor, the
-  row springs back), right = Delete (the row flies off and folds away, **no confirmation**, Undo snackbar; the details sheet and the
-  TalkBack action still ask first), details sheet with Delete/Edit and the attached picture. On a month's **last day** the month ends
+  row springs back), right = Delete, which **asks first** since 2026-11-11 (owner: "when I swipe delete it's not asking for
+  confirmation"; `swipeDeleteAsks`, Settings > Finance > "Ask before a swipe deletes", on by default: the row springs back and the
+  usual question comes up, "no" leaves it where it was; off is the earlier way - the row flies off and folds away, **no confirmation**,
+  Undo snackbar - kept as the choice), details sheet with Delete/Edit and the attached picture. On a month's **last day** the month ends
   exactly at the cutoff, so the Upcoming query keys on `range.end == cutoff` (month view only) to keep next month's entries listed. *Plans* = Budgets (per category + overall, history page, sub-categories fold into the parent),
   Recurring (`RecurringView`/`RecurringEditor`; rows record themselves on their day; **a payment and its reminder are kept in step** -
   section 5, `RecurringReminders`; a row with a reminder shows a small bell and says "with a reminder" to TalkBack), Reminders (`RemindersView`).
-- **Insights** (`finance/ui/InsightsScreen.kt`, `finance/domain/Insights.kt`): a story - snapshot hero (one sentence of how
-  this compares and with what, two bars on one scale), a single-series multi-month trend, ranked category rows with share and
-  a link to their transactions (or, Settings > Appearance > Layouts > **Categories in Insights**, `InsightsCategoriesLayout.Carousel`
-  - the Home top-spending `CategoryCarousel` over every category of the month; days that were picked always show the list;
-  default List), "More detail" collapsed (day by day, income sources). A month in progress is compared
-  like-for-like (`comparisonRange`). Custom date ranges.
+- **Insights** (`finance/ui/InsightsScreen.kt`, `finance/domain/Insights.kt`), redesigned 2026-11-13 after the owner ("not liking the
+  insight screen design somehow and the chart also") and **two research reports** (Haiku 5.5 xhigh and Gemini 3.8 Flash High, same
+  brief, checked against primary sources - `verified-facts.md` "Charts and Insights design"): one story, **this month before the months
+  around it**: the hero (amount, a **verdict sentence with the difference in money then as a share**, `verdict()`: "₹4,100 less than this
+  time last month (7%)", then Income and Saved) -> **"How this month built up"**, the running-total `PaceChart` as a panel of its own
+  (168 dp, solid this period, dashed the one before, the amount it points at above it, scrub the whole plot; it was the 104 dp chart
+  inside the hero) -> ranked category rows (**each with its change from last month as a small arrow and figure, "Same" or "New"**, never
+  red or green: `CategoryRowChange`; **no separate "What changed" list any more** - it listed the same categories twice; the figure
+  is not shown when the period before had no spending) -> By person -> the six-month bars (zero-based, bars standing on a firm baseline,
+  rounded tops) -> "More detail" collapsed (day by day, income sources). Categories can still be (Settings > Appearance > Layouts >
+  **Categories in Insights**, `InsightsCategoriesLayout.Carousel`) the Home top-spending carousel; days that were picked always show
+  the list; default List. A month in progress is compared like-for-like (`comparisonRange`); `heroBasis` is the one phrase every
+  comparison on the screen uses. Custom date ranges. Tests: `InsightsScreenTest`, `InsightsRenderTest` (pictures in `app/build/qa_insights/`).
 - **Wallet** (`screens/WalletScreen.kt`, `wallet/`): Accounts (layouts Stack | Cards | Rows | Carousel) and Cards (layouts
   Stack/Cards/Rows/Carousel; **the cards' default is Cards**, and the Wallet's Stack layout draws `CardStack` (a `DeckStack`; swipe the
   front card to bring the next forward, hold it to spread them out, Back gathers them again). **A "filed like folders" stack
@@ -83,6 +99,14 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
 - **Search** (`navigation/AppSearch.kt`): transactions, accounts (also by their bank's name), categories, people, settings.
 - **Settings** (`settings/ui/`): Appearance, Finance, Data & backup, Wallet & Cards, Notifications, Availability &
   Schedules, Security & privacy, Updates & changelog, plus About, Profile (name, emoji or own photo), Categories, People.
+  **The main list is grouped under headings** (2026-11-11, owner: "a little bit confusing, can you rearrange them";
+  `SettingsListGroup` in `SettingsScreen.kt`): *Look & feel* (Appearance, Widgets), *Money* (Finance, Banks & Categories),
+  *Cards* (Wallet & Cards, Availability & Schedules), *Alerts & safety* (Notifications, Security & Lock, Data & Backup), then
+  *System* (Updates & changelog, Welcome tour, About, and **Reset settings last**). Only where a row is shown changed: `SettingsPage`,
+  its routes and search are as they were, and `SettingsGroups` (the flat order, Appearance first) is derived from the groups.
+  **Previews** (`settings/ui/MotionPreview.kt`): Transitions > Pages and > Back gesture each show a thumb-sized screen playing the
+  choice, drawn from `BackPreview`'s own poses; it loops only under `LocalLiveMotion` with animations on, else one still frame.
+  Tests: `SettingsArrangementTest` (pictures in `app/build/qa_settings/`).
 - **Update page / Changelog page** (`updates/ui/`): see section 7. **Reminder alert screen** (`reminders/ReminderAlertScreen`).
 
 ## 2. Money rules
@@ -280,6 +304,21 @@ transaction and read again to fill the form.
 - Exports: **Full backup with pictures (.zip)**, **small backup (.json)**, **CSV**, **App backup** (zip with settings,
   reminders, profile, font, optional cards - chosen part by part when restoring; `backup/`). Restore validates first and asks
   before replacing anything; old backups still restore; a newer-format file is refused.
+- **A backup holds the user's categories, not the app's** (2026-11-12, owner: "why include all the categories when it is related to
+  the app"; finance format **version 3**): the export sites call `FinanceSnapshot.trimmedForBackup()` (`FinanceBackup.kt`), which
+  leaves out a default category only if it is exactly as seeded (name, family, icon, colour, not archived; `FinanceDatabase.defaultSeedPlan`),
+  **nothing refers to it** (no transaction, budget, repeating payment, or kept sub-category) and **it is the only one of its name** -
+  so it can be made again. Everything else is kept whole with its id. The file names the defaults the user removed
+  (`removedDefaultCategories`), and `restore` then calls `FinanceDatabase.addMissingDefaults` (never doubling a name, each at its
+  seed order). `repository.snapshot()` itself is still everything (undo restores it), and a version 1/2 file - which lists every
+  category - is restored exactly as before, nothing added. Why not drop the in-use defaults too: categories have no "built-in" mark
+  and every reference is by id, so the file must carry what the data points at. Tests: `BackupCategoriesTest` (a namesake - the
+  user's own "Hobbies" beside the app's sub-category - is why "only one of its name" is a rule: left out, it was gone after a restore).
+- **Default categories** (`FinanceDatabase.defaultCategories`, sub-categories in `CategorySuggestions.byParent`): since 2026-11-12
+  (database version 13, `CategorySuggestions.addedIn13`) also *Money sent* (sent to friends, lent, repaid, bill splits), *Gifts given*,
+  *Fees & charges*, *Work expenses*, and for income *Money received*, *Investment returns*, *Sold items* - with icon keys
+  `money_sent`, `money_received`, `sold_items`. An existing ledger gets them once (`addDefaultFamilies`: never where a category of
+  that kind already goes by the name).
 - **Locked backups** (since 2026-11-03, whole-app encryption stage 1): each restorable export first asks "Lock the backup?"
   (`BackupLockSheet` in `settings/ui/LockedBackupUi.kt`; **Lock it** is preselected, **Don't lock** saves the file exactly as before).
   Locked, the whole file is wrapped by `backup/LockedFile` and saved as `<name>.locked` (`application/octet-stream`); unlocked it is

@@ -82,6 +82,37 @@ enum class PageAnimationType(val label: String, val description: String) {
 }
 
 /**
+ * What the back gesture shows as it is dragged, everywhere it goes back - a tab, a pushed page, a sheet (owner, 2026-11-11: "not
+ * consistent throughout the app ... include multiple options"). [PageStyle], the default, is what it always was meant to be: the page
+ * closing the way the page style closes it. The others close it one fixed way, whatever the pages use.
+ */
+enum class BackGestureStyle(val label: String, val description: String) {
+    PageStyle("Match pages", "What you leave closes under your finger the way your page style closes it"),
+    Shrink("Shrink", "It shrinks a little and drifts towards your finger as it fades, like Android's own back preview"),
+    Slide("Slide", "It slides off to the side with your finger"),
+    Fade("Fade", "It fades away where it is"),
+    ;
+
+    /** The page style whose way of closing a gesture in this style plays: the pages' own ([pages]), or the one it names. */
+    fun animation(pages: PageAnimationType): PageAnimationType = when (this) {
+        PageStyle -> pages
+        Shrink -> PageAnimationType.System
+        Slide -> PageAnimationType.SlideHorizontal
+        Fade -> PageAnimationType.FadeThrough
+    }
+}
+
+/**
+ * How long a back gesture's close takes from start to end ([ms]): the finger plays the first of it, and letting go plays the rest in
+ * what is left of this time (owner, 2026-11-11: "improving the timing, it is fast" - it finished in 160 ms, or at once).
+ */
+enum class BackGestureSpeed(val label: String, val description: String, val ms: Int) {
+    Relaxed("Relaxed", "Takes its time once you let go", 560),
+    Standard("Standard", "Unhurried, without making you wait", 420),
+    Brisk("Brisk", "Finishes quickly", 300),
+}
+
+/**
  * How bottom sheets and decisions (the confirm sheets) open and close - chosen apart from the [PageAnimationType], which
  * moves pages. They are the same surface, so every sheet and every decision follows the one chosen. With animations turned
  * off in system settings none of them adds any motion of its own.
@@ -359,6 +390,9 @@ data class AppPrefsState(
     val launchAnimation: LaunchAnimation = LaunchAnimation.Cookie,
     /** How the dock moves its pill from one tab to the next. */
     val dockSelection: DockSelectionStyle = DockSelectionStyle.Glide,
+    /** What the back gesture shows as it is dragged, and how long its close takes (Settings > Appearance > Transitions > Back gesture). */
+    val backGestureStyle: BackGestureStyle = BackGestureStyle.PageStyle,
+    val backGestureSpeed: BackGestureSpeed = BackGestureSpeed.Standard,
     val walletCardActionStyle: WalletCardActionStyle = WalletCardActionStyle.Bar,
     val bankIconStyle: BankIconStyle = BankIconStyle.Full,
     val accountsLayout: AccountsLayout = AccountsLayout.Stack,
@@ -374,6 +408,11 @@ data class AppPrefsState(
     /** Swipe a transaction row to reveal its actions. Every action stays reachable from the row's details either way. */
     val swipeActionsEnabled: Boolean = true,
     val transactionSwipeActions: TransactionSwipeActions = TransactionSwipeActions.EditAndDelete,
+    /**
+     * A swipe to delete asks first, as Delete does everywhere else (owner, 2026-11-11: "when I swipe delete it's not asking for
+     * confirmation"). Off is the way it was: gone at once, with Undo for a few seconds.
+     */
+    val swipeDeleteAsks: Boolean = true,
     val clipboardTimeout: ClipboardTimeout = ClipboardTimeout.Sec10,
     /** Cards tilt a few degrees with the phone's motion. Off, or with animations removed system-wide, they stay flat. */
     val cardTiltEnabled: Boolean = true,
@@ -569,6 +608,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
             sheetAnimation = prefs.enum(K_SHEET_ANIMATION, SheetAnimationType.defaultFor(pages)),
             launchAnimation = prefs.enum(K_LAUNCH_ANIMATION, defaults.launchAnimation),
             dockSelection = prefs.enum(K_DOCK_SELECTION, defaults.dockSelection),
+            backGestureStyle = prefs.enum(K_BACK_GESTURE_STYLE, defaults.backGestureStyle),
+            backGestureSpeed = prefs.enum(K_BACK_GESTURE_SPEED, defaults.backGestureSpeed),
             walletCardActionStyle = prefs.enum(K_WALLET_ACTION_STYLE, defaults.walletCardActionStyle),
             bankIconStyle = prefs.enum(K_BANK_ICON_STYLE, defaults.bankIconStyle),
             accountsLayout = prefs.enum(K_ACCOUNTS_LAYOUT, defaults.accountsLayout),
@@ -582,6 +623,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
             dummyDataEnabled = prefs.getBoolean(K_DUMMY_DATA, defaults.dummyDataEnabled),
             swipeActionsEnabled = prefs.getBoolean(K_SWIPE_ENABLED, defaults.swipeActionsEnabled),
             transactionSwipeActions = prefs.enum(K_TRANSACTION_SWIPE, defaults.transactionSwipeActions),
+            swipeDeleteAsks = prefs.getBoolean(K_SWIPE_DELETE_ASKS, defaults.swipeDeleteAsks),
             clipboardTimeout = prefs.enum(K_CLIPBOARD_TIMEOUT, defaults.clipboardTimeout),
             cardTiltEnabled = prefs.getBoolean(K_CARD_TILT, defaults.cardTiltEnabled),
             heroWeather = prefs.getBoolean(K_HERO_WEATHER, defaults.heroWeather),
@@ -688,6 +730,12 @@ class AppPreferences(private val prefs: SharedPreferences) {
     fun setDockSelection(style: DockSelectionStyle) =
         change({ copy(dockSelection = style) }) { putString(K_DOCK_SELECTION, style.name) }
 
+    fun setBackGestureStyle(style: BackGestureStyle) =
+        change({ copy(backGestureStyle = style) }) { putString(K_BACK_GESTURE_STYLE, style.name) }
+
+    fun setBackGestureSpeed(speed: BackGestureSpeed) =
+        change({ copy(backGestureSpeed = speed) }) { putString(K_BACK_GESTURE_SPEED, speed.name) }
+
     fun setWalletCardActionStyle(style: WalletCardActionStyle) =
         change({ copy(walletCardActionStyle = style) }) { putString(K_WALLET_ACTION_STYLE, style.name) }
 
@@ -721,6 +769,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
 
     fun setTransactionSwipeActions(actions: TransactionSwipeActions) =
         change({ copy(transactionSwipeActions = actions) }) { putString(K_TRANSACTION_SWIPE, actions.name) }
+
+    fun setSwipeDeleteAsks(asks: Boolean) =
+        change({ copy(swipeDeleteAsks = asks) }) { putBoolean(K_SWIPE_DELETE_ASKS, asks) }
 
     fun setClipboardTimeout(timeout: ClipboardTimeout) =
         change({ copy(clipboardTimeout = timeout) }) { putString(K_CLIPBOARD_TIMEOUT, timeout.name) }
@@ -1075,6 +1126,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_SHEET_ANIMATION = "sheet_animation"
         const val K_LAUNCH_ANIMATION = "launch_animation"
         const val K_DOCK_SELECTION = "dock_selection"
+        const val K_BACK_GESTURE_STYLE = "back_gesture_style"
+        const val K_BACK_GESTURE_SPEED = "back_gesture_speed"
         const val K_WALLET_ACTION_STYLE = "wallet_card_action_style"
         const val K_BANK_ICON_STYLE = "bank_icon_style"
         const val K_ACCOUNTS_LAYOUT = "accounts_layout"
@@ -1089,6 +1142,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_DUMMY_DATA = "dummy_data_enabled"
         const val K_SWIPE_ENABLED = "swipe_actions_enabled"
         const val K_TRANSACTION_SWIPE = "transaction_swipe_actions"
+        const val K_SWIPE_DELETE_ASKS = "swipe_delete_asks"
         const val K_CLIPBOARD_TIMEOUT = "clipboard_timeout"
         const val K_CARD_TILT = "card_tilt_enabled"
         const val K_HERO_WEATHER = "hero_weather"

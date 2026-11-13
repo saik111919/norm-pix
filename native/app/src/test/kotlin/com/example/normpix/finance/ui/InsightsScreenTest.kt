@@ -19,6 +19,7 @@ import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.Category
 import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.FinanceTransaction
+import com.example.normpix.finance.domain.MoneyFormatter
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.settings.InsightsCategoriesLayout
@@ -37,7 +38,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Insights reads as a story - snapshot, trend, categories, what changed - and says what it measures. */
+/**
+ * Insights reads as a story - the answer and how it compares, how it built up, what it is made of with what changed in each, who it
+ * was for, the months around it - and says what it measures.
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h2400dp")
 class InsightsScreenTest {
@@ -122,13 +126,22 @@ class InsightsScreenTest {
 
         compose.onNodeWithText("Spent this month").assertIsDisplayed()
         compose.onNodeWithText("₹1,500.00").assertIsDisplayed()
-        // 1,500 against 1,300 over the same days: 15% more - and the hero's pill says what it is compared with.
-        compose.onNodeWithText("15% more than this time last month").assertIsDisplayed()
-        compose.onNode(hasText("Amounts in Indian rupee", substring = true)).assertIsDisplayed()
+        // 1,500 against 1,300 over the same days: 200 more, 15% - the verdict as a sentence, saying what it is compared with.
+        compose.onNodeWithText("₹200 more than this time last month (15%)").assertIsDisplayed()
+        compose.onNode(hasText("Amounts in Indian rupee", substring = true)).assertExists()
     }
 
     @Test
-    fun theHeroChartsBothPeriodsOnOneScale() {
+    fun theVerdictIsASentenceWithTheDifferenceInMoney() {
+        val money = MoneyFormatter(com.example.normpix.finance.domain.CurrencySpec.INR)
+        assertEquals("₹4,100 less than this time last month (7%)", verdict(-0.07, -410_000, "this time last month", money))
+        assertEquals("₹200 more than last month (15%)", verdict(0.15, 20_000, "last month", money))
+        assertEquals("About the same as last month", verdict(0.001, 100, "last month", money), "a gap too small to say is not said")
+        assertEquals("About the same as last month", verdict(0.0, 0, "last month", money))
+    }
+
+    @Test
+    fun thePaceChartIsAPanelOfItsOwn_chartsBothPeriodsOnOneScale_andSpeaksThemAsOne() {
         val seed = seed()
         val lastMonth = MonthKey.of(now).previous
         record(seed, TransactionType.Expense, seed.food, 150_000, LocalDate.now().atStartOfDay().plusMinutes(1))
@@ -136,8 +149,25 @@ class InsightsScreenTest {
         show()
         compose.waitForIdle()
 
+        // Not squeezed into the hero any more: a titled panel under it, with the dashed line explained.
+        compose.onNodeWithText("How this month built up").assertExists()
+        compose.onNode(hasText("The solid line is this month; the dashed one is last month, day for day.", substring = true)).assertExists()
         // One element speaks both lines of the pace chart, so a screen reader hears the comparison rather than two loose amounts.
-        compose.onNodeWithContentDescription("This month ₹1,500.00, Same days of ${monthLabel(lastMonth)} ₹1,300.00").assertIsDisplayed()
+        compose.onNodeWithContentDescription("This month ₹1,500.00, Same days of ${monthLabel(lastMonth)} ₹1,300.00").assertExists()
+    }
+
+    @Test
+    fun thisMonthComesBeforeTheMonthsAroundIt() {
+        val seed = seed()
+        record(seed, TransactionType.Expense, seed.food, 100_000, LocalDate.now().atStartOfDay().plusMinutes(1))
+        record(seed, TransactionType.Expense, seed.food, 40_000, MonthKey.of(now).addMonths(-1).start.plusHours(2))
+        record(seed, TransactionType.Expense, seed.food, 40_000, MonthKey.of(now).addMonths(-2).start.plusHours(2))
+        show()
+        compose.waitForIdle()
+
+        fun top(text: String) = compose.onNodeWithText(text).fetchSemanticsNode().boundsInRoot.top
+        val order = listOf("Spent this month", "How this month built up", "Where your money went", "Spending by month", "More detail")
+        assertEquals(order, order.sortedBy { top(it) }, "the answer, how it built up, what it is made of, then the months around it, then the detail")
     }
 
     @Test
@@ -206,7 +236,7 @@ class InsightsScreenTest {
     }
 
     @Test
-    fun whatChangedNamesTheLargestIncreaseAndDecrease() {
+    fun eachCategorySaysWhatChangedInIt_inTheRowItIsAlreadyIn() {
         val seed = seed()
         val lastMonth = MonthKey.of(now).previous
         record(seed, TransactionType.Expense, seed.food, 100_000, LocalDate.now().atStartOfDay().plusMinutes(1))
@@ -216,14 +246,25 @@ class InsightsScreenTest {
         show()
         compose.waitForIdle()
 
-        val list = compose.onNode(hasScrollAction())
-        list.performScrollToNode(hasText("What changed"))
-        compose.onNodeWithText("What changed").assertIsDisplayed()
-        compose.onAllNodesWithText("Largest increase", substring = true).onFirst().assertExists()
-        compose.onAllNodesWithText("Largest decrease", substring = true).onFirst().assertExists()
-        // Food rose 600 and Transport fell 400.
-        assertTrue(compose.onAllNodesWithText("₹600.00 more", substring = true).fetchSemanticsNodes().isNotEmpty())
-        assertTrue(compose.onAllNodesWithText("₹400.00 less", substring = true).fetchSemanticsNodes().isNotEmpty())
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Where your money went"))
+        // Food rose 600 and Transport fell 400, said in each category's own row and to a screen reader with the rest of it.
+        compose.onNodeWithContentDescription("Food, ₹1,000.00, 67%, 1 transaction, ₹600.00 more than this time last month. Show transactions").assertHasClickAction()
+        compose.onNodeWithContentDescription("Transport, ₹500.00, 33%, 1 transaction, ₹400.00 less than this time last month. Show transactions").assertHasClickAction()
+        // And no second list of the same categories under another name (both researchers found it, 2026-11-13).
+        assertTrue(compose.onAllNodesWithText("What changed").fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodesWithText("Largest increase", substring = true).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun aFirstMonthHasNothingToCompareSoNoRowSaysNew() {
+        val seed = seed()
+        record(seed, TransactionType.Expense, seed.food, 100_000, LocalDate.now().atStartOfDay().plusMinutes(1))
+        show()
+        compose.waitForIdle()
+
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Where your money went"))
+        compose.onNodeWithContentDescription("Food, ₹1,000.00, 100%, 1 transaction. Show transactions").assertHasClickAction()
+        assertTrue(compose.onAllNodesWithText("New").fetchSemanticsNodes().isEmpty())
     }
 
     @Test

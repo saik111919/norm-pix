@@ -410,6 +410,12 @@ fun OverlayHost(overlays: AppOverlays) {
                 Box(
                     Modifier
                         .fillMaxWidth()
+                        // The back gesture draws the sheet down as it is dragged, and letting go closes it - as a swipe does, and
+                        // only a sheet that has really gone is dismissed (a form that must ask first is asked before this is).
+                        .sheetBackGesture(sheetState, sheetMotionOn) {
+                            runCatching { sheetState.hide() }
+                            if (!sheetState.isVisible) request.result.complete(null)
+                        }
                         .blursBackdrop(overlays, request, surface.blurBehind, hold)
                         .then(
                             if (request.expandable && fits == null) {
@@ -474,6 +480,11 @@ fun OverlayHost(overlays: AppOverlays) {
                 Box(
                     Modifier
                         .fillMaxWidth()
+                        // Back means "no", and is drawn as on every sheet: down under the finger, gone when it is let go.
+                        .sheetBackGesture(sheetState, sheetMotionOn) {
+                            runCatching { sheetState.hide() }
+                            request.result.complete(false)
+                        }
                         .blursBackdrop(overlays, request, surface.blurBehind, hold)
                         .blurredBy(above, TileMode.Decal)
                         .windowInsetsPadding(

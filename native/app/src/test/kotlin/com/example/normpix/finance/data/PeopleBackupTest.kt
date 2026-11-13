@@ -108,7 +108,11 @@ class PeopleBackupTest {
 
     @Test
     fun `a backup from a newer version is refused rather than read without its people`() = runDb {
-        val json = FinanceBackupCodec.encode(repo.snapshot(), exportedAt = now).replace("\"version\": 2", "\"version\": 3")
+        // Whatever the format's version is now, the one after it is from an app this one does not know.
+        val current = "\"version\": ${FinanceBackupCodec.FORMAT_VERSION}"
+        val written = FinanceBackupCodec.encode(repo.snapshot(), exportedAt = now)
+        assertTrue(current in written)
+        val json = written.replace(current, "\"version\": ${FinanceBackupCodec.FORMAT_VERSION + 1}")
         assertFalse(FinanceBackupCodec.decode(json).isValid)
     }
 

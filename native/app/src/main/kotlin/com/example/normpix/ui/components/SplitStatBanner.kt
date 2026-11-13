@@ -90,6 +90,11 @@ fun SplitStatBanner(
     tone: StatusTone? = null,
     onClickLabel: String? = null,
     onClick: (() -> Unit)? = null,
+    /**
+     * The banner with nothing printed on it: what stands behind the front one in a stack of them (a `DeckStack`'s plate) - the same
+     * size by construction, with nothing to read or press.
+     */
+    plate: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
     val status = tone?.resolve()
@@ -98,11 +103,12 @@ fun SplitStatBanner(
     val container = scheme.secondaryContainer
     val ink = scheme.onSecondaryContainer
     val stacked = LocalDensity.current.fontScale > StackAtFontScale
+    val shown = if (plate) 0f else 1f
 
     val quiet = quietInk(ink, container)
 
     val left: @Composable (Shape, Modifier, Boolean) -> Unit = { shape, panel, fillHeight ->
-        Panel(shape, container, ink, onClick, panel, fillHeight) {
+        Panel(shape, container, ink, onClick, panel, fillHeight, contentAlpha = shown) {
             Column {
                 Text(progress.title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
                 Text(progress.subtitle, style = MaterialTheme.typography.bodyMedium, color = quiet)
@@ -113,7 +119,7 @@ fun SplitStatBanner(
         }
     }
     val right: @Composable (Shape, Modifier, Boolean) -> Unit = { shape, panel, fillHeight ->
-        Panel(shape, container, ink, onClick, panel, fillHeight) {
+        Panel(shape, container, ink, onClick, panel, fillHeight, contentAlpha = shown) {
             FigureBody(figure, quiet)
         }
     }

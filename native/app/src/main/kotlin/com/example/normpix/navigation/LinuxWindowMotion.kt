@@ -89,6 +89,18 @@ internal object LinuxWindowMotion {
         shrinkVertically(tween(ms, easing = closeEase), shrinkTowards = Alignment.Bottom) { full -> strip(full) } +
             fadeOut(tween(ms, easing = fadeOutEase))
 
+    /**
+     * A page closing under the back gesture: the same sinking and the same late fade as [closing], but worked out from how far the
+     * close has gone ([progress] of the transition's time, see `BackGesture`) - so the navigation host, seeking it to the finger, shows
+     * exactly what [closeReveal] and [closeAlpha] give a tab at that point.
+     */
+    fun closingUnder(ms: Int, progress: Easing): ExitTransition =
+        shrinkVertically(
+            tween(ms, easing = { closeEase.transform(progress.transform(it)) }),
+            shrinkTowards = Alignment.Bottom,
+        ) { full -> strip(full) } +
+            fadeOut(tween(ms, easing = { 1f - closeAlpha(progress.transform(it)) }))
+
     private fun strip(full: Int): Int = (full * STRIP).roundToInt().coerceAtLeast(1)
 }
 

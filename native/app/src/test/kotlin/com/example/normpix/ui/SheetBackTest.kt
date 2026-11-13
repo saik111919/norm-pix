@@ -28,6 +28,7 @@ import com.example.normpix.ui.theme.NormPixTheme
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -179,6 +180,77 @@ class SheetBackTest {
         assertFalse(closed)
         // Material shrinks a sheet as a back gesture sweeps, to show it closing; one that stays must not stay shrunk.
         assertEquals(fullWidth, bodyWidth(), 0.5f, "the form is back to its full width")
+    }
+
+    private fun bodyTop() = compose.onNodeWithTag(BODY, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
+
+    /** The finger [progress] of the way through a back gesture, still down. */
+    private fun dragBack(progress: Float) {
+        compose.runOnUiThread {
+            val back = topWindow().onBackPressedDispatcher
+            back.dispatchOnBackStarted(BackEventCompat(0f, 1_200f, 0f, BackEventCompat.EDGE_LEFT))
+            back.dispatchOnBackProgressed(BackEventCompat(150f, 1_200f, progress, BackEventCompat.EDGE_LEFT))
+        }
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun aBackGesture_drawsACleanSheetDownUnderTheFinger_asADragDoes() {
+        openForm()
+        val restTop = bodyTop()
+
+        dragBack(0.5f)
+        // The start of its own close - down, the way a sheet goes, in the sheet style (the default one narrows it as it leaves) -
+        // not Material's own back preview, which shrinks the sheet where it stands and never moves it.
+        val draggedTop = bodyTop()
+        assertTrue(draggedTop > restTop + 20f, "the sheet has come down with the finger: $restTop -> $draggedTop")
+        assertFalse(closed, "it is still open while the finger is down")
+
+        // Further, and it is further down.
+        compose.runOnUiThread {
+            topWindow().onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(400f, 1_200f, 0.8f, BackEventCompat.EDGE_LEFT))
+        }
+        compose.waitForIdle()
+        assertTrue(bodyTop() > draggedTop + 20f, "and follows it on: $draggedTop -> ${bodyTop()}")
+    }
+
+    @Test
+    fun aBackGesture_givenUp_putsTheSheetBackWhereItWas() {
+        openForm()
+        val restTop = bodyTop()
+        dragBack(0.6f)
+        assertTrue(bodyTop() > restTop + 20f)
+
+        compose.runOnUiThread { topWindow().onBackPressedDispatcher.dispatchOnBackCancelled() }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        assertEquals(restTop, bodyTop(), 1f, "back up where it rests")
+        assertFalse(closed)
+        compose.onNodeWithText("New entry").assertIsDisplayed()
+    }
+
+    @Test
+    fun aBackGesture_letGo_closesTheSheet() {
+        openForm()
+        dragBack(0.4f)
+        pressBack()
+        until { closed }
+        assertNull(closedWith, "closing by Back gives nothing back")
+        until { !shown("New entry") }
+    }
+
+    @Test
+    fun aBackGesture_onAFormWithChanges_doesNotMoveIt_itAsks() {
+        openForm()
+        val restTop = bodyTop()
+        dirty = true
+        compose.waitForIdle()
+
+        dragBack(0.6f)
+        assertEquals(restTop, bodyTop(), 1f, "a form that must ask first is not drawn away as if it were closing")
+        pressBack()
+        until { shown("Discard this entry?") }
+        assertFalse(closed)
     }
 
     private companion object {

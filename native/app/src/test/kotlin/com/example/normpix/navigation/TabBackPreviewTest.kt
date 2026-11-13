@@ -35,11 +35,15 @@ class TabBackPreviewTest {
 
     private val back = TabBackPreview()
 
-    /** Home (red, on screen) and Wallet (blue, hidden), in [style], with the gesture as [back] has it. */
-    private fun show(style: PageAnimationType, reducedMotion: Boolean = false) {
+    /**
+     * Home (red, on screen) and Wallet (blue, hidden), in [style], with the gesture as [back] has it. [backStyle] is the close the
+     * gesture plays: the pages' own unless the Back gesture style names another.
+     */
+    private fun show(style: PageAnimationType, reducedMotion: Boolean = false, backStyle: PageAnimationType = style) {
         compose.setContent {
             CompositionLocalProvider(
                 LocalPageAnimation provides style,
+                LocalBackAnimation provides backStyle,
                 LocalReducedMotionOverride provides reducedMotion,
             ) {
                 Box(Modifier.fillMaxSize()) {
@@ -80,6 +84,15 @@ class TabBackPreviewTest {
         gesture(target = 3, progress = 0.5f, direction = 1f)
         show(PageAnimationType.SlideHorizontal)
         assertEquals(Color.Blue, pixelAt(0.25f), "from the left edge the tab goes right, and the tab beneath shows on the left")
+        assertEquals(Color.Red, pixelAt(0.75f))
+    }
+
+    @Test
+    fun theBackGestureStyleIsWhatTheGesturePlays_whateverThePagesUse() {
+        // Linux window pages, but the Back gesture style says Slide: the tab slides, it does not sink.
+        gesture(target = 3, progress = 0.5f, direction = 1f)
+        show(PageAnimationType.LinuxWindow, backStyle = PageAnimationType.SlideHorizontal)
+        assertEquals(Color.Blue, pixelAt(0.25f), "the tab has gone to the right, as a slide does")
         assertEquals(Color.Red, pixelAt(0.75f))
     }
 

@@ -308,6 +308,9 @@ fun BarChart(
             val layout = tickLayouts[i]
             drawText(layout, color = axisText, topLeft = Offset(plotLeft - gap - layout.size.width, ty - layout.size.height / 2f))
         }
+        // The zero line is the one that matters - the bars stand on it, and their heights are read from it (Apple's and Datawrapper's
+        // rule for bars: a zero baseline) - so it is firmer than the lines above it.
+        drawLine(axisText.copy(alpha = axisText.alpha * 0.55f), Offset(plotLeft, plotBottom), Offset(size.width, plotBottom), strokeWidth = 1.5.dp.toPx())
 
         values.forEachIndexed { i, value ->
             val centre = plotLeft + slot * (i + 0.5f)
@@ -315,17 +318,18 @@ fun BarChart(
             val strength = SET_BACK_ALPHA + (1f - SET_BACK_ALPHA) * emphasis[i].value
             val ahead = i >= elapsed
             if (ahead || value <= 0) {
-                // Nothing here (yet): a stub on the baseline - the chosen column's in full color, so "today" shows even empty.
+                // Nothing here (yet): a low mark on the baseline - the chosen column's in full color, so "today" shows even empty.
                 val tone = when {
                     i == focus -> color
                     ahead -> emptyAhead
                     else -> empty
                 }
-                drawPill(tone, left, plotBottom - stub / 2, barWidth, stub)
+                drawBar(tone, left, plotBottom - marker, barWidth, marker)
                 return@forEachIndexed
             }
-            val top = plotBottom - max(stub / 2, (plotBottom - y(value)) * progress)
-            drawPill(color.copy(alpha = color.alpha * strength), left, top, barWidth, plotBottom + stub / 2 - top)
+            // Standing on the baseline, not floating over it as a capsule: a bar's height is its value.
+            val top = plotBottom - max(marker, (plotBottom - y(value)) * progress)
+            drawBar(color.copy(alpha = color.alpha * strength), left, top, barWidth, plotBottom - top)
         }
 
         if (reference != null && reference > 0) {
@@ -361,6 +365,23 @@ fun BarChart(
 /** Which column [x] (from the plot's start) falls in, for a plot [plotWidth] wide holding [count] of them. */
 private fun columnAt(x: Float, plotWidth: Float, count: Int): Int =
     if (plotWidth <= 0f) 0 else (x / (plotWidth / count)).toInt().coerceIn(0, count - 1)
+
+/** A bar standing on its baseline: its top corners rounded (never more than half its width, nor more than its height), its foot square. */
+private fun DrawScope.drawBar(color: Color, x: Float, y: Float, width: Float, height: Float) {
+    val r = min(AppSpacing.sm.toPx(), min(width / 2, height))
+    val path = Path().apply {
+        addRoundRect(
+            RoundRect(
+                Rect(x, y, x + width, y + height),
+                topLeft = CornerRadius(r, r),
+                topRight = CornerRadius(r, r),
+                bottomLeft = CornerRadius.Zero,
+                bottomRight = CornerRadius.Zero,
+            ),
+        )
+    }
+    drawPath(path, color)
+}
 
 /** A capsule: both ends fully rounded (a stub as short as it is round is a circle). */
 private fun DrawScope.drawPill(color: Color, x: Float, y: Float, width: Float, height: Float) {

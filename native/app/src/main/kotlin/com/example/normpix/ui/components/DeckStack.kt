@@ -42,6 +42,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -114,6 +115,25 @@ class DeckStackState {
 fun rememberDeckStackState(): DeckStackState = remember { DeckStackState() }
 
 /**
+ * How far the front item has been pulled across, as a share of what makes a swipe count (0 at rest, 1 once it would be taken
+ * - [SWIPE_SHARE] of its width). Held by the deck, written by the item in front as it is dragged and as it comes home, and read in
+ * the draw step by the items behind it, which print their face in step with it: pulling a card shows what is under it (owner,
+ * 2026-11-13: "when swiping can't we show the back cards' details"). Reading it in composition would recompose every frame, so
+ * only [DeckItem] reads it as a draw value - and as one bit ([peeking]) to decide whether to compose the behind faces at all.
+ */
+@Stable
+private class DragShare {
+    var value by mutableFloatStateOf(0f)
+}
+
+/** How much of the face of an item [position] places behind the front one shows at a full pull: the next one all of it, the one after half. */
+private fun peekWeight(position: Int): Float = when (position) {
+    1 -> 1f
+    2 -> 0.5f
+    else -> 0f
+}
+
+/**
  * A deck of same-sized items as a stack: the front one shown in full by [face], the others a hair of colour above it, each
  * a little smaller, drawn by [plate]. Tapping the front item calls [onOpen]; swiping it sends it to the back (or, the other
  * way, brings the last one forward), and tapping an item behind brings that one forward.
@@ -154,6 +174,14 @@ fun <T> DeckStack(
     extraActions: (T) -> List<CustomAccessibilityAction> = { emptyList() },
     /** How much darker each step back is (black over the item): cards are deep colours and take a lot, a pale banner very little. */
     behindDim: Float = STEP_DIM,
+    /** The room between an item and its [footer]. */
+    footerGap: Dp = 0.dp,
+    /**
+     * What sits under the stack and belongs to the item in front - a banner's row of buttons (owner, 2026-11-11: "this part can keep
+     * as it is while the above part moves, because it is the same"). It does not move with the items: swiping changes which item is
+     * in front, and the footer, in the same place, is then that item's. Laid out in a column, each item has its own under it.
+     */
+    footer: (@Composable (T) -> Unit)? = null,
     plate: @Composable (T) -> Unit,
     face: @Composable (T) -> Unit,
 ) {
@@ -194,6 +222,7 @@ fun <T> DeckStack(
 
     val arrive = AppMotion.duration(AppMotion.MEDIUM_MS)
     val leave = AppMotion.duration(AppMotion.SHORT_MS)
+    val pulled = remember { DragShare() }
     Box(modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
         AnimatedContent(
             targetState = state.unfolded && unfolds,
@@ -210,50 +239,58 @@ fun <T> DeckStack(
                             val spoken = description(item, index, count)
                             val extra = extraActions(item)
                             val press = onItemLongPress
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .combinedClickable(
-                                        onClickLabel = "Opens the details",
-                                        onLongClickLabel = if (press != null) itemLongPressLabel else null,
-                                        onLongClick = press?.let { held -> { held(item) } },
-                                        onClick = { onOpen(item) },
-                                    )
-                                    .clearAndSetSemantics {
-                                        contentDescription = spoken
-                                        role = Role.Button
-                                        onClick(label = "Opens the details") { onOpen(item); true }
-                                        if (press != null) onLongClick(label = itemLongPressLabel) { press(item); true }
-                                        if (extra.isNotEmpty()) customActions = extra
-                                    },
-                            ) { face(item) }
+                            Column(verticalArrangement = Arrangement.spacedBy(footerGap)) {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .combinedClickable(
+                                            onClickLabel = "Opens the details",
+                                            onLongClickLabel = if (press != null) itemLongPressLabel else null,
+                                            onLongClick = press?.let { held -> { held(item) } },
+                                            onClick = { onOpen(item) },
+                                        )
+                                        .clearAndSetSemantics {
+                                            contentDescription = spoken
+                                            role = Role.Button
+                                            onClick(label = "Opens the details") { onOpen(item); true }
+                                            if (press != null) onLongClick(label = itemLongPressLabel) { press(item); true }
+                                            if (extra.isNotEmpty()) customActions = extra
+                                        },
+                                ) { face(item) }
+                                footer?.invoke(item)
+                            }
                         }
                     }
                 }
             } else {
-                Box(Modifier.widthIn(max = maxWidth).fillMaxWidth().padding(top = Peek * minOf(count - 1, BEHIND))) {
-                    // Always in the items' own order: an item keeps its place in the tree and only its depth changes, so each
-                    // moves from where it was to where it goes.
-                    items.forEachIndexed { index, item ->
-                        key(itemKey(item)) {
-                            DeckItem(
-                                position = (index - front).mod(count),
-                                count = count,
-                                shape = shape,
-                                behindDim = behindDim,
-                                spoken = description(item, index, count),
-                                onOpen = { onOpen(item) },
-                                onLongPress = hold?.let { press -> { press(item) } },
-                                longPressLabel = holdLabel,
-                                extra = stackedActions(item),
-                                onBringForward = { bringForward(index) },
-                                onNext = { bringForward(front + 1) },
-                                onPrevious = { bringForward(front - 1) },
-                                plate = { plate(item) },
-                                face = { face(item) },
-                            )
+                Column(Modifier.widthIn(max = maxWidth).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(footerGap)) {
+                    Box(Modifier.fillMaxWidth().padding(top = Peek * minOf(count - 1, BEHIND))) {
+                        // Always in the items' own order: an item keeps its place in the tree and only its depth changes, so each
+                        // moves from where it was to where it goes.
+                        items.forEachIndexed { index, item ->
+                            key(itemKey(item)) {
+                                DeckItem(
+                                    position = (index - front).mod(count),
+                                    count = count,
+                                    shape = shape,
+                                    behindDim = behindDim,
+                                    spoken = description(item, index, count),
+                                    onOpen = { onOpen(item) },
+                                    onLongPress = hold?.let { press -> { press(item) } },
+                                    longPressLabel = holdLabel,
+                                    extra = stackedActions(item),
+                                    onBringForward = { bringForward(index) },
+                                    onNext = { bringForward(front + 1) },
+                                    onPrevious = { bringForward(front - 1) },
+                                    pulled = pulled,
+                                    plate = { plate(item) },
+                                    face = { face(item) },
+                                )
+                            }
                         }
                     }
+                    // Under the stack, in one place whichever item is in front: it is that item's.
+                    footer?.invoke(items[front])
                 }
             }
         }
@@ -327,6 +364,7 @@ private fun DeckItem(
     onBringForward: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
+    pulled: DragShare,
     plate: @Composable () -> Unit,
     face: @Composable () -> Unit,
 ) {
@@ -341,6 +379,9 @@ private fun DeckItem(
     // Printed while at or near the front; an item on its way back turns to a plate before any of its print could show.
     val printed by remember { derivedStateOf { depth < 0.5f } }
     val isFront = position == 0
+    // One of the next two behind the front, while the front is being pulled: its face is composed, to be printed in step with the pull.
+    val peekable = peekWeight(position) > 0f
+    val peeking by remember(peekable) { derivedStateOf { peekable && pulled.value > 0.01f } }
 
     // The outer layer places the item in the stack, from its top edge so a smaller item keeps its top where it is shown;
     // the inner one is the item following a finger, which turns about its own middle.
@@ -375,7 +416,12 @@ private fun DeckItem(
                 .draggable(
                     orientation = Orientation.Horizontal,
                     enabled = isFront && count > 1,
-                    state = rememberDraggableState { delta -> scope.launch { drag.snapTo(drag.value + delta) } },
+                    state = rememberDraggableState { delta ->
+                        scope.launch {
+                            drag.snapTo(drag.value + delta)
+                            pulled.value = if (width > 0) (abs(drag.value) / (width * SWIPE_SHARE)).coerceIn(0f, 1f) else 0f
+                        }
+                    },
                     onDragStopped = { velocity ->
                         val moved = drag.value
                         val far = abs(moved) > width * SWIPE_SHARE || abs(velocity) > FLING_SPEED
@@ -384,8 +430,12 @@ private fun DeckItem(
                             if (toward < 0f) onNext() else onPrevious()
                         }
                         // Not in the drag's own scope: once the item is no longer in front the drag is gone, and the item
-                        // must still come home.
-                        scope.launch { drag.animateTo(0f, settle) }
+                        // must still come home - and the faces behind it, which were printing in step with it, go with it.
+                        scope.launch {
+                            drag.animateTo(0f, settle) {
+                                pulled.value = if (width > 0) (abs(value) / (width * SWIPE_SHARE)).coerceIn(0f, 1f) else 0f
+                            }
+                        }
                     },
                 )
                 // No ripple, so keyboard focus is shown by a ring along the item's edge.
@@ -418,7 +468,17 @@ private fun DeckItem(
                     }
                 },
         ) {
-            if (printed) face() else plate()
+            if (printed) {
+                face()
+            } else {
+                plate()
+                // Under the front item as it is pulled: its face, printed in step with the pull (a draw value: nothing recomposes
+                // per frame), so what is behind is seen coming rather than a blank card.
+                if (peeking) {
+                    val weight = peekWeight(position)
+                    Box(Modifier.graphicsLayer { alpha = (pulled.value * weight).coerceIn(0f, 1f) }) { face() }
+                }
+            }
         }
     }
 }

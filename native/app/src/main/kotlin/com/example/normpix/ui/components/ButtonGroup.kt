@@ -45,9 +45,16 @@ fun ConnectedButtonGroup(
     height: Dp = 48.dp,
     /** The room either side of a segment's icon and words: less where three share a narrow card. */
     contentPadding: Dp = AppSpacing.md,
+    /**
+     * How round the group's two outer ends are, along its top and along its bottom: a pill (half the height) unless it is set into a
+     * shape of its own, when each is that shape's corner less the room the group is set in by - so the group follows its background
+     * instead of bulging out of it (owner, 2026-11-13: "follow the background shape"). A banner's bar has small top corners and
+     * large bottom ones.
+     */
+    outerTop: CornerSize = CornerSize(50),
+    outerBottom: CornerSize = CornerSize(50),
 ) {
     val haptics = rememberAppHaptics()
-    val outer = CornerSize(50)
     val inner = CornerSize(4.dp)
     Row(modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         buttons.forEachIndexed { index, button ->
@@ -56,10 +63,10 @@ fun ConnectedButtonGroup(
             Segment(
                 button = button,
                 shape = RoundedCornerShape(
-                    topStart = if (first) outer else inner,
-                    bottomStart = if (first) outer else inner,
-                    topEnd = if (last) outer else inner,
-                    bottomEnd = if (last) outer else inner,
+                    topStart = if (first) outerTop else inner,
+                    bottomStart = if (first) outerBottom else inner,
+                    topEnd = if (last) outerTop else inner,
+                    bottomEnd = if (last) outerBottom else inner,
                 ),
                 height = height,
                 contentPadding = contentPadding,

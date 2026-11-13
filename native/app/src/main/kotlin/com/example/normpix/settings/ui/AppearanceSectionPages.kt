@@ -44,9 +44,14 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
 import com.example.normpix.banks.ui.BankBadge
 import com.example.normpix.finance.domain.AccountKind
+import com.example.normpix.finance.domain.Category
+import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.ui.CategoryAvatarSample
 import com.example.normpix.finance.ui.CategoryGlyph
+import com.example.normpix.finance.ui.CategorySpend
+import com.example.normpix.finance.ui.SPEND_ASPECT
+import com.example.normpix.finance.ui.SpendCardFace
 import com.example.normpix.finance.ui.LocalCategoryIconShape
 import com.example.normpix.finance.ui.LocalCategoryIconStyle
 import com.example.normpix.finance.ui.MonthScopeButton
@@ -62,6 +67,8 @@ import com.example.normpix.settings.AppIcons
 import com.example.normpix.settings.AppPreferences
 import com.example.normpix.settings.AppPrefsState
 import com.example.normpix.settings.BackButtonStyle
+import com.example.normpix.settings.BackGestureSpeed
+import com.example.normpix.settings.BackGestureStyle
 import com.example.normpix.settings.BankIconStyle
 import com.example.normpix.settings.CardDesign
 import com.example.normpix.settings.CardsLayout
@@ -122,6 +129,7 @@ fun AppearanceSectionPage(section: AppearanceSection) {
                     AppearanceSection.ProgressIndicators -> ProgressIndicatorsSection(prefs, preferences, haptics)
                     AppearanceSection.Transitions -> {
                         PageTransitionsSection(prefs, preferences, haptics)
+                        BackGestureSection(prefs, preferences, haptics)
                         SheetTransitionsSection(prefs, preferences, haptics)
                         LaunchAnimationSection(prefs, preferences, haptics)
                         DockSelectionSection(prefs, preferences, haptics)
@@ -424,11 +432,13 @@ private fun EffectsSection(prefs: AppPrefsState, preferences: AppPreferences, ha
 private fun PageTransitionsSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
     ListSection(
         title = "Pages",
-        footer = "Pages, tabs, a screen's sections and the back gesture's preview all move in the style you pick. " +
-            "Sheets and dialogs have a style of their own, below. " +
+        footer = "Pages, tabs and a screen's sections all move in the style you pick. " +
+            "The back gesture and sheets each have a style of their own, below. " +
             "When animations are turned off in system settings, pages change without animating.",
         modifier = Modifier.selectableGroup(),
     ) {
+        // What the chosen style does, moving, above the choices: a page opening over another and closing again.
+        item { PageTransitionPreview(prefs.pageAnimation) }
         for (type in PageAnimationType.entries) {
             item {
                 RadioRow(
@@ -438,6 +448,55 @@ private fun PageTransitionsSection(prefs: AppPrefsState, preferences: AppPrefere
                     onClick = {
                         haptics.selection()
                         preferences.setPageAnimation(type)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The back gesture: what it shows as it is dragged ([BackGestureStyle]) and how long its close takes ([BackGestureSpeed]) - the
+ * same wherever it goes back, a tab or a page (owner, 2026-11-11).
+ */
+@Composable
+private fun BackGestureSection(prefs: AppPrefsState, preferences: AppPreferences, haptics: AppHaptics) {
+    ListSection(
+        title = "Back gesture",
+        footer = "What you see while you swipe back from the edge of the screen - on a tab and on a page alike. " +
+            "Your finger starts the close; letting go finishes it. Try it here: swipe back from this page.",
+        modifier = Modifier.selectableGroup(),
+    ) {
+        // The gesture itself, in the style and at the speed chosen: a finger from the edge, then letting go.
+        item { BackGesturePreview(prefs.backGestureStyle.animation(prefs.pageAnimation), prefs.backGestureSpeed.ms) }
+        for (style in BackGestureStyle.entries) {
+            item {
+                RadioRow(
+                    headline = style.label,
+                    supporting = style.description,
+                    selected = prefs.backGestureStyle == style,
+                    onClick = {
+                        haptics.selection()
+                        preferences.setBackGestureStyle(style)
+                    },
+                )
+            }
+        }
+    }
+    ListSection(
+        title = "Back gesture speed",
+        footer = "How long the close takes once you let go. When animations are turned off in system settings, back simply goes back.",
+        modifier = Modifier.selectableGroup(),
+    ) {
+        for (speed in BackGestureSpeed.entries) {
+            item {
+                RadioRow(
+                    headline = speed.label,
+                    supporting = speed.description,
+                    selected = prefs.backGestureSpeed == speed,
+                    onClick = {
+                        haptics.selection()
+                        preferences.setBackGestureSpeed(speed)
                     },
                 )
             }
@@ -784,7 +843,7 @@ private fun WalletLayoutSections(prefs: AppPrefsState, preferences: AppPreferenc
     }
     ListSection(
         title = "Card design",
-        footer = "Your saved cards and your accounts both wear the design you pick. The pictures are made-up cards.",
+        footer = "Your saved cards, your accounts and the categories in Top spending all wear the design you pick. The pictures are made up.",
         modifier = Modifier.selectableGroup(),
     ) {
         for (design in CardDesign.entries) {
@@ -829,25 +888,46 @@ private val PreviewAccount = AccountCardData(
 private fun CardDesignPreview(design: CardDesign, onClick: () -> Unit, modifier: Modifier = Modifier) {
     BoxWithConstraints(modifier.fillMaxWidth().clearAndSetSemantics {}) {
         val gap = AppSpacing.sm
-        val scale = ((maxWidth - gap) / 2) / PrintReferenceWidth
-        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-            ScaledCard(scale) { WalletCardFacePreview(PreviewCard, revealed = false, cardDesign = design) }
-            ScaledCard(scale) { AccountCardFacePreview(PreviewAccount, cardDesign = design) }
+        val whole = maxWidth
+        val scale = ((whole - gap) / 2) / PrintReferenceWidth
+        Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                ScaledCard(scale) { WalletCardFacePreview(PreviewCard, revealed = false, cardDesign = design) }
+                ScaledCard(scale) { AccountCardFacePreview(PreviewAccount, cardDesign = design) }
+            }
+            // A category's card, as Top spending draws it: as wide as the row, as it is on Home.
+            ScaledCard(whole / PrintReferenceWidth, aspect = SPEND_ASPECT) { SpendCardFace(design, PreviewSpend, compact = false) }
         }
         // A tap, and nothing a keyboard could land on (see MonthControlPreview).
         Box(Modifier.matchParentSize().pointerInput(onClick) { detectTapGestures { onClick() } })
     }
 }
 
+/** A made-up category's month for [CardDesignPreview]: nothing of the user's. */
+private val PreviewSpend = CategorySpend(
+    categoryId = 0L,
+    category = Category(
+        id = 0L, name = "Groceries", type = CategoryType.Expense, icon = "grocery", color = 1,
+        createdAt = LocalDateTime.of(2026, 1, 1, 0, 0), updatedAt = LocalDateTime.of(2026, 1, 1, 0, 0),
+    ),
+    month = MonthKey.of(LocalDateTime.now()),
+    amount = 1_245_000L,
+    count = 12,
+    share = 0.32,
+    previous = 1_000_000L,
+    budget = null,
+)
+
 /**
- * [content] laid out at the size a card is printed for ([PrintReferenceWidth] wide) and drawn at [scale] of it, from its top left,
- * taking only the scaled room. (A fixed size on a smaller parent would be centred on it, not pinned to a corner.)
+ * [content] laid out at the size a card is printed for ([PrintReferenceWidth] wide, [aspect] times as wide as tall) and drawn at
+ * [scale] of it, from its top left, taking only the scaled room. (A fixed size on a smaller parent would be centred on it, not
+ * pinned to a corner.)
  */
 @Composable
-private fun ScaledCard(scale: Float, content: @Composable () -> Unit) {
+private fun ScaledCard(scale: Float, aspect: Float = CARD_ASPECT, content: @Composable () -> Unit) {
     Layout(content = content, modifier = Modifier.clipToBounds()) { measurables, _ ->
         val width = PrintReferenceWidth.roundToPx()
-        val height = (width / CARD_ASPECT).roundToInt()
+        val height = (width / aspect).roundToInt()
         val face = measurables.first().measure(Constraints.fixed(width, height))
         layout((width * scale).roundToInt(), (height * scale).roundToInt()) {
             face.placeWithLayer(0, 0) {

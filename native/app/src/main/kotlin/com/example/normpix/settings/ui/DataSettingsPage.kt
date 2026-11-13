@@ -35,6 +35,7 @@ import com.example.normpix.backup.BackupFreshness
 import com.example.normpix.finance.data.FinanceBackupArchive
 import com.example.normpix.finance.data.FinanceBackupCodec
 import com.example.normpix.finance.data.FinanceSnapshot
+import com.example.normpix.finance.data.trimmedForBackup
 import com.example.normpix.finance.ui.LocalFinance
 import com.example.normpix.finance.ui.offerUndo
 import com.example.normpix.finance.ui.rememberFinanceActions
@@ -123,7 +124,8 @@ fun DataSettingsPage() {
     fun exportBackup() = run("backup") {
         val lock = overlays.askBackupLock("Your finance data, without the pictures attached to it") ?: return@run
         val now = LocalDateTime.now()
-        val snapshot = finance.repository.snapshot()
+        // Without the app's own default categories that nothing uses: a backup holds what is the user's (see trimmedForBackup).
+        val snapshot = finance.repository.snapshot().trimmedForBackup()
         val text = FinanceBackupCodec.encode(snapshot, exportedAt = now)
         val bytes = withContext(Dispatchers.Default) { lock.seal(text.toByteArray(Charsets.UTF_8)) }
         val saved = try {
@@ -145,7 +147,7 @@ fun DataSettingsPage() {
     fun exportFullBackup() = run("full") {
         val lock = overlays.askBackupLock("Your finance data, with the bills and receipts attached to it") ?: return@run
         val now = LocalDateTime.now()
-        val snapshot = finance.repository.snapshot()
+        val snapshot = finance.repository.snapshot().trimmedForBackup()
         val text = FinanceBackupCodec.encode(snapshot, exportedAt = now)
         val names = snapshot.transactions.mapNotNull { it.picture }
         val store = finance.pictures
@@ -494,7 +496,8 @@ internal fun describe(s: FinanceSnapshot): String {
     return listOf(
         count(s.transactions.size, "transaction"),
         count(s.accounts.size, "account"),
-        count(s.categories.size, "category", "categories"),
+        // A backup that leaves out the app's own unused defaults counts what it holds: the ones in use, and the user's own.
+        count(s.categories.size, "category", "categories") + if (s.removedDefaults != null) " of your own or in use" else "",
         count(s.budgets.size, "budget change"),
         count(s.recurringRules.size, "recurring payment"),
     ).joinToString(", ")

@@ -248,6 +248,8 @@ fun ListRow(
     headlineColor: Color = Color.Unspecified,
     supportingMaxLines: Int = 2,
     onLongClick: (() -> Unit)? = null,
+    overline: String? = null,
+    overlineColor: Color = Color.Unspecified,
 ) {
     androidx.compose.material3.ListItem(
         modifier = modifier.then(
@@ -261,6 +263,8 @@ fun ListRow(
         ),
         colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
         leadingContent = leading,
+        // A small line above the headline: what kind of thing this is (a status word), in [overlineColor] when one is given.
+        overlineContent = overline?.let { { Text(it, color = overlineColor, fontWeight = FontWeight.SemiBold, maxLines = 1) } },
         headlineContent = { Text(headline, color = headlineColor) },
         supportingContent = supporting?.let {
             { Text(it, maxLines = supportingMaxLines, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }

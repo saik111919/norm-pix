@@ -21,12 +21,12 @@ When a fact drifts: fix the prose that mentions it **first**, then change the va
 nothing needed changing.
 
 <!-- facts:begin -->
-verified_commit=0ffc5a43
-verified_date=2026-11-08
+verified_commit=df2dff40
+verified_date=2026-11-13
 versionName=1.5.0
-finance_db_version=12
+finance_db_version=13
 reminders_db_version=2
-finance_backup_format=2
+finance_backup_format=3
 app_backup_version=1
 cards_file_version=1
 min_sdk=26
@@ -217,7 +217,7 @@ ICON_IN_DISC
 | `settings/` (new setting, default, page), `SettingsCatalog`, `AppearanceSection` | `architecture.md` sections 6-7; `features.md` section 10 |
 | `onboarding/` (the welcome tour, its pictures and their motion) | `features.md` section 8, the **Welcome tour** paragraph; `design-system.md` sections 2 and 6 |
 | `navigation/` (routes, shell, navigator interface) | `architecture.md` section 5 |
-| `notifications/`, the bell, `LocalTopBarExtras` | `features.md` section 1; `architecture.md` section 5; `design-system.md` banners (`BannerCard`) |
+| `notifications/`, the bell, `LocalTopBarExtras` | `features.md` section 1; `architecture.md` section 5; `design-system.md` banners (the Notifications rows, the "+" strip) |
 | `ui/components`, `ui/theme`, blur, sheets, motion | `design-system.md` |
 | A new top-level package | the package map in `SKILL.md` (verify.sh fails otherwise) |
 | Test infrastructure (`testing/`, `robolectric.properties`) | `architecture.md` section 8; `build-test-release.md` section 5 |

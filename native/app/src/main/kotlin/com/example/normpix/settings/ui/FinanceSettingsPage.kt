@@ -10,6 +10,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.rounded.CurrencyExchange
 import androidx.compose.material.icons.rounded.StarOutline
@@ -157,6 +158,32 @@ fun FinanceSettingsPage() {
                                     },
                                 )
                             }
+                        }
+                    }
+                }
+                // Only where a swipe can delete at all.
+                RevealVisibility(visible = prefs.swipeActionsEnabled && prefs.transactionSwipeActions.delete) {
+                    ListSection(
+                        // A group of its own, apart from the radio group above it as every other group is: an untitled section has no
+                        // heading to carry the gap, so it stuck to "Delete only" (seen on the phone, 2026-11-13).
+                        modifier = Modifier.padding(top = AppSpacing.lg),
+                        footer = if (prefs.swipeDeleteAsks) {
+                            "A swipe to delete asks before anything is removed."
+                        } else {
+                            "A swipe to delete removes the transaction at once. Undo is offered for a few seconds."
+                        },
+                    ) {
+                        item {
+                            SwitchRow(
+                                checked = prefs.swipeDeleteAsks,
+                                onCheckedChange = {
+                                    haptics.selection()
+                                    preferences.setSwipeDeleteAsks(it)
+                                },
+                                headline = "Ask before a swipe deletes",
+                                supporting = "Off deletes at once, with Undo.",
+                                leading = { Icon(Icons.Outlined.DeleteOutline, contentDescription = null) },
+                            )
                         }
                     }
                 }

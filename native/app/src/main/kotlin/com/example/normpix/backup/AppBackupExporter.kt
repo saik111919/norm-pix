@@ -5,6 +5,7 @@ import com.example.normpix.AppContainer
 import com.example.normpix.BuildConfig
 import com.example.normpix.finance.data.FinanceBackupCodec
 import com.example.normpix.finance.data.FinanceSnapshot
+import com.example.normpix.finance.data.trimmedForBackup
 import com.example.normpix.reminders.ReminderBackupCodec
 import com.example.normpix.settings.CustomFont
 import com.example.normpix.settings.ProfilePhotos
@@ -56,7 +57,8 @@ class AppBackupExporter(private val context: Context, private val container: App
 
     /** Reads it all, as of [now]. [cardsFile] is the saved cards as a locked cards file, or null to leave them out. */
     suspend fun gather(now: LocalDateTime, cardsFile: String?): Source {
-        val snapshot = container.finance.repository.snapshot()
+        // Without the app's own default categories that nothing uses, as in a finance backup (see trimmedForBackup).
+        val snapshot = container.finance.repository.snapshot().trimmedForBackup()
         val settings = container.preferences.exportAll()
         container.reminders.ensureLoaded()
         val reminders = container.reminders.state.value.reminders

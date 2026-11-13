@@ -1,6 +1,6 @@
 # NormPix design system and UI rules
 
-Verified 2026-10-27 against commit `763cc08f`. The owner judges the app by how it looks and feels on their phone, and
+Verified 2026-11-13 against commit `df2dff40` (plus the uncommitted work of 2026-11-09 to 11-13). The owner judges the app by how it looks and feels on their phone, and
 corrects design by screenshot. Reuse what exists; a new bespoke widget needs a reason.
 
 Contents: 1 Theme and tokens · 2 The shared components · 3 Sheets, messages and menus · 4 Blur and glass ·
@@ -94,9 +94,42 @@ Use these before writing anything new:
   as the pill with how much of how much; the **crash** report has neither (one full-width panel). Large text stacks the panels. The pieces
   (`Panel`, `FigureBody`, `PillBody`, `CyclePill`, the shapes) are the summary banner's, made `internal`. `spoken()` says the figure and the pill too. Items of a
   deck must be the same size, so keep each line to one line (the title excepted as above). The ratchet counts hand-set spacing: `BannerStack.kt` is now clean.
-  **`BannerCard`** (2026-11-08) is the same banner on its own, not in a deck - what the Notifications page lists: it keeps the one-thing-to-read
-  semantics of a stacked banner (`contentDescription` of the three lines, `Role.Button`, the open action, and the two buttons as custom
-  accessibility actions), so the `Panel`s' `clearAndSetSemantics` can never leave a banner unreadable, but it draws nothing over or behind it.
+  **Home shows one of these for everything waiting** (2026-11-09, `attentionBanner`: no figure panel, so the kinds' line has the full width) that opens
+  the Notifications page, plus the update's own; the other banners are **not drawn as banners any more** - the Notifications page lists them as
+  `ListSection` rows (`ListRow` with `overline` = the status word in the status colour, a `LeadingIcon` in the solid status colour, the figure **at the
+  row's end** - `Banner.rowFigure()`, "Late by / 3 days", dropped where the words already say it - (owner, 2026-11-11: "utilize space well"), an
+  `AppLinearProgress(calm = true)` in line with the text for a bar, and the buttons as one `ConnectedButtonGroup` across the row; a row whose only
+  button would do what pressing it does has none, `Banner.rowActions()`). `BannerCard` (the earlier full banners on that page, 2026-11-08) was removed
+  with that. Holding a deck still spreads it (cards, top spending).
+- **A group of buttons follows the shape it is set in** (2026-11-13, owner: "follow the background shape", on the banner's bar and the
+  Notifications rows): `ConnectedButtonGroup(outerTop, outerBottom)` take the corner of each outer end - a pill by default, else the
+  container's corner less the inset (`BannerActions`: top `Inner - 4 dp`, bottom `Outer - 4 dp`; a notification row: top 8 dp, bottom the
+  group's large corner less the inset for the last row of a group, else the small one between rows). A full pill in a bar with small top
+  corners bulged out of it.
+- **Pulling a stack shows what is under it** (2026-11-13, owner: "can't we show the back cards' details"; `DeckStack`): the front item writes
+  how far it has been pulled (`DragShare`, 0..1 of what makes a swipe count) as it is dragged and as it comes home; the next two items
+  behind it (`peekWeight`: 1 and 0.5) compose their `face` **only while a pull is on** (one derived bit) and print it at alpha
+  `share * weight` read in `graphicsLayer` - no per-frame recomposition. Every deck gets it: cards, accounts, category cards, banners,
+  bills. Tests: `DeckPeekTest`.
+- **The strip above the "+" menu is a container** (2026-11-13: "give background to this and follow the same blur background as
+  sheets"; `NotificationStrip`): one rounded 28 dp surface behind the rows - `frostedGlass` of the page behind plus the sheet's 62%
+  (`AppFrostedTokens.surfaceAlpha`) tint of `surfaceContainerLow`, solid where `rememberFrostedChrome` says nothing is blurred - with the
+  rows as solid `surfaceContainerHigh` items on it.
+- **The category card has the four Card designs** (2026-11-13, owner: "same setting apply to this also"; `finance/ui/CategoryCardDesigns.kt`):
+  `SpendCardFace(design, spend, compact)` / `SpendCardPlate(design, category)` for Home's Top spending stack and the Insights carousel
+  (`compact` = the carousel's print: who and what it came to). Classic is the card as it was (`SpendFace` / `SpendCarouselFace`); Banner a wide
+  top panel and two small ones in the category's colour (`SpendPanel`, the bank cards' corner sizes); Ledger flat on `surfaceContainerHigh`
+  with a hairline; Tinted flat on the category's tone with rings and a filled share chip. Every face is `SPEND_ASPECT` wide-to-tall so a deck
+  and its plate agree. `rememberCardDesign()` reads the one setting; its previews are in Settings > Appearance > Layouts > Card design. Pictures:
+  `app/build/qa_category_cards/` (`CategoryCardDesignRenderTest`).
+- **A banner stack moves its panels over a fixed bar of buttons** (2026-11-11, owner: "this part can keep as it is while above part moves, because it
+  is the same, and instead of the buttons use button group"): `DeckStack(footer = ...)` draws `footer(front)` under the stack in one place, so swiping
+  changes which item is in front and the bar under it is that item's (laid out in a column, each item has its own); `BannerStack` stacks only
+  `BannerTop` (the panels; shape `StackedTop`) and its bar is `BannerActions`: the quieter button first in a tint of the status colour, the main one
+  filled with the colour (`BannerColors.solid/onSolid`, checked 4.5:1 in `BannerColorsTest`) as one `ConnectedButtonGroup`; a **lone button is the
+  tint**, not the solid - a bar of solid status colour that wide shouted (seen in a render). **Bills due** (`screens/HomeBills.kt`) are the same: one
+  bill is a plain `SplitStatBanner`; several are a `DeckStack` (soonest in front, swipe for the next, hold to lay out, the section heading's
+  `StackButton`; `SplitStatBanner(plate = true)` is the blank card behind). Home and the Wallet both.
 - **Summary banner** (`SplitStatBanner.kt`, 2026-11-07, from the owner's reference picture - a "Due date" panel with a progress pill beside a
   "Total" panel): two panels in one `secondaryContainer`, big outer corners (`AppRadius.xxl`) and 8 dp where they meet, a 4 dp seam as the divider (the
   hero's language), fine curved lines drawn over both at 7% of the ink (`curvedLines`, 16 dp apart). Left (`BannerProgress`): title, a line under it, a
@@ -296,6 +329,22 @@ Use these before writing anything new:
 - Page transitions: six styles (`PageAnimationType`); only the page on top changes opacity (no ghosting); the window
   background follows the app's surface colour so Dark on a light phone never flashes white. Judge motion on the qa/release
   build: a debug build recomposes Home from scratch when a page closes and can stall.
+- **The back gesture is one thing everywhere** (2026-11-11, owner's recording: "not consistent throughout the app ... it is fast";
+  `navigation/BackGesture.kt`). Two rules, the same for a tab, a pushed page and a sheet: **the finger plays the start of the close,
+  not all of it** (`BackGesture.eased(raw)` = raw^1.7: half the gesture is a third of the close) and **letting go plays the rest in
+  what is left of one clock** (`finishMs`, of the Back gesture speed: Relaxed 560 / Standard 420 / Brisk 300 ms). The style is
+  `BackGestureStyle` (Match pages | Shrink | Slide | Fade -> a `PageAnimationType` whose *close* is played, `LocalBackAnimation`);
+  both are Settings > Appearance > Transitions > Back gesture. Tabs draw it by hand (`AppShell`, `BackPreview`); **pushed pages go
+  through `AppNavHost`, which must pass `predictivePopEnter/ExitTransition`** (`BackGestureTransitions`) - left out, navigation-compose
+  2.10 plays its own default, `scaleOut(0.7)`, then drops the page in a frame, whatever the page style (that was the inconsistency);
+  the shell under a page learns it is the gesture through `ShellBeneath.byGesture`. `PageWindow` reads how much of a sinking page shows
+  in **`onPlaced`** from `boundsInRoot()` (`onGloballyPositioned` is not told of every frame when the page does not move on screen, and
+  the parent's own size is always the page's). **Sheets**: `Modifier.sheetBackGesture` (`ui/components/SheetBackGesture.kt`) is a
+  `PredictiveBackHandler` in the sheet's window that moves the sheet down as a drag would - by nested scroll, the public way into
+  Material's sheet - so the sheet style follows it; let go = `hide()`, given up = `expand()` / `partialExpand()` said outright
+  (Material settles a sheet more than 56 dp from rest *by position*, which would close it). A form that must ask first is not moved
+  (`SheetDismissConfirmation`'s handler is newer). Tests: `BackGestureTest`, `PageBackGestureTest` (a real host and a real gesture;
+  pictures in `app/build/qa_back_gesture/`), `TabBackPreviewTest`, `SheetBackTest`.
 
 ## 6. Motion
 
@@ -312,7 +361,8 @@ what darkens (rain) is in the card's ink.
 
 Reduced motion (system "remove animations") removes the app's own motion everywhere (`AppMotion.duration` returns 0,
 `spatial()` becomes `snap()`; the card tilt never starts). Material's own `ModalBottomSheet` springs/curves are used for
-sheets; do not invent custom sheet motion. Sheet style is separate from page style (`SheetAnimationType`).
+sheets; do not invent custom sheet motion (the back gesture on a sheet moves it as a drag does and then calls Material's own
+`hide()`, section 5). Sheet style is separate from page style (`SheetAnimationType`).
 
 ## 7. Accessibility (a hard requirement here, not polish)
 
@@ -320,6 +370,12 @@ sheets; do not invent custom sheet motion. Sheet style is separate from page sty
   colour alone (overdue = badge + text + colour); announcements use polite live regions.
 - Check large text: the layout must hold at 1.3x (dock labels) and 1.6x font scale (`LargeTextTest`, `LargeTextLayoutTest`).
 - Contrast is tested per theme. Pictures in the About guide are inert and hidden from screen readers.
+- **Charts** (`finance/ui/Charts.kt`; rules from the Insights redesign of 2026-11-13, sources in `verified-facts.md` "Charts and Insights design"):
+  bars compare amounts and stand on a **zero baseline** (never a truncated axis), rounded tops and a flat foot (`drawBar`); lines show change over
+  time (`PaceChart`: this period solid, the one before dashed, a "Last month" key); a chart sits in a panel of its own under a plain-words title and
+  a one-sentence footer saying what the lines are and how to read a day; fewer grid lines because the chart can be touched, and the whole plot
+  area is the touch target; the main message is a sentence above the chart (`verdict()`), so nothing critical needs a touch; change is never
+  colour alone (arrow + figure + word, and not red/green); the canvas is hidden from TalkBack and a spoken summary stands in for it.
 
 ## 8. Wide screens
 

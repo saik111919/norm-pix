@@ -6,9 +6,12 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
+import com.example.normpix.notifications.NotificationsPage
+import com.example.normpix.notifications.ProvideNotifications
 import com.example.normpix.testing.TestEnvironment
 import java.time.LocalDateTime
 import kotlin.test.assertEquals
@@ -22,9 +25,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Home's "Back up your data" banner: there when the last backup is older than the reminder (or there never was one) and there is
- * something to keep; not for a recent backup, a reminder that is off, a phone with nothing in it or the sample set; and "Later" puts
- * it off. Its button opens Settings > Data & backup.
+ * The "Back up your data" notification (counted in Home's one Needs attention banner, and a row of its own on the Notifications page,
+ * which is what these look at): there when the last backup is older than the reminder (or there never was one) and there is something
+ * to keep; not for a recent backup, a reminder that is off, a phone with nothing in it or the sample set; and "Later" puts it off. Its
+ * button opens Settings > Data & backup.
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -47,11 +51,12 @@ class HomeBackupBannerTest {
         finance.saveAccount(Account(name = "Savings", kind = AccountKind.Bank, createdAt = now, updatedAt = now))
     }
 
+    /** The Notifications page on the real gathering (`ProvideNotifications`), once it has drawn its foot: the rows come before it. */
     private fun showHome() {
-        compose.setContent { env.Content { HomeScreen() } }
+        compose.setContent { env.Content { ProvideNotifications { NotificationsPage() } } }
         compose.waitUntil(10_000) {
             compose.waitForIdle()
-            compose.onAllNodesWithText("Add income").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("Notification settings").fetchSemanticsNodes().isNotEmpty()
         }
     }
 
@@ -77,10 +82,8 @@ class HomeBackupBannerTest {
         showHome()
         assertTrue(bannerShown("Last backup 20 days ago"))
 
-        // The banner's buttons are custom actions on it, as a screen reader finds them.
-        val later = compose.onNode(hasContentDescription("Last backup 20 days ago", substring = true)).fetchSemanticsNode()
-            .config[SemanticsActions.CustomActions].first { it.label == "Later" }
-        compose.runOnUiThread { later.action() }
+        // The row's own Later button.
+        compose.onNodeWithText("Later").performClick()
         compose.waitForIdle()
         assertTrue(env.preferences.state.value.backupNudgeSnoozedUntil > System.currentTimeMillis(), "put off into the future")
         assertTrue(!bannerShown("Last backup "), "and gone for now")

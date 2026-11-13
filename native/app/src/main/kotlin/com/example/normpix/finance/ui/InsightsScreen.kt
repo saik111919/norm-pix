@@ -88,6 +88,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 /** What Insights shows: one month (the default), or days the user picked. */
@@ -270,25 +271,27 @@ fun InsightsScreen(listState: LazyListState = rememberLazyListState()) {
                                 onAction = { actions.addTransaction() },
                             )
                         } else {
-                            // Reading order: the answer, the months it sits among, what it is made of, what moved,
-                            // and - one tap away - the supporting detail.
+                            // Reading order, this month before the months around it (research, 2026-11-13; both reports): the answer
+                            // and how it compares, how it built up, what it is made of - each category with what changed in it, so
+                            // there is no second list of the same categories - who it was for, then the months it sits among and,
+                            // one tap away, the supporting detail.
                             val hasActivity = data.summary.count > 0
                             val hasDetail = data.daily.isNotEmpty() || data.income.isNotEmpty()
                             AdaptiveColumns(
                                 narrow = {
                                     if (hasActivity) Snapshot(data) else EmptyMonth(data, onAdd = { actions.addTransaction() })
-                                    Trend(data)
+                                    if (hasActivity) PacePanel(data)
                                     if (data.expenses.isNotEmpty()) WhereMoneyWent(data)
                                     if (data.expenses.isNotEmpty()) ByPerson(data)
-                                    if (hasActivity) WhatChanged(data)
+                                    Trend(data)
                                     if (hasDetail) MoreDetail(data)
                                     Footnote()
                                 },
                                 left = {
                                     if (hasActivity) Snapshot(data) else EmptyMonth(data, onAdd = { actions.addTransaction() })
+                                    if (hasActivity) PacePanel(data)
                                     if (data.expenses.isNotEmpty()) WhereMoneyWent(data)
                                     if (data.expenses.isNotEmpty()) ByPerson(data)
-                                    if (hasActivity) WhatChanged(data)
                                 },
                                 right = {
                                     Trend(data)
@@ -360,9 +363,17 @@ private fun comparisonBasis(data: InsightsData): String = when (val p = data.per
 }
 
 /**
- * The one answer the screen exists for, as the hero (the same group as Home's): how much went out, a pill saying whether
- * that is more or less than last month, and the month building up day by day against the one before. Under it, what came
- * in and what was left over.
+ * What every comparison on this screen says it is against, in the one phrase the hero uses ("this time last month", or the month's
+ * name once it is over): the hero's verdict and each category's change must not name the same thing two ways.
+ */
+private fun heroBasis(data: InsightsData): String = when (val period = data.period) {
+    is InsightsPeriod.Month -> if (data.inProgress) "this time last month" else monthLabel(period.month.previous)
+    is InsightsPeriod.Days -> comparisonBasis(data)
+}
+
+/**
+ * The one answer the screen exists for, as the hero (the same group as Home's): how much went out and a sentence saying how that
+ * compares with last month. Under it, what came in and what was left over. How the month built up is the panel under the hero.
  */
 @Composable
 private fun Snapshot(data: InsightsData) {
@@ -396,30 +407,34 @@ private fun Snapshot(data: InsightsData) {
         }
         if (change != null) {
             Spacer(Modifier.height(AppSpacing.sm))
+            // The verdict as a sentence with the amount (research, 2026-11-13: Apple Card puts "how much more or less than the
+            // previous period" under its total): the difference in rupees first, the percentage after it.
             HeroChangePill(
                 trendIcon(change),
-                comparedWith(
-                    change,
-                    when (period) {
-                        is InsightsPeriod.Month -> if (data.inProgress) "this time last month" else monthLabel(period.month.previous)
-                        is InsightsPeriod.Days -> comparisonBasis(data)
-                    },
-                ),
+                verdict(change = change, difference = s.expense - data.previous.expense, basis = heroBasis(data), money = money),
             )
         }
-        SpendingPace(data, money)
     }
 }
 
+/** "₹4,100 less than this time last month (7%)": what the gap is, in money, then as a share. "About the same as ..." when it is. */
+internal fun verdict(change: Double, difference: Long, basis: String, money: MoneyFormatter): String {
+    val percent = (abs(change) * 100).roundToInt()
+    if (percent == 0 || difference == 0L) return "About the same as $basis"
+    return "${money.format(abs(difference), trimZeroFraction = true)} ${if (difference < 0) "less" else "more"} than $basis ($percent%)"
+}
+
 /**
- * The hero's chart: the month's spending building up day by day, the month before dashed behind it, so "more or less than
- * usual" is a gap you can see on any day. A key under it names the two lines; touching the chart reads the day there
- * instead. Nothing when the month has nothing to draw.
+ * The month building up day by day, the month before dashed behind it, so "more or less than usual" is a gap you can see on any
+ * day - as a panel of its own, under the hero (owner, 2026-11-13: "the chart is not quite likable"). It was the small chart inside
+ * the hero card: both researchers put the main question in the biggest chart, and Apple's guidance is to give a compact screen's
+ * chart the plot's whole width and to let the whole plot area be touched, which now it can. Above it, the amount the chart is
+ * pointing at (the month so far, or the day touched) with the dashed line's key beside it. Nothing when there is nothing to draw.
  */
 @Composable
-private fun SpendingPace(data: InsightsData, money: MoneyFormatter) {
+private fun PacePanel(data: InsightsData) {
+    val money = rememberFinanceState().money
     val scheme = MaterialTheme.colorScheme
-    val onHero = LocalContentColor.current
     val period = data.period
     val start = data.start
     val beforeStart = period.before.start
@@ -450,46 +465,62 @@ private fun SpendingPace(data: InsightsData, money: MoneyFormatter) {
         append("$nowLabel ${money.format(data.summary.expense)}")
         if (previous.isNotEmpty()) append(", $spokenBefore ${money.format(data.previous.expense)}")
     }
-    val reference = onHero.copy(alpha = 0.55f)
-    val keyText = onHero.copy(alpha = 0.85f)
+    // A dashed line is a different shape, not only a different colour (never colour alone), and quieter than the line it is behind.
+    val reference = scheme.onSurfaceVariant.copy(alpha = 0.75f)
+    val d = day
+    val sameDay = d?.coerceAtMost(previous.size)
+    val heading = when (period) {
+        is InsightsPeriod.Month -> if (data.inProgress) "How this month built up" else "How ${monthLabel(period.month)} built up"
+        is InsightsPeriod.Days -> "How these days built up"
+    }
 
-    Spacer(Modifier.height(AppSpacing.xl))
-    PaceChart(
-        current = current,
-        previous = previous,
-        days = maxOf(period.days, period.beforeDays),
-        semanticsLabel = spoken,
-        lineColor = onHero,
-        referenceColor = reference,
-        guideColor = onHero.copy(alpha = 0.3f),
-        ringColor = scheme.primary,
-        scrubDay = day,
-        onScrub = { day = it },
-    )
-    Spacer(Modifier.height(AppSpacing.md))
-    // The chart already says this to a screen reader; the key is for the eye.
-    Row(Modifier.fillMaxWidth().clearAndSetSemantics {}, horizontalArrangement = Arrangement.spacedBy(AppSpacing.lg)) {
-        val d = day
-        ChartKey(
-            color = onHero,
-            label = if (d == null) nowLabel else "${shortDate(start.plusDays(d - 1L))} · ${money.compact(current[d - 1])}",
-            textColor = keyText,
+    // Mid-sentence "this month" and "last month" are lower case; a month's name, once it is over, keeps its capital.
+    fun inSentence(label: String) = if (period is InsightsPeriod.Month && !data.inProgress) label else label.replaceFirstChar { it.lowercase() }
+    Panel(
+        title = heading,
+        footer = if (previous.isNotEmpty()) {
+            "The solid line is ${inSentence(nowLabel)}; the dashed one is ${inSentence(beforeKey)}, day for day. Touch or drag along the chart to read a day."
+        } else {
+            "Touch or drag along the chart to read a day."
+        },
+    ) {
+        // What the chart points at, above it: the total so far, or the day touched. The chart says all this to a screen reader already.
+        ChartReadout(
+            label = if (d == null) nowLabel else shortDate(start.plusDays(d - 1L)),
+            value = money.format(if (d == null) current.last() else current[d - 1]),
+            modifier = Modifier.clearAndSetSemantics {},
+            key = if (previous.isEmpty()) {
+                null
+            } else {
+                {
+                    ChartKey(
+                        color = reference,
+                        label = if (sameDay != null) "$beforeKey · ${money.compact(previous[sameDay - 1])}" else beforeKey,
+                        dashed = true,
+                    )
+                }
+            },
         )
-        if (previous.isNotEmpty()) {
-            val sameDay = d?.coerceAtMost(previous.size)
-            ChartKey(
-                color = reference,
-                label = if (sameDay != null) {
-                    "${shortDate(beforeStart.plusDays(sameDay - 1L))} · ${money.compact(previous[sameDay - 1])}"
-                } else {
-                    beforeKey
-                },
-                dashed = true,
-                textColor = keyText,
-            )
-        }
+        Spacer(Modifier.height(AppSpacing.lg))
+        PaceChart(
+            current = current,
+            previous = previous,
+            days = maxOf(period.days, period.beforeDays),
+            semanticsLabel = spoken,
+            lineColor = scheme.primary,
+            referenceColor = reference,
+            guideColor = scheme.outlineVariant,
+            // The ring round the dot is the panel's own tone, so the dot sits cut out of the lines rather than stuck on them.
+            ringColor = scheme.surfaceContainer,
+            scrubDay = day,
+            onScrub = { day = it },
+            height = PACE_CHART_HEIGHT,
+        )
     }
 }
+
+/** Tall enough for the gap between the two lines to be read; the old one, in the hero card, was 104 dp. */
+private val PACE_CHART_HEIGHT = 168.dp
 
 /** What the numbers are, said once, at the bottom instead of repeated under every block. */
 @Composable
@@ -519,44 +550,6 @@ private fun EmptyMonth(data: InsightsData, onAdd: () -> Unit) {
         actionIcon = Icons.Rounded.Add,
         onAction = onAdd,
     )
-}
-
-/** What moved compared with the same period last month: the category that grew most and the one that shrank most. */
-@Composable
-private fun WhatChanged(data: InsightsData) {
-    val finance = rememberFinanceState()
-    val money = finance.money
-    val changes = categoryChanges(data.expenses, data.previousExpenses)
-    val up = changes.largestIncrease()
-    val down = changes.largestDecrease()
-    val basis = comparisonBasis(data)
-
-    @Composable
-    fun Change(label: String, change: CategoryChange, icon: ImageVector, word: String) {
-        val category = finance.category(change.categoryId)
-        ListRow(
-            headline = category?.name ?: "Deleted category",
-            supporting = "$label: ${money.format(abs(change.delta))} $word than $basis (${money.format(change.previous)} to ${money.format(change.current)})",
-            supportingMaxLines = 3,
-            leading = { CategoryAvatar(category) },
-            trailing = { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-        )
-    }
-
-    ListSection(
-        title = "What changed",
-        footer = if (up == null && down == null) {
-            "Nothing to compare yet: there was no spending in $basis."
-        } else {
-            "Spending categories compared with $basis."
-        },
-    ) {
-        up?.let { item { Change("Largest increase", it, Icons.AutoMirrored.Rounded.TrendingUp, "more") } }
-        down?.let { item { Change("Largest decrease", it, Icons.AutoMirrored.Rounded.TrendingDown, "less") } }
-        if (up == null && down == null) {
-            item { ListRow(headline = "No category changes", supporting = "Spending in each category matches $basis.") }
-        }
-    }
 }
 
 private const val COLLAPSED_ROWS = 5
@@ -645,6 +638,10 @@ private fun WhereMoneyWentList(data: InsightsData) {
 
     val biggestShare = percentLabel(shareOf(biggest.amount, total))
     val month = data.month
+    // What each category came to in the period it is compared with. With nothing spent then there is nothing to compare, and no
+    // row says "new" about every category of a first month.
+    val basis = heroBasis(data)
+    val compared = data.previousExpenses.isNotEmpty()
     ListSection(
         title = "Where your money went",
         intro = if (month != null) {
@@ -652,7 +649,7 @@ private fun WhereMoneyWentList(data: InsightsData) {
         } else {
             "$biggestName is your biggest spend: $biggestShare of spending ${data.within}."
         },
-        footer = "Tap a category to see its transactions.",
+        footer = if (compared) "Tap a category to see its transactions. The small figure is its change from $basis." else "Tap a category to see its transactions.",
     ) {
         for (t in rows) item {
             val category = finance.category(t.categoryId)
@@ -660,13 +657,17 @@ private fun WhereMoneyWentList(data: InsightsData) {
             val percent = percentLabel(shareOf(t.amount, total))
             val count = "${t.count} ${if (t.count == 1) "transaction" else "transactions"}"
             val open = { data.openCategory(navigator, t.categoryId) }
+            val before = data.previousExpenses.firstOrNull { it.categoryId == t.categoryId }?.amount ?: 0L
+            val change = if (compared) CategoryRowChange(delta = t.amount - before, isNew = before == 0L) else null
             CategoryShareRow(
                 category = category,
                 amount = t.amount,
                 share = shareOf(t.amount, total),
+                change = change,
                 onClick = open,
                 modifier = Modifier.clearAndSetSemantics {
-                    contentDescription = "$name, ${money.format(t.amount)}, $percent, $count. Show transactions"
+                    val said = change?.spoken(money, basis)?.let { ", $it" }.orEmpty()
+                    contentDescription = "$name, ${money.format(t.amount)}, $percent, $count$said. Show transactions"
                     role = Role.Button
                     onClick { open(); true }
                 },
