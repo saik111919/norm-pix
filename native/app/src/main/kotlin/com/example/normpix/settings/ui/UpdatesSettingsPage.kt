@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.InstallMobile
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PhoneAndroid
@@ -121,6 +122,7 @@ fun UpdatesSettingsPage() {
                             )
                         }
                     }
+                    UpdateFilesSection()
                     return@Column
                 }
                 ListSection(
@@ -151,7 +153,11 @@ fun UpdatesSettingsPage() {
                         )
                     }
                 }
-                if (!prefs.updateChecksEnabled) return@Column
+                if (!prefs.updateChecksEnabled) {
+                    // A file left in Downloads is there whether or not NormPix checks by itself.
+                    UpdateFilesSection()
+                    return@Column
+                }
 
                 ListSection(title = "How often", modifier = Modifier.selectableGroup()) {
                     for (choice in UpdateCheckEvery.entries) {
@@ -305,6 +311,7 @@ fun UpdatesSettingsPage() {
                         }
                     }
                 }
+                UpdateFilesSection()
             }
             if (pickingTime) {
                 TimePickerDialogFor(
@@ -316,6 +323,32 @@ fun UpdatesSettingsPage() {
                     onDismiss = { pickingTime = false },
                 )
             }
+        }
+    }
+}
+
+/**
+ * "Update files": clearing away an APK a browser or the GitHub app left in Downloads. The updates NormPix downloads itself are
+ * deleted once installed ([com.example.normpix.updates.UpdateDownloader.clearInstalled]); these are the user's, and NormPix can
+ * only reach the ones they pick (the system's picker; no storage permission), so the row opens it. See [rememberApkCleanup].
+ * Shown whatever else the page shows: with updates off, and in a build that never updates itself.
+ */
+@Composable
+private fun UpdateFilesSection() {
+    val pickApks = rememberApkCleanup()
+    ListSection(
+        title = "Update files",
+        footer = "Updates NormPix downloads itself are deleted once they're installed. A file your browser saved stays in " +
+            "Downloads until it's deleted; NormPix only touches the files you pick.",
+    ) {
+        item {
+            SettingsRow(
+                headline = "Delete downloaded APK files",
+                supporting = "Pick NormPix files left in Downloads after an update",
+                icon = Icons.Outlined.DeleteSweep,
+                hue = SettingsPageUpdatesHue,
+                onClick = pickApks,
+            )
         }
     }
 }

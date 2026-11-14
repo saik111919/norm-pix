@@ -368,6 +368,14 @@ path, never NormPix's own providers - judged by the authority **after the last `
 - **Update now** downloads the APK (foreground `UpdateDownloadService` so it continues with the app closed; notification with
   Cancel/Install), verifies size, SHA-256, package name, version and **signing key**, and only then hands it to Android's
   installer, which asks the user. The app never uninstalls itself. Only release builds update themselves.
+- **Leftover APKs** (2026-11-14, owner: "if an apk is left can we give an option to delete it"): the app's own downloads are deleted once installed
+  (`UpdateDownloader.clearInstalled`); one a browser or the GitHub app saved in Downloads is not NormPix's to list. Settings > Automatic updates >
+  "Update files" > **Delete downloaded APK files** (`UpdateFilesSection`, on the page in every state; `settings/ui/ApkCleanup.kt`, logic in
+  `updates/ApkFiles.kt`) opens the system picker for APKs (`OpenMultipleDocuments`, after `lock.expectExternalActivity()`), then a confirm sheet lists the files
+  (name, size, "Not named like a NormPix update" - `isNormPixApkName` - still deletable; "Can't be deleted from here" when the provider's
+  `FLAG_SUPPORTS_DELETE` is off, then not counted or tried), deletes with `DocumentsContract.deleteDocument` and says the result in a snackbar after the sheet
+  closes. **It uses the picker on purpose: listing Downloads would need `MANAGE_EXTERNAL_STORAGE`, a new permission and a Play Protect risk.** Never log
+  a file's name. Tests: `ApkFilesTest`, `ApkCleanupTest` (a fake registry answers the picker, a fake `ApkFileStore` stands for the files), `UpdateUiTest`.
 - **Changelog**: the update page holds a **Changelog pill** opening `ChangelogPage` (all published versions, newest first,
   from the releases' own notes, cached for offline reading). The changelog loads only there.
 - **Preview update channel** (opt-in builds from `features`): designed, **not built** - no code exists. See the owner notes:

@@ -48,7 +48,7 @@ Use these before writing anything new:
   tests landed on the bar.
   Secondary icon buttons (`FloatingActionIconButton`: Delete, Remind, Reset) go in its `actions` slot; `errorText` stays a line above it.
   The filter sheet uses the same bar and fade. No Cancel/close,
-  `DiscardChangesGuard` asks before dropping unsaved changes, on Back too - section 3), `ConfirmSheetContent` (every confirm/alert),
+  `DiscardChangesGuard` asks before dropping unsaved changes, on Back too - section 3), `ConfirmSheetContent` (every confirm/alert; an optional `body` slot holds what the decision is about, e.g. the files to delete, capped in height so the buttons stay in reach),
   `OptionSheet` (`OptionSheet.kt`: the one sheet for a single or a multiple choice; a header with an optional subtitle and, for multiple choice only, a 48 dp
   confirm circle; a search field only when `searchPlaceholder` is given (banks); the options as one `ListSegment` group (20 dp outer / 4 dp inner corners) with
   a radio or checkbox, the label in `primary` + SemiBold when chosen, and a leading / trailing slot (bank logos, category avatars); an optional full-width tonal

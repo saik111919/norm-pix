@@ -75,7 +75,9 @@ fun SheetHeader(
  * What a yes / no decision looks like: the same bottom sheet every form uses, not a dialog floating mid-screen.
  * An optional icon, the question as a heading, what it means, then the answer as full-width buttons at thumb height -
  * the action first, "Cancel" under it. [cancelLabel] null makes it an acknowledgement with a single button.
- * A destructive action wears the error colors, so it can't be mistaken for an ordinary one.
+ * A destructive action wears the error colors, so it can't be mistaken for an ordinary one. [body], when given, is what the
+ * decision is about (a list of the files to delete), between the message and the buttons; it keeps to its own height (a list
+ * scrolls), so the buttons stay in reach.
  */
 @Composable
 fun ConfirmSheetContent(
@@ -88,6 +90,7 @@ fun ConfirmSheetContent(
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    body: (@Composable () -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     Column(
@@ -113,6 +116,10 @@ fun ConfirmSheetContent(
         if (message != null) {
             Spacer(Modifier.height(AppSpacing.sm))
             Text(message, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+        }
+        if (body != null) {
+            Spacer(Modifier.height(AppSpacing.md))
+            body()
         }
         Spacer(Modifier.height(AppSpacing.xl))
         Button(

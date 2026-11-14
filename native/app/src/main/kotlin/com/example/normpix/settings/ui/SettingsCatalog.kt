@@ -165,6 +165,7 @@ object SettingsCatalog {
         SettingsEntry("How often to check for updates", SettingsPage.Updates, listOf("how often", "frequency", "interval", "update schedule", "daily", "weekly", "twice a day", "once a day", "every 3 days", "once a week")),
         SettingsEntry("Update check time", SettingsPage.Updates, listOf("check time", "set time", "at a set time", "time of day", "when to check", "any time", "update time")),
         SettingsEntry("Check when NormPix opens", SettingsPage.Updates, listOf("check when opened", "check on open", "check at launch", "when i open", "open the app", "launch", "startup")),
+        SettingsEntry("Delete downloaded APK files", SettingsPage.Updates, listOf("apk", "delete apk", "leftover", "installer file", "downloads", "clean up", "storage", "update file")),
         SettingsEntry(
             "Welcome tour",
             null,
