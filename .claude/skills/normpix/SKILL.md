@@ -5,7 +5,7 @@ description: "Everything about the NormPix project - a private, offline-first An
 
 # NormPix project skill
 
-Stamp: verified against commit `df2dff40` (`versionName` 1.5.0 in the tree; CI has released up to v1.5.9) on 2026-11-13. If `git log` shows newer commits on source paths, or
+Stamp: verified against commit `2f415c71` (`versionName` 1.5.0 in the tree; CI has released up to v1.5.9) on 2026-11-14. If `git log` shows newer commits on source paths, or
 `bash .claude/skills/normpix/scripts/verify.sh` reports drift, trust the code and fix the skill (`references/maintenance.md`).
 
 ## 1. The 60-second picture

@@ -19,7 +19,7 @@ class NfcCardOutletService : HostApduService() {
         if (isSelectAidCommand(commandApdu)) {
             // Even with a card armed, nothing is shared outside the user's schedule (the sheet normally tears it down first).
             if (!isAllowed()) return STATUS_FAILED
-            val payload = activePayload
+            val payload = takePayload()
             if (payload != null) {
                 val dataBytes = payload.toByteArray(StandardCharsets.UTF_8)
                 val response = ByteArray(dataBytes.size + 2)
@@ -93,5 +93,12 @@ class NfcCardOutletService : HostApduService() {
             activePayload = null
             onCardTransferredCallback = null
         }
+
+        /**
+         * The card waiting to be shared, which is then no longer waiting: one share goes to one reader. The sheet stays on "Card
+         * Transferred!" until it is closed, and a second reader held to the phone in that time must not be handed the card as well.
+         */
+        @Synchronized
+        internal fun takePayload(): String? = activePayload.also { activePayload = null }
     }
 }

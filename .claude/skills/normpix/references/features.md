@@ -135,7 +135,9 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
 Flow: another app shares text or a picture to NormPix (`ShareTransactionActivity`, exported, no UI) -> `SharedTextInbox`
 (memory only) -> MainActivity -> the transaction editor opens with a **draft the user checks and saves**; nothing is saved
 unseen. Pictures are read on the device by ML Kit (`MlKitSharedPictureReader`); the same picture can be attached to the
-transaction and read again to fill the form.
+transaction and read again to fill the form. Only another app's `content://` picture is taken (`sharedPictureOf`): never a file
+path, never NormPix's own providers - judged by the authority **after the last `@`** (`isOwnAuthority`), as Android reads
+`user@name` and `0@<own provider>` is the app's own files (2026-11-13).
 
 - Recognizer reality (not what the screen looks like): line order is **scrambled**; the rupee sign is read as `7`, `Z` or
   dropped (`rupeeRestored` uses ML Kit's per-symbol confidence: a misread symbol scores ~0.07-0.12, real digits 0.6-0.95);
@@ -196,6 +198,12 @@ transaction and read again to fill the form.
 - **Card exchange between phones** (`wallet/nfc/NfcCardExchange`, HCE `NfcCardOutletService`; Receive / Share tabs). Offered
   only while the phone's NFC is on **and** the in-app switch allows it (`ScheduledFeature.NfcExchange`, default **Off**; the
   availability scheduler supports Always / Scheduled weekly windows / Off). `nfcExchangeOffered` is followed live.
+  What Share hands a reader is the card's number, expiry and CVV **in the clear** (JSON over ISO-DEP, to whatever selects the
+  private AID), so the service is fenced (security review, 2026-11-13; `NfcCardOutletServiceTest`): Android routes to it only on an
+  **unlocked** phone (`apduservice.xml` `requireDeviceUnlock="true"`), `isAllowed` also needs NormPix **in front**
+  (`ActivityHost.visible`), and a card goes to **one reader, once** (`takePayload` disarms; the sheet stays on "Card
+  Transferred!"). On Receive, a number that isn't one, or an expiry that isn't a month 1-12 and a 2- or 4-digit year, makes the
+  payload no card (`parseCardFromNfcPayload`). Encrypting the exchange itself would need a pairing step and is not built.
 - **Card tilt** (`wallet/motion/CardTilt.kt`): gyro/accelerometer lean (4 degree limit and a gain of 0.3 since 2026-11-08 - the owner found 6 degrees at 0.5 "tilting way too much" - dead zone, one shared listener, off under
   reduced motion). It leans the saved cards **and the accounts drawn as cards** (`AccountCardView(tilt)`: the carousel's front card and
   the list's cards; the accounts' stack stays flat; the cards' stacks, `CardStack` and `CardFolderStack`, lean their front card), with the

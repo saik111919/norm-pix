@@ -80,8 +80,18 @@ fun sharedPictureOf(intent: Intent?, ownPackage: String): Uri? {
     return try {
         val uri = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
             ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
-        uri?.takeIf { it.scheme == ContentResolver.SCHEME_CONTENT && it.authority?.startsWith(ownPackage) == false }
+        uri?.takeIf { it.scheme == ContentResolver.SCHEME_CONTENT && !isOwnAuthority(it.authority, ownPackage) }
     } catch (_: RuntimeException) {
         null
     }
 }
+
+/**
+ * Whether a `content://` address with this [authority] is one of [ownPackage]'s providers (or has no authority to tell by).
+ *
+ * Android reads an authority as `user@name`: a share from a work profile arrives as `10@com.bank.files`, and the part before the
+ * `@` is the user it belongs to, not the provider. So `0@<own provider>` is NormPix's own files as much as `<own provider>` is,
+ * and it is the name after the last `@` - what Android itself looks the provider up by - that is compared.
+ */
+internal fun isOwnAuthority(authority: String?, ownPackage: String): Boolean =
+    authority == null || authority.substringAfterLast('@').startsWith(ownPackage, ignoreCase = true)

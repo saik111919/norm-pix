@@ -187,6 +187,22 @@ Format: `claim - applies to - source - status/date`.
 - A child session in this checkout runs the project's Stop hook too: Haiku's final message answered the "skill may be out of date" reminder instead of the question;
   its report was earlier in its thread (`t3_thread_read`, `afterPosition`). Read the whole child thread, not only the delivered summary.
 
+## Play Protect and developer verification (2026-11-13: two research runs, the pages and the owner's phone)
+
+- A sideloaded APK that declares `REQUEST_INSTALL_PACKAGES` together with NormPix's other powers is answered `POTENTIALLY_UNWANTED` /
+  `generic_malware` by Play Protect's cloud scan; without that permission, `SAFE` - Play Protect on Android 16, Nov 2026 - owner's
+  phone, eleven variants (`build-test-release.md` section 8) - verified 2026-11-13. Google publishes no criteria for this verdict.
+- `adb install` is not cloud-scanned (installer `com.android.shell` is allowed) - same phone - logcat `Finsky VerifyApps` - verified 2026-11-13.
+- The appeal form is `support.google.com/googleplay/android-developer/contact/protectappeals`: email, package name, the APK's SHA-256
+  **as uploaded to VirusTotal**, and a justification (all required); "All appeal decisions are final and you will not receive a
+  response." - the page - verified 2026-11-13.
+- Android developer verification: from 30 Sep 2026 for installs from participating stores in Brazil, Indonesia, Singapore and Thailand
+  (certified devices, Android 7+); "expanded globally for all apps" in 2027; limited distribution accounts (no fee, no government ID,
+  up to 20 devices) from Aug 2026; the page says nothing about Play Protect - developer.android.com/developer-verification - verified
+  2026-11-13. On the phone the verifier (`com.google.android.verifier`) already runs on every install and currently allows NormPix.
+- Gemini's claims that a `CN=Android Debug` certificate is "publicly known" and that `com.example` is flagged are **wrong** here: the
+  release key is a locally generated keystore, and debug-key `com.example.normpix.qa` variants without the installer scan `SAFE`.
+
 ## How to add an entry
 
 `claim - applies to (library/API level/version) - source (URL or path:line) - status/date`. If a fact is later disproved, delete it

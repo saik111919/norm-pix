@@ -142,9 +142,11 @@ class NormPixApplication : Application() {
         welcomeNewInstall(hadData)
         ReminderNotifications.createChannel(this)
         CardExpiryNotifications.createChannel(this)
-        // The card-emulation service is started by the system, not by the UI, so it asks the schedule itself.
+        // The card-emulation service is started by the system, not by the UI, so it asks the schedule itself - and whether NormPix is
+        // the app in front: a card left ready to share in a sheet behind another app is not handed to a reader nobody is looking at.
         NfcCardOutletService.isAllowed = {
-            container.preferences.state.value.availabilityOf(ScheduledFeature.NfcExchange).availabilityAt(LocalDateTime.now()).isOpen
+            container.host.visible &&
+                container.preferences.state.value.availabilityOf(ScheduledFeature.NfcExchange).availabilityAt(LocalDateTime.now()).isOpen
         }
         followCardsForExpiry()
         followCardsForBanks()

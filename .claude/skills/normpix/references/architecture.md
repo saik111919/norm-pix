@@ -54,7 +54,7 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
 ## 2. Process wiring
 
 - `NormPixApplication` builds the `AppContainer` (`buildContainer`), creates notification channels (reminders, card
-  expiry), points `NfcCardOutletService.isAllowed` at the availability schedule, and starts observers that must work
+  expiry), points `NfcCardOutletService.isAllowed` at the availability schedule and NormPix being in front, and starts observers that must work
   without any screen open: `followCardsForExpiry` (card expiry tracker syncs only from a successfully loaded list),
   `followCardsForBanks` (`CardBankLinker` links cards to banks once finance is loaded), `updates.start()`,
   `followUpdateSettings` (background update job follows Settings), `followLedgerForWidgets` (redraws the Recent widget
@@ -75,7 +75,9 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
   into container flows: a reminder id (alert screen), card-expiry (open Wallet), update notification (open update page,
   optionally install), a widget's request. Lifecycle: `onStart` re-arms expiry alarms and tells the lock the app resumed;
   `onResume/onPause` tell the updater; `onWindowFocusChanged` reconciles the clipboard; `onStop` tells the lock.
-- Entry points in `AndroidManifest.xml`: `MainActivity`; ten launcher `activity-alias`es (`.IconDefault`, `.IconGlossy`,
+- Entry points in `AndroidManifest.xml`: `MainActivity` (**not exported** since 2026-11-13: the exported aliases are how the
+  launcher reaches it, and notifications, widgets, shortcuts, the tile and a share start it as NormPix itself; from `adb` start
+  an alias, `am start -n <id>/com.example.normpix.IconDefault`, not `MainActivity`); ten launcher `activity-alias`es (`.IconDefault`, `.IconGlossy`,
   `.IconComic`, `.IconMinimal`, `.IconFlat`, `.IconGlass`, `.IconClay`, `.IconPixel`, `.IconPaper`, `.IconNeon`; only the
   default is enabled, `AppIcons.use` swaps); `ShareTransactionActivity` (NoDisplay share target for text/plain and
   image/*); three widget receivers; `NfcCardOutletService` (host card emulation); reminder, card-expiry, clipboard-clear

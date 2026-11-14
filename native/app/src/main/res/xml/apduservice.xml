@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- What this service hands over is a card's number, expiry and CVV, so Android only routes a reader to it while the phone is
+     unlocked (requireDeviceUnlock): a phone left with a card ready to share, and locked since, answers nothing. -->
 <host-apdu-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/nfc_outlet_service_desc"
-    android:requireDeviceUnlock="false">
+    android:requireDeviceUnlock="true">
     <aid-group
         android:category="other"
         android:description="@string/nfc_outlet_service_desc">

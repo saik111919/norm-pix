@@ -82,9 +82,12 @@
                 android:resource="@xml/scan_file_paths" />
         </provider>
 
+        <!-- Not exported: no other app can start the main screen with extras of its choosing (a reminder to show, a request to
+             install the update). The launcher reaches it through the icon aliases below, which are exported; notifications, widgets,
+             the icon's shortcuts, the Quick Settings tile and a share all start it as NormPix itself. -->
         <activity
             android:name=".MainActivity"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|density|uiMode|fontScale|locale|layoutDirection" />

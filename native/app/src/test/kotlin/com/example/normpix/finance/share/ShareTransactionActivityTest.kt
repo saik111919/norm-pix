@@ -96,6 +96,13 @@ class ShareTransactionActivityTest {
         // A file path, or one of NormPix's own files, could be a way for another app to have NormPix read its private files.
         assertNull(sharedPictureOf(sendPicture(Uri.parse("file:///data/data/${app.packageName}/files/card_vault.bin")), app.packageName))
         assertNull(sharedPictureOf(sendPicture(Uri.parse("content://${app.packageName}.scanfiles/scan/card.jpg")), app.packageName))
+        // Android reads `user@name` as the provider `name`: a user in front doesn't make NormPix's own provider another app's.
+        assertNull(sharedPictureOf(sendPicture(Uri.parse("content://0@${app.packageName}.scanfiles/scan/card.jpg")), app.packageName))
+        assertNull(sharedPictureOf(sendPicture(Uri.parse("content://10@${app.packageName}.scanfiles/receipts/r.png")), app.packageName))
+        assertNull(sharedPictureOf(sendPicture(Uri.parse("content://x@0@${app.packageName}.scanfiles/scan/card.jpg")), app.packageName))
+        // ... while a picture shared from a work profile, which arrives with its user in front, is another app's and is taken.
+        val fromWorkProfile = Uri.parse("content://10@com.bank.files/receipt.png")
+        assertEquals(fromWorkProfile, sharedPictureOf(sendPicture(fromWorkProfile), app.packageName))
         // Not a picture, or not a URI at all.
         assertNull(sharedPictureOf(sendPicture(type = "text/plain"), app.packageName))
         assertNull(sharedPictureOf(sendPicture(picture = "content://not/a/uri"), app.packageName))

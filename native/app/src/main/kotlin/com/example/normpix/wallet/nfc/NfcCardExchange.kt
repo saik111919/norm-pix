@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -92,8 +93,10 @@ fun parseCardFromNfcPayload(raw: String): StoredCard? = runCatching {
     // A card number is digits (spaces and dashes are only grouping): anything else is not a card.
     val digits = cardNumber.filter { it.isDigit() }
     if (cardNumber.any { !it.isDigit() && it != ' ' && it != '-' } || digits.length !in MIN_DIGITS..MAX_DIGITS) return null
-    val expiryMonth = json["expiryMonth"]?.jsonPrimitive?.content ?: "12"
-    val expiryYear = json["expiryYear"]?.jsonPrimitive?.content ?: "30"
+    // An expiry is a month and a year in digits. What arrives is whatever the tag or phone that was tapped chose to send, so
+    // anything else in their place makes it no card, as a number that isn't one does: it is never kept, or shown on a card.
+    val expiryMonth = expiryOf(json["expiryMonth"], missing = "12") { it.length <= 2 && it.toInt() in 1..12 } ?: return null
+    val expiryYear = expiryOf(json["expiryYear"], missing = "30") { it.length == 2 || it.length == 4 } ?: return null
     // Optional, and only ever a 3-4 digit code: anything else (absent, null, empty, junk) means the card has none.
     val cvv = (json["cvv"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.length in 3..4 && it.all(Char::isDigit) }.orEmpty()
     val kindKey = json["kind"]?.jsonPrimitive?.content ?: "credit"
@@ -111,6 +114,12 @@ fun parseCardFromNfcPayload(raw: String): StoredCard? = runCatching {
         createdAt = LocalDateTime.now(),
     )
 }.getOrNull()
+
+/** An expiry field as it arrived: [missing] when the payload has none, null when what it has isn't plain digits that [fits] takes. */
+private fun expiryOf(field: JsonElement?, missing: String, fits: (String) -> Boolean): String? {
+    val text = field?.jsonPrimitive?.content?.trim() ?: return missing
+    return text.takeIf { it.isNotEmpty() && it.all { c -> c in '0'..'9' } && fits(it) }
+}
 
 private const val MAX_TEXT = 64
 private const val MIN_DIGITS = 12
