@@ -29,7 +29,6 @@ import com.example.normpix.screens.crashBanners
 import com.example.normpix.screens.reminderBanners
 import com.example.normpix.screens.updateBanners
 import com.example.normpix.ui.components.Banner
-import com.example.normpix.ui.components.BannerFigure
 import com.example.normpix.ui.components.StatusAction
 import com.example.normpix.ui.theme.StatusTone
 import java.time.LocalDateTime
@@ -170,17 +169,3 @@ fun attentionBanner(items: List<AppNotification>, open: () -> Unit): Banner {
         onOpen = open,
     )
 }
-
-/**
- * The figure a notification's row shows at its end, beside its lines ("Late by / 3 days", "Left / Rs 1,200") - where a row has room
- * to spare (owner, 2026-11-11: "utilize space well"; it was a line of its own under the text). None when the row's words already say
- * it: a backup's "Last backup 30 days ago" is its figure too.
- */
-fun Banner.rowFigure(): BannerFigure? = figure?.takeUnless { message.contains(it.figure, ignoreCase = true) }
-
-/**
- * The buttons a notification's row shows, the quieter one first. None when its only button does what pressing the row does (a
- * budget's "View budgets" opens the budgets, as the row does): the row is the button then, and a line of the page is saved.
- */
-fun Banner.rowActions(): List<StatusAction> =
-    if (secondary == null && primary.onClick === onOpen) emptyList() else listOfNotNull(secondary, primary)

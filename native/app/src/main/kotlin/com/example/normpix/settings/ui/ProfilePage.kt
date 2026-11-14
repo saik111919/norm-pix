@@ -343,6 +343,7 @@ fun ProfilePage() {
                                 headline = "Settings",
                                 supporting = "Appearance, finance, data, security and more",
                                 icon = Icons.Outlined.Settings,
+                                emoji = SettingsRowEmoji.SETTINGS,
                                 hue = null,
                                 onClick = { navigator.openSettings() },
                             )

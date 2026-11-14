@@ -137,6 +137,7 @@ object SettingsCatalog {
         // Wallet
         SettingsEntry("Store cards", SettingsPage.Wallet, listOf("store cards", "don't store cards", "dont store cards", "do not store cards", "delete cards", "delete all cards", "remove cards", "erase cards", "no cards", "save cards", "card vault", "wallet cards", "accounts only")),
         SettingsEntry("Save CVV", SettingsPage.Wallet, listOf("cvv", "save cvv", "cvc", "security code", "don't save cvv", "dont save cvv", "do not store cvv", "delete cvv", "remove cvv", "card security code", "optional cvv"), cardsOnly = true),
+        SettingsEntry(KEYBOARD_CARD_FILL_TITLE, SettingsPage.Wallet, listOf("scan card", "keyboard scan", "autofill", "auto fill", "autofill with google", "keyboard", "fill card", "saved card", "google pay card", "card scanner"), cardsOnly = true),
         SettingsEntry("Card number on account", SettingsPage.Wallet, listOf("card number on account", "account card number", "card number", "first 6 digits", "last 4 digits", "bin", "paid from", "receipts", "match receipts", "recognise card", "recognize card")),
         SettingsEntry("Export and import cards", SettingsPage.Wallet, listOf("export cards", "import cards", "card backup", "backup cards", "move cards", "transfer cards", "password"), cardsOnly = true),
         SettingsEntry("Card actions style", SettingsPage.Wallet, listOf("buttons", "menu", "context menu", "actions"), cardsOnly = true),

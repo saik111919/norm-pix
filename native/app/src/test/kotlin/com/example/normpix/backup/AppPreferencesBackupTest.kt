@@ -35,6 +35,7 @@ class AppPreferencesBackupTest {
         "nfc_reveal_registered_only",
         "card_cvv_enabled",
         "wallet_cards_enabled",
+        "card_keyboard_fill",
     )
 
     private fun store(name: String): SharedPreferences =

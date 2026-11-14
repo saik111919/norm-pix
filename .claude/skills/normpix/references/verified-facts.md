@@ -203,6 +203,29 @@ Format: `claim - applies to - source - status/date`.
 - Gemini's claims that a `CN=Android Debug` certificate is "publicly known" and that `com.example` is flagged are **wrong** here: the
   release key is a locally generated keystore, and debug-key `com.example.normpix.qa` variants without the installer scan `SAFE`.
 
+## Android's own back gesture and the keyboard's card autofill (2026-11-14: two research runs each, the page and the pinned sources)
+
+- Full-screen predictive back: the surface scales to **90%**, X shift `((screen width / 20) - 8) dp`, Y shift `((available height / 20) - 8) dp`
+  with a decelerate interpolator, 8 dp margin; "A linear progress value ... shouldn't be directly used for preview animations ... Feed the
+  progress value with a STANDARD_DECELERATE token or PathInterpolator(0f, 0f, 0f, 1f) so that the gesture is more apparent in the
+  beginning"; full-screen fade-through threshold 35% - developer.android.com/design/ui/mobile/guides/patterns/predictive-back - opened 2026-11-14.
+- AOSP cross-activity animation: closing `MAX_SCALE = 0.9f`; entering starts 96 dp aside (`cross_activity_back_entering_start_offset`) at 0.9
+  and comes to full size on commit; commit `POST_COMMIT_DURATION = 450L` on `Interpolators.EMPHASIZED`; closing alpha `1 - 5 x progress`;
+  scrim 0.2 light / 0.8 dark - AOSP CrossActivityBackAnimation and DefaultCrossActivityBackAnimation (WMShell, main) - both researchers
+  [SOURCE-CHECKED], not opened by me; Android 14+.
+- `BackEvent` progress is already non-linear at the platform (`BackTouchTracker`: linear to a threshold, then a non-linear factor) and spring-
+  smoothed (`BackProgressAnimator`) - AOSP core - both researchers [SOURCE-CHECKED]; so an app's own ease-in on top makes the start late.
+- navigation-compose's default predictive pop: exit `scaleOut(targetScale = 0.7f)`, enter `fadeIn(spring(1f, 1600f))` - DefaultNavTransitions (navigation-compose)
+  (androidx-main; 2.10.2 tag not opened) - consistent with what `PageBackGestureTest` saw on 2026-11-11.
+- compose-ui **1.12.1** (BOM 2026.09.00): `ContentType.CreditCardNumber / ExpirationMonth / ExpirationYear / SecurityCode`, `PersonFullName`
+  (`androidx.compose.ui.autofill`), `contentType` / `contentDataType` semantics; `ContentDataType.None` makes a node not autofillable
+  (`isAutofillable()`); `AutofillManager.commit()` / `cancel()`; **`AndroidAutofillManager.onEndApplyChanges` calls `commit()` itself when no
+  content-typed node is left on screen**; text fields are sensitive data by default; a password field gets a Password content type by itself -
+  sources jar `ui-android-1.12.1-sources.jar` (AndroidAutofillManager, ContentDataType and PopulateViewStructure in it) and
+  `KeyboardCardFillTest` - verified 2026-11-14.
+- The keyboard's "Scan card" chip is the autofill service's (Autofill with Google via inline suggestions, Android 11+), not the keyboard's
+  own; FLAG_SECURE does not block autofill - both researchers, partly dated sources; not seen on a device.
+
 ## How to add an entry
 
 `claim - applies to (library/API level/version) - source (URL or path:line) - status/date`. If a fact is later disproved, delete it

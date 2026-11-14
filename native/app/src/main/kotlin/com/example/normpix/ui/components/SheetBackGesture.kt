@@ -16,7 +16,9 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollDispatcher
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalView
+import com.example.normpix.navigation.AndroidBack
 import com.example.normpix.navigation.BackGesture
+import com.example.normpix.navigation.LocalAndroidBack
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.launch
 
@@ -42,6 +44,9 @@ internal fun Modifier.sheetBackGesture(state: SheetState, enabled: Boolean, onBa
     val scope = rememberCoroutineScope()
     val view = LocalView.current
     val back by rememberUpdatedState(onBack)
+    // In the "Android" Back gesture style the sheet follows the finger as it is, a share of its way out (see AndroidBack.sheet);
+    // in the others the finger plays the start of the close.
+    val android = LocalAndroidBack.current
     PredictiveBackHandler(enabled = enabled) { progress ->
         // From where the sheet is to out of its window: Material lays it out at the top and draws it its offset lower.
         val top = runCatching { state.requireOffset() }.getOrNull()
@@ -51,7 +56,7 @@ internal fun Modifier.sheetBackGesture(state: SheetState, enabled: Boolean, onBa
         var moved = 0f
         try {
             progress.collect { event ->
-                val to = BackGesture.eased(event.progress) * travel
+                val to = (if (android) AndroidBack.sheet(event.progress) else BackGesture.eased(event.progress)) * travel
                 dispatcher.dispatchPostScroll(Offset.Zero, Offset(0f, to - moved), NestedScrollSource.UserInput)
                 moved = to
             }

@@ -15,7 +15,6 @@ import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.rounded.CurrencyExchange
 import androidx.compose.material.icons.rounded.StarOutline
 import androidx.compose.material.icons.rounded.SwipeLeft
-import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -114,7 +113,7 @@ fun FinanceSettingsPage() {
                         ListRow(
                             headline = "Currency",
                             supporting = "${currency.name} (${currency.symbol.trim()})",
-                            leading = { Icon(Icons.Rounded.CurrencyExchange, contentDescription = null) },
+                            leading = { SettingsLeadingIcon(Icons.Rounded.CurrencyExchange, SettingsRowEmoji.MONEY) },
                             onClick = ::pickCurrency,
                         )
                     }
@@ -122,7 +121,7 @@ fun FinanceSettingsPage() {
                         ListRow(
                             headline = "Default account",
                             supporting = finance.defaultAccount?.name ?: "None",
-                            leading = { Icon(Icons.Rounded.StarOutline, contentDescription = null) },
+                            leading = { SettingsLeadingIcon(Icons.Rounded.StarOutline, SettingsRowEmoji.STAR) },
                             enabled = finance.activeAccounts.isNotEmpty(),
                             onClick = ::pickDefaultAccount,
                         )
@@ -141,7 +140,7 @@ fun FinanceSettingsPage() {
                             },
                             headline = "Swipe actions",
                             supporting = "Swipe a transaction or reminder sideways to reach its actions.",
-                            leading = { Icon(Icons.Rounded.SwipeLeft, contentDescription = null) },
+                            leading = { SettingsLeadingIcon(Icons.Rounded.SwipeLeft, SettingsRowEmoji.SWIPE) },
                         )
                     }
                 }
@@ -182,7 +181,7 @@ fun FinanceSettingsPage() {
                                 },
                                 headline = "Ask before a swipe deletes",
                                 supporting = "Off deletes at once, with Undo.",
-                                leading = { Icon(Icons.Outlined.DeleteOutline, contentDescription = null) },
+                                leading = { SettingsLeadingIcon(Icons.Outlined.DeleteOutline, SettingsRowEmoji.ERASE) },
                             )
                         }
                     }
@@ -192,7 +191,7 @@ fun FinanceSettingsPage() {
                         ListRow(
                             headline = "Categories",
                             supporting = "$expense for spending · $income for income",
-                            leading = { Icon(Icons.Outlined.Category, contentDescription = null) },
+                            leading = { SettingsLeadingIcon(Icons.Outlined.Category, SettingsRowEmoji.TAG) },
                             onClick = navigator::openCategories,
                         )
                     }
@@ -204,7 +203,7 @@ fun FinanceSettingsPage() {
                             } else {
                                 "${finance.activePeople.size} ${if (finance.activePeople.size == 1) "person" else "people"} · what you spend on each"
                             },
-                            leading = { Icon(Icons.Outlined.Groups, contentDescription = null) },
+                            leading = { SettingsLeadingIcon(Icons.Outlined.Groups, SettingsRowEmoji.HANDSHAKE) },
                             onClick = navigator::openPeople,
                         )
                     }

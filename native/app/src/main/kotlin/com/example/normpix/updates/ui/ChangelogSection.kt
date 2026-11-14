@@ -33,6 +33,8 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.normpix.ui.components.AppLoadingIndicator
+import com.example.normpix.settings.ui.SettingsLeadingBadge
+import com.example.normpix.settings.ui.SettingsRowEmoji
 import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
@@ -126,7 +128,7 @@ fun ChangelogSection(
                 ListRow(
                     headline = "No changes to show yet",
                     supporting = "Once a release is published, what it changed is listed here.",
-                    leading = { LeadingIcon(Icons.Outlined.History) },
+                    leading = { SettingsLeadingBadge(Icons.Outlined.History, SettingsRowEmoji.NOTE) },
                 )
             }
         }

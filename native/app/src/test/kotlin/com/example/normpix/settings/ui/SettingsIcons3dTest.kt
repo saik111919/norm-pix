@@ -1,15 +1,26 @@
 package com.example.normpix.settings.ui
 
 import android.content.Context
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Fingerprint
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
+import com.example.normpix.availability.ScheduledFeature
+import com.example.normpix.availability.ui.emoji
 import com.example.normpix.finance.ui.Fluent3d
 import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.navigation.SettingsPage
@@ -56,6 +67,72 @@ class SettingsIcons3dTest {
         val emoji = SettingsPage.entries.map { it.emoji } +
             listOf(SettingsRowEmoji.RESET, SettingsRowEmoji.UPDATES, SettingsRowEmoji.WELCOME_TOUR, SettingsRowEmoji.ABOUT)
         for (e in emoji) assertNotNull(Fluent3d.path(context, e), "a bundled 3D picture of $e")
+    }
+
+    /** Every string constant of [SettingsRowEmoji], the pictures of the rows of Settings and of the pages under it. */
+    private fun registryEmoji(): List<String> = SettingsRowEmoji::class.java.declaredFields
+        .filter { it.type == String::class.java && java.lang.reflect.Modifier.isStatic(it.modifiers) }
+        .map { field -> field.isAccessible = true; field.get(null) as String }
+
+    @Test
+    fun `every emoji on the pages under Settings has a 3D picture`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val registry = registryEmoji()
+        assertTrue(registry.size >= 40, "the registry was read (${registry.size} emoji)")
+        val others = AppearanceSection.entries.map { it.emoji } + ScheduledFeature.entries.map { it.emoji } +
+            SettingsCatalog.entries.mapNotNull { it.emoji }
+        assertTrue(others.isNotEmpty())
+        for (e in registry + others) assertNotNull(Fluent3d.path(context, e), "a bundled 3D picture of $e (${Fluent3d.fileName(e)}.webp)")
+    }
+
+    @Test
+    fun `the rows of the pages under Settings take their emoji from the registry, not a literal`() {
+        // A literal at a call site would escape the test above, and a missing picture would quietly leave the row flat.
+        val root = java.io.File("src/main/kotlin/com/example/normpix")
+        val literal = Regex("""Settings(?:LeadingIcon|LeadingBadge)\([^)\n]*"|\bemoji\s*=\s*"""")
+        val offenders = listOf("settings/ui", "about/ui", "updates/ui", "availability/ui")
+            .flatMap { dir -> java.io.File(root, dir).walkTopDown().filter { it.extension == "kt" }.toList() }
+            .filter { it.name != "SettingsRows.kt" }
+            .filter { literal.containsMatchIn(it.readText()) }
+            .map { it.name }
+        assertTrue(offenders.isEmpty(), "use a SettingsRowEmoji constant in: $offenders")
+    }
+
+    @Test
+    fun `a bare leading icon is a larger picture in 3D and exactly the flat icon otherwise`() {
+        compose.setContent {
+            env.Content {
+                Column {
+                    SettingsLeadingIcon(Icons.Rounded.Fingerprint, SettingsRowEmoji.LOCK_AND_KEY, Modifier.testTag("bare"))
+                    SettingsLeadingBadge(Icons.Rounded.Fingerprint, SettingsRowEmoji.LOCK_AND_KEY, Modifier.testTag("badge"))
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag("bare").assertWidthIsEqualTo(32.dp).assertHeightIsEqualTo(32.dp)
+        compose.onNodeWithTag("badge").assertWidthIsEqualTo(40.dp).assertHeightIsEqualTo(40.dp)
+
+        env.preferences.setSettingsIcons3d(false)
+        compose.waitForIdle()
+        compose.onNodeWithTag("bare").assertWidthIsEqualTo(24.dp).assertHeightIsEqualTo(24.dp)
+        compose.onNodeWithTag("badge").assertWidthIsEqualTo(40.dp).assertHeightIsEqualTo(40.dp)
+
+        env.preferences.setSettingsIcons3d(true)
+        env.preferences.setCategoryIconStyle(CategoryIconStyle.entries.first { it != CategoryIconStyle.ThreeD })
+        compose.waitForIdle()
+        compose.onNodeWithTag("bare").assertWidthIsEqualTo(24.dp)
+    }
+
+    @Test
+    fun `a search result is pictured by what it leads to`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        // A search result is pictured by what it leads to: its own emoji, its Appearance screen's, else its page's.
+        val result = SettingsCatalog.entries.first { it.title == "Reset all settings" }
+        assertEquals(SettingsRowEmoji.RESET, result.emoji)
+        val colors = SettingsCatalog.entries.first { it.appearance == AppearanceSection.Colors }
+        assertEquals(AppearanceSection.Colors.emoji, colors.emoji)
+        assertEquals(SettingsPage.Security.emoji, SettingsCatalog.entries.first { it.page == SettingsPage.Security && it.appearance == null }.emoji)
+        assertNotNull(Fluent3d.path(context, result.emoji!!))
     }
 
     @Test

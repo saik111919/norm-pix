@@ -180,6 +180,14 @@ class ShellState(index: Int = 0, section: Int = 0, plansTab: Int = 0) {
     val canStepBackInPlans: Boolean
         get() = destination == AppDestination.PlansAndTransactions && tab == PlansAndTransactionsTab.Plans
 
+    /** The step back takes inside Plans - a section up to Budgets, or Plans to the transaction history - or null where it leaves the tab. */
+    val planStep: PlanStep?
+        get() = when {
+            !canStepBackInPlans -> null
+            section != PlanSection.Budgets -> PlanStep.Section
+            else -> PlanStep.View
+        }
+
     fun stepBackInPlans(): Boolean {
         if (!canStepBackInPlans) return false
         return if (section != PlanSection.Budgets) {
@@ -477,8 +485,12 @@ private fun AppNavigation(
     val prefs by container.preferences.state.collectAsStateWithLifecycle()
     // The back gesture: which close it plays (the pages' own, or the one the Back gesture style names) and how long it takes.
     val backAnimation = prefs.backGestureStyle.animation(pageAnimation)
-    val backGestureMs = prefs.backGestureSpeed.ms
-    val gesture = remember(backAnimation, backGestureMs, reduced) { BackGestureTransitions(backAnimation, backGestureMs, reduced) }
+    // The "Android" style: Android's own preview, following the finger as it is (see AndroidBack).
+    val androidBack = prefs.backGestureStyle.isAndroid
+    val backGestureMs = AndroidBack.clockMs(prefs.backGestureSpeed.ms, androidBack)
+    val gesture = remember(backAnimation, androidBack, backGestureMs, reduced) {
+        BackGestureTransitions(backAnimation, backGestureMs, reduced, android = androidBack)
+    }
     val lockVersion by container.lock.version.collectAsStateWithLifecycle()
     val appLocked = remember(prefs, lockVersion) { container.lock.isAppLocked(prefs) }
     val walletLocked = remember(prefs, lockVersion) { container.lock.isWalletLocked(prefs) }
@@ -516,6 +528,7 @@ private fun AppNavigation(
         LocalShellState provides shell,
         LocalPageAnimation provides pageAnimation,
         LocalBackAnimation provides backAnimation,
+        LocalAndroidBack provides androidBack,
         LocalBackGestureMs provides backGestureMs,
     ) {
      // Reminders are one tap from what they are about (an expense's receipt, a repeating payment, an account), so those

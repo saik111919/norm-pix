@@ -2,14 +2,12 @@ package com.example.normpix.settings.ui
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.ViewCarousel
 import androidx.compose.material.icons.rounded.SaveAlt
-import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -25,7 +23,6 @@ import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.settings.ClipboardTimeout
 import com.example.normpix.settings.WalletCardActionStyle
-import com.example.normpix.ui.components.AppLoadingIndicator
 import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
@@ -46,6 +43,9 @@ import kotlinx.coroutines.launch
  * cards leaves the page. How the Wallet looks - the layouts of accounts and cards, bank logos, the cards' tilt - is with the
  * rest of how NormPix looks, in Appearance (Layouts, Icons and Effects).
  */
+/** The switch that lets the phone's autofill service see the card form (and so offer Scan card above the keyboard). */
+const val KEYBOARD_CARD_FILL_TITLE = "Keyboard card fill"
+
 @Composable
 fun WalletSettingsPage() {
     val navigator = LocalNavigator.current
@@ -100,18 +100,14 @@ fun WalletSettingsPage() {
     }
 
     @Composable
-    fun TransferRow(id: String, icon: ImageVector, title: String, subtitle: String, enabled: Boolean = true, onClick: () -> Unit) {
+    fun TransferRow(id: String, icon: ImageVector, emoji: String, title: String, subtitle: String, enabled: Boolean = true, onClick: () -> Unit) {
         ListRow(
             headline = title,
             supporting = subtitle,
             enabled = enabled && busy == null,
             onClick = onClick,
             leading = {
-                if (busy == id) {
-                    AppLoadingIndicator(Modifier.size(24.dp), strokeWidth = 2.5.dp)
-                } else {
-                    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                SettingsLeadingIcon(icon, emoji, tint = MaterialTheme.colorScheme.onSurfaceVariant, busy = busy == id)
             },
         )
     }
@@ -156,6 +152,24 @@ fun WalletSettingsPage() {
                                 },
                             )
                         }
+                        item {
+                            // Off by default: the card form is then hidden from the phone's autofill service altogether.
+                            SwitchRow(
+                                headline = KEYBOARD_CARD_FILL_TITLE,
+                                supporting = if (prefs.cardKeyboardFill) {
+                                    "On: your autofill service can offer a saved card or Scan card above the keyboard. What you " +
+                                        "pick or scan passes through it; NormPix never asks it to save a card"
+                                } else {
+                                    "Off: the card form is hidden from your phone's autofill service. Scan card on the form " +
+                                        "works either way, on this device"
+                                },
+                                checked = prefs.cardKeyboardFill,
+                                onCheckedChange = { on ->
+                                    haptics.selection()
+                                    preferences.setCardKeyboardFill(on)
+                                },
+                            )
+                        }
                     }
                 }
                 if (cardsOn) {
@@ -166,7 +180,7 @@ fun WalletSettingsPage() {
                             if (prefs.cardCvvEnabled) "." else ", without their CVVs while Save CVV is off.",
                     ) {
                         item {
-                            TransferRow("export", Icons.Rounded.SaveAlt, "Export cards", "A password-protected file of your saved cards") {
+                            TransferRow("export", Icons.Rounded.SaveAlt, SettingsRowEmoji.EXPORT, "Export cards", "A password-protected file of your saved cards") {
                                 run("export") { transfer.export() }
                             }
                         }
@@ -174,6 +188,7 @@ fun WalletSettingsPage() {
                             TransferRow(
                                 "import",
                                 Icons.Outlined.FileOpen,
+                                SettingsRowEmoji.IMPORT,
                                 "Import cards",
                                 if (sample) "Not while sample data is showing. Turn it off in Data & Backup first." else "From a NormPix cards file",
                                 enabled = !sample,
@@ -204,7 +219,7 @@ fun WalletSettingsPage() {
                         ListRow(
                             headline = "Accounts and cards layout",
                             supporting = "In Appearance > Layouts, beside Home's. Bank logos and card tilt are in Appearance too",
-                            leading = { Icon(Icons.Outlined.ViewCarousel, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            leading = { SettingsLeadingIcon(Icons.Outlined.ViewCarousel, SettingsRowEmoji.FILE_BOX, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                             onClick = { navigator.openAppearance(AppearanceSection.Layouts) },
                         )
                     }
@@ -216,7 +231,7 @@ fun WalletSettingsPage() {
                             supporting = "A card account can keep the first 6 and last 4 digits of its number, so a shared receipt is put on " +
                                 "the right card. Edit the account in the Wallet and type the number: only those ten digits are kept, " +
                                 "never the whole number.",
-                            leading = { Icon(Icons.Outlined.CreditCard, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            leading = { SettingsLeadingIcon(Icons.Outlined.CreditCard, SettingsRowEmoji.CARD, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                             supportingMaxLines = 5,
                         )
                     }

@@ -23,7 +23,6 @@ import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.reminders.BatteryAccess
 import com.example.normpix.reminders.ReminderAccess
 import com.example.normpix.reminders.ReminderDelivery
-import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.LocalOverlays
@@ -84,7 +83,7 @@ fun ReminderAlertSettings() {
                 } else {
                     "Off. Reminders can arrive a few minutes late. Tap to allow \"Alarms & reminders\" for NormPix."
                 },
-                leading = { LeadingIcon(Icons.Outlined.Alarm) },
+                leading = { SettingsLeadingBadge(Icons.Outlined.Alarm, SettingsRowEmoji.ALARM) },
                 supportingMaxLines = 4,
                 onClick = if (exact) null else ({ open(container.alarms?.exactAlarmSettingsIntent()) }),
             )
@@ -97,7 +96,7 @@ fun ReminderAlertSettings() {
                     BatteryAccess.Optimized -> "Optimised. Reminders ring, but a phone's own app-killer may stop them. Tap to choose \"Unrestricted\" for NormPix."
                     BatteryAccess.Restricted -> "Restricted in the background: reminders will not ring. Tap to change it to Unrestricted."
                 },
-                leading = { LeadingIcon(Icons.Outlined.BatteryChargingFull) },
+                leading = { SettingsLeadingBadge(Icons.Outlined.BatteryChargingFull, SettingsRowEmoji.POWER) },
                 supportingMaxLines = 4,
                 onClick = if (battery == BatteryAccess.Unrestricted) null else ({ open(ReminderAccess.batterySettingsIntent()) }),
             )
@@ -112,6 +111,7 @@ fun ReminderAlertSettings() {
                 },
                 icon = Icons.Outlined.Fullscreen,
                 hue = SettingsPageNotificationsHue,
+                emoji = SettingsRowEmoji.PHONE,
                 checked = prefs.reminderFullScreenEnabled,
                 onCheckedChange = {
                     haptics.selection()
@@ -124,7 +124,7 @@ fun ReminderAlertSettings() {
                 ListRow(
                     headline = "Allow full-screen alerts in Android",
                     supporting = "Opens \"Full-screen notifications\" for NormPix",
-                    leading = { LeadingIcon(Icons.Outlined.Fullscreen) },
+                    leading = { SettingsLeadingBadge(Icons.Outlined.Fullscreen, SettingsRowEmoji.PHONE) },
                     onClick = { open(ReminderAccess.fullScreenSettingsIntent(context)) },
                 )
             }
@@ -142,6 +142,7 @@ fun ReminderAlertSettings() {
                 supporting = if (prefs.reminderOverlayEnabled) "On" else "Off",
                 icon = Icons.Outlined.Layers,
                 hue = SettingsPageNotificationsHue,
+                emoji = SettingsRowEmoji.STACK,
                 checked = prefs.reminderOverlayEnabled,
                 onCheckedChange = { on ->
                     haptics.selection()
@@ -174,7 +175,7 @@ fun ReminderAlertSettings() {
                 ListRow(
                     headline = "Display over other apps",
                     supporting = if (canDraw) "Allowed" else "Not allowed yet. Tap to allow it for NormPix in Android's settings.",
-                    leading = { LeadingIcon(Icons.Outlined.Layers) },
+                    leading = { SettingsLeadingBadge(Icons.Outlined.Layers, SettingsRowEmoji.STACK) },
                     supportingMaxLines = 4,
                     onClick = if (canDraw) null else ({ openOverlayPage() }),
                 )
@@ -183,7 +184,7 @@ fun ReminderAlertSettings() {
                 ListRow(
                     headline = "Try it",
                     supporting = if (canDraw) "Show a sample card now" else "Allow display over other apps first",
-                    leading = { LeadingIcon(Icons.Rounded.PlayArrow) },
+                    leading = { SettingsLeadingBadge(Icons.Rounded.PlayArrow, SettingsRowEmoji.SPARKLES) },
                     enabled = canDraw,
                     onClick = if (canDraw) ({ ReminderDelivery.showSample(context) }) else null,
                 )

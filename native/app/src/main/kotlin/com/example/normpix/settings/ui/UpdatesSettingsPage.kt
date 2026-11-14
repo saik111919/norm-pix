@@ -118,7 +118,7 @@ fun UpdatesSettingsPage() {
                         item {
                             ListRow(
                                 headline = "Updates come with release builds",
-                                leading = { LeadingIcon(Icons.Outlined.UpdateDisabled) },
+                                leading = { SettingsLeadingBadge(Icons.Outlined.UpdateDisabled, SettingsRowEmoji.BOX) },
                             )
                         }
                     }
@@ -135,6 +135,7 @@ fun UpdatesSettingsPage() {
                             supporting = automaticChecksSupporting(prefs),
                             icon = Icons.Outlined.Update,
                             hue = SettingsPageUpdatesHue,
+                            emoji = SettingsRowEmoji.UPDATES,
                             checked = prefs.updateChecksEnabled,
                             onCheckedChange = { on ->
                                 haptics.selection()
@@ -149,6 +150,7 @@ fun UpdatesSettingsPage() {
                             supporting = updateSummary(update, updater),
                             icon = Icons.Outlined.SystemUpdate,
                             hue = SettingsPageUpdatesHue,
+                            emoji = SettingsRowEmoji.MAGNIFIER,
                             onClick = { system.checkForUpdates() },
                         )
                     }
@@ -203,7 +205,7 @@ fun UpdatesSettingsPage() {
                             ListRow(
                                 headline = "Time",
                                 supporting = updateCheckTimesText(prefs, is24Hour),
-                                leading = { LeadingIcon(Icons.Outlined.Schedule) },
+                                leading = { SettingsLeadingBadge(Icons.Outlined.Schedule, SettingsRowEmoji.CLOCK) },
                                 onClick = { pickingTime = true },
                             )
                         }
@@ -223,7 +225,7 @@ fun UpdatesSettingsPage() {
                                 haptics.selection()
                                 preferences.setUpdateCheckOnOpen(on)
                             },
-                            leading = { LeadingIcon(Icons.Outlined.PhoneAndroid) },
+                            leading = { SettingsLeadingBadge(Icons.Outlined.PhoneAndroid, SettingsRowEmoji.PHONE) },
                         )
                     }
                 }
@@ -276,7 +278,7 @@ fun UpdatesSettingsPage() {
                                     haptics.selection()
                                     preferences.setUpdateOnMobileData(on)
                                 },
-                                leading = { LeadingIcon(Icons.Outlined.SignalCellularAlt) },
+                                leading = { SettingsLeadingBadge(Icons.Outlined.SignalCellularAlt, SettingsRowEmoji.MOBILE_DATA) },
                             )
                         }
                     }
@@ -290,7 +292,7 @@ fun UpdatesSettingsPage() {
                             ListRow(
                                 headline = "Allow NormPix to install updates",
                                 supporting = "Turn on \"Allow from this source\" for NormPix",
-                                leading = { LeadingIcon(Icons.Outlined.InstallMobile) },
+                                leading = { SettingsLeadingBadge(Icons.Outlined.InstallMobile, SettingsRowEmoji.KEY) },
                                 onClick = { updater.openInstallSetting() },
                             )
                         }
@@ -305,7 +307,7 @@ fun UpdatesSettingsPage() {
                             ListRow(
                                 headline = "Notifications",
                                 supporting = "Turn them on to hear about updates",
-                                leading = { LeadingIcon(Icons.Outlined.NotificationsOff) },
+                                leading = { SettingsLeadingBadge(Icons.Outlined.NotificationsOff, SettingsRowEmoji.BELL) },
                                 onClick = { navigator.openSettings(SettingsPage.Notifications) },
                             )
                         }

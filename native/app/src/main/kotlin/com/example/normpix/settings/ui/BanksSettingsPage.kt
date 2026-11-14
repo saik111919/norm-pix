@@ -64,7 +64,6 @@ import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.ui.components.AppEmptyState
 import com.example.normpix.ui.components.AppSubPage
-import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.LocalOverlays
@@ -386,7 +385,7 @@ fun BanksContent(title: String, tabBar: @Composable () -> Unit) {
                             ListRow(
                                 headline = "Add a bank",
                                 supporting = "Missing from the list? Add it by name",
-                                leading = { LeadingIcon(Icons.Rounded.Add) },
+                                leading = { SettingsLeadingBadge(Icons.Rounded.Add, SettingsRowEmoji.BANK) },
                                 onClick = ::addBank,
                             )
                         }

@@ -31,6 +31,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.normpix.navigation.BackGesture
+import com.example.normpix.navigation.BackLook
 import com.example.normpix.navigation.BackPose
 import com.example.normpix.navigation.BackPreview
 import com.example.normpix.navigation.BottomRevealShape
@@ -70,11 +71,18 @@ private val PreviewCorner = AppRadius.md
  * follows it a little, then it lets go and the rest of the close plays in what is left of the clock - over and over.
  */
 @Composable
-internal fun BackGesturePreview(animation: PageAnimationType, totalMs: Int, modifier: Modifier = Modifier) {
+internal fun BackGesturePreview(
+    animation: PageAnimationType,
+    totalMs: Int,
+    modifier: Modifier = Modifier,
+    /** Android's own preview (the "Android" style) instead of [animation]'s close. */
+    android: Boolean = false,
+) {
+    val look = remember(animation, android) { BackLook(animation, android) }
     val live = LocalLiveMotion.current && !rememberReducedMotion()
     val raw = remember { Animatable(PREVIEW_STILL) }
     var finger by remember { mutableStateOf(true) }
-    LaunchedEffect(animation, totalMs, live) {
+    LaunchedEffect(look, totalMs, live) {
         if (!live) {
             raw.snapTo(PREVIEW_STILL)
             finger = true
@@ -94,8 +102,8 @@ internal fun BackGesturePreview(animation: PageAnimationType, totalMs: Int, modi
     }
     MiniScreen(
         modifier = modifier,
-        leaving = { BackPreview.leaving(animation, BackGesture.eased(raw.value), 1f) },
-        revealed = { BackPreview.revealed(animation, BackGesture.eased(raw.value), 1f) },
+        leaving = { look.leaving(look.eased(raw.value), 1f) },
+        revealed = { look.revealed(look.eased(raw.value), 1f) },
         finger = { if (finger) raw.value else null },
     )
 }

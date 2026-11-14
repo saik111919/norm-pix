@@ -142,7 +142,8 @@ class PictureAttachmentFlowTest {
         compose.onNodeWithText("Attached").assertExists()
         amountField().assert(hasText("250"))
         compose.onNodeWithText("SWIGGY").assertExists()
-        compose.onNodeWithText("Food & dining › Delivery apps").assertExists()
+        // Swiggy has a sub-category of its own since 2026-11-14 (a new install has it; see MerchantCategories).
+        compose.onNodeWithText("Food & dining › Swiggy").assertExists()
         assertTrue(stored().isEmpty())
 
         compose.onNodeWithText("Save expense").performClick()

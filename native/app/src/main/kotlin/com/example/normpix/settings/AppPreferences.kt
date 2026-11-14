@@ -83,23 +83,33 @@ enum class PageAnimationType(val label: String, val description: String) {
 
 /**
  * What the back gesture shows as it is dragged, everywhere it goes back - a tab, a pushed page, a sheet (owner, 2026-11-11: "not
- * consistent throughout the app ... include multiple options"). [PageStyle], the default, is what it always was meant to be: the page
- * closing the way the page style closes it. The others close it one fixed way, whatever the pages use.
+ * consistent throughout the app ... include multiple options"). [System], the default since 2026-11-14 (owner: "the predictive back
+ * follows the system back gesture for better feel"), is Android's own back preview, following the finger as it moves; a phone that
+ * chose another style keeps it. [PageStyle] (the default before) closes the page the way the page style closes it; the others close
+ * it one fixed way, whatever the pages use. Stored by name.
  */
 enum class BackGestureStyle(val label: String, val description: String) {
+    System("Android", "Follows your finger the way Android's own back does: what you leave shrinks towards your finger over what you go back to, and leaves when you let go"),
     PageStyle("Match pages", "What you leave closes under your finger the way your page style closes it"),
     Shrink("Shrink", "It shrinks a little and drifts towards your finger as it fades, like Android's own back preview"),
     Slide("Slide", "It slides off to the side with your finger"),
     Fade("Fade", "It fades away where it is"),
     ;
 
-    /** The page style whose way of closing a gesture in this style plays: the pages' own ([pages]), or the one it names. */
+    /**
+     * The page style whose way of closing a gesture in this style plays: the pages' own ([pages]), or the one it names. [System] draws
+     * Android's own preview instead ([isAndroid]); the type it names is only what stands in for it where a page style is asked for.
+     */
     fun animation(pages: PageAnimationType): PageAnimationType = when (this) {
+        System -> PageAnimationType.System
         PageStyle -> pages
         Shrink -> PageAnimationType.System
         Slide -> PageAnimationType.SlideHorizontal
         Fade -> PageAnimationType.FadeThrough
     }
+
+    /** Whether this is Android's own back preview, which follows the finger as it is (not the start of a page style's close). */
+    val isAndroid: Boolean get() = this == System
 }
 
 /**
@@ -391,7 +401,7 @@ data class AppPrefsState(
     /** How the dock moves its pill from one tab to the next. */
     val dockSelection: DockSelectionStyle = DockSelectionStyle.Glide,
     /** What the back gesture shows as it is dragged, and how long its close takes (Settings > Appearance > Transitions > Back gesture). */
-    val backGestureStyle: BackGestureStyle = BackGestureStyle.PageStyle,
+    val backGestureStyle: BackGestureStyle = BackGestureStyle.System,
     val backGestureSpeed: BackGestureSpeed = BackGestureSpeed.Standard,
     val walletCardActionStyle: WalletCardActionStyle = WalletCardActionStyle.Bar,
     val bankIconStyle: BankIconStyle = BankIconStyle.Full,
@@ -426,6 +436,12 @@ data class AppPrefsState(
      * scan, an NFC tap or a cards file is kept without one. Turning it off deletes the CVVs already saved, after asking.
      */
     val cardCvvEnabled: Boolean = true,
+    /**
+     * Whether the card form tells the phone's autofill service (Autofill with Google, a password manager) which of its fields are
+     * the card's, so the keyboard can offer a saved card or "Scan card" (owner, 2026-11-14: "like how Swiggy does"). Off by default:
+     * what is picked or scanned then goes through that service, which is not this app. NormPix never asks it to save a card.
+     */
+    val cardKeyboardFill: Boolean = false,
     /**
      * Settings > Wallet & Cards > Store cards. Off, NormPix keeps no cards at all: the vault is emptied (after asking), the Wallet
      * shows accounts only, and everything about cards leaves the settings and the search. Turning it back on starts empty.
@@ -499,8 +515,9 @@ data class AppPrefsState(
     /** How the built-in category icons are drawn, wherever a category shows. */
     val categoryIconStyle: CategoryIconStyle = CategoryIconStyle.ThreeD,
     /**
-     * Settings' own icons (the groups on the main Settings list) follow [categoryIconStyle] when it is 3D: a 3D picture on each
-     * group's tinted tile. Off keeps them the flat Material icons there, whatever the style.
+     * Settings' own icons (the groups on the main Settings list, and the leading icons of the rows on the pages under it) follow
+     * [categoryIconStyle] when it is 3D: a 3D picture on each group's tinted tile, a larger one in place of a row's own icon. Off
+     * keeps them the flat Material icons there, whatever the style.
      */
     val settingsIcons3d: Boolean = true,
     /** The shape behind those icons (and the people's avatars): a circle, as they have always been, unless the user picks another. */
@@ -628,6 +645,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
             cardTiltEnabled = prefs.getBoolean(K_CARD_TILT, defaults.cardTiltEnabled),
             heroWeather = prefs.getBoolean(K_HERO_WEATHER, defaults.heroWeather),
             cardCvvEnabled = prefs.getBoolean(K_CARD_CVV, defaults.cardCvvEnabled),
+            cardKeyboardFill = prefs.getBoolean(K_CARD_KEYBOARD_FILL, defaults.cardKeyboardFill),
             walletCardsEnabled = prefs.getBoolean(K_WALLET_CARDS, defaults.walletCardsEnabled),
             sheetBlurEnabled = prefs.getBoolean(K_SHEET_BLUR, defaults.sheetBlurEnabled),
             artworkColors = prefs.getBoolean(K_ARTWORK_COLORS, defaults.artworkColors),
@@ -784,6 +802,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
     /** Only the settings flow that has dealt with the CVVs already saved should call this (see `CardsSettingsFlows`). */
     fun setCardCvvEnabled(enabled: Boolean) =
         change({ copy(cardCvvEnabled = enabled) }) { putBoolean(K_CARD_CVV, enabled) }
+
+    fun setCardKeyboardFill(enabled: Boolean) =
+        change({ copy(cardKeyboardFill = enabled) }) { putBoolean(K_CARD_KEYBOARD_FILL, enabled) }
 
     /** Only the settings flow that has erased the cards already saved should call this with false (see `CardsSettingsFlows`). */
     fun setWalletCardsEnabled(enabled: Boolean) =
@@ -1147,6 +1168,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_CARD_TILT = "card_tilt_enabled"
         const val K_HERO_WEATHER = "hero_weather"
         const val K_CARD_CVV = "card_cvv_enabled"
+        const val K_CARD_KEYBOARD_FILL = "card_keyboard_fill"
         const val K_WALLET_CARDS = "wallet_cards_enabled"
         const val K_SHEET_BLUR = "sheet_blur_enabled"
         const val K_ARTWORK_COLORS = "artwork_colors"
@@ -1211,6 +1233,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
          *   registered here (kept apart, under a key that never leaves this phone), and it is a lock like the one above.
          * - [K_CARD_CVV], [K_WALLET_CARDS]: whether this phone keeps CVVs and cards at all. Each is tied to what is stored here
          *   (turning one off deletes it, after asking), so a file must neither switch it off over saved cards nor back on.
+         * - [K_CARD_KEYBOARD_FILL]: whether the card form is shown to this phone's autofill service; opening it up is this phone's call.
          * - [K_REMINDER_OVERLAY]: whether reminders float over other apps; it rests on a permission granted on this phone.
          * Update records and the card vault are in files of their own, not in these preferences.
          */
@@ -1235,6 +1258,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
             K_NFC_REVEAL_REGISTERED,
             K_CARD_CVV,
             K_WALLET_CARDS,
+            // Letting the phone's autofill service see the card form is a choice made on this phone, for its autofill service: a
+            // file must not be able to switch it on.
+            K_CARD_KEYBOARD_FILL,
             // Floating reminders draw over other apps on this phone, under a permission only this phone's user grants: a file
             // must not be able to switch them on. (The list of apps they keep away from is carried; it is only names.)
             K_REMINDER_OVERLAY,

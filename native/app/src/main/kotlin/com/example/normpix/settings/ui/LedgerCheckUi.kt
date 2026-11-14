@@ -35,7 +35,6 @@ import com.example.normpix.finance.ui.rememberFinanceState
 import com.example.normpix.finance.ui.shortDate
 import com.example.normpix.ui.components.AppOverlays
 import com.example.normpix.ui.components.AppSnackbars
-import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.SheetHeader
@@ -162,34 +161,34 @@ private fun LedgerCheckSheet(result: LedgerCheckResult, onChoice: (CheckChoice?)
                     ListRow(
                         headline = "${loose.category.name} is a category of its own now",
                         supporting = "It was a sub-category, but ${loose.reason}.",
-                        leading = { LeadingIcon(Icons.Outlined.Category, background = success.container, foreground = success.onContainer) },
+                        leading = { SettingsLeadingBadge(Icons.Outlined.Category, SettingsRowEmoji.TAG, background = success.container, foreground = success.onContainer) },
                     )
                 }
                 if (issues.incomeBudgets.isNotEmpty()) item {
                     ListRow(
                         headline = "Removed ${count(issues.incomeBudgets.size, "budget")} on income categories",
                         supporting = "A budget limits spending: one on income counted toward nothing.",
-                        leading = { LeadingIcon(Icons.Outlined.FactCheck, background = success.container, foreground = success.onContainer) },
+                        leading = { SettingsLeadingBadge(Icons.Outlined.FactCheck, SettingsRowEmoji.MONEY, background = success.container, foreground = success.onContainer) },
                     )
                 }
                 for (catchUp in issues.ruleCatchUps) item {
                     ListRow(
                         headline = "${catchUp.rule.payee ?: "A repeating payment"} goes on from ${shortDate(catchUp.nextDate)}",
                         supporting = "Its next date was one it had already recorded, so it would have been counted twice.",
-                        leading = { LeadingIcon(Icons.Outlined.Schedule, background = success.container, foreground = success.onContainer) },
+                        leading = { SettingsLeadingBadge(Icons.Outlined.Schedule, SettingsRowEmoji.CALENDAR, background = success.container, foreground = success.onContainer) },
                     )
                 }
                 if (issues.staleDefaultAccount) item {
                     ListRow(
                         headline = "The default account is chosen afresh",
                         supporting = "The one set was archived or gone; new entries start with the first active account.",
-                        leading = { LeadingIcon(Icons.Outlined.AccountBalanceWallet, background = success.container, foreground = success.onContainer) },
+                        leading = { SettingsLeadingBadge(Icons.Outlined.AccountBalanceWallet, SettingsRowEmoji.CARD, background = success.container, foreground = success.onContainer) },
                     )
                 }
                 if (result.recordedRepeats > 0) item {
                     ListRow(
                         headline = "Recorded ${count(result.recordedRepeats, "repeating payment")} that were due",
-                        leading = { LeadingIcon(Icons.Outlined.Schedule, background = success.container, foreground = success.onContainer) },
+                        leading = { SettingsLeadingBadge(Icons.Outlined.Schedule, SettingsRowEmoji.CALENDAR, background = success.container, foreground = success.onContainer) },
                     )
                 }
             }
@@ -239,7 +238,7 @@ private fun LedgerCheckSheet(result: LedgerCheckResult, onChoice: (CheckChoice?)
                     item {
                         ListRow(
                             headline = "${group.size} like this",
-                            leading = { LeadingIcon(Icons.Outlined.ContentCopy) },
+                            leading = { SettingsLeadingBadge(Icons.Outlined.ContentCopy, SettingsRowEmoji.STACK) },
                             onClick = { onChoice(CheckChoice.Open(group.last())) },
                         )
                     }
@@ -279,7 +278,7 @@ private fun LedgerCheckSheet(result: LedgerCheckResult, onChoice: (CheckChoice?)
                     ListRow(
                         headline = held.account.name,
                         supporting = "${if (held.balance < 0) "Owes" else "Holds"} ${money.format(kotlin.math.abs(held.balance))}",
-                        leading = { LeadingIcon(Icons.Outlined.AccountBalanceWallet) },
+                        leading = { SettingsLeadingBadge(Icons.Outlined.AccountBalanceWallet, SettingsRowEmoji.FILE_BOX) },
                     )
                 }
             }
@@ -290,7 +289,7 @@ private fun LedgerCheckSheet(result: LedgerCheckResult, onChoice: (CheckChoice?)
                     ListRow(
                         headline = if (fixed == 0) "Nothing needed putting right" else "Nothing else to look at",
                         supporting = "Balances, budgets and totals are worked out from every entry each time they are shown.",
-                        leading = { LeadingIcon(Icons.Rounded.CheckCircle, background = success.container, foreground = success.onContainer) },
+                        leading = { SettingsLeadingBadge(Icons.Rounded.CheckCircle, SettingsRowEmoji.SPARKLES, background = success.container, foreground = success.onContainer) },
                     )
                 }
             }

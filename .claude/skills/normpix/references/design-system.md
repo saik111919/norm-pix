@@ -95,17 +95,16 @@ Use these before writing anything new:
   (`Panel`, `FigureBody`, `PillBody`, `CyclePill`, the shapes) are the summary banner's, made `internal`. `spoken()` says the figure and the pill too. Items of a
   deck must be the same size, so keep each line to one line (the title excepted as above). The ratchet counts hand-set spacing: `BannerStack.kt` is now clean.
   **Home shows one of these for everything waiting** (2026-11-09, `attentionBanner`: no figure panel, so the kinds' line has the full width) that opens
-  the Notifications page, plus the update's own; the other banners are **not drawn as banners any more** - the Notifications page lists them as
-  `ListSection` rows (`ListRow` with `overline` = the status word in the status colour, a `LeadingIcon` in the solid status colour, the figure **at the
-  row's end** - `Banner.rowFigure()`, "Late by / 3 days", dropped where the words already say it - (owner, 2026-11-11: "utilize space well"), an
-  `AppLinearProgress(calm = true)` in line with the text for a bar, and the buttons as one `ConnectedButtonGroup` across the row; a row whose only
-  button would do what pressing it does has none, `Banner.rowActions()`). `BannerCard` (the earlier full banners on that page, 2026-11-08) was removed
-  with that. Holding a deck still spreads it (cards, top spending).
-- **A group of buttons follows the shape it is set in** (2026-11-13, owner: "follow the background shape", on the banner's bar and the
-  Notifications rows): `ConnectedButtonGroup(outerTop, outerBottom)` take the corner of each outer end - a pill by default, else the
-  container's corner less the inset (`BannerActions`: top `Inner - 4 dp`, bottom `Outer - 4 dp`; a notification row: top 8 dp, bottom the
-  group's large corner less the inset for the last row of a group, else the small one between rows). A full pill in a bar with small top
-  corners bulged out of it.
+  the Notifications page, plus the update's own; the other banners are listed on the **Notifications page, each as Home's banner**
+  (`BannerCard`, 2026-11-14, owner: "Notification screen cards are not following the new design" - Home's banner design): the panels
+  (`BannerTop`) over the bar (`BannerActions`), joined by the same seam - what a `BannerStack` of one draws - one under another beneath
+  the kind's `SectionSubheader`, none stacked, every one with its bar of buttons. Pressing the panels opens what it is about; TalkBack reads
+  `spoken()` once with the buttons as custom actions (`Banner.accessibilityActions()`, shared with the stack). Pixel-compared with a
+  `BannerStack` of one in `NotificationsRenderTest` (identical at 1x; at 1.6x within 1/255 on a few edge pixels). The rows of 2026-11-09..13
+  (`rowFigure`, `rowActions`, `NotificationRow`) are gone. Holding a deck still spreads it (cards, top spending).
+- **A group of buttons follows the shape it is set in** (2026-11-13, owner: "follow the background shape", on the banner's bar):
+  `ConnectedButtonGroup(outerTop, outerBottom)` take the corner of each outer end - a pill by default, else the container's corner less
+  the inset (`BannerActions`: top `Inner - 4 dp`, bottom `Outer - 4 dp`). A full pill in a bar with small top corners bulged out of it.
 - **Pulling a stack shows what is under it** (2026-11-13, owner: "can't we show the back cards' details"; `DeckStack`): the front item writes
   how far it has been pulled (`DragShare`, 0..1 of what makes a swipe count) as it is dragged and as it comes home; the next two items
   behind it (`peekWeight`: 1 and 0.5) compose their `face` **only while a pull is on** (one derived bit) and print it at alpha
@@ -158,7 +157,12 @@ Use these before writing anything new:
 - **Icons/art**: `ui/theme/AppIcons.kt` (app icon set; Wallet uses the supplied Google Wallet artwork), `finance/ui/CategoryArt`
   / `CategoryVisuals` / `BrandLogos`, `banks/ui/BankBadge`, `AssetImage`, `SvgAsset`. Illustrations (the welcome tour's,
   `onboarding/TourArt.kt`) are Fluent 3D emoji from `assets/fluent3d` on pads of M3 Expressive shapes (`graphics-shapes`) in the theme's
-  containers; those pictures are 128 px, so keep one under ~80 dp or it goes soft on a 3x screen.
+  containers; those pictures are 128 px, so keep one under ~80 dp or it goes soft on a 3x screen. **Settings pages follow "3D icons in
+  Settings"** (2026-11-14, owner: "Settings sub pages are not following the 3D icons"): on any Settings page use `SettingsLeadingIcon` (a
+  bare 32 dp picture where the flat icon was bare), `SettingsLeadingBadge` (the same disc, picture at 70%) or `SettingsRow(emoji = ...)`
+  (the main list's 44 dp tile), with a `SettingsRowEmoji` constant - never a bare `Icon` / `LeadingIcon`; functional icons (chevrons, option
+  radios, swatches, logos, status) stay flat; off, every page is exactly as before. Settings search results wear pictures too.
+  `SettingsIcons3dTest` checks every constant has a bundled picture and no call site uses a literal; renders in `SettingsSubPagesRenderTest`.
 - **Interface icons: Material or Lucide** (2026-11-07, owner: "can you use these icons" - Lucide, https://lucide.dev; Settings > Appearance > Icons > Interface
   icons, `IconStyle`, preference `icon_style`, **Material by default** so no one's icons change by an update). The code names Material icons everywhere
   (~840 uses of 297 icons), so Lucide is a **lookup at draw time**, not new names: every file imports `com.example.normpix.ui.components.Icon`
@@ -345,6 +349,25 @@ Use these before writing anything new:
   (Material settles a sheet more than 56 dp from rest *by position*, which would close it). A form that must ask first is not moved
   (`SheetDismissConfirmation`'s handler is newer). Tests: `BackGestureTest`, `PageBackGestureTest` (a real host and a real gesture;
   pictures in `app/build/qa_back_gesture/`), `TabBackPreviewTest`, `SheetBackTest`.
+- **"Android" is the default Back gesture style** (2026-11-14, owner: "the predictive back follows the system back gesture for better
+  feel"; `BackGestureStyle.System`, `isAndroid`; a phone that chose another style keeps it). `AndroidBack` (`navigation/BackGesture.kt`) is
+  Android's own preview with the platform's numbers (`verified-facts.md`): the page shrinks to 90%, rounds, lifts and drifts ((w/20)-8)dp
+  towards the finger (`DRIFT` 0.03) while the screen beneath waits at 90% and 96 dp to the other side (`ENTER_OFFSET` 0.23); past
+  `PREVIEW_BY` (half the timeline) the page fades within a fifth and the screen beneath comes forward on the emphasized curve. It is **not
+  eased by raw^1.7**: Android's page says to feed the progress through a *decelerating* curve (moves most at the start), and the platform
+  has already eased it - the old curve on top is what felt late. Its clock is `TIME` (2.15) x the speed (`clockMs`), so the commit is
+  Android's 450 ms at Standard. Everything that draws the gesture asks one `BackLook` (`rememberBackLook()`: `eased`, `leaving`, `revealed`;
+  `LocalAndroidBack` beside `LocalBackAnimation`), and `BackGestureTransitions(android = ...)` gives the host the same motion. Sheets in this
+  style follow the finger part way (`AndroidBack.sheet`, at most `SHEET_SHARE` 0.4 of the way out).
+- **A step back inside a screen is a back gesture too** (2026-11-14, owner: "Activity & Plan screen is not following the predictive back",
+  Banks & Categories should "step back to Banks first"): what is left closes under the finger over what it goes back to, letting go
+  finishes it and makes the step (a `handoff` moment so what was beneath does not arrive again), giving up eases back. Plans & Activity
+  (`WithinTabBack` in `AppShell`: the Plans view over Activity in the inner `TabHost`s, a section over Budgets in the list item - posed on
+  the part on screen, `ShownPart` / `applyBackPose(pose, shown)`); Banks & Categories (back from the side it did not open on returns to it
+  first, `StepBackHandler` + `StepBackLayers` in `navigation/StepBack.kt`, each side keyed so the one beneath carries on); Settings
+  two-pane (a step inside a page, e.g. an Appearance screen, over its page); the welcome tour (the pager follows the finger). While a
+  view is beneath, each view's own switch shows that view. Tests: `StepBackTest`, `StepBackGestureTest` (whole app, real gesture,
+  pictures in `qa_back_gesture/`), `OnboardingTourTest`.
 
 ## 6. Motion
 

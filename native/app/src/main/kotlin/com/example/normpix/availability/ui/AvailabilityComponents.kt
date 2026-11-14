@@ -55,6 +55,9 @@ import com.example.normpix.availability.describeWindow
 import com.example.normpix.availability.formatTime
 import com.example.normpix.availability.summary
 import com.example.normpix.finance.ui.TimePickerDialogFor
+import com.example.normpix.settings.ui.SettingsLeadingBadge
+import com.example.normpix.settings.ui.SettingsLeadingIcon
+import com.example.normpix.settings.ui.SettingsRowEmoji
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.RadioRow
@@ -73,6 +76,12 @@ import java.time.format.TextStyle
 val ScheduledFeature.icon: ImageVector
     get() = when (this) {
         ScheduledFeature.NfcExchange -> Icons.Rounded.Contactless
+    }
+
+/** The emoji [feature] is pictured by when Settings' icons are 3D ([SettingsLeadingBadge]), beside its [icon]. */
+internal val ScheduledFeature.emoji: String
+    get() = when (this) {
+        ScheduledFeature.NfcExchange -> SettingsRowEmoji.HANDSHAKE
     }
 
 /**
@@ -94,7 +103,7 @@ fun AvailabilityStatusRow(
         supporting = ui.message,
         supportingMaxLines = 3,
         modifier = modifier,
-        leading = { LeadingIcon(ui.feature.icon) },
+        leading = { SettingsLeadingBadge(ui.feature.icon, ui.feature.emoji) },
         trailing = { StatusTag(tag, tone = tone, icon = icon) },
         onClick = onClick,
     )
@@ -187,7 +196,7 @@ fun ScheduleEditor(
                         ListRow(
                             headline = "Starts",
                             supporting = formatTime(schedule.start, is24Hour),
-                            leading = { Icon(Icons.Outlined.Schedule, contentDescription = null) },
+                            leading = { SettingsLeadingIcon(Icons.Outlined.Schedule, SettingsRowEmoji.CLOCK) },
                             onClick = { pickingTime = TimeField.Start },
                         )
                     }
@@ -195,7 +204,7 @@ fun ScheduleEditor(
                         ListRow(
                             headline = "Ends",
                             supporting = formatTime(schedule.end, is24Hour) + if (schedule.crossesMidnight) " (next day)" else "",
-                            leading = { Icon(Icons.Outlined.Schedule, contentDescription = null) },
+                            leading = { SettingsLeadingIcon(Icons.Outlined.Schedule, SettingsRowEmoji.HOURGLASS) },
                             onClick = { pickingTime = TimeField.End },
                         )
                     }

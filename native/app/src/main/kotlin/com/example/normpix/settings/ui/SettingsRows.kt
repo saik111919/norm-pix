@@ -12,10 +12,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -32,11 +34,14 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.ui.Fluent3d
 import com.example.normpix.finance.ui.paletteColor
 import com.example.normpix.navigation.SettingsPage
+import com.example.normpix.ui.components.AppLoadingIndicator
 import com.example.normpix.ui.components.AssetImage
+import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListSectionStyle
 import com.example.normpix.ui.components.ProfileAvatar
 
@@ -88,12 +93,91 @@ val SettingsPage.emoji: String
         SettingsPage.Security -> "🔒"
     }
 
-/** The 3D emoji of the main Settings list's other rows. */
+/**
+ * The emoji a search result on the main Settings list is pictured by: its own when it is a special entry (Reset, About ...), its
+ * Appearance screen's for a setting there, else its page's - the picture the row it leads to wears. Null for an entry that is none
+ * of these, which keeps its flat icon.
+ */
+internal val SettingsEntry.emoji: String?
+    get() = when {
+        special != null -> when (special) {
+            SettingsSpecial.Profile -> SettingsRowEmoji.PROFILE
+            SettingsSpecial.Categories -> SettingsRowEmoji.TAG
+            SettingsSpecial.People -> SettingsRowEmoji.HANDSHAKE
+            SettingsSpecial.Reset -> SettingsRowEmoji.RESET
+            SettingsSpecial.Updates -> SettingsRowEmoji.UPDATES
+            SettingsSpecial.About -> SettingsRowEmoji.ABOUT
+            SettingsSpecial.WelcomeTour -> SettingsRowEmoji.WELCOME_TOUR
+        }
+        appearance != null -> appearance.emoji
+        else -> page?.emoji
+    }
+
+/**
+ * The 3D emoji of every other Settings row: the main list's own rows, and the leading icons of the rows on the pages under it
+ * ([SettingsLeadingIcon], [SettingsLeadingBadge], the `emoji` of [SettingsRow]). One place to pick a row's picture, so the same thing
+ * wears the same picture on every page. Each is a bundled 3D picture: `SettingsIcons3dTest` reads every constant here, so an emoji the
+ * app has no picture of is a failing test, not a row that quietly goes flat. A row names its emoji by a constant of this object, not
+ * a literal (the test checks that too): add the constant here.
+ */
 internal object SettingsRowEmoji {
+    // The main list's rows
     const val RESET = "🧹"
     const val UPDATES = "📥"
     const val WELCOME_TOUR = "🎉"
     const val ABOUT = "📖"
+    const val SETTINGS = "⚙️"
+    const val PROFILE = "🙂"
+
+    // Security, lock, privacy
+    const val LOCK = "🔒"
+    const val LOCK_AND_KEY = "🔐"
+    const val KEY = "🔑"
+    const val SHIELD = "🛡️"
+    const val TAG = "🏷️"
+    const val PHONE = "📱"
+    const val SCREEN = "🖥️"
+
+    // Data, backup, check
+    const val BACKUP = "💾"
+    const val BOX = "📦"
+    const val EXPORT = "📤"
+    const val IMPORT = "📥"
+    const val SPREADSHEET = "📊"
+    const val CLOCK = "🕐"
+    const val HOURGLASS = "⏳"
+    const val MAGNIFIER = "🔍"
+    const val ERASE = "🧹"
+    const val SAMPLE = "🧪"
+    const val FILE_BOX = "🗃️"
+    const val CALENDAR = "🗓️"
+
+    // Money, wallet, banks, people
+    const val MONEY = "💰"
+    const val STAR = "⭐"
+    const val CARD = "💳"
+    const val BANK = "🏦"
+    const val HANDSHAKE = "🤝"
+    const val SWIPE = "🪄"
+
+    // Notifications, alerts, updates, widgets
+    const val BELL = "🔔"
+    const val ALARM = "⏰"
+    const val POWER = "⚡"
+    const val STACK = "📑"
+    const val SPARKLES = "✨"
+    const val MOBILE_DATA = "📶"
+    const val LIGHT_BULB = "💡"
+
+    // About, appearance, the rest
+    const val GLOBE = "🌐"
+    const val BUG = "🐞"
+    const val NOTE = "📝"
+    const val QUESTION = "❓"
+    const val PEN = "🖋️"
+    const val PUZZLE = "🧩"
+    const val JOYSTICK = "🕹️"
+    const val PALETTE = "🎨"
 }
 
 /**
@@ -112,9 +196,7 @@ val LocalSettingsIcons3d = staticCompositionLocalOf { false }
 fun SettingsGlyph(icon: ImageVector, hue: Int?, modifier: Modifier = Modifier, emoji: String? = null) {
     val scheme = MaterialTheme.colorScheme
     val tone = hue?.let { paletteColor(it) }
-    val threeD = LocalSettingsIcons3d.current
-    val context = LocalContext.current
-    val picture = remember(emoji, threeD) { if (threeD && emoji != null) Fluent3d.path(context, emoji) else null }
+    val picture = rememberSettingsPicture(emoji)
     Box(
         modifier.size(44.dp).background(tone?.container ?: scheme.surfaceContainerHighest, RoundedCornerShape(14.dp)),
         contentAlignment = Alignment.Center,
@@ -126,6 +208,76 @@ fun SettingsGlyph(icon: ImageVector, hue: Int?, modifier: Modifier = Modifier, e
         }
     }
 }
+
+/**
+ * The bundled 3D picture of [emoji] (its path under `assets/`) while Settings' icons are 3D ([LocalSettingsIcons3d]); null when they
+ * are flat, when there is no [emoji], or when the app has no picture of it - the caller then draws its flat icon, so a row never
+ * goes blank.
+ */
+@Composable
+internal fun rememberSettingsPicture(emoji: String?): String? {
+    val threeD = LocalSettingsIcons3d.current
+    val context = LocalContext.current
+    return remember(emoji, threeD) { if (threeD && emoji != null) Fluent3d.path(context, emoji) else null }
+}
+
+/**
+ * The leading icon of a row on a Settings page - the bare icon a `ListRow` or `SwitchRow` draws at its start. Flat, it is exactly
+ * that `Icon(icon, contentDescription = null)`; with 3D icons on ([LocalSettingsIcons3d]) it is the 3D picture of [emoji], bare
+ * and larger than the glyph it replaces ([BARE_PICTURE_SIZE]: a picture at a glyph's 24 dp looks lost, and a neutral tile behind
+ * it vanishes on the light rows), so a one-line row keeps its height. Decorative: no description, as the flat icon has none.
+ *
+ * A row that is [busy] (a backup being written) shows the app's loading indicator where the icon was, as those rows always have; in
+ * 3D it sits in a box of the picture's size, so the row's text does not move when the work starts and ends.
+ */
+@Composable
+fun SettingsLeadingIcon(
+    icon: ImageVector,
+    emoji: String,
+    modifier: Modifier = Modifier,
+    tint: Color = LocalContentColor.current,
+    busy: Boolean = false,
+) {
+    val picture = rememberSettingsPicture(emoji)
+    when {
+        busy && picture == null -> AppLoadingIndicator(modifier.size(24.dp), strokeWidth = 2.5.dp)
+        busy -> Box(modifier.size(BARE_PICTURE_SIZE), contentAlignment = Alignment.Center) {
+            AppLoadingIndicator(Modifier.size(24.dp), strokeWidth = 2.5.dp)
+        }
+        picture == null -> Icon(icon, contentDescription = null, modifier = modifier, tint = tint)
+        else -> AssetImage(picture, modifier.size(BARE_PICTURE_SIZE))
+    }
+}
+
+/**
+ * [com.example.normpix.ui.components.LeadingIcon]'s tonal badge on a Settings page. Flat, it is exactly that badge; with 3D icons on
+ * it is the same disc, in the same colours (a success or an error tone keeps saying so), carrying the 3D picture of [emoji] larger
+ * than the glyph it replaces.
+ */
+@Composable
+fun SettingsLeadingBadge(
+    icon: ImageVector,
+    emoji: String,
+    modifier: Modifier = Modifier,
+    background: Color = MaterialTheme.colorScheme.secondaryContainer,
+    foreground: Color = MaterialTheme.colorScheme.onSecondaryContainer,
+    size: Dp = 40.dp,
+) {
+    val picture = rememberSettingsPicture(emoji)
+    if (picture == null) {
+        LeadingIcon(icon, modifier, background, foreground, size)
+    } else {
+        Box(modifier.size(size).background(background, CircleShape), contentAlignment = Alignment.Center) {
+            AssetImage(picture, Modifier.size(size * DISC_PICTURE_FILL))
+        }
+    }
+}
+
+/** What the picture in a Settings leading icon is drawn at, bare: a 3D picture reads as large as a glyph about 24 dp across at this size. */
+private val BARE_PICTURE_SIZE = 32.dp
+
+/** How much of a disc its 3D picture fills (the glyph it replaces filled half): as much as the main list's 30 of 44 dp tile. */
+private const val DISC_PICTURE_FILL = 0.7f
 
 /**
  * A row of the main Settings screen: the group's coloured glyph, its name in the heading weight and, under it, what it holds
@@ -239,6 +391,7 @@ fun SettingsSplitSwitchRow(
     modifier: Modifier = Modifier,
     supporting: String? = null,
     enabled: Boolean = true,
+    emoji: String? = null,
 ) {
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         SettingsRow(
@@ -248,6 +401,7 @@ fun SettingsSplitSwitchRow(
             modifier = Modifier.weight(1f),
             supporting = supporting,
             onClick = onClick,
+            emoji = emoji,
         )
         Box(
             Modifier
@@ -282,11 +436,13 @@ fun SettingsSwitchRow(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     supporting: String? = null,
+    /** The emoji the row is pictured by when Settings' icons are 3D ([SettingsGlyph]); null keeps [icon] always. */
+    emoji: String? = null,
 ) {
     ListItem(
         modifier = modifier.toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        leadingContent = { SettingsGlyph(icon, hue) },
+        leadingContent = { SettingsGlyph(icon, hue, emoji = emoji) },
         headlineContent = { Text(headline, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) },
         supportingContent = supporting?.let { { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
         trailingContent = { Switch(checked = checked, onCheckedChange = null) },

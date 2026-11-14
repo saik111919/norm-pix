@@ -2,7 +2,9 @@ package com.example.normpix.onboarding
 
 import android.Manifest
 import android.os.Build
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
+import com.example.normpix.navigation.rememberBackLook
+import kotlin.coroutines.cancellation.CancellationException
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -132,8 +134,25 @@ fun OnboardingTour(preferences: AppPreferences, onFinished: () -> Unit) {
     val onLast by remember { derivedStateOf { pager.currentPage == ONBOARDING_STEPS - 1 } }
     val context = LocalContext.current.applicationContext
 
-    // Back goes to the step before; on the first step it is the app's own back, as on any screen.
-    BackHandler(enabled = pager.currentPage > 0) { scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } }
+    // Back goes to the step before; on the first step it is the app's own back, as on any screen. The gesture brings the step before
+    // in under the finger, as a swipe would (2026-11-14, every step back in the app is a back gesture like the others): letting go
+    // finishes the turn, giving up turns it back.
+    val backLook = rememberBackLook()
+    PredictiveBackHandler(enabled = pager.currentPage > 0) { progress ->
+        val from = pager.currentPage
+        var moved = 0f
+        try {
+            progress.collect { event ->
+                val page = (pager.layoutInfo.pageSize + pager.layoutInfo.pageSpacing).toFloat()
+                val to = backLook.eased(event.progress) * page
+                pager.dispatchRawDelta(-(to - moved))
+                moved = to
+            }
+            scope.launch { pager.animateScrollToPage(from - 1) }
+        } catch (_: CancellationException) {
+            scope.launch { pager.animateScrollToPage(from) }
+        }
+    }
     // The steps' pictures, decoded now, so a step's stickers are there when it slides in.
     LaunchedEffect(Unit) { withContext(Dispatchers.IO) { tourPictures.forEach { AssetBitmaps.load(context, it) } } }
 

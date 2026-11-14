@@ -48,10 +48,10 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
   instead), in all three top-bar styles through `LocalTopBarExtras`. It carries how many are new; tapping it opens a
   **Notifications page** that lists everything that needs the user -
   overdue reminders, budgets over or nearly used, cards about to expire, a crash report, a backup due, an update waiting - **grouped by
-  kind** (Reminders, Budgets, Cards, Backup, NormPix = crash report + update) as the pages' own list pattern (2026-11-09, owner: "not
-  following the design patterns"): a `ListSection` per kind, one tonal row per notification (status disc, the status word in the status
-  colour as the overline, title, what it is about, its figure at the row's end, a bar when it has one, its buttons as one connected
-  group - none when the only one would do what pressing the row does; pressing the row opens what it is about). **Home's Needs attention is one banner** ("4 things need attention", the kinds in a line, the
+  kind** (Reminders, Budgets, Cards, Backup, NormPix = crash report + update), each notification drawn as **Home's banner** (since
+  2026-11-14, owner: "Notification screen cards are not following the new design"; `BannerCard`: its two panels over its bar of buttons,
+  the status colour throughout, never stacked; pressing the panels opens what it is about). From 2026-11-09 to 2026-11-13 they were
+  tonal list rows. **Home's Needs attention is one banner** ("4 things need attention", the kinds in a line, the
   colour of the worst) that opens this page (owner, 2026-11-09); **an update keeps its own banner on Home** with its own buttons, as before,
   and is also listed on the page. There is **no history**: a
   notification lives as long as the thing it says does. **Opening the page is seeing it all** (all keys listed are written as seen;
@@ -185,6 +185,15 @@ path, never NormPix's own providers - judged by the authority **after the last `
   public PPSE directory, then NDEF; **never GPO / READ RECORD**; a bank card prefills network/kind and explains that the
   number must be typed or scanned). Card numbers are never in a normal backup; a separate password-locked **cards file**
   moves them (`CardsTransfer`).
+- **Keyboard card fill** (2026-11-14, owner: "keyboard gives an option to scan the cards like how Swiggy does"; Settings > Wallet & Cards,
+  `cardKeyboardFill`, key `card_keyboard_fill`, **off by default**, never carried by a backup). That "Scan card" chip is the phone's
+  autofill service (Autofill with Google, shown by the keyboard), so turning it on routes the card form through a service outside the
+  app - hence opt-in. On: the form's fields carry `ContentType.CreditCardNumber` / `ExpirationMonth` / `ExpirationYear` / `SecurityCode`
+  and `PersonFullName` (`Modifier.cardAutofill`), a four-digit year from a service is kept as two (`expiryYearDigits`), and the session is
+  **cancelled** on save and as the sheet starts to close (`LocalSheetClosing`) - compose-ui 1.12.1 commits a session by itself when
+  content-typed fields leave the screen, which is what makes a service offer "Save card?". Off: every card field is
+  `ContentDataType.None`, so no service sees the form at all (before this the CVV field was reported as a password field); the account
+  form's card number is always None. `KeyboardCardFillTest`. Not seen on a device yet.
 - **Lock** (`wallet/AppLock.kt`, `AppLockService`): biometrics or device credential; scope Wallet only | Entire app;
   timeout immediate / 30 s / 1 min / 5 min / until closed. Locking closes every sheet (`AppOverlays.dismissAll`) and widgets
   show nothing of the ledger while NormPix is locked.
@@ -326,7 +335,15 @@ path, never NormPix's own providers - judged by the authority **after the last `
   (database version 13, `CategorySuggestions.addedIn13`) also *Money sent* (sent to friends, lent, repaid, bill splits), *Gifts given*,
   *Fees & charges*, *Work expenses*, and for income *Money received*, *Investment returns*, *Sold items* - with icon keys
   `money_sent`, `money_received`, `sold_items`. An existing ledger gets them once (`addDefaultFamilies`: never where a category of
-  that kind already goes by the name).
+  that kind already goes by the name). **2026-11-14: +50 ready-made sub-categories** (owner: "Food & Dining subcategories like snacks,
+  lunch, dinner, Swiggy ... used in daily life"): Food & dining gained Snacks, Lunch, Dinner, Swiggy, Zomato, Tiffin & mess, Office
+  canteen, Sweets & mithai; Groceries Blinkit, Zepto, Instamart, BigBasket, DMart, Milk delivery; Transport Uber, Ola, Rapido, FASTag
+  recharge, RTO & licence; and more across Bills, Housing, Health, Fitness, Events, Education, Kids, Subscriptions, Loans, Salary and Other
+  income. No database change: a new install seeds them (`seedDefaults` walks `byParent`), an existing phone takes them from Banks &
+  Categories > "Add suggested sub-categories". Brand sub-categories carry their logo key (swiggy, zomato, blinkit ...). `MerchantCategories`
+  rules may name a newer sub with `Rule.orElseSub`, the broader sub to use on a phone that lacks it (Swiggy -> Swiggy, else Delivery apps;
+  Uber -> Uber, else Cabs & rideshare; FASTag -> FASTag recharge, else Tolls; "lunch"/"dinner"/"snacks"/"tiffin" words -> their sub, else
+  the parent). Families stay at most 18 sub-categories except Subscriptions (`CategorySuggestionsTest`).
 - **Locked backups** (since 2026-11-03, whole-app encryption stage 1): each restorable export first asks "Lock the backup?"
   (`BackupLockSheet` in `settings/ui/LockedBackupUi.kt`; **Lock it** is preselected, **Don't lock** saves the file exactly as before).
   Locked, the whole file is wrapped by `backup/LockedFile` and saved as `<name>.locked` (`application/octet-stream`); unlocked it is

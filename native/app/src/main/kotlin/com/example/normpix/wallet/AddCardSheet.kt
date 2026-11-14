@@ -38,8 +38,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentDataType
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.platform.LocalAutofillManager
+import androidx.compose.ui.semantics.contentDataType
+import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -69,6 +75,7 @@ import com.example.normpix.ui.components.AppLoadingIndicator
 import com.example.normpix.ui.components.DiscardChangesGuard
 import com.example.normpix.ui.components.EditorSheet
 import com.example.normpix.ui.components.LocalOverlays
+import com.example.normpix.ui.components.LocalSheetClosing
 import com.example.normpix.ui.components.ProvideArtworkSeed
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppIconSizes
@@ -104,6 +111,21 @@ internal object CardNumberTransformation : VisualTransformation {
 
 private fun digitsOnly(input: String, max: Int): String = input.filter { it in '0'..'9' }.take(max)
 
+/** A card's year as the form keeps it, two digits: an autofill service may hand over all four ("2028" is "28"). */
+internal fun expiryYearDigits(input: String): String {
+    val digits = input.filter { it in '0'..'9' }
+    return if (digits.length == 4) digits.takeLast(2) else digits.take(2)
+}
+
+/**
+ * What the card form tells the phone's autofill service about a field. With Settings > Wallet & Cards > Keyboard card fill on, which
+ * of the card's details it is ([type]), so the service can offer a saved card or "Scan card" above the keyboard; off (the default),
+ * that it is nothing to fill ([ContentDataType.None]): Compose then reports no event for the field, and no service sees the form or
+ * offers to save what is typed in it.
+ */
+internal fun Modifier.cardAutofill(on: Boolean, type: ContentType): Modifier =
+    semantics { if (on) contentType = type else contentDataType = ContentDataType.None }
+
 /** What the form says after a bank card was tapped: what was found, and why the rest is typed. */
 private fun tappedNotice(info: PaymentCardInfo, canScan: Boolean): String =
     "${info.title} detected. Banks lock the card number inside the chip, so no app can read it with a tap. " +
@@ -131,6 +153,18 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
     val catalog = rememberFinanceState().catalog
     val prefs by container.preferences.state.collectAsState()
     val keepCvv = prefs.cardCvvEnabled
+    // Settings > Wallet & Cards > Keyboard card fill (off by default): the phone's autofill service may see which fields are the
+    // card's and offer a saved card or "Scan card" above the keyboard. Its session is cancelled - never committed - as the sheet
+    // starts to go, however it goes: Compose commits a session by itself once fields with a content type leave the screen, which
+    // is what has a service offer to save the card. Cancelled first, there is nothing to save, and nothing is handed over.
+    val keyboardFill = prefs.cardKeyboardFill
+    val autofill = LocalAutofillManager.current
+    val closing = LocalSheetClosing.current
+    if (keyboardFill) {
+        LaunchedEffect(autofill, closing) {
+            snapshotFlow { closing() }.collect { going -> if (going) autofill?.cancel() }
+        }
+    }
 
     // The bank is one of the banks the app knows - the same list accounts use - not free text. A card from before banks
     // were shared opens on the bank its name refers to, or on its old name to be turned into one.
@@ -279,6 +313,7 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
             (if (expectedDigits != null) number.length == expectedDigits else number.length in 12..19) &&
             (month.toIntOrNull() ?: 0) in 1..12 && year.length == 2 && (!keepCvv || cvv.isEmpty() || cvv.length >= 3)
         if (picked == null || !valid) return
+        if (keyboardFill) autofill?.cancel()
         onDone(
             StoredCard(
                 id = initial?.id ?: "${System.currentTimeMillis()}${(0..999).random()}",
@@ -377,7 +412,7 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
         OutlinedTextField(
             value = name,
             onValueChange = { name = it },
-            modifier = Modifier.fillMaxWidth().focusRequester(nameFocus),
+            modifier = Modifier.fillMaxWidth().focusRequester(nameFocus).cardAutofill(keyboardFill, ContentType.PersonFullName),
             label = { Text("Cardholder name") },
             isError = nameError != null,
             supportingText = nameError?.let { { Text(it) } },
@@ -418,7 +453,7 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
         OutlinedTextField(
             value = number,
             onValueChange = { number = digitsOnly(it, maxDigits) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().cardAutofill(keyboardFill, ContentType.CreditCardNumber),
             label = { Text("Card number") },
             placeholder = { Text("1234 5678 9012 3456") },
             isError = numberError != null,
@@ -436,7 +471,7 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
                 OutlinedTextField(
                     value = month,
                     onValueChange = { month = digitsOnly(it, 2) },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).cardAutofill(keyboardFill, ContentType.CreditCardExpirationMonth),
                     label = { Text("Month") },
                     placeholder = { Text("MM") },
                     isError = monthError != null,
@@ -448,8 +483,8 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
                 )
                 OutlinedTextField(
                     value = year,
-                    onValueChange = { year = digitsOnly(it, 2) },
-                    modifier = Modifier.weight(1f),
+                    onValueChange = { year = expiryYearDigits(it) },
+                    modifier = Modifier.weight(1f).cardAutofill(keyboardFill, ContentType.CreditCardExpirationYear),
                     label = { Text("Year") },
                     placeholder = { Text("YY") },
                     isError = yearError != null,
@@ -465,7 +500,7 @@ fun AddCardSheet(initial: StoredCard?, onDone: (StoredCard?) -> Unit, tapped: Pa
                 OutlinedTextField(
                     value = cvv,
                     onValueChange = { cvv = digitsOnly(it, 4) },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).cardAutofill(keyboardFill, ContentType.CreditCardSecurityCode),
                     label = { Text("CVV") },
                     isError = cvvError != null,
                     supportingText = { Text(cvvError ?: "Optional") },

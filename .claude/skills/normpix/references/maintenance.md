@@ -197,6 +197,21 @@ tintedCardScheme
 PrintReferenceWidth
 BARE_ICON_IN_BOX
 ICON_IN_DISC
+AndroidBack
+BackLook
+LocalAndroidBack
+WithinTabBack
+StepBackHandler
+StepBackLayers
+ShownPart
+LocalSheetClosing
+cardAutofill
+KEYBOARD_CARD_FILL_TITLE
+SettingsLeadingIcon
+SettingsLeadingBadge
+SettingsRowEmoji
+BannerCard
+orElseSub
 <!-- symbols:end -->
 
 ## 2. What to update when

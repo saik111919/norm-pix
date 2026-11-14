@@ -60,7 +60,6 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.ui.components.AppSubPage
-import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.LocalSnackbars
@@ -151,7 +150,7 @@ fun WidgetsSettingsPage() {
                             ListRow(
                                 headline = "Let the rings step on the minute",
                                 supporting = "Allow alarms & reminders for NormPix. Until then the rings can run a little behind the minute.",
-                                leading = { LeadingIcon(Icons.Outlined.Schedule) },
+                                leading = { SettingsLeadingBadge(Icons.Outlined.Schedule, SettingsRowEmoji.ALARM) },
                                 onClick = {
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                                         // Android's own page for it comes over NormPix: coming back from it is not leaving.
@@ -187,7 +186,7 @@ fun WidgetsSettingsPage() {
                             ListRow(
                                 headline = "Your launcher can't add it from here",
                                 supporting = "Press and hold the home screen, choose Widgets and find NormPix.",
-                                leading = { LeadingIcon(Icons.Outlined.Info) },
+                                leading = { SettingsLeadingBadge(Icons.Outlined.Info, SettingsRowEmoji.LIGHT_BULB) },
                             )
                         }
                     }

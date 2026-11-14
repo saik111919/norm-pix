@@ -25,6 +25,8 @@ import androidx.compose.ui.text.font.FontFamily
 import com.example.normpix.diagnostics.CrashLog
 import com.example.normpix.diagnostics.CrashReport
 import com.example.normpix.navigation.LocalAppContainer
+import com.example.normpix.settings.ui.SettingsLeadingIcon
+import com.example.normpix.settings.ui.SettingsRowEmoji
 import com.example.normpix.ui.components.EditorSheet
 import com.example.normpix.ui.components.Icon
 import com.example.normpix.ui.components.ListRow
@@ -66,7 +68,7 @@ fun CrashLogSection() {
             ListRow(
                 headline = "Crash log",
                 supporting = crashLogSummary(entries),
-                leading = { Icon(Icons.Outlined.ReportProblem, contentDescription = null) },
+                leading = { SettingsLeadingIcon(Icons.Outlined.ReportProblem, SettingsRowEmoji.BUG) },
                 trailing = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
                 supportingMaxLines = 3,
                 onClick = {

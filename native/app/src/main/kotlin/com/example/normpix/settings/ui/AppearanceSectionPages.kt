@@ -58,6 +58,7 @@ import com.example.normpix.finance.ui.MonthScopeButton
 import com.example.normpix.finance.ui.MonthSwitcher
 import com.example.normpix.finance.ui.outline
 import com.example.normpix.finance.ui.paletteColor
+import com.example.normpix.navigation.AndroidBack
 import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
@@ -89,7 +90,6 @@ import com.example.normpix.ui.components.AppLinearProgress
 import com.example.normpix.ui.components.AppLoadingIndicator
 import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.ConfirmSheetContent
-import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.LocalAppScope
@@ -251,7 +251,7 @@ private fun CategoryIconsSection(prefs: AppPrefsState, preferences: AppPreferenc
     }
     ListSection(
         title = "Settings icons",
-        footer = "With the 3D style, the groups on the main Settings list wear 3D pictures too. Turn this off to keep them flat " +
+        footer = "With the 3D style, Settings and the pages under it wear 3D pictures too. Turn this off to keep them flat " +
             "there and 3D everywhere else.",
     ) {
         item {
@@ -318,7 +318,7 @@ private fun CategoryIconsSection(prefs: AppPrefsState, preferences: AppPreferenc
             ListRow(
                 headline = "See all icons",
                 supporting = "Interface, categories and brands, app icons",
-                leading = { LeadingIcon(Icons.Outlined.Category) },
+                leading = { SettingsLeadingBadge(Icons.Outlined.Category, SettingsRowEmoji.PUZZLE) },
                 onClick = { scope.launch { overlays.sheet<Unit>(expandable = true) { IconGallerySheet() } } },
             )
         }
@@ -468,7 +468,13 @@ private fun BackGestureSection(prefs: AppPrefsState, preferences: AppPreferences
         modifier = Modifier.selectableGroup(),
     ) {
         // The gesture itself, in the style and at the speed chosen: a finger from the edge, then letting go.
-        item { BackGesturePreview(prefs.backGestureStyle.animation(prefs.pageAnimation), prefs.backGestureSpeed.ms) }
+        item {
+            BackGesturePreview(
+                prefs.backGestureStyle.animation(prefs.pageAnimation),
+                AndroidBack.clockMs(prefs.backGestureSpeed.ms, prefs.backGestureStyle.isAndroid),
+                android = prefs.backGestureStyle.isAndroid,
+            )
+        }
         for (style in BackGestureStyle.entries) {
             item {
                 RadioRow(
@@ -584,7 +590,7 @@ private fun SheetTransitionsSection(prefs: AppPrefsState, preferences: AppPrefer
             ListRow(
                 headline = "Open a sheet",
                 supporting = "Like a form or a picker",
-                leading = { LeadingIcon(Icons.Outlined.Layers) },
+                leading = { SettingsLeadingBadge(Icons.Outlined.Layers, SettingsRowEmoji.STACK) },
                 onClick = {
                     scope.launch {
                         overlays.sheet<Unit> { done ->
@@ -607,7 +613,7 @@ private fun SheetTransitionsSection(prefs: AppPrefsState, preferences: AppPrefer
             ListRow(
                 headline = "Open a question",
                 supporting = "Like the ones that ask before deleting",
-                leading = { LeadingIcon(Icons.Outlined.Layers) },
+                leading = { SettingsLeadingBadge(Icons.Outlined.Layers, SettingsRowEmoji.QUESTION) },
                 onClick = {
                     scope.launch {
                         overlays.confirm(

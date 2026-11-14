@@ -30,6 +30,8 @@ import androidx.core.net.toUri
 import com.example.normpix.BuildConfig
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
+import com.example.normpix.settings.ui.SettingsLeadingIcon
+import com.example.normpix.settings.ui.SettingsRowEmoji
 import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.EditorSheet
 import com.example.normpix.ui.components.ListRow
@@ -74,7 +76,7 @@ fun AboutPage() {
                         ListRow(
                             headline = "Everything stays on this device",
                             supporting = "No account and no analytics. NormPix connects only to GitHub, to check for updates and download them.",
-                            leading = { Icon(Icons.Outlined.PhoneAndroid, contentDescription = null) },
+                            leading = { SettingsLeadingIcon(Icons.Outlined.PhoneAndroid, SettingsRowEmoji.PHONE) },
                             supportingMaxLines = 4,
                         )
                     }
@@ -83,7 +85,7 @@ fun AboutPage() {
                             headline = "Locked and encrypted",
                             supporting = "Your data and card details are encrypted on this phone, and you choose what asks for your " +
                                 "fingerprint, face or screen lock.",
-                            leading = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+                            leading = { SettingsLeadingIcon(Icons.Outlined.Lock, SettingsRowEmoji.LOCK) },
                             supportingMaxLines = 4,
                         )
                     }
@@ -96,7 +98,7 @@ fun AboutPage() {
                         ListRow(
                             headline = "Welcome tour",
                             supporting = "Play the introduction a new install begins with: how NormPix looks, your name and picture, reminders.",
-                            leading = { Icon(Icons.Outlined.Celebration, contentDescription = null) },
+                            leading = { SettingsLeadingIcon(Icons.Outlined.Celebration, SettingsRowEmoji.WELCOME_TOUR) },
                             trailing = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
                             supportingMaxLines = 3,
                             onClick = container.preferences::startOnboarding,
@@ -110,7 +112,7 @@ fun AboutPage() {
                             ListRow(
                                 headline = "Updates & changelog",
                                 supporting = "NormPix ${BuildConfig.VERSION_NAME}",
-                                leading = { Icon(Icons.Outlined.SystemUpdate, contentDescription = null) },
+                                leading = { SettingsLeadingIcon(Icons.Outlined.SystemUpdate, SettingsRowEmoji.UPDATES) },
                                 trailing = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
                                 onClick = navigator::openUpdates,
                             )
@@ -125,7 +127,7 @@ fun AboutPage() {
                             headline = "NormPix on GitHub",
                             supporting = "${repositoryUrl().removePrefix("https://")}\n" +
                                 "The source code, every release and the full change history. Opens in your browser.",
-                            leading = { Icon(Icons.Outlined.Language, contentDescription = null) },
+                            leading = { SettingsLeadingIcon(Icons.Outlined.Language, SettingsRowEmoji.GLOBE) },
                             trailing = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null) },
                             supportingMaxLines = 4,
                             onClick = { openInBrowser(context, repositoryUrl()) },

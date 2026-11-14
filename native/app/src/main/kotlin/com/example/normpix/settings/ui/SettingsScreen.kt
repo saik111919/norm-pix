@@ -221,6 +221,7 @@ internal fun SettingsListContent(
                         supporting = entry.location,
                         icon = entry.icon,
                         hue = null,
+                        emoji = entry.emoji,
                         onClick = { activator.activate(entry) },
                     )
                 }

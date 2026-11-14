@@ -83,9 +83,21 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -210,15 +222,16 @@ fun AppShell(
     var tabHandoff by remember { mutableStateOf(false) }
 
     // Inside Plans back steps up first - section to Budgets, then to the transaction history - and only then
-    // falls back to the previous tab. The steps live on ShellState so the rule has one definition.
-    fun canClimbWithinTab(): Boolean = shell.canStepBackInPlans
-
-    fun climbWithinTab() {
-        shell.stepBackInPlans()
-    }
+    // falls back to the previous tab. The steps live on ShellState so the rule has one definition, and each is a back gesture
+    // like any other (owner, 2026-11-14: "Activity & Plan screen is not following the predictive back"): what is left closes under
+    // the finger over what it goes back to - the Plans view over Activity, a section over Budgets ([WithinTabBack]). Until then a
+    // step only changed the state when the gesture was let go, with nothing to see while it was dragged.
+    val withinTab = remember { WithinTabBack() }
+    // The Back gesture style: Android's own preview, or a page style's close (see BackLook).
+    val backLook = rememberBackLook()
 
     val hasHistory = tabHistory.size > 1
-    val handlesBack = canClimbWithinTab() || hasHistory
+    val handlesBack = shell.canStepBackInPlans || hasHistory
 
     PredictiveBackHandler(enabled = handlesBack && !covered) { progress ->
         if (backFinishing) {
@@ -226,26 +239,33 @@ fun AppShell(
             return@PredictiveBackHandler
         }
         backSettling[0]?.cancel()
-        val toPreviousTab = !canClimbWithinTab() && hasHistory
-        backPreview.target = if (toPreviousTab) tabHistory[tabHistory.lastIndex - 1] else TabBackPreview.NO_TAB
+        val step = shell.planStep
+        val toPreviousTab = step == null && hasHistory
+        // The one preview this gesture moves: the view or the section a step inside Plans leaves, else the tab.
+        val preview = when (step) {
+            PlanStep.View -> withinTab.view.also { it.target = PlansAndTransactionsTab.Transactions.ordinal }
+            PlanStep.Section -> withinTab.section.also { it.target = PlanSection.Budgets.ordinal }
+            null -> backPreview.also { it.target = if (toPreviousTab) tabHistory[tabHistory.lastIndex - 1] else TabBackPreview.NO_TAB }
+        }
         fun easeBackToRest() {
             backSettling[0] = scope.launch {
-                animate(backPreview.progress, 0f, animationSpec = backSettle) { value, _ -> backPreview.progress = value }
-                backPreview.target = TabBackPreview.NO_TAB
+                animate(preview.progress, 0f, animationSpec = backSettle) { value, _ -> preview.progress = value }
+                preview.target = TabBackPreview.NO_TAB
             }
         }
-        // How far the finger has gone (0..1). What is drawn is BackGesture.eased of it: the start of the close, not all of it.
+        // How far the finger has gone (0..1). What is drawn is the look's eased of it: in a page style the start of the close, not all
+        // of it; in Android's own, the finger's progress as it is.
         var raw = 0f
         try {
             progress.collect { backEvent ->
-                backPreview.direction = BackPreview.directionOf(backEvent.swipeEdge == BackEventCompat.EDGE_RIGHT)
+                preview.direction = BackPreview.directionOf(backEvent.swipeEdge == BackEventCompat.EDGE_RIGHT)
                 raw = backEvent.progress
-                backPreview.progress = BackGesture.eased(raw)
+                preview.progress = backLook.eased(raw)
             }
             // Gesture completed.
-            if (toPreviousTab) {
-                // The close is finished from where the finger let go, and the switch is made when the tab is gone: the tab
-                // it returns to is already on screen, whole, so it is switched to without arriving - nothing flashes.
+            if (step != null || toPreviousTab) {
+                // The close is finished from where the finger let go, and the switch is made when what is left is gone: what it
+                // returns to is already on screen, whole, so it is switched to without arriving - nothing flashes.
                 backFinishing = true
                 val from = raw
                 scope.launch {
@@ -253,26 +273,29 @@ fun AppShell(
                         // The rest of the close, in what is left of the gesture's clock and along the curve the finger was on -
                         // not a fixed 160 ms from wherever it was, which after a quick swipe was most of the close in a blink.
                         animate(from, 1f, animationSpec = tween(BackGesture.finishMs(from, backGestureMs), easing = LinearEasing)) { value, _ ->
-                            backPreview.progress = BackGesture.eased(value)
+                            preview.progress = backLook.eased(value)
                         }
-                        tabHandoff = true
+                        if (step == null) tabHandoff = true else withinTab.handoff = true
                         Snapshot.withMutableSnapshot {
-                            tabHistory.removeAt(tabHistory.lastIndex)
-                            shell.selected = tabHistory.last()
-                            backPreview.target = TabBackPreview.NO_TAB
-                            backPreview.progress = 0f
+                            if (step == null) {
+                                tabHistory.removeAt(tabHistory.lastIndex)
+                                shell.selected = tabHistory.last()
+                            } else {
+                                shell.stepBackInPlans()
+                            }
+                            preview.target = TabBackPreview.NO_TAB
+                            preview.progress = 0f
                         }
                         // Two frames: the one that draws the switch, and the one after it.
                         withFrameNanos { }
                         withFrameNanos { }
                     } finally {
                         tabHandoff = false
+                        withinTab.handoff = false
                         backFinishing = false
                     }
                 }
             } else {
-                // A step up inside the tab: its content eases back to full size while the section changes under it.
-                climbWithinTab()
                 easeBackToRest()
             }
         } catch (_: CancellationException) {
@@ -621,6 +644,7 @@ fun AppShell(
                     PlansAndTransactionsScreen(
                         transactionsListState = listStates[1],
                         plansListState = plansListState,
+                        back = withinTab,
                     )
                 }
             }
@@ -944,7 +968,7 @@ internal fun PersistentShell(
     hidden: Boolean,
 ) {
     val animation = LocalPageAnimation.current
-    val backAnimation = LocalBackAnimation.current
+    val backLook = rememberBackLook()
     val reduced = rememberReducedMotion()
     Box(
         Modifier
@@ -954,7 +978,7 @@ internal fun PersistentShell(
                 if (!reduced && uncovered < 1f) {
                     // Under the back gesture: the page beneath of the Back gesture style, as far along as the gesture's curve puts it.
                     val pose = if (beneath.byGesture) {
-                        BackPreview.revealed(backAnimation, BackGesture.eased(uncovered), beneath.direction)
+                        backLook.revealed(backLook.eased(uncovered), beneath.direction)
                     } else {
                         BackPreview.revealed(animation, uncovered, 1f)
                     }
@@ -997,8 +1021,8 @@ internal fun TabHost(
     content: @Composable () -> Unit,
 ) {
     val animation = LocalPageAnimation.current
-    // What the back gesture plays: the page style's own close, or the one the Back gesture style names.
-    val backAnimation = LocalBackAnimation.current
+    // What the back gesture plays: the page style's own close, the one the Back gesture style names, or Android's own preview.
+    val backLook = rememberBackLook()
     val reduced = rememberReducedMotion()
     // While the back gesture is taking the app to the previous tab: the tab on screen is moved as that style closes a page,
     // and the tab it goes back to is laid out, whole, beneath it. Reduced motion shows neither: the gesture just goes back.
@@ -1035,7 +1059,7 @@ internal fun TabHost(
             .then(
                 when {
                     visible && preview != null -> Modifier
-                        .graphicsLayer { applyBackPose(BackPreview.leaving(backAnimation, preview.progress, preview.direction)) }
+                        .graphicsLayer { applyBackPose(backLook.leaving(preview.progress, preview.direction)) }
                         .background(surface)
                     visible -> Modifier.graphicsLayer {
                         val t = arrival.value
@@ -1054,7 +1078,7 @@ internal fun TabHost(
                         }
                     }
                     preview != null && preview.target == ordinal -> Modifier
-                        .graphicsLayer { applyBackPose(BackPreview.revealed(backAnimation, preview.progress, preview.direction)) }
+                        .graphicsLayer { applyBackPose(backLook.revealed(preview.progress, preview.direction)) }
                         .clearAndSetSemantics {}
                     departing -> Modifier
                         .graphicsLayer {
@@ -1092,8 +1116,77 @@ internal class TabBackPreview {
     }
 }
 
+/**
+ * The back gesture as it takes Plans & Activity up a step inside the tab (see [ShellState.planStep]): the Plans view going back to
+ * Activity ([view], its targets are [PlansAndTransactionsTab] ordinals) and a section going back to Budgets ([section], [PlanSection]
+ * ordinals). Each is a [TabBackPreview] the gesture moves as it moves the tabs; [handoff] is true for the moment of the switch a
+ * finished gesture makes, so what it went back to - already on screen, whole - does not arrive again.
+ */
+@Stable
+internal class WithinTabBack {
+    val view = TabBackPreview()
+    val section = TabBackPreview()
+    var handoff by mutableStateOf(false)
+}
+
+/**
+ * The part of a layer that is on screen, from [update] in `onPlaced`: a section of a list can be screens long, and a pose that
+ * shrinks it about its middle, or sinks it from its top, moves what nobody sees. [applyBackPose] given one moves the part that shows.
+ */
+internal class ShownPart {
+    /** The top and bottom of the part on screen, in the layer's own pixels; the whole layer until placed. */
+    var top = 0f
+        private set
+    var bottom = Float.NaN
+        private set
+
+    fun update(coordinates: LayoutCoordinates) {
+        if (!coordinates.isAttached) return
+        val y = coordinates.positionInRoot().y
+        val shown = coordinates.boundsInRoot()
+        top = (shown.top - y).coerceAtLeast(0f)
+        bottom = (shown.bottom - y).coerceAtLeast(top)
+    }
+}
+
 /** Draws a tab in [pose]: the shape, shadow and motion of the user's page style part-way through going back. */
-private fun GraphicsLayerScope.applyBackPose(pose: BackPose) {
+internal fun GraphicsLayerScope.applyBackPose(pose: BackPose, shown: ShownPart) {
+    val bottom = if (shown.bottom.isNaN()) size.height else shown.bottom.coerceAtMost(size.height)
+    val top = shown.top.coerceAtMost(bottom)
+    if (top <= 0f && bottom >= size.height) {
+        applyBackPose(pose)
+        return
+    }
+    val height = (bottom - top).coerceAtLeast(1f)
+    scaleX = pose.scale
+    scaleY = pose.scale
+    alpha = pose.alpha
+    translationX = pose.shiftX * size.width
+    // About the middle of what shows, not of the whole section.
+    transformOrigin = TransformOrigin(pose.origin.pivotFractionX, ((top + bottom) / 2f) / size.height.coerceAtLeast(1f))
+    val corner = PageCornerRadius.toPx()
+    if (pose.reveal < 1f) {
+        clip = true
+        shape = ShownPartShape(bottom - height * pose.reveal, bottom, corner * pose.corners, roundBottom = false)
+    } else if (pose.corners > 0f) {
+        clip = true
+        shape = ShownPartShape(top, bottom, corner * pose.corners, roundBottom = true)
+    }
+    shadowElevation = BACK_LIFT.toPx() * pose.lift
+}
+
+/** A rectangle from [top] to [bottom] of the layer, its top corners (and its bottom ones with [roundBottom]) rounded by [corner]. */
+private class ShownPartShape(private val top: Float, private val bottom: Float, private val corner: Float, private val roundBottom: Boolean) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val rect = Rect(0f, top.coerceIn(0f, size.height), size.width, bottom.coerceIn(0f, size.height))
+        val radius = CornerRadius(corner.coerceIn(0f, rect.height / 2f))
+        val lower = if (roundBottom) radius else CornerRadius.Zero
+        return Outline.Rounded(RoundRect(rect, topLeft = radius, topRight = radius, bottomLeft = lower, bottomRight = lower))
+    }
+}
+
+/** Draws a tab in [pose]: the shape, shadow and motion of the user's page style part-way through going back. */
+internal fun GraphicsLayerScope.applyBackPose(pose: BackPose) {
     scaleX = pose.scale
     scaleY = pose.scale
     alpha = pose.alpha

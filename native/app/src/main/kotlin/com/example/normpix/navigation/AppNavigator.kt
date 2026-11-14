@@ -26,6 +26,9 @@ enum class PlanSection(val label: String) {
     Reminders("Reminders"),
 }
 
+/** A step back takes inside Plans & Activity before it leaves the tab: a section up to Budgets, or the Plans view to Activity. */
+enum class PlanStep { Section, View }
+
 /** Settings pages reachable directly (from search, or links inside the app). */
 enum class SettingsPage { Appearance, Widgets, Finance, Banks, Data, Wallet, Notifications, Availability, Security, Updates }
 

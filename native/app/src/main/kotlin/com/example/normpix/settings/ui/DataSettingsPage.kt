@@ -14,7 +14,6 @@ import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material.icons.outlined.TableView
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.SaveAlt
-import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,10 +40,8 @@ import com.example.normpix.finance.ui.offerUndo
 import com.example.normpix.finance.ui.rememberFinanceActions
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
-import com.example.normpix.ui.components.AppLoadingIndicator
 import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.ListRow
-import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.RadioRow
 import com.example.normpix.ui.components.LocalAppScope
@@ -322,7 +319,7 @@ fun DataSettingsPage() {
     }
 
     @Composable
-    fun Row(id: String, icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit, destructive: Boolean = false) {
+    fun Row(id: String, icon: ImageVector, emoji: String, title: String, subtitle: String, onClick: () -> Unit, destructive: Boolean = false) {
         val color = if (destructive) MaterialTheme.colorScheme.error else Color.Unspecified
         ListRow(
             headline = title,
@@ -331,11 +328,7 @@ fun DataSettingsPage() {
             enabled = busy == null,
             onClick = onClick,
             leading = {
-                if (busy == id) {
-                    AppLoadingIndicator(Modifier.size(24.dp), strokeWidth = 2.5.dp)
-                } else {
-                    Icon(icon, contentDescription = null, tint = if (destructive) color else MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                SettingsLeadingIcon(icon, emoji, tint = if (destructive) color else MaterialTheme.colorScheme.onSurfaceVariant, busy = busy == id)
             },
         )
     }
@@ -358,6 +351,7 @@ fun DataSettingsPage() {
                             supporting = "Explore NormPix with realistic sample accounts and transactions",
                             icon = Icons.Outlined.Science,
                             hue = 6,
+                            emoji = SettingsRowEmoji.SAMPLE,
                         )
                     }
                 }
@@ -376,6 +370,7 @@ fun DataSettingsPage() {
                         Row(
                             "app",
                             Icons.Outlined.Backup,
+                            SettingsRowEmoji.BACKUP,
                             "Everything: data, pictures, settings and reminders",
                             "A .zip to set up this app again, here or on another phone. Saved cards only if you choose.",
                             ::exportAppBackup,
@@ -385,6 +380,7 @@ fun DataSettingsPage() {
                         Row(
                             "full",
                             Icons.Outlined.FolderZip,
+                            SettingsRowEmoji.BOX,
                             "Full backup, with pictures",
                             "A .zip with everything, and the bills and receipts attached to transactions. Restorable.",
                             ::exportFullBackup,
@@ -394,13 +390,14 @@ fun DataSettingsPage() {
                         Row(
                             "backup",
                             Icons.Rounded.SaveAlt,
+                            SettingsRowEmoji.EXPORT,
                             "Backup without pictures",
                             "A small .json file. Restorable; attached pictures stay on this phone only.",
                             ::exportBackup,
                         )
                     }
                     item {
-                        Row("csv", Icons.Outlined.TableView, "Transactions as a spreadsheet", "A .csv for Excel or Sheets. Not restorable.", ::exportCsv)
+                        Row("csv", Icons.Outlined.TableView, SettingsRowEmoji.SPREADSHEET, "Transactions as a spreadsheet", "A .csv for Excel or Sheets. Not restorable.", ::exportCsv)
                     }
                 }
                 ListSection(
@@ -418,7 +415,7 @@ fun DataSettingsPage() {
                             } else {
                                 "Never, on this phone"
                             },
-                            leading = { LeadingIcon(Icons.Outlined.History) },
+                            leading = { SettingsLeadingBadge(Icons.Outlined.History, SettingsRowEmoji.CLOCK) },
                         )
                     }
                     for (days in BackupFreshness.REMINDER_CHOICES + 0) {
@@ -444,6 +441,7 @@ fun DataSettingsPage() {
                         Row(
                             "restore",
                             Icons.Rounded.Restore,
+                            SettingsRowEmoji.IMPORT,
                             "Restore from backup",
                             if (prefs.dummyDataEnabled) {
                                 "Sample data is on. Turn it off to restore a backup to your actual data."
@@ -463,6 +461,7 @@ fun DataSettingsPage() {
                         Row(
                             "check",
                             Icons.Outlined.FactCheck,
+                            SettingsRowEmoji.MAGNIFIER,
                             "Check and recalculate",
                             if (prefs.dummyDataEnabled) {
                                 "Checks the sample data and works its numbers out again"
@@ -478,6 +477,7 @@ fun DataSettingsPage() {
                         Row(
                             "erase",
                             Icons.Outlined.DeleteForever,
+                            SettingsRowEmoji.ERASE,
                             if (prefs.dummyDataEnabled) "Reset sample data" else "Delete all finance data",
                             if (prefs.dummyDataEnabled) "Reset sample transactions, accounts and budgets" else "Transactions, accounts, budgets and more",
                             ::eraseAll,

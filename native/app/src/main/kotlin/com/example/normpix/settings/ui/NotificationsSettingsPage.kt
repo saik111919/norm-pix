@@ -22,7 +22,6 @@ import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.settings.AppNotifications
 import com.example.normpix.ui.components.AppSubPage
-import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.LocalSnackbars
@@ -73,6 +72,7 @@ fun NotificationsSettingsPage() {
                             supporting = "Reminder alerts, card expiry reminders and updates",
                             icon = if (prefs.notificationsEnabled) Icons.Outlined.NotificationsActive else Icons.Outlined.NotificationsOff,
                             hue = SettingsPageNotificationsHue,
+                            emoji = SettingsRowEmoji.BELL,
                             checked = prefs.notificationsEnabled,
                             onCheckedChange = { on ->
                                 haptics.selection()
@@ -92,7 +92,7 @@ fun NotificationsSettingsPage() {
                             ListRow(
                                 headline = "Open Android notification settings",
                                 supporting = "Allow notifications for NormPix there",
-                                leading = { LeadingIcon(Icons.Outlined.Settings) },
+                                leading = { SettingsLeadingBadge(Icons.Outlined.Settings, SettingsRowEmoji.SETTINGS) },
                                 onClick = ::openAndroidSettings,
                             )
                         }
@@ -102,7 +102,7 @@ fun NotificationsSettingsPage() {
                         item {
                             ListRow(
                                 headline = "Android notification settings",
-                                leading = { LeadingIcon(Icons.Outlined.Settings) },
+                                leading = { SettingsLeadingBadge(Icons.Outlined.Settings, SettingsRowEmoji.SETTINGS) },
                                 onClick = ::openAndroidSettings,
                             )
                         }

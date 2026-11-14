@@ -44,6 +44,15 @@ object CategorySuggestions {
             SuggestedSubCategory("Pizza", "pizza"),
             SuggestedSubCategory("Wine & beer", "wine"),
             SuggestedSubCategory("Breakfast", "emoji:🥞"),
+            // Meals by the time of day, and the food apps and mess/canteen routines of a normal Indian week.
+            SuggestedSubCategory("Snacks", "snacks"),
+            SuggestedSubCategory("Lunch", "emoji:🍛"),
+            SuggestedSubCategory("Dinner", "emoji:🍽️"),
+            SuggestedSubCategory("Swiggy", "swiggy"),
+            SuggestedSubCategory("Zomato", "zomato"),
+            SuggestedSubCategory("Tiffin & mess", "emoji:🍱"),
+            SuggestedSubCategory("Office canteen", "emoji:🏢"),
+            SuggestedSubCategory("Sweets & mithai", "emoji:🍬"),
         ),
         "Groceries" to listOf(
             SuggestedSubCategory("Fruits & vegetables", "fruit_veg"),
@@ -56,6 +65,13 @@ object CategorySuggestions {
             SuggestedSubCategory("Spices & condiments", "emoji:🧂"),
             SuggestedSubCategory("Household supplies", "cleaning"),
             SuggestedSubCategory("Toiletries", "personal"),
+            // Quick-commerce and big-basket apps, and the daily milk round.
+            SuggestedSubCategory("Blinkit", "blinkit"),
+            SuggestedSubCategory("Zepto", "zepto"),
+            SuggestedSubCategory("Instamart", "emoji:🛵"),
+            SuggestedSubCategory("BigBasket", "bigbasket"),
+            SuggestedSubCategory("DMart", "dmart"),
+            SuggestedSubCategory("Milk delivery", "emoji:🥛"),
         ),
         "Transport" to listOf(
             SuggestedSubCategory("Petrol & diesel", "fuel"),
@@ -69,6 +85,11 @@ object CategorySuggestions {
             SuggestedSubCategory("Car repair", "car_repair"),
             SuggestedSubCategory("Car wash", "car_wash"),
             SuggestedSubCategory("EV charging", "ev_charging"),
+            SuggestedSubCategory("Uber", "uber"),
+            SuggestedSubCategory("Ola", "ola"),
+            SuggestedSubCategory("Rapido", "rapido"),
+            SuggestedSubCategory("FASTag recharge", "fastag"),
+            SuggestedSubCategory("RTO & licence", "emoji:🪪"),
         ),
         "Shopping" to listOf(
             SuggestedSubCategory("Clothing", "clothing"),
@@ -82,6 +103,8 @@ object CategorySuggestions {
             SuggestedSubCategory("Gifts for others", "gift"),
             SuggestedSubCategory("Home decor", "home"),
             SuggestedSubCategory("Online orders", "shopping"),
+            SuggestedSubCategory("Kitchenware", "emoji:🍳"),
+            SuggestedSubCategory("Tailor & alterations", "emoji:✂️"),
         ),
         "Bills & utilities" to listOf(
             SuggestedSubCategory("Electricity", "electricity"),
@@ -93,6 +116,9 @@ object CategorySuggestions {
             SuggestedSubCategory("Society maintenance", "maintenance"),
             SuggestedSubCategory("Trash & garbage", "cleaning"),
             SuggestedSubCategory("Solar & green power", "electricity"),
+            SuggestedSubCategory("Piped gas (PNG)", "gas"),
+            SuggestedSubCategory("Water cans & RO", "emoji:💧"),
+            SuggestedSubCategory("Courier & post", "emoji:📦"),
         ),
         "Rent & housing" to listOf(
             SuggestedSubCategory("Rent", "rent"),
@@ -104,6 +130,12 @@ object CategorySuggestions {
             SuggestedSubCategory("Security & CCTV", "security"),
             SuggestedSubCategory("Plumbing", "plumbing"),
             SuggestedSubCategory("Garden", "garden"),
+            SuggestedSubCategory("Cook & house help", "emoji:🍲"),
+            SuggestedSubCategory("Electrician", "emoji:⚡"),
+            SuggestedSubCategory("Pest control", "emoji:🦟"),
+            SuggestedSubCategory("Painting", "emoji:🖌️"),
+            SuggestedSubCategory("Deposit & brokerage", "emoji:🔑"),
+            SuggestedSubCategory("Ironing & dry clean", "emoji:👔"),
         ),
         "Health" to listOf(
             SuggestedSubCategory("Doctor", "doctor"),
@@ -114,6 +146,9 @@ object CategorySuggestions {
             SuggestedSubCategory("Eye care", "eye_care"),
             SuggestedSubCategory("Glasses", "vision"),
             SuggestedSubCategory("Therapy", "therapy"),
+            SuggestedSubCategory("Health checkups", "emoji:🩺"),
+            SuggestedSubCategory("Ayurveda & homeopathy", "emoji:🌿"),
+            SuggestedSubCategory("Physiotherapy", "emoji:🦴"),
         ),
         "Personal care" to listOf(
             SuggestedSubCategory("Salon & haircut", "haircut"),
@@ -128,6 +163,8 @@ object CategorySuggestions {
             SuggestedSubCategory("Sports gear", "sports"),
             SuggestedSubCategory("Swimming", "emoji:🏊"),
             SuggestedSubCategory("Fitness apps", "emoji:⌚"),
+            SuggestedSubCategory("Personal trainer", "emoji:💪"),
+            SuggestedSubCategory("Protein & supplements", "emoji:🥤"),
         ),
         "Entertainment" to listOf(
             SuggestedSubCategory("Movies", "movies"),
@@ -150,6 +187,8 @@ object CategorySuggestions {
             SuggestedSubCategory("Birthdays", "emoji:🎂"),
             SuggestedSubCategory("Festivals", "emoji:🪔"),
             SuggestedSubCategory("Functions & ceremonies", "emoji:🎊"),
+            SuggestedSubCategory("Anniversaries", "emoji:💍"),
+            SuggestedSubCategory("Housewarming", "emoji:🏠"),
         ),
         "Education" to listOf(
             SuggestedSubCategory("School fees", "school_fees"),
@@ -162,6 +201,8 @@ object CategorySuggestions {
             SuggestedSubCategory("Exam fees", "emoji:📝"),
             SuggestedSubCategory("Hostel & PG", "hotel"),
             SuggestedSubCategory("Certifications", "emoji:🎓"),
+            SuggestedSubCategory("School bus & van", "bus"),
+            SuggestedSubCategory("College fees", "emoji:🏫"),
         ),
         "Kids" to listOf(
             SuggestedSubCategory("Baby supplies", "baby"),
@@ -169,6 +210,7 @@ object CategorySuggestions {
             SuggestedSubCategory("Childcare", "childcare"),
             SuggestedSubCategory("Kids' activities", "emoji:🤸"),
             SuggestedSubCategory("Pocket money", "emoji:👛"),
+            SuggestedSubCategory("Vaccinations", "emoji:💉"),
         ),
         "Pets" to listOf(
             SuggestedSubCategory("Pet food", "emoji:🦴"),
@@ -246,6 +288,10 @@ object CategorySuggestions {
             // Reading, Fitness & Lifestyle
             SuggestedSubCategory("News & magazines", "books"),
             SuggestedSubCategory("Medium", "medium"),
+
+            // India's own OTT and music apps
+            SuggestedSubCategory("JioHotstar", "jiohotstar"),
+            SuggestedSubCategory("JioSaavn", "jiosaavn"),
         ),
         "Insurance" to listOf(
             SuggestedSubCategory("Life insurance", "insurance"),
@@ -261,6 +307,9 @@ object CategorySuggestions {
             SuggestedSubCategory("Student loan", "education"),
             SuggestedSubCategory("Credit card EMI", "credit_card"),
             SuggestedSubCategory("Gold loan", "gold"),
+            SuggestedSubCategory("Two-wheeler loan EMI", "emoji:🛵"),
+            SuggestedSubCategory("Appliance & gadget EMI", "emoji:📱"),
+            SuggestedSubCategory("Pay later (BNPL)", "emoji:⏳"),
         ),
         "Taxes" to listOf(
             SuggestedSubCategory("Income tax", "tax"),
@@ -325,6 +374,8 @@ object CategorySuggestions {
             SuggestedSubCategory("Bonus", "bonus"),
             SuggestedSubCategory("Overtime", "emoji:⏰"),
             SuggestedSubCategory("Reimbursements", "refund"),
+            SuggestedSubCategory("Stipend", "emoji:🎒"),
+            SuggestedSubCategory("Incentives & commission", "emoji:🏆"),
         ),
         "Freelance" to listOf(
             SuggestedSubCategory("Client projects", "work"),
@@ -372,6 +423,9 @@ object CategorySuggestions {
             SuggestedSubCategory("Refunds", "refund"),
             SuggestedSubCategory("Pension", "pension"),
             SuggestedSubCategory("Prizes & cashback", "bonus"),
+            SuggestedSubCategory("Tax refund", "refund"),
+            SuggestedSubCategory("Scholarship", "emoji:🎓"),
+            SuggestedSubCategory("Insurance claims", "insurance"),
         ),
     )
 }
