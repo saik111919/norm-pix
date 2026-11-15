@@ -301,6 +301,45 @@ class DateTimeSheetsTest {
     }
 
     @Test
+    fun daysBeforeTheFirstOfferedAreNotTappable_andNeitherAreTheQuickPicksThatFallBeforeIt() {
+        compose.setContent {
+            NormPixTheme {
+                DateSheet(initial = today.plusDays(5), latest = today.plusYears(1), onPick = { pickedDate = it }, today = today, earliest = today.plusDays(1))
+            }
+        }
+        compose.waitForIdle()
+        // Today (15 October) and what is before it cannot be chosen; tomorrow can.
+        day("Wednesday, 14 October 2026").assertIsNotEnabled()
+        day("Thursday, 15 October 2026, today").assertIsNotEnabled()
+        day("Friday, 16 October 2026").assertIsEnabled()
+        // Today and Yesterday are not offered as quick picks; Tomorrow and In a week are.
+        compose.onAllNodes(hasContentDescription("Today, ", substring = true)).assertCountEquals(0)
+        compose.onAllNodes(hasContentDescription("Yesterday, ", substring = true)).assertCountEquals(0)
+        day("Tomorrow, ").assertExists()
+        day("In a week, ").assertExists()
+        // The calendar does not step back past the month of the first day offered.
+        compose.onNodeWithContentDescription("Previous month").assertIsNotEnabled()
+        day("Friday, 16 October 2026").performClick()
+        use("Use ${dayLabel(LocalDate.of(2026, 10, 16))}").performClick()
+        assertEquals(LocalDate.of(2026, 10, 16), pickedDate)
+    }
+
+    @Test
+    fun theLastDayOfferedIsTheOneGivenAndNothingAfterIt() {
+        compose.setContent {
+            NormPixTheme { DateSheet(initial = today, latest = today.plusDays(20), onPick = { pickedDate = it }, today = today) }
+        }
+        compose.waitForIdle()
+        // October is shown: the month is the last there is, none after it can be stepped to.
+        compose.onNodeWithContentDescription("Next month").performClick()
+        compose.waitForIdle()
+        day("Sunday, 1 November 2026").assertIsEnabled()
+        day("Wednesday, 4 November 2026").assertIsEnabled() // 20 days on: the last day
+        day("Thursday, 5 November 2026").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Next month").assertIsNotEnabled()
+    }
+
+    @Test
     fun aSingleFieldIsAloneInTheRow() {
         var opened = 0
         compose.setContent { NormPixTheme { PickerFieldRow(PickerField("Last repeat by", "5 Oct 2027") { opened++ }) } }

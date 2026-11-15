@@ -257,7 +257,7 @@ class SharedTransactionImportTest {
     fun `a merchant the user hasn't filed yet gets the category the app knows for it`() {
         val text = "₹250 paid to Swiggy on 10-10-26"
         val prefill = runBlocking { SharedTransactionImport.prefill(parse(text), text, finance.state.value, repository, now) }
-        assertEquals(category("Delivery apps").id, prefill.categoryId)
+        assertEquals(category("Swiggy").id, prefill.categoryId)
         assertTrue(ShareNotice("Category picked for Swiggy. Change it if it doesn't fit.") in prefill.notices)
 
         // The user's own filing of the payee wins over the app's table.

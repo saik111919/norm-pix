@@ -15,7 +15,6 @@ import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Nfc
 import androidx.compose.material.icons.rounded.PhoneAndroid
-import com.example.normpix.ui.components.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -154,7 +153,7 @@ fun SecuritySettingsPage() {
                         SwitchRow(
                             headline = "Require unlock",
                             supporting = "Fingerprint, face or screen lock",
-                            leading = { Icon(Icons.Rounded.Fingerprint, contentDescription = null) },
+                            leading = { SettingsLeadingIcon(Icons.Rounded.Fingerprint, SettingsRowEmoji.LOCK_AND_KEY) },
                             checked = locked,
                             // Turning it off stays possible even if biometrics later disappear.
                             enabled = biometrics == true || locked,
@@ -228,7 +227,7 @@ fun SecuritySettingsPage() {
                                     NfcAvailability.Disabled -> "Turn on NFC in system settings to use this"
                                     NfcAvailability.Unsupported -> "Not available on this device"
                                 },
-                                leading = { Icon(Icons.Rounded.Nfc, contentDescription = null) },
+                                leading = { SettingsLeadingIcon(Icons.Rounded.Nfc, SettingsRowEmoji.TAG) },
                                 checked = prefs.nfcTagRevealEnabled,
                                 enabled = nfc != NfcAvailability.Unsupported,
                                 onCheckedChange = { on ->
@@ -246,7 +245,7 @@ fun SecuritySettingsPage() {
                                         tagCount == 0 -> "Register your own tag, and only it will work"
                                         else -> "Only your $tagCount registered ${if (tagCount == 1) "tag" else "tags"} will work"
                                     },
-                                    leading = { Icon(Icons.Outlined.Key, contentDescription = null) },
+                                    leading = { SettingsLeadingIcon(Icons.Outlined.Key, SettingsRowEmoji.KEY) },
                                     checked = prefs.nfcRevealRegisteredOnly,
                                     // Turning it off stays possible whatever NFC is doing, so a lost tag never locks you out.
                                     enabled = nfc == NfcAvailability.Available || prefs.nfcRevealRegisteredOnly,
@@ -273,7 +272,7 @@ fun SecuritySettingsPage() {
                                         ListRow(
                                             headline = "Register another tag",
                                             supporting = "Up to ${container.registeredTags.limit}; any one of them will do",
-                                            leading = { Icon(Icons.Outlined.AddCircleOutline, contentDescription = null) },
+                                            leading = { SettingsLeadingIcon(Icons.Outlined.AddCircleOutline, SettingsRowEmoji.TAG) },
                                             onClick = { withIdentity("Confirm it's you to register a tag") { registerTag() } },
                                         )
                                     }
@@ -282,7 +281,7 @@ fun SecuritySettingsPage() {
                                     ListRow(
                                         headline = "Remove registered tags",
                                         supporting = "$tagCount registered. Any NFC tag will work again until you register one",
-                                        leading = { Icon(Icons.Outlined.DeleteOutline, contentDescription = null) },
+                                        leading = { SettingsLeadingIcon(Icons.Outlined.DeleteOutline, SettingsRowEmoji.ERASE) },
                                         supportingMaxLines = 3,
                                         onClick = {
                                             scope.launch {
@@ -313,7 +312,7 @@ fun SecuritySettingsPage() {
                             headline = "Everything stays on this device",
                             supporting = "No account and no sign-in, and nothing is sent anywhere. " +
                                 "NormPix never reads SMS or connects to your bank.",
-                            leading = { Icon(Icons.Rounded.PhoneAndroid, contentDescription = null) },
+                            leading = { SettingsLeadingIcon(Icons.Rounded.PhoneAndroid, SettingsRowEmoji.PHONE) },
                             supportingMaxLines = 4,
                         )
                     }
@@ -333,7 +332,9 @@ fun SecuritySettingsPage() {
                                 "Android's own storage encryption still protects it. NormPix adds its own when it starts, and tries " +
                                     "again each time until it can."
                             },
-                            leading = { Icon(if (dataEncrypted) Icons.Outlined.Lock else Icons.Outlined.LockOpen, contentDescription = null) },
+                            leading = {
+                                SettingsLeadingIcon(if (dataEncrypted) Icons.Outlined.Lock else Icons.Outlined.LockOpen, if (dataEncrypted) SettingsRowEmoji.LOCK else SettingsRowEmoji.SHIELD)
+                            },
                             supportingMaxLines = 4,
                         )
                     }
@@ -342,7 +343,7 @@ fun SecuritySettingsPage() {
                             ListRow(
                                 headline = "Cards are encrypted",
                                 supporting = "Card details are encrypted with AES-256-GCM, with the key kept in the Android Keystore.",
-                                leading = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+                                leading = { SettingsLeadingIcon(Icons.Outlined.Lock, SettingsRowEmoji.LOCK_AND_KEY) },
                                 supportingMaxLines = 4,
                             )
                         }
@@ -352,7 +353,7 @@ fun SecuritySettingsPage() {
                             ListRow(
                                 headline = "Screen is protected",
                                 supporting = "Screenshots and screen recording are blocked, and the app is hidden in Recents.",
-                                leading = { Icon(Icons.Outlined.ScreenshotMonitor, contentDescription = null) },
+                                leading = { SettingsLeadingIcon(Icons.Outlined.ScreenshotMonitor, SettingsRowEmoji.SCREEN) },
                                 supportingMaxLines = 4,
                             )
                         }

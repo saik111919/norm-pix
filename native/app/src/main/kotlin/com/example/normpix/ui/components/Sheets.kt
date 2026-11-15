@@ -75,7 +75,9 @@ fun SheetHeader(
  * What a yes / no decision looks like: the same bottom sheet every form uses, not a dialog floating mid-screen.
  * An optional icon, the question as a heading, what it means, then the answer as full-width buttons at thumb height -
  * the action first, "Cancel" under it. [cancelLabel] null makes it an acknowledgement with a single button.
- * A destructive action wears the error colors, so it can't be mistaken for an ordinary one.
+ * A destructive action wears the error colors, so it can't be mistaken for an ordinary one. [body], when given, is what the
+ * decision is about (a list of the files to delete), between the message and the buttons; it keeps to its own height (a list
+ * scrolls), so the buttons stay in reach.
  */
 @Composable
 fun ConfirmSheetContent(
@@ -88,6 +90,7 @@ fun ConfirmSheetContent(
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    body: (@Composable () -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     Column(
@@ -113,6 +116,10 @@ fun ConfirmSheetContent(
         if (message != null) {
             Spacer(Modifier.height(AppSpacing.sm))
             Text(message, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+        }
+        if (body != null) {
+            Spacer(Modifier.height(AppSpacing.md))
+            body()
         }
         Spacer(Modifier.height(AppSpacing.xl))
         Button(
@@ -190,6 +197,10 @@ fun EditorSheet(
     /** Why the form could not be saved, said above Save where it cannot scroll out of sight; null says nothing. */
     errorText: String? = null,
     slideToSave: Boolean = false,
+    /** False while the form can't be saved yet (what it still lacks is said by [status] or the form): Save is then dimmed. */
+    saveEnabled: Boolean = true,
+    /** A line of how the form stands, kept above Save like [errorText] so it stays in sight however far the form is scrolled. */
+    status: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(modifier.fillMaxWidth()) {
@@ -231,6 +242,13 @@ fun EditorSheet(
                     .politeLiveRegion(),
             )
         }
+        if (status != null) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = AppSpacing.xxl, top = AppSpacing.xs, end = AppSpacing.xxl),
+            ) { status() }
+        }
         Box(
             Modifier
                 .fillMaxWidth()
@@ -241,7 +259,7 @@ fun EditorSheet(
                     SlideToConfirm(
                         label = "Slide to " + saveLabel.replaceFirstChar { it.lowercase() },
                         onConfirm = onSave,
-                        enabled = !saving,
+                        enabled = !saving && saveEnabled,
                         busy = saving,
                         modifier = Modifier.weight(1f),
                     )
@@ -250,7 +268,7 @@ fun EditorSheet(
                 FloatingActionBar(
                     primaryLabel = saveLabel,
                     onPrimary = onSave,
-                    primaryEnabled = !saving,
+                    primaryEnabled = !saving && saveEnabled,
                     primaryColors = saveColors,
                     actions = actions,
                 )

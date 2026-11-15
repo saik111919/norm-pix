@@ -734,8 +734,8 @@ private fun billDueOf(account: Account, balance: Long, today: LocalDate): BillDu
     if (account.kind == AccountKind.Card && balance < 0) nextBillDue(account.dueDay, today) else null
 
 /** What is said under an account's amount when the amount needs saying in words, or null when it doesn't. */
-private fun accountStanding(balance: Long, kind: AccountKind): String? = when {
-    balance < 0 -> if (kind == AccountKind.Card || kind == AccountKind.Other) "Owed" else "Overdrawn"
+private fun accountStanding(balance: Long, kind: AccountKind, loan: Boolean = false): String? = when {
+    balance < 0 -> if (loan || kind == AccountKind.Card || kind == AccountKind.Other) "Owed" else "Overdrawn"
     // A card paid past its bill: the bank owes the difference back, and it counts as money held.
     balance > 0 && kind == AccountKind.Card -> "In credit"
     else -> null
@@ -768,7 +768,7 @@ private fun AccountCards(
             kind = account.kind,
             bankName = finance.catalog.byKey(account.bankKey)?.name,
             balance = finance.money.format(balance),
-            standing = accountStanding(balance, account.kind),
+            standing = accountStanding(balance, account.kind, account.isLoan),
             isDefault = finance.defaultAccount?.id == account.id,
             archived = account.archived,
             cards = account.bankKey?.let { cardsPerBank[it] } ?: 0,
@@ -840,7 +840,7 @@ private fun AccountTile(account: Account, cardsPerBank: Map<String, Int>) {
     val isDefault = finance.defaultAccount?.id == account.id
     val bank = finance.catalog.byKey(account.bankKey)
     val cards = account.bankKey?.let { cardsPerBank[it] } ?: 0
-    val standing = accountStanding(balance, account.kind)
+    val standing = accountStanding(balance, account.kind, account.isLoan)
     val room = creditRoom(account.creditLimit, balance)
     val due = billDueOf(account, balance, LocalDate.now())
     val details = listOfNotNull(

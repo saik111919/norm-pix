@@ -9,11 +9,21 @@ import com.example.normpix.finance.data.TransactionPictures
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.FinanceTransaction
+import com.example.normpix.finance.domain.LoanEmi
+import com.example.normpix.finance.domain.LoanTerms
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.RecurrenceFrequency
 import com.example.normpix.finance.domain.RecurringRule
+import com.example.normpix.finance.domain.SavingsGoal
+import com.example.normpix.finance.domain.SplitPart
+import com.example.normpix.finance.domain.REIMBURSABLE_TAG
+import com.example.normpix.finance.domain.TAX_DEDUCTIBLE_TAG
+import com.example.normpix.finance.domain.Tag
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.finance.domain.emiFor
+import com.example.normpix.finance.domain.loanEmiEntries
+import com.example.normpix.finance.domain.loanSchedule
 import com.example.normpix.finance.ui.FinanceController
 import com.example.normpix.reminders.NoOpReminderScheduler
 import com.example.normpix.reminders.Reminder
@@ -101,6 +111,9 @@ class DummyData private constructor(
         updates = real.updates,
         // So are the widgets: a tap on one reaches the app whichever set is showing (and the UI offers the way back).
         widgetRequests = real.widgetRequests,
+        // Automatic backups are of the user's own data: the real container's service, which reads the real container, never this set.
+        autoBackup = real.autoBackup,
+        isSampleData = true,
     )
 
     /** Drops the sample set and frees its stores, its pictures too. */
@@ -200,6 +213,17 @@ class DummyData private constructor(
             val upi = repo.account("Paytm Wallet", AccountKind.Wallet, opening = rupees(2_000), order = 3)
             val bank2 = repo.account("SBI Savings", AccountKind.Bank, opening = rupees(45_000), order = 4)
             val card2 = repo.account("Axis Credit Card", AccountKind.Card, opening = -rupees(4_200), order = 5, statementDay = 12, dueDay = 28)
+            // A home loan, so the loan page has something to show: it began the month before the sample set's first EMI (below), so it
+            // owes what was borrowed at the start and the EMIs paid since have brought that down.
+            val loanPrincipal = rupees(10_00_000)
+            val loanTerms = LoanTerms(
+                principal = loanPrincipal,
+                rateBp = 875,
+                tenureMonths = 180,
+                emi = emiFor(loanPrincipal, 875, 180),
+                start = firstMonth.addMonths(1).start.toLocalDate().withDayOfMonth(5),
+            )
+            val homeLoan = repo.account("HDFC Home Loan", AccountKind.Loan, opening = -loanPrincipal, order = 6, loan = loanTerms)
             repo.setDefaultAccountId(bank)
 
             // The people the household spends on, so the People page and the per-person totals have something to show.
@@ -288,7 +312,22 @@ class DummyData private constructor(
             val axisSpend = mutableMapOf<MonthKey, Long>()
             val transactions = mutableListOf<FinanceTransaction>()
 
-            fun spend(account: Long, category: Long, amount: Long, payee: String, at: LocalDateTime, note: String? = null, person: Long? = null) {
+            // A few tags, so the Tags field, the filter and Insights > Year by tag have something to show: the two ready-made ones on
+            // medical bills for parents and the home loan's interest (deductions a salaried person in India claims), and on work cabs.
+            val taxDeductible = repo.saveTag(Tag(name = TAX_DEDUCTIBLE_TAG, createdAt = start)).id!!
+            val reimbursable = repo.saveTag(Tag(name = REIMBURSABLE_TAG, createdAt = start)).id!!
+            val work = repo.saveTag(Tag(name = "Work", createdAt = start)).id!!
+
+            fun spend(
+                account: Long,
+                category: Long,
+                amount: Long,
+                payee: String,
+                at: LocalDateTime,
+                note: String? = null,
+                person: Long? = null,
+                tags: Set<Long> = emptySet(),
+            ) {
                 if (at.isAfter(now)) return
                 transactions += FinanceTransaction(
                     type = TransactionType.Expense,
@@ -301,6 +340,7 @@ class DummyData private constructor(
                     createdAt = at,
                     updatedAt = at,
                     personId = person,
+                    tagIds = tags,
                 )
                 if (account == card) iciciSpend.merge(MonthKey.of(at), amount, Long::plus)
                 if (account == card2) axisSpend.merge(MonthKey.of(at), amount, Long::plus)
@@ -320,7 +360,7 @@ class DummyData private constructor(
                 )
             }
 
-            fun income(amount: Long, account: Long, category: Long, payee: String, at: LocalDateTime, note: String) {
+            fun income(amount: Long, account: Long, category: Long, payee: String, at: LocalDateTime, note: String, tags: Set<Long> = emptySet()) {
                 if (at.isAfter(now)) return
                 transactions += FinanceTransaction(
                     type = TransactionType.Income,
@@ -332,6 +372,7 @@ class DummyData private constructor(
                     note = note,
                     createdAt = at,
                     updatedAt = at,
+                    tagIds = tags,
                 )
             }
 
@@ -357,7 +398,13 @@ class DummyData private constructor(
                     if (index % 4 == 0) {
                         spend(upi, busMetro, pick(40, 80), "Namma Metro", day.at(9, 10))
                     } else {
-                        spend(bank, cabsRideshare, pick(180, 420), listOf("Uber", "Ola", "Rapido").random(random), day.at(9, 25))
+                        // Every third of these rides is to a client's office: the company pays it back.
+                        val forWork = index % 3 == 0
+                        spend(
+                            bank, cabsRideshare, pick(180, 420), listOf("Uber", "Ola", "Rapido").random(random), day.at(9, 25),
+                            note = if (forWork) "Client visit" else null,
+                            tags = if (forWork) setOf(reimbursable, work) else emptySet(),
+                        )
                     }
                 }
                 when (dom) {
@@ -371,7 +418,7 @@ class DummyData private constructor(
                     6 -> if (!weekday || index % 2 == 1) spend(card, movies, pick(650, 1_100), "PVR INOX", day.at(21, 15), person = riya)
                     9 -> spend(card2, onlineOrders, pick(1_200, 2_800), "Amazon", day.at(22, 10), person = if (month.toInt() % 2 == 0) mom else arjun)
                     10 -> transfer(rupees(3_500), bank, cash.id!!, "ATM withdrawal", day.at(17, 20))
-                    13 -> spend(bank, pharmacy, pick(260, 950), "Apollo Pharmacy", day.at(19, 50), person = mom)
+                    13 -> spend(bank, pharmacy, pick(260, 950), "Apollo Pharmacy", day.at(19, 50), person = mom, tags = setOf(taxDeductible))
                     16 -> spend(card2, salonHaircut, pick(400, 850), "Looks Salon", day.at(15, 30), person = kavya)
                     17 -> spend(card2, petrolDiesel, pick(1_800, 2_500), "Shell", day.at(19, 30), note = "Fuel")
                     18 -> spend(bank, electricity, pick(1_450, 1_950), "BESCOM", day.at(10, 0), note = "Electricity")
@@ -383,7 +430,7 @@ class DummyData private constructor(
                     21 -> spend(card2, movies, pick(450, 950), "BookMyShow", day.at(18, 0), person = rohit)
                     22 -> spend(upi, mobileRecharge, rupees(299), "Jio prepaid", day.at(12, 0), note = "Mobile recharge")
                     24 -> spend(card, clothing, pick(1_500, 3_500), listOf("Myntra", "Fabindia").random(random), day.at(16, 30), person = if (month.toInt() % 2 == 0) dad else kavya)
-                    26 -> spend(bank, doctor, pick(600, 1_200), "Dr. Sharma Clinic", day.at(11, 0), person = dad)
+                    26 -> spend(bank, doctor, pick(600, 1_200), "Dr. Sharma Clinic", day.at(11, 0), person = dad, tags = setOf(taxDeductible))
                     28 -> {
                         // Settle the Axis credit card: last month's statement (or, in the first month, the opening balance carried in).
                         val owedAxis = if (month == firstMonth) rupees(4_200) else (axisSpend[month.previous] ?: 0) + recurringOnAxis
@@ -394,10 +441,10 @@ class DummyData private constructor(
                     income(rupees(1_186), bank, savingsInterest, "HDFC Bank", day.at(23, 0), note = "Savings interest")
                 }
                 if (month == firstMonth.addMonths(1) && dom == 14) {
-                    income(rupees(18_500), bank2, clientProjects, "Upwork", day.at(15, 0), note = "Logo design project")
+                    income(rupees(18_500), bank2, clientProjects, "Upwork", day.at(15, 0), note = "Logo design project", tags = setOf(work))
                 }
                 if (month == firstMonth.addMonths(3) && dom == 19) {
-                    income(rupees(24_000), bank2, clientProjects, "Upwork", day.at(16, 0), note = "Mobile app redesign")
+                    income(rupees(24_000), bank2, clientProjects, "Upwork", day.at(16, 0), note = "Mobile app redesign", tags = setOf(work))
                 }
                 if (month == firstMonth.addMonths(4) && dom == day.lengthOfMonth()) {
                     income(rupees(1_240), bank, savingsInterest, "HDFC Bank", day.at(23, 0), note = "Savings interest")
@@ -405,7 +452,50 @@ class DummyData private constructor(
                 day = day.plusDays(1)
                 index++
             }
+            // The home loan's EMIs so far, paid from HDFC Savings on the 5th: each is the principal as a transfer onto the loan (what is
+            // owed goes down) and the interest as an expense in Loans & EMI (spending), as Record EMI makes them.
+            val loans = category("Loans & EMI")
+            val instalments = checkNotNull(loanSchedule(loanTerms.principal, loanTerms.rateBp, loanTerms.emi) { loanTerms.dateOf(it) })
+            for (instalment in instalments) {
+                val at = instalment.date.at(10, 15)
+                if (at.isAfter(now)) break
+                // The interest is the part a home loan's borrower claims against tax: tagged so, as the user would.
+                transactions += loanEmiEntries(LoanEmi(homeLoan, bank, at, instalment.principal, instalment.interest, loans, "HDFC Home Loan"), at)
+                    .map { if (it.type == TransactionType.Expense) it.copy(tagIds = setOf(taxDeductible)) else it }
+            }
             repo.saveTransactions(transactions)
+            // One supermarket bill shared out between two categories, so Activity shows a split payment: a row for each part, marked
+            // Split, and the details of either showing the whole bill (in memory only, like the rest). Two days ago, from HDFC Savings.
+            repo.saveSplit(
+                FinanceTransaction(
+                    type = TransactionType.Expense,
+                    amount = rupees(2_020),
+                    accountId = bank,
+                    occurredAt = now.minusDays(2).withHour(18).withMinute(20).withSecond(0).withNano(0),
+                    payee = "DMart",
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+                listOf(
+                    SplitPart(category("Staples & grains"), rupees(1_380), "Rice, atta and dal"),
+                    SplitPart(category("Household supplies"), rupees(640), "Detergent and floor cleaner"),
+                ),
+            )
+            // Two savings goals, so Plans > Goals has something to show, in memory only like the rest: an emergency fund that counts SBI
+            // Savings (where the monthly savings go), and a trip that keeps its own amount, with a date a few months ahead.
+            val today = now.toLocalDate()
+            repo.saveGoal(
+                SavingsGoal(
+                    name = "Emergency fund", target = rupees(3_00_000), targetDate = today.plusMonths(14), emoji = "💰",
+                    accountId = bank2, createdAt = start, updatedAt = start,
+                ),
+            )
+            repo.saveGoal(
+                SavingsGoal(
+                    name = "Trip to Goa", target = rupees(40_000), targetDate = today.plusMonths(5), emoji = "🌴",
+                    saved = rupees(18_000), createdAt = start, updatedAt = start,
+                ),
+            )
         }
 
         private suspend fun FinanceRepository.person(name: String, emoji: String?, color: Int): Long =
@@ -418,6 +508,7 @@ class DummyData private constructor(
             order: Int,
             statementDay: Int? = null,
             dueDay: Int? = null,
+            loan: LoanTerms? = null,
         ): Long =
             saveAccount(
                 Account(
@@ -427,6 +518,7 @@ class DummyData private constructor(
                     sortOrder = order,
                     statementDay = statementDay,
                     dueDay = dueDay,
+                    loan = loan,
                     createdAt = start,
                     updatedAt = start,
                     bankKey = BankCatalog.BuiltIn.leading(name)?.key,

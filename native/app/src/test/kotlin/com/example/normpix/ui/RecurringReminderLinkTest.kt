@@ -37,7 +37,8 @@ import org.robolectric.annotation.Config
  * no longer exists". (The rules themselves are `RecurringRemindersTest`.)
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], qualifiers = "w411dp-h891dp")
+// Tall enough for the Recurring list with its Forecast and Bills calendar rows: a phone-sized window left the payment's row under the dock.
+@Config(sdk = [34], qualifiers = "w411dp-h1200dp")
 class RecurringReminderLinkTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()

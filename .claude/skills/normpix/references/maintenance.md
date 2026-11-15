@@ -21,12 +21,12 @@ When a fact drifts: fix the prose that mentions it **first**, then change the va
 nothing needed changing.
 
 <!-- facts:begin -->
-verified_commit=df2dff40
-verified_date=2026-11-13
+verified_commit=0a0dded6
+verified_date=2026-11-16
 versionName=1.5.0
-finance_db_version=13
+finance_db_version=17
 reminders_db_version=2
-finance_backup_format=3
+finance_backup_format=7
 app_backup_version=1
 cards_file_version=1
 min_sdk=26
@@ -72,6 +72,10 @@ SecureClipboard
 RegisteredTags
 NfcTagReader
 NfcCardOutletService
+NfcPairing
+NfcShareResponder
+NfcShareInitiator
+ShareProblem
 ScheduledFeature
 CardBankLinker
 BankCatalog
@@ -156,6 +160,9 @@ TestEnvironment
 AppBackupArchive
 CardsTransfer
 FinanceBackupCodec
+LoanTerms
+RecordEmiSheet
+loanEmiEntries
 COLLAPSE_STRETCH
 chipSolidAt
 minTouchTarget
@@ -197,6 +204,47 @@ tintedCardScheme
 PrintReferenceWidth
 BARE_ICON_IN_BOX
 ICON_IN_DISC
+AndroidBack
+BackLook
+LocalAndroidBack
+WithinTabBack
+StepBackHandler
+StepBackLayers
+ShownPart
+LocalSheetClosing
+cardAutofill
+KEYBOARD_CARD_FILL_TITLE
+SettingsLeadingIcon
+SettingsLeadingBadge
+SettingsRowEmoji
+BannerCard
+orElseSub
+AutoBackupService
+AutoBackupNames
+AutoBackupProblem
+AutoBackupJobService
+AutoBackupSchedule
+ContainerBackupData
+SealedSecret
+AUTO_BACKUP_KEYS
+autoBackupProblemBanner
+FakeBackupFolders
+StatementCsv
+StatementLayout
+StatementMapping
+StatementDates
+StatementAmounts
+StatementReader
+StatementNarration
+StatementImport
+StatementImportFlows
+StatementFixtures
+saveTransactionsUndoably
+OpenStatement
+openStatement
+billsMonth
+BillsCalendarPage
+openBillsCalendar
 <!-- symbols:end -->
 
 ## 2. What to update when

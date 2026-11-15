@@ -150,15 +150,22 @@ commit the tree mid-session and it would be swept in). Don't write PNGs with Pow
   over the real app, nor it over them. A debug/qa build installed before that key existed needs one uninstall (never the owner's
   real app).
 - Without secrets, CI still publishes a prerelease signed with the debug key and fails a real release.
-- **Play Protect says "Harmful app blocked - This app may be harmful" with an Install anyway link** (owner's phone, 2026-11-08, for v1.5.8 and
-  v1.5.9, installed from Downloads; whether v1.5.4 or older did too was not said). What was checked (nothing here is Play Protect's own
-  reason, which cannot be seen): the APK is the one CI built (SHA-256 equals GitHub's), signed with the same key as v1.5.0
-  (`CN=Android Debug`, `96b30aae...`, valid v2 signature); 18 permissions, each for a feature (no SMS, contacts, location, camera,
-  accessibility, notification-listener, device-admin or usage access); network limited to the GitHub hosts. Differences from v1.5.0: four
-  permissions, `SYSTEM_ALERT_WINDOW` and `USE_FULL_SCREEN_INTENT` (the reminder floating card and alert, first in **v1.5.5**),
-  `USE_EXACT_ALARM`, `SET_ALARM`. Best guess, unproven: an unknown signer plus a new file every release plus overlay + install-packages +
-  boot + full-screen-intent permissions together. Install anyway works; the signing key and package name cannot change without stranding
-  the installed app (Android's v3 key rotation might, unresearched). Not tried: an APK without the two overlay permissions.
+- **Play Protect "Harmful app blocked - This app may be harmful"** (owner's phone since v1.5.8, 2026-11-08). **Cause found on
+  2026-11-13 by bisecting on the phone** (motorola edge 50 neo, Android 16; eleven `qaRelease` variants under the qa id, each opened the
+  way a user opens a download): Play Protect's cloud scan answers `{"verdict":"POTENTIALLY_UNWANTED","threatType":"generic_malware"}`
+  whenever the APK declares **`REQUEST_INSTALL_PACKAGES` (the in-app updater) together with the app's other powers**. Without it
+  (overlay, full-screen alert, boot, NFC and card emulation all kept) the verdict is `SAFE`; with it and none of the others, `SAFE`;
+  with it and any of the others, blocked - taking away the overlay alone (or with the full-screen alert), the silent-update
+  permission, boot, NFC or the card-emulation service each still left it blocked. So **the overlay is not the cause**, and neither is
+  the key (the release key under the qa id was blocked too; debug-key variants without the installer were `SAFE`) nor the
+  `com.example` id. The only change that clears it is installing updates through another app (the browser) instead of in-app -
+  the owner's decision, not built. Appeal: `support.google.com/googleplay/android-developer/contact/protectappeals` wants the APK's
+  SHA-256 **on VirusTotal** and says "you will not receive a response"; it would be per APK, so per release.
+  - **Testing what a user sees**: `adb install` is never cloud-scanned (Play Protect logs `Installer app: com.android.shell` and allows
+    it). Push the APK to `/sdcard/Download`, open it in Files (DocumentsUI) > select > More options > Open with > **Package
+    installer** > Install; "App scan recommended" > **Scan app** uploads the APK to Google (say so to the owner) and the verdict shows
+    in the dialog and in `logcat` as `Finsky ... JIT scan response`. Close the result with OK and uninstall. Never run this with the
+    real app id: a `SAFE` verdict offers Install, which would go over the owner's real app.
 
 ## 9. Git, branches and PRs
 

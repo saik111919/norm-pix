@@ -50,7 +50,9 @@ import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.domain.Category
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.MoneyFormatter
+import com.example.normpix.finance.domain.largestPartCategory
 import com.example.normpix.finance.domain.pathName
+import com.example.normpix.finance.domain.splitTotal
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.StatusTone
@@ -58,9 +60,13 @@ import com.example.normpix.ui.theme.resolve
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-/** One line of a receipt's details: what it is, and its value. */
+/**
+ * One line of a receipt's details: what it is, and its value - with, where it has one, a quieter line under it (a split part's note).
+ * [figure] says the value is an amount: it keeps its whole width (never broken over lines) and the label, which may be long (a
+ * category's path), is what wraps.
+ */
 @Immutable
-class ReceiptRow(val label: String, val value: String)
+class ReceiptRow(val label: String, val value: String, val detail: String? = null, val figure: Boolean = false)
 
 /**
  * Everything a receipt shows, as plain values - so the same receipt can be drawn on screen now and, later, drawn again into
@@ -83,9 +89,15 @@ class ReceiptData(
     val footnotes: List<String>,
 )
 
-/** [t] as a receipt: who it was with, the amount, and the facts in the order they are asked about. */
-fun receiptOf(t: FinanceTransaction, finance: FinanceState, is24Hour: Boolean): ReceiptData {
-    val category = finance.category(t.categoryId)
+/**
+ * [t] as a receipt: who it was with, the amount, and the facts in the order they are asked about. For one part of a split payment,
+ * [parts] are all its parts (this one among them): the receipt is then the whole payment - its total, and a line for each part with
+ * its category, amount and note - and [t] only says which row it was opened from (its reference).
+ */
+fun receiptOf(t: FinanceTransaction, finance: FinanceState, is24Hour: Boolean, parts: List<FinanceTransaction> = emptyList()): ReceiptData {
+    val split = parts.size >= 2
+    // The badge of a split is the category most of it went to.
+    val category = finance.category(if (split) largestPartCategory(parts) else t.categoryId)
     val account = finance.account(t.accountId)
     val to = finance.account(t.toAccountId)
     val isTransfer = t.type == TransactionType.Transfer
@@ -96,11 +108,25 @@ fun receiptOf(t: FinanceTransaction, finance: FinanceState, is24Hour: Boolean): 
             add(ReceiptRow("From", account?.name ?: "Unknown"))
             add(ReceiptRow("To", to?.name ?: "Unknown"))
         } else {
-            add(ReceiptRow("Category", category?.let { finance.categories.pathName(it) } ?: "Uncategorized"))
+            if (!split) add(ReceiptRow("Category", category?.let { finance.categories.pathName(it) } ?: "Uncategorized"))
             add(ReceiptRow(if (t.type == TransactionType.Income) "Into" else "Paid from", account?.name ?: "Unknown"))
             finance.person(t.personId)?.let { add(ReceiptRow("For", it.name)) }
         }
-        if (t.note != null) add(ReceiptRow("Note", t.note))
+        if (split) {
+            add(ReceiptRow("Split into", "${parts.size} parts"))
+            for (part in parts) {
+                add(
+                    ReceiptRow(
+                        label = finance.category(part.categoryId)?.let { finance.categories.pathName(it) } ?: "Uncategorized",
+                        value = finance.money.format(part.amount),
+                        detail = part.note,
+                        figure = true,
+                    ),
+                )
+            }
+        } else if (t.note != null) {
+            add(ReceiptRow("Note", t.note))
+        }
         t.id?.let { add(ReceiptRow("Reference", receiptReference(it))) }
     }
     val footnotes = buildList {
@@ -114,11 +140,11 @@ fun receiptOf(t: FinanceTransaction, finance: FinanceState, is24Hour: Boolean): 
         )
     }
     return ReceiptData(
-        title = t.payee ?: if (isTransfer) "Transfer" else category?.name ?: "Uncategorized",
+        title = t.payee ?: if (isTransfer) "Transfer" else if (split) "Split payment" else category?.name ?: "Uncategorized",
         type = t.type,
         category = if (isTransfer) null else category,
         payee = if (isTransfer) null else t.payee,
-        amount = t.amount,
+        amount = if (split) splitTotal(parts) else t.amount,
         money = finance.money,
         moment = dateTimeLabel(t.occurredAt, is24Hour),
         recurring = t.recurringId != null,
@@ -246,18 +272,23 @@ private fun ReceiptBadge(data: ReceiptData) {
 private fun ReceiptLine(row: ReceiptRow) {
     val scheme = MaterialTheme.colorScheme
     val text = MaterialTheme.typography
-    Row(
-        Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
-        horizontalArrangement = Arrangement.spacedBy(AppSpacing.lg),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Text(row.label, style = text.bodyMedium, color = scheme.onSurfaceVariant)
-        Text(
-            row.value,
-            style = text.bodyLarge.copy(fontWeight = FontWeight.Medium, fontFeatureSettings = TABULAR_FIGURES),
-            textAlign = TextAlign.End,
-            modifier = Modifier.weight(1f),
-        )
+    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(AppSpacing.lg),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Text(row.label, style = text.bodyMedium, color = scheme.onSurfaceVariant, modifier = if (row.figure) Modifier.weight(1f) else Modifier)
+            Text(
+                row.value,
+                style = text.bodyLarge.copy(fontWeight = FontWeight.Medium, fontFeatureSettings = TABULAR_FIGURES),
+                textAlign = TextAlign.End,
+                modifier = if (row.figure) Modifier else Modifier.weight(1f),
+            )
+        }
+        if (row.detail != null) {
+            Text(row.detail, style = text.bodySmall, color = scheme.onSurfaceVariant, modifier = Modifier.padding(top = AppSpacing.xxs))
+        }
     }
 }
 

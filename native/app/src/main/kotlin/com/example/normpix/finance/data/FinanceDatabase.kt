@@ -61,6 +61,10 @@ class FinanceDatabase(
                 if (oldVersion < 11) addNewDefaultCategories(db, clock())
                 if (oldVersion < 12) addAccountNumberStarts(db)
                 if (oldVersion < 13) addDefaultFamilies(db, clock(), CategorySuggestions.addedIn13)
+                if (oldVersion < 14) addLoanColumns(db)
+                if (oldVersion < 15) addTags(db)
+                if (oldVersion < 16) addGoals(db)
+                if (oldVersion < 17) addSplitGroup(db)
             }
 
             override fun onOpen(db: SupportSQLiteDatabase) {
@@ -68,6 +72,15 @@ class FinanceDatabase(
                 // A safety net, not a migration: a database whose version says it has every column but which lacks one (a build that
                 // numbered its versions differently, a restore of an older file) would refuse every account write. Only ever adds.
                 runCatching { ensureAccountColumns(db) }
+                // The same for the two tag tables (version 15): every read of a transaction reads its tags, so a database numbered 15
+                // without them would show no history at all. Only ever creates what is missing; never touches a row.
+                runCatching { if (!db.isReadOnly) addTags(db) }
+                // And the goals table (version 16): the ledger reads every goal with the rest of its reference data, so a database
+                // numbered 16 without it would not load at all. The same: only ever creates what is missing, never touches a row.
+                runCatching { if (!db.isReadOnly) addGoals(db) }
+                // And the split group on transactions (version 17): every read of a transaction names the column, so a database numbered
+                // 17 without it would show no history at all. Only ever adds the empty column and its index; never touches a row.
+                runCatching { if (!db.isReadOnly) addSplitGroup(db) }
             }
         },
     )
@@ -81,7 +94,21 @@ class FinanceDatabase(
 
     companion object {
         const val DB_NAME = "normpix_finance.db"
-        const val VERSION = 13
+        const val VERSION = 17
+
+        /**
+         * The columns that make an account a loan (version 14), all empty for an account that is not one: what was borrowed and the
+         * monthly EMI in minor units, the yearly interest in basis points (1050 = 10.50%), the length in months, and the day of the
+         * first EMI as every moment here is kept (see `toStorage`: milliseconds of the wall-clock day, so INTEGER, not text).
+         * An account is a loan when `loan_principal` is not null.
+         */
+        private val LOAN_COLUMNS = listOf(
+            "loan_principal" to "INTEGER",
+            "loan_rate_bp" to "INTEGER",
+            "loan_tenure_months" to "INTEGER",
+            "loan_emi" to "INTEGER",
+            "loan_start" to "INTEGER",
+        )
 
         /** The columns an account has beyond its first ones, as the migrations from version 2 on add them, with their types. */
         private val ACCOUNT_EXTRA_COLUMNS = listOf(
@@ -92,7 +119,7 @@ class FinanceDatabase(
             "number_ending" to "TEXT",
             "card_id" to "TEXT",
             "number_start" to "TEXT",
-        )
+        ) + LOAN_COLUMNS
 
         /** Adds any of [ACCOUNT_EXTRA_COLUMNS] the accounts table lacks (empty for every account, as the migrations leave them). */
         fun ensureAccountColumns(db: SupportSQLiteDatabase) {
@@ -115,6 +142,15 @@ class FinanceDatabase(
         const val RECURRING_RULES = "recurring_rules"
         const val META = "meta"
 
+        /** The tags the user named (version 15). */
+        const val TAGS = "tags"
+
+        /** Which tag is on which transaction (version 15): one row a link, gone with either side. */
+        const val TRANSACTION_TAGS = "transaction_tags"
+
+        /** The savings goals the user set (version 16). */
+        const val GOALS = "goals"
+
         fun createSchema(db: SupportSQLiteDatabase) {
             db.execSQL(
                 """
@@ -133,7 +169,12 @@ class FinanceDatabase(
                   due_day INTEGER,
                   number_ending TEXT,
                   card_id TEXT,
-                  number_start TEXT
+                  number_start TEXT,
+                  loan_principal INTEGER,
+                  loan_rate_bp INTEGER,
+                  loan_tenure_months INTEGER,
+                  loan_emi INTEGER,
+                  loan_start INTEGER
                 )
                 """.trimIndent(),
             )
@@ -203,6 +244,7 @@ class FinanceDatabase(
                   updated_at INTEGER NOT NULL,
                   person_id INTEGER REFERENCES $PEOPLE(id) ON DELETE SET NULL,
                   picture TEXT,
+                  split_group TEXT,
                   CHECK (
                     (type = 'transfer' AND to_account_id IS NOT NULL
                        AND to_account_id != account_id AND category_id IS NULL)
@@ -219,6 +261,7 @@ class FinanceDatabase(
             db.execSQL("CREATE INDEX idx_tx_type_occurred ON $TRANSACTIONS(type, occurred_at)")
             db.execSQL("CREATE INDEX idx_tx_recurring ON $TRANSACTIONS(recurring_id)")
             db.execSQL("CREATE INDEX idx_tx_person ON $TRANSACTIONS(person_id, occurred_at)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_tx_split ON $TRANSACTIONS(split_group)")
             createPersonGuards(db)
             createPersonGuards(db, RECURRING_RULES, "rule")
             db.execSQL(
@@ -238,6 +281,90 @@ class FinanceDatabase(
                     "ON $BUDGETS(COALESCE(category_id, -1), effective_month)",
             )
             db.execSQL("CREATE TABLE $META (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            addTags(db)
+            addGoals(db)
+        }
+
+        /**
+         * Version 17: a payment can be split into categories (`finance/domain/Splits.kt`). Adds one (empty) column to transactions,
+         * `split_group` - the random id the parts of one split payment share, null for every row that is not one - and an index to find a
+         * group's rows by. Every existing transaction stays exactly as it was, with none: nothing is worked out for a row that was never
+         * split, and no row, value, table or other column is touched. The column is added only where it is missing, and the index only
+         * where it is, so a retried migration, or the safety net in `onOpen`, can never fail on "duplicate column name" or "already
+         * exists" and leave the database refusing to open.
+         */
+        fun addSplitGroup(db: SupportSQLiteDatabase) {
+            val have = db.rawQuery("PRAGMA table_info($TRANSACTIONS)", null).use { cursor ->
+                buildSet { while (cursor.moveToNext()) add(cursor.getString(cursor.getColumnIndexOrThrow("name"))) }
+            }
+            // No transactions table at all (a hand-built database in a test): nothing to add the column to, and no reason to refuse to open.
+            if (have.isEmpty()) return
+            if ("split_group" !in have) db.execSQL("ALTER TABLE $TRANSACTIONS ADD COLUMN split_group TEXT")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_tx_split ON $TRANSACTIONS(split_group)")
+        }
+
+        /**
+         * Version 16: savings goals (`finance/domain/Goals.kt`). Adds one new, empty table - nothing that was there is touched: no row,
+         * column or table - and is safe to run again (`IF NOT EXISTS`), so a retried migration, or the safety net in `onOpen`, can never
+         * fail on "already exists" and leave the database refusing to open.
+         *
+         * - `target` is what the user wants saved, above zero; `target_date` is the day by which, kept as every date here is (INTEGER
+         *   milliseconds of the wall-clock day, see `toStorage`), or null for none.
+         * - `account_id` is the account whose balance counts as saved, or null for a goal that keeps its own amount in `saved` (never
+         *   below zero). The account row going away sets it to null (`ON DELETE SET NULL`): the goal is then on its own, and a linked
+         *   goal keeps no amount of its own (the repository stores it as zero), so it has nothing saved.
+         */
+        fun addGoals(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS $GOALS (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  name TEXT NOT NULL,
+                  target INTEGER NOT NULL CHECK (target > 0),
+                  target_date INTEGER,
+                  emoji TEXT,
+                  account_id INTEGER REFERENCES $ACCOUNTS(id) ON DELETE SET NULL,
+                  saved INTEGER NOT NULL DEFAULT 0 CHECK (saved >= 0),
+                  sort_order INTEGER NOT NULL DEFAULT 0,
+                  created_at INTEGER NOT NULL,
+                  updated_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+        }
+
+        /**
+         * Version 15: transactions can carry tags (`finance/domain/Tags.kt`). Adds two new, empty tables and their indexes - nothing that
+         * was there is touched: no row, column or table - and is safe to run again (every statement is `IF NOT EXISTS`), so a retried
+         * migration, or the safety net in `onOpen`, can never fail on "already exists" and leave the database refusing to open.
+         *
+         * - [TAGS]: a name (unique whatever its case, as people's are) and when it was made, as every moment here is kept (INTEGER
+         *   milliseconds of the wall clock, see `toStorage`).
+         * - [TRANSACTION_TAGS]: one row a link, its key the pair, so a tag is on a transaction once at most. Both sides are foreign keys
+         *   that cascade: deleting a transaction or a tag takes its links with it, and a link can never point at nothing (foreign keys
+         *   are on, `onConfigure`). The index on `tag_id` finds a tag's transactions; the key finds a transaction's tags.
+         */
+        fun addTags(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS $TAGS (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  name TEXT NOT NULL,
+                  created_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_name ON $TAGS(name COLLATE NOCASE)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS $TRANSACTION_TAGS (
+                  transaction_id INTEGER NOT NULL REFERENCES $TRANSACTIONS(id) ON DELETE CASCADE,
+                  tag_id INTEGER NOT NULL REFERENCES $TAGS(id) ON DELETE CASCADE,
+                  PRIMARY KEY (transaction_id, tag_id)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_transaction_tags_tag ON $TRANSACTION_TAGS(tag_id)")
         }
 
         /** The banks the user added (built-in banks are not stored; accounts refer to them by directory id). */
@@ -411,6 +538,21 @@ class FinanceDatabase(
                 while (cursor.moveToNext()) if (cursor.getString(0).trim().lowercase() in markers) return true
             }
             return false
+        }
+
+        /**
+         * Version 14: an account can be a loan (`finance/domain/Loans.kt`). Adds the five (empty) columns of [LOAN_COLUMNS]: every
+         * account stays exactly as it was, with no loan - nothing is worked out for an account that was never told it is one - and no
+         * row, value or table is touched. A column that is there already (a retried migration) is left alone, so this can never fail on
+         * "duplicate column name" and leave the database refusing to open.
+         */
+        fun addLoanColumns(db: SupportSQLiteDatabase) {
+            val have = db.rawQuery("PRAGMA table_info($ACCOUNTS)", null).use { cursor ->
+                buildSet { while (cursor.moveToNext()) add(cursor.getString(cursor.getColumnIndexOrThrow("name"))) }
+            }
+            for ((column, type) in LOAN_COLUMNS) {
+                if (column !in have) db.execSQL("ALTER TABLE $ACCOUNTS ADD COLUMN $column $type")
+            }
         }
 
         /**

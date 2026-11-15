@@ -37,9 +37,10 @@ import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.navigation.SettingsPage
 import com.example.normpix.settings.ui.automaticUpdatesSummary
+import com.example.normpix.settings.ui.SettingsLeadingBadge
+import com.example.normpix.settings.ui.SettingsRowEmoji
 import com.example.normpix.ui.components.AppEmptyState
 import com.example.normpix.ui.components.AppSubPage
-import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.PagePill
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
@@ -122,7 +123,7 @@ private fun UpdatePageFor(updater: AppUpdater, onClose: () -> Unit) {
                         ListRow(
                             headline = "Automatic updates",
                             supporting = automaticUpdatesSummary(prefs, is24Hour),
-                            leading = { LeadingIcon(Icons.Outlined.Update) },
+                            leading = { SettingsLeadingBadge(Icons.Outlined.Update, SettingsRowEmoji.UPDATES) },
                             onClick = { navigator.openSettings(SettingsPage.Updates) },
                         )
                     }

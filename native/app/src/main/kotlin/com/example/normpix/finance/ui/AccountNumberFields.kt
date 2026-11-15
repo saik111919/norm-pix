@@ -18,6 +18,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentDataType
+import androidx.compose.ui.semantics.contentDataType
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import com.example.normpix.finance.domain.Account
@@ -195,7 +198,8 @@ private fun CardNumberField(
     OutlinedTextField(
         value = cardNumber,
         onValueChange = { entered -> onCardNumber(entered.filter { it in '0'..'9' }.take(MAX_CARD_NUMBER_DIGITS)) },
-        modifier = modifier.fillMaxWidth(),
+        // Kept out of the phone's autofill service: no service sees this field or offers to save what is typed in it.
+        modifier = modifier.fillMaxWidth().semantics { contentDataType = ContentDataType.None },
         label = { Text("Card number (optional)") },
         placeholder = { Text("1234 5678 9012 3456") },
         trailingIcon = if (kept != null) {

@@ -12,6 +12,9 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.example.normpix.finance.ui.CategoriesContent
+import com.example.normpix.navigation.StepBackHandler
+import com.example.normpix.navigation.StepBackLayers
+import com.example.normpix.navigation.rememberStepBack
 import com.example.normpix.ui.components.AppPrimaryTabs
 import com.example.normpix.ui.components.AppTab
 import com.example.normpix.ui.theme.AppSpacing
@@ -37,26 +40,36 @@ private val BanksAndCategoriesTabs = listOf(
  * [initialTab] is the side the page opens on: Banks from the Settings row, Categories from the route the Finance settings row,
  * the "+" menu's tile and Settings search open (see [com.example.normpix.navigation.Routes.CATEGORIES]). The choice is kept
  * across rotation, and is the user's from the moment they touch the switch.
+ *
+ * Back from the other side goes back to the side the page opened on first, and only then leaves the page (owner, 2026-11-14: "step
+ * back to Banks first", as Plans steps back to Activity) - as a back gesture like any other: the side shown closes under the finger
+ * over the side it returns to ([StepBackHandler]).
  */
 @Composable
 fun BanksAndCategoriesPage(initialTab: BanksAndCategoriesTab = BanksAndCategoriesTab.Banks) {
     var chosen by rememberSaveable { mutableStateOf(initialTab.name) }
     val tab = BanksAndCategoriesTab.entries.firstOrNull { it.name == chosen } ?: initialTab
-    val tabBar: @Composable () -> Unit = {
+    val stepBack = rememberStepBack()
+    StepBackHandler(stepBack, enabled = tab != initialTab, to = initialTab.ordinal) { chosen = initialTab.name }
+    // Each side's own switch says that side: the one beneath a back gesture is drawn as it will be once it is back.
+    val tabBar: @Composable (BanksAndCategoriesTab) -> Unit = { side ->
         AppPrimaryTabs(
             tabs = BanksAndCategoriesTabs,
-            selectedIndex = tab.ordinal,
+            selectedIndex = side.ordinal,
             onSelect = { index -> chosen = BanksAndCategoriesTab.entries[index].name },
             modifier = Modifier.padding(AppSpacing.page).padding(bottom = AppSpacing.sm),
         )
     }
     // Each side keeps its search, its chips and its place in the list while the other is shown, as the app's primary
-    // switches do, without leaving both long lists composed at once.
+    // switches do, without leaving both long lists composed at once (both are, only while a back gesture shows one under the other).
     val savedSides = rememberSaveableStateHolder()
-    savedSides.SaveableStateProvider(tab.name) {
-        when (tab) {
-            BanksAndCategoriesTab.Banks -> BanksContent(BANKS_AND_CATEGORIES_TITLE, tabBar)
-            BanksAndCategoriesTab.Categories -> CategoriesContent(BANKS_AND_CATEGORIES_TITLE, tabBar)
+    StepBackLayers(stepBack, shown = tab, of = BanksAndCategoriesTab.entries::getOrNull) { side ->
+        val sideTabBar: @Composable () -> Unit = { tabBar(side) }
+        savedSides.SaveableStateProvider(side.name) {
+            when (side) {
+                BanksAndCategoriesTab.Banks -> BanksContent(BANKS_AND_CATEGORIES_TITLE, sideTabBar)
+                BanksAndCategoriesTab.Categories -> CategoriesContent(BANKS_AND_CATEGORIES_TITLE, sideTabBar)
+            }
         }
     }
 }

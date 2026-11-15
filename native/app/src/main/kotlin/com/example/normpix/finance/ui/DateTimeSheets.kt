@@ -14,6 +14,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -67,13 +68,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.CollectionInfo
+import androidx.compose.ui.semantics.CollectionItemInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.collectionInfo
+import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
@@ -87,6 +95,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.normpix.finance.domain.CalendarItem
+import com.example.normpix.finance.domain.DayMark
+import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.ui.components.FloatingActionBar
 import com.example.normpix.ui.components.FloatingActionBarDefaults
 import com.example.normpix.ui.components.InnerCorner
@@ -122,6 +133,14 @@ private val DayHeight = 44.dp
 private val DayCircle = 40.dp
 private val DayBand = 36.dp
 
+/** A day's tile when it carries markers (the Bills calendar): the number's circle, a small gap and a row of dots. */
+private val MarkedDayHeight = 54.dp
+private val MarkDot = AppSpacing.sm - AppSpacing.xxs
+private val MarkGap = 3.dp
+
+/** How many dots a day shows; more than that is a "+" after them. */
+internal const val MARKS_SHOWN = 3
+
 /** As tall as the search bar, the split buttons and the Insights range control, so every date and time control lines up. */
 private val PickerHeight = 56.dp
 
@@ -135,16 +154,26 @@ private val FirstMonth = YearMonth.of(2000, 1)
 /**
  * While this is in composition, the [DateSheet] is up to pick a day, as [DateRangePickerFor] brings up the range sheet:
  * [onPicked] gets the day chosen, [onDismiss] is called when it is closed without. The last day it offers is the end of the
- * year [yearsAhead] years from now. It opens over whatever is open (the transaction editor is a sheet too).
+ * year [yearsAhead] years from now (or [latest], when one is given), and the first is [earliest] when one is given. It opens over
+ * whatever is open (the transaction editor is a sheet too).
  */
 @Composable
-fun DatePickerDialogFor(initial: LocalDate, onPicked: (LocalDate) -> Unit, onDismiss: () -> Unit, yearsAhead: Int = 10) {
+fun DatePickerDialogFor(
+    initial: LocalDate,
+    onPicked: (LocalDate) -> Unit,
+    onDismiss: () -> Unit,
+    yearsAhead: Int = 10,
+    /** The last day offered, in place of the end of the year [yearsAhead] years on; null for that. */
+    latest: LocalDate? = null,
+    /** The first day offered; null offers every day back to the calendar's start. */
+    earliest: LocalDate? = null,
+) {
     val overlays = LocalOverlays.current
     val picked by rememberUpdatedState(onPicked)
     val dismissed by rememberUpdatedState(onDismiss)
     LaunchedEffect(Unit) {
-        val latest = LocalDate.of(LocalDate.now().year + yearsAhead, 12, 31)
-        val date = overlays.sheet<LocalDate>(expandable = true) { done -> DateSheet(initial, latest, onPick = done) }
+        val last = latest ?: LocalDate.of(LocalDate.now().year + yearsAhead, 12, 31)
+        val date = overlays.sheet<LocalDate>(expandable = true) { done -> DateSheet(initial, last, onPick = done, earliest = earliest) }
         if (date != null) picked(date) else dismissed()
     }
 }
@@ -173,23 +202,29 @@ fun TimePickerDialogFor(initial: LocalDateTime, onPicked: (hour: Int, minute: In
 internal class DatePick(val label: String, val date: LocalDate)
 
 /** The days offered as quick picks: today and yesterday, and - where days to come may be chosen - tomorrow and a week on. */
-internal fun datePicks(today: LocalDate, latest: LocalDate?): List<DatePick> = listOf(
+internal fun datePicks(today: LocalDate, latest: LocalDate?, earliest: LocalDate? = null): List<DatePick> = listOf(
     DatePick("Today", today),
     DatePick("Yesterday", today.minusDays(1)),
     DatePick("Tomorrow", today.plusDays(1)),
     DatePick("In a week", today.plusWeeks(1)),
-).filter { latest == null || !it.date.isAfter(latest) }
+).filter { (latest == null || !it.date.isAfter(latest)) && (earliest == null || !it.date.isBefore(earliest)) }
 
 /**
  * One day picked from a sheet, in the range sheet's family: quick picks as tiles, then a month at a time - the month with a
  * step either side, its days as round tiles under the weekdays, the chosen day filled, today ringed, days after [latest]
- * not offered - and a button that uses the day. A tap on a day only chooses it; the button returns it. Calls [onPick] with
- * the day, or null when the sheet is closed without.
+ * not offered (nor those before [earliest], when there is one) - and a button that uses the day. A tap on a day only chooses it;
+ * the button returns it. Calls [onPick] with the day, or null when the sheet is closed without.
  */
 @Composable
-fun DateSheet(initial: LocalDate, latest: LocalDate?, onPick: (LocalDate?) -> Unit, today: LocalDate = LocalDate.now()) {
+fun DateSheet(
+    initial: LocalDate,
+    latest: LocalDate?,
+    onPick: (LocalDate?) -> Unit,
+    today: LocalDate = LocalDate.now(),
+    earliest: LocalDate? = null,
+) {
     val haptics = rememberAppHaptics()
-    val picks = remember(today, latest) { datePicks(today, latest) }
+    val picks = remember(today, latest, earliest) { datePicks(today, latest, earliest) }
     var chosen by remember { mutableStateOf(initial) }
     var shown by remember { mutableStateOf(YearMonth.from(initial)) }
 
@@ -227,6 +262,7 @@ fun DateSheet(initial: LocalDate, latest: LocalDate?, onPick: (LocalDate?) -> Un
                 last = chosen,
                 today = today,
                 latest = latest,
+                earliest = earliest,
                 onPick = {
                     haptics.selection()
                     chosen = it
@@ -575,8 +611,13 @@ internal fun timeText(time: LocalTime, is24Hour: Boolean): String = timeLabel(ti
  * The calendar the day and range sheets share: the month with a step either side, its days as round tiles under the weekdays
  * (always six weeks tall, so a sheet keeps its height from month to month), changing month with a slide. The days from
  * [first] to [last] are filled at the ends and joined by a band between ([last] null while the last day is still to be
- * tapped; the same day for both is one chosen day), [today] is ringed, days after [latest] are not offered. [shown] is the
+ * tapped; the same day for both is one chosen day), [today] is ringed, days after [latest] (and before [earliest]) are not offered. [shown] is the
  * month on screen, changed through [onShown]; a tap on a day calls [onPick].
+ *
+ * With [markers] (the Bills calendar) each day carries what is on it: its tile is taller, with up to [MARKS_SHOWN] dots under the number
+ * (and a "+" for more), a screen reader hears "3 things due" or "nothing due" after the date, the grid says it is one (rows and columns)
+ * and the month has only the weeks it needs. A day not in the map has nothing. Without it - the date pickers - the calendar is exactly
+ * as it always was.
  */
 @Composable
 internal fun MonthCalendar(
@@ -588,6 +629,8 @@ internal fun MonthCalendar(
     latest: LocalDate?,
     onPick: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
+    earliest: LocalDate? = null,
+    markers: Map<LocalDate, DayMarks>? = null,
 ) {
     val haptics = rememberAppHaptics()
     val scheme = MaterialTheme.colorScheme
@@ -596,13 +639,14 @@ internal fun MonthCalendar(
     val locale = LocalConfiguration.current.locales[0]
     val firstDayOfWeek = rememberFirstDayOfWeek()
     val lastMonth = YearMonth.from(latest ?: today.plusYears(10))
+    val firstMonth = earliest?.let { YearMonth.from(it) } ?: FirstMonth
     val outer = CornerSize(50)
     val inner = CornerSize(InnerCorner)
 
     Column(modifier.fillMaxWidth()) {
         // The month, with a step either side: the month sheet's year control.
         Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(SplitGap)) {
-            val back = shown.isAfter(FirstMonth)
+            val back = shown.isAfter(firstMonth)
             Surface(
                 onClick = {
                     haptics.selection()
@@ -656,7 +700,8 @@ internal fun MonthCalendar(
             targetState = shown,
             transitionSpec = {
                 if (reduced) {
-                    EnterTransition.None togetherWith ExitTransition.None
+                    // Nothing moves, not even the height of a month with fewer weeks.
+                    (EnterTransition.None togetherWith ExitTransition.None) using null
                 } else {
                     // A later month comes in from the right, an earlier one from the left, like the pages of a calendar.
                     val direction = if (targetState.isBefore(initialState)) -1 else 1
@@ -677,8 +722,10 @@ internal fun MonthCalendar(
                 last = last,
                 today = today,
                 latest = latest,
+                earliest = earliest,
                 firstDayOfWeek = firstDayOfWeek,
                 onPick = onPick,
+                markers = markers,
             )
         }
     }
@@ -692,8 +739,8 @@ internal fun rememberFirstDayOfWeek(): DayOfWeek {
 }
 
 /**
- * [month]'s days under the weekdays, always six weeks tall so the sheet keeps its height from month to month. [last] null
- * while the last day is still to be tapped.
+ * [month]'s days under the weekdays, always six weeks tall so the sheet keeps its height from month to month - or, with [markers],
+ * as many weeks as the month has, each a taller row. [last] null while the last day is still to be tapped.
  */
 @Composable
 private fun MonthDays(
@@ -702,13 +749,21 @@ private fun MonthDays(
     last: LocalDate?,
     today: LocalDate,
     latest: LocalDate?,
+    earliest: LocalDate?,
     firstDayOfWeek: DayOfWeek,
     onPick: (LocalDate) -> Unit,
+    markers: Map<LocalDate, DayMarks>? = null,
 ) {
     val lead = (month.atDay(1).dayOfWeek.value - firstDayOfWeek.value + 7) % 7
     val length = month.lengthOfMonth()
-    Column(Modifier.fillMaxWidth()) {
-        for (week in 0 until 6) {
+    val weeks = if (markers == null) 6 else (lead + length + 6) / 7
+    val tileHeight = if (markers == null) DayHeight else MarkedDayHeight
+    Column(
+        Modifier.fillMaxWidth().then(
+            if (markers == null) Modifier else Modifier.semantics { collectionInfo = CollectionInfo(rowCount = weeks, columnCount = 7) },
+        ),
+    ) {
+        for (week in 0 until weeks) {
             Row(Modifier.fillMaxWidth()) {
                 for (column in 0 until 7) {
                     val n = week * 7 + column - lead + 1
@@ -719,11 +774,15 @@ private fun MonthDays(
                             first = first,
                             last = last,
                             today = day == today,
-                            enabled = latest == null || !day.isAfter(latest),
+                            enabled = (latest == null || !day.isAfter(latest)) && (earliest == null || !day.isBefore(earliest)),
                             onPick = { onPick(day) },
+                            marks = markers?.let { it[day] ?: DayMarks.None },
+                            height = tileHeight,
+                            row = week,
+                            column = column,
                         )
                     } else {
-                        Spacer(Modifier.weight(1f).height(DayHeight))
+                        Spacer(Modifier.weight(1f).height(tileHeight))
                     }
                 }
             }
@@ -732,7 +791,18 @@ private fun MonthDays(
 }
 
 @Composable
-private fun RowScope.DayTile(day: LocalDate, first: LocalDate?, last: LocalDate?, today: Boolean, enabled: Boolean, onPick: () -> Unit) {
+private fun RowScope.DayTile(
+    day: LocalDate,
+    first: LocalDate?,
+    last: LocalDate?,
+    today: Boolean,
+    enabled: Boolean,
+    onPick: () -> Unit,
+    marks: DayMarks? = null,
+    height: Dp = DayHeight,
+    row: Int = 0,
+    column: Int = 0,
+) {
     val scheme = MaterialTheme.colorScheme
     val isFirst = day == first
     val isLast = day == last
@@ -748,15 +818,17 @@ private fun RowScope.DayTile(day: LocalDate, first: LocalDate?, last: LocalDate?
             between -> append(", in the range")
         }
         if (today) append(", today")
+        if (marks != null) append(", ${marks.spoken}")
     }
     Box(
         Modifier
             .weight(1f)
-            .height(DayHeight)
+            .height(height)
             .clearAndSetSemantics {
                 contentDescription = spoken
                 role = Role.Button
                 selected = ends || between
+                if (marks != null) collectionItemInfo = CollectionItemInfo(row, 1, column, 1)
                 if (enabled) onClick { onPick(); true } else disabled()
             }
             .clickable(
@@ -776,25 +848,120 @@ private fun RowScope.DayTile(day: LocalDate, first: LocalDate?, last: LocalDate?
             }
             Box(band.height(DayBand).background(scheme.secondaryContainer))
         }
-        Box(
-            Modifier
-                .size(DayCircle)
-                .clip(CircleShape)
-                .background(if (ends) scheme.primary else Color.Transparent)
-                .then(if (today && !ends) Modifier.border(1.5.dp, scheme.primary, CircleShape) else Modifier),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                "${day.dayOfMonth}",
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = if (ends || today) FontWeight.SemiBold else FontWeight.Normal,
-                color = when {
-                    ends -> scheme.onPrimary
-                    !enabled -> scheme.onSurface.copy(alpha = 0.38f)
-                    between -> scheme.onSecondaryContainer
-                    else -> scheme.onSurface
+        val number: @Composable () -> Unit = {
+            Box(
+                Modifier
+                    .size(DayCircle)
+                    .clip(CircleShape)
+                    .background(if (ends) scheme.primary else Color.Transparent)
+                    .then(if (today && !ends) Modifier.border(1.5.dp, scheme.primary, CircleShape) else Modifier),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "${day.dayOfMonth}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = if (ends || today) FontWeight.SemiBold else FontWeight.Normal,
+                    color = when {
+                        ends -> scheme.onPrimary
+                        !enabled -> scheme.onSurface.copy(alpha = 0.38f)
+                        between -> scheme.onSecondaryContainer
+                        else -> scheme.onSurface
+                    },
+                )
+            }
+        }
+        if (marks == null) {
+            number()
+        } else {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                number()
+                Spacer(Modifier.height(2.dp))
+                DayMarkRow(marks)
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Markers: what is on a day (the Bills calendar)
+// ---------------------------------------------------------------------------------------------------------------------
+
+/**
+ * What a day's tile shows under its number: one dot for each of the first [MARKS_SHOWN] things on the day - by kind, money going out,
+ * money coming in, a reminder - and a "+" when there are more. [count] is how many things there are altogether.
+ */
+@Immutable
+internal class DayMarks(val kinds: List<DayMark>, val count: Int) {
+    /** More things than dots. */
+    val more: Boolean get() = count > kinds.size
+
+    /** What a screen reader says after the date: "3 things due", "1 thing due" or "nothing due". */
+    val spoken: String get() = when (count) {
+        0 -> "nothing due"
+        1 -> "1 thing due"
+        else -> "$count things due"
+    }
+
+    companion object {
+        /** A day with nothing on it. */
+        val None = DayMarks(emptyList(), 0)
+    }
+}
+
+/** The marks for a day's [items] (already in the order a day lists them). */
+internal fun dayMarksOf(items: List<CalendarItem>): DayMarks = DayMarks(items.take(MARKS_SHOWN).map { it.mark }, items.size)
+
+/** The dots under a day's number, then a "+" when there are more things than dots. Drawn, not read: the day describes itself. */
+@Composable
+private fun DayMarkRow(marks: DayMarks) {
+    Row(
+        Modifier.height(MarkDot + 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(MarkGap),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        for (kind in marks.kinds) DayMarkDot(kind, diameter = MarkDot)
+        if (marks.more) {
+            val color = MaterialTheme.colorScheme.onSurfaceVariant
+            Canvas(Modifier.size(MarkDot)) {
+                val stroke = 1.5.dp.toPx()
+                drawLine(color, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), strokeWidth = stroke)
+                drawLine(color, Offset(size.width / 2, 0f), Offset(size.width / 2, size.height), strokeWidth = stroke)
+            }
+        }
+    }
+}
+
+/**
+ * One kind's dot, in the shape that says it as well as its colour: money going out a filled circle in the warm colour, money coming
+ * in a diamond in the positive one, a reminder a ring in the theme's primary. It is the only picture of the kind - the legend and the
+ * list under the calendar say them in words.
+ */
+@Composable
+internal fun DayMarkDot(kind: DayMark, modifier: Modifier = Modifier, diameter: Dp = MarkDot) {
+    val color = when (kind) {
+        DayMark.Out -> TransactionType.Expense.role().color
+        DayMark.In -> TransactionType.Income.role().color
+        DayMark.Reminder -> MaterialTheme.colorScheme.primary
+    }
+    Canvas(modifier.size(diameter)) {
+        val w = size.width
+        val h = size.height
+        when (kind) {
+            DayMark.Out -> drawCircle(color)
+            DayMark.In -> drawPath(
+                Path().apply {
+                    moveTo(w / 2, 0f)
+                    lineTo(w, h / 2)
+                    lineTo(w / 2, h)
+                    lineTo(0f, h / 2)
+                    close()
                 },
+                color,
             )
+            DayMark.Reminder -> {
+                val stroke = 1.5.dp.toPx()
+                drawCircle(color, radius = (size.minDimension - stroke) / 2, style = Stroke(stroke))
+            }
         }
     }
 }

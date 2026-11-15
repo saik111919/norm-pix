@@ -24,7 +24,13 @@ enum class PlanSection(val label: String) {
     Budgets("Budgets"),
     Recurring("Recurring"),
     Reminders("Reminders"),
+
+    /** Savings goals (2026-11-15). Last, so the sections that were there keep their places in what the shell remembers. */
+    Goals("Goals"),
 }
+
+/** A step back takes inside Plans & Activity before it leaves the tab: a section up to Budgets, or the Plans view to Activity. */
+enum class PlanStep { Section, View }
 
 /** Settings pages reachable directly (from search, or links inside the app). */
 enum class SettingsPage { Appearance, Widgets, Finance, Banks, Data, Wallet, Notifications, Availability, Security, Updates }
@@ -41,6 +47,15 @@ interface AppNavigator {
 
     fun openBudgetHistory()
 
+    /** What the repeating payments cost - a month, a year, each one - with a switch to pause each (a navigator without it does nothing). */
+    fun openRepeatingCosts() = Unit
+
+    /** The cash-flow forecast: the money that can be spent, day by day to a date the user picks (a navigator without it does nothing). */
+    fun openForecast() = Unit
+
+    /** The Bills calendar: card bills, repeating payments, reminders and entries dated ahead, a month at a time (a navigator without it does nothing). */
+    fun openBillsCalendar() = Unit
+
     /** The People page: what is spent on each person. */
     fun openPeople()
 
@@ -56,6 +71,15 @@ interface AppNavigator {
     fun openCategoryHistory(categoryId: Long, range: DateRange) = openCategoryHistory(categoryId, MonthKey.of(range.start))
 
     fun openAccountHistory(accountId: Long)
+
+    /**
+     * The transactions with one tag: over the whole days of [range] when given (a year of the review by tag), else every one, all time
+     * (a navigator without the route does nothing).
+     */
+    fun openTagHistory(tagId: Long, range: DateRange? = null) = Unit
+
+    /** The yearly review by tag: what each tag came to over a financial year (a navigator without it does nothing). */
+    fun openYearByTag() = Unit
 
     fun openSettings(page: SettingsPage? = null)
 

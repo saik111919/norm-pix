@@ -27,7 +27,6 @@ import androidx.compose.material.icons.outlined.FontDownload
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.TextFields
-import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -57,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.ui.ChoiceOption
 import com.example.normpix.finance.ui.ConnectedChoiceRow
+import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.settings.AppIcon
 import com.example.normpix.settings.AppPreferences
 import com.example.normpix.settings.AppPrefsState
@@ -84,15 +84,10 @@ private const val ICONS_PER_ROW = 4
  * that hold one bigger control (the app icons, the interface font) rather than a list of rows.
  */
 @Composable
-internal fun SettingsCardHeader(icon: ImageVector, title: String, subtitle: String, modifier: Modifier = Modifier) {
+internal fun SettingsCardHeader(icon: ImageVector, emoji: String, title: String, subtitle: String, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(52.dp).background(scheme.primaryContainer, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, contentDescription = null, tint = scheme.onPrimaryContainer, modifier = Modifier.size(26.dp))
-        }
+        SettingsLeadingBadge(icon, emoji, background = scheme.primaryContainer, foreground = scheme.onPrimaryContainer, size = 52.dp)
         Column(Modifier.padding(start = AppSpacing.lg).weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold), color = scheme.onSurface)
             Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
@@ -104,7 +99,7 @@ internal fun SettingsCardHeader(icon: ImageVector, title: String, subtitle: Stri
 @Composable
 internal fun AppIconCard(selected: AppIcon, onSelected: (AppIcon) -> Unit) {
     Column(Modifier.padding(AppSpacing.lg)) {
-        SettingsCardHeader(Icons.Outlined.Palette, "Home screen icon", "Choose how NormPix looks on your home screen")
+        SettingsCardHeader(Icons.Outlined.Palette, AppearanceSection.AppIcon.emoji, "Home screen icon", "Choose how NormPix looks on your home screen")
         Spacer(Modifier.height(AppSpacing.lg))
         Column(Modifier.fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.spacedBy(AppSpacing.md)) {
             for (row in AppIcon.entries.chunked(ICONS_PER_ROW)) {
@@ -199,7 +194,7 @@ internal fun InterfaceFontCard(prefs: AppPrefsState, preferences: AppPreferences
     fun commit() = preferences.setFontShape(weight.roundToInt(), width.roundToInt(), roundness.roundToInt())
 
     Column(Modifier.padding(AppSpacing.lg)) {
-        SettingsCardHeader(Icons.Outlined.TextFields, "Font and style", "Customize the interface font and style")
+        SettingsCardHeader(Icons.Outlined.TextFields, AppearanceSection.InterfaceFont.emoji, "Font and style", "Customize the interface font and style")
         Spacer(Modifier.height(AppSpacing.lg))
         ConnectedChoiceRow(
             options = fontOptions,

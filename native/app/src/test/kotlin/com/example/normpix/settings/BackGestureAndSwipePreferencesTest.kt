@@ -25,13 +25,23 @@ class BackGestureAndSwipePreferencesTest {
         .also { it.edit().clear().commit() }
 
     @Test
-    fun theDefaults_followThePages_atAnUnhurriedSpeed_andASwipeAsks() {
+    fun theDefaults_androidsOwnBack_atAnUnhurriedSpeed_andASwipeAsks() {
         val prefs = AppPreferences(store())
-        assertEquals(BackGestureStyle.PageStyle, prefs.state.value.backGestureStyle)
+        // Since 2026-11-14 (owner: "the predictive back follows the system back gesture"): Android's own, for a phone that never chose.
+        assertEquals(BackGestureStyle.System, prefs.state.value.backGestureStyle)
+        assertTrue(prefs.state.value.backGestureStyle.isAndroid)
         assertEquals(BackGestureSpeed.Standard, prefs.state.value.backGestureSpeed)
         assertTrue(prefs.state.value.swipeDeleteAsks, "a swipe to delete asks first unless it is turned off")
-        assertEquals(listOf("Match pages", "Shrink", "Slide", "Fade"), BackGestureStyle.entries.map { it.label })
+        assertEquals(listOf("Android", "Match pages", "Shrink", "Slide", "Fade"), BackGestureStyle.entries.map { it.label })
         assertEquals(listOf("Relaxed", "Standard", "Brisk"), BackGestureSpeed.entries.map { it.label })
+    }
+
+    @Test
+    fun aPhoneThatChoseAStyleKeepsIt_theNewDefaultDoesNotChangeIt() {
+        val context = store()
+        // What an earlier version stored when "Match pages" (the default then) was picked by hand.
+        context.edit().putString("back_gesture_style", "PageStyle").commit()
+        assertEquals(BackGestureStyle.PageStyle, AppPreferences(context).state.value.backGestureStyle)
     }
 
     @Test
@@ -56,7 +66,7 @@ class BackGestureAndSwipePreferencesTest {
         val context = store()
         context.edit().putString("back_gesture_style", "Explode").putString("back_gesture_speed", "Ludicrous").commit()
         val prefs = AppPreferences(context)
-        assertEquals(BackGestureStyle.PageStyle, prefs.state.value.backGestureStyle)
+        assertEquals(BackGestureStyle.System, prefs.state.value.backGestureStyle)
         assertEquals(BackGestureSpeed.Standard, prefs.state.value.backGestureSpeed)
     }
 

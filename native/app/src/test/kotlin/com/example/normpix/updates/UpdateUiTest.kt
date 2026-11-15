@@ -559,6 +559,38 @@ class UpdateUiTest {
     }
 
     @Test
+    fun `the update files row ends the page, and stays when checking is off and in a build that never updates itself`() {
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatesSettingsPage() } }
+        compose.onNodeWithText("Update files").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Delete downloaded APK files").performScrollTo().assertIsDisplayed()
+        // After "Network" and the rest, not before them.
+        assertTrue(boundsOf("Update files").top > boundsOf("Network").top, "the last group of the page")
+
+        scrollTap("Check for updates automatically")
+        assertFalse(environment.preferences.state.value.updateChecksEnabled)
+        absent("Network")
+        compose.onNodeWithText("Delete downloaded APK files").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `the update files row is on the page of a build that does not update itself`() {
+        val environment = environment(updater(enabled = false))
+        compose.setContent { environment.Content { UpdatesSettingsPage() } }
+        compose.onNodeWithText("Updates come with release builds").assertIsDisplayed()
+        compose.onNodeWithText("Update files").assertIsDisplayed()
+        compose.onNodeWithText("Delete downloaded APK files").assertIsDisplayed()
+    }
+
+    @Test
+    fun `settings search finds the update files row on the Automatic updates page`() {
+        for (query in listOf("apk", "delete apk", "leftover", "installer file", "clean up", "update file")) {
+            val found = SettingsCatalog.search(query).filter { it.title == "Delete downloaded APK files" }
+            assertEquals(listOf<SettingsPage?>(SettingsPage.Updates), found.map { it.page }, "\"$query\" finds it")
+        }
+    }
+
+    @Test
     fun `how often to check is the user's to choose, a day being where it starts`() {
         val environment = environment(updater())
         compose.setContent { environment.Content { UpdatesSettingsPage() } }

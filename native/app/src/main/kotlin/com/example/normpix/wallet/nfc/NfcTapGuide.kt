@@ -61,10 +61,12 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.example.normpix.finance.ui.TABULAR_FIGURES
 import com.example.normpix.ui.components.AppLinearProgress
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppMotion
@@ -80,9 +82,9 @@ internal enum class TapPhase { Ready, Reading, Done, Problem, Off }
 
 internal fun NfcInletState.tapPhase(): TapPhase = when (this) {
     NfcInletState.Idle, NfcInletState.Active -> TapPhase.Ready
-    NfcInletState.Detected, NfcInletState.Receiving -> TapPhase.Reading
+    NfcInletState.Detected, NfcInletState.Receiving, is NfcInletState.Comparing -> TapPhase.Reading
     is NfcInletState.Success, is NfcInletState.PaymentCard -> TapPhase.Done
-    is NfcInletState.Unsupported, NfcInletState.Lost, is NfcInletState.Error -> TapPhase.Problem
+    is NfcInletState.Unsupported, NfcInletState.Lost, is NfcInletState.Error, is NfcInletState.ShareFailed -> TapPhase.Problem
     NfcInletState.NfcOff, NfcInletState.NoNfc -> TapPhase.Off
 }
 
@@ -117,7 +119,9 @@ internal fun NfcTapPanel(
     LaunchedEffect(state) {
         when (state) {
             is NfcInletState.Success -> if (state.alreadySaved) haptics.strong() else haptics.success()
-            is NfcInletState.PaymentCard, is NfcInletState.Unsupported, NfcInletState.Lost -> haptics.strong()
+            is NfcInletState.PaymentCard, is NfcInletState.Unsupported, NfcInletState.Lost, is NfcInletState.ShareFailed -> haptics.strong()
+            // The phones are back to back: a tick says the code is up to compare.
+            is NfcInletState.Comparing -> haptics.selection()
             else -> Unit
         }
     }
@@ -172,6 +176,17 @@ internal fun NfcTapPanel(
                 Spacer(Modifier.height(AppSpacing.lg))
                 AppLinearProgress(Modifier.width(160.dp))
             }
+            is NfcInletState.Comparing -> {
+                Spacer(Modifier.height(AppSpacing.lg))
+                ShareCode(state.code)
+                Spacer(Modifier.height(AppSpacing.lg))
+                // Still waiting: for Match on the other phone, then for the card.
+                AppLinearProgress(Modifier.width(160.dp))
+            }
+            is NfcInletState.ShareFailed -> {
+                Spacer(Modifier.height(AppSpacing.lg))
+                Button(onClick = onRetry) { Text("Try again") }
+            }
             NfcInletState.Idle, NfcInletState.Active, is NfcInletState.Unsupported, NfcInletState.Lost -> {
                 Spacer(Modifier.height(AppSpacing.md))
                 ListeningTag()
@@ -223,6 +238,9 @@ private fun panelCopy(state: NfcInletState, area: PhoneNfcArea, acceptsPhones: B
         "Tap your card" to "$what $where"
     }
     NfcInletState.Detected, NfcInletState.Receiving -> "Detected" to "Hold still for a moment."
+    is NfcInletState.Comparing ->
+        "Compare the codes" to "Check the other phone shows this code, then tap Match on that phone. Keep the phones together."
+    is NfcInletState.ShareFailed -> state.problem.title to state.problem.message
     is NfcInletState.Success ->
         when {
             state.alreadySaved -> "Already in your wallet" to "You already have this card, so nothing was added."
@@ -238,6 +256,33 @@ private fun panelCopy(state: NfcInletState, area: PhoneNfcArea, acceptsPhones: B
     NfcInletState.NfcOff -> "Turn on NFC" to "NFC is off, so your phone can't sense the card. Turn it on and come back: scanning starts by itself."
     NfcInletState.NoNfc -> "This phone doesn't have NFC" to "You can still add a card by typing its details or scanning the front."
     is NfcInletState.Error -> "Couldn't read that" to state.message
+}
+
+/**
+ * The six-digit code both phones show, grouped "123 456" in tabular figures so the two screens are easy to compare. Read out as
+ * one polite announcement, digit by digit ("Code 1 2 3 4 5 6"), never as a number.
+ */
+@Composable
+internal fun ShareCode(code: String, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    val spoken = "Code " + code.toList().joinToString(" ")
+    Surface(
+        color = scheme.secondaryContainer,
+        shape = AppRadius.rLg,
+        modifier = modifier.clearAndSetSemantics {
+            contentDescription = spoken
+            liveRegion = LiveRegionMode.Polite
+        },
+    ) {
+        Text(
+            code.chunked(3).joinToString(" "),
+            style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.SemiBold, fontFeatureSettings = TABULAR_FIGURES),
+            color = scheme.onSecondaryContainer,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.padding(horizontal = AppSpacing.xxl, vertical = AppSpacing.md),
+        )
+    }
 }
 
 /** "Ready for a tap" marker: the reader is listening right now. */

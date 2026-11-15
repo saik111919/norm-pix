@@ -260,6 +260,28 @@ class OnboardingTourTest {
         assertFalse(finished, "back is a step, not an exit")
     }
 
+    @Test
+    fun `the back gesture brings the step before in under the finger, and giving it up stays`() {
+        show()
+        next()
+        val title = compose.onNodeWithText("What should we call you?")
+        val atRest = title.getUnclippedBoundsInRoot().left
+        val back = compose.activity.onBackPressedDispatcher
+        compose.runOnUiThread {
+            back.dispatchOnBackStarted(androidx.activity.BackEventCompat(0f, 900f, 0f, androidx.activity.BackEventCompat.EDGE_LEFT))
+            back.dispatchOnBackProgressed(androidx.activity.BackEventCompat(300f, 900f, 0.6f, androidx.activity.BackEventCompat.EDGE_LEFT))
+        }
+        compose.waitForIdle()
+        // Part way: the second step has moved over to the right, as a swipe back would move it, and is still there.
+        val held = title.getUnclippedBoundsInRoot().left
+        assertTrue(held.value > atRest.value + 40f, "moved under the finger: $atRest -> $held")
+        assertFalse(finished)
+        compose.runOnUiThread { back.dispatchOnBackCancelled() }
+        compose.waitForIdle()
+        assertEquals(atRest.value, title.getUnclippedBoundsInRoot().left.value, 1f, "given up: back where it was")
+        assertFalse(finished)
+    }
+
     // Who is welcomed ---------------------------------------------------------------------------------------------
 
     private fun fresh() = AppPreferences(env.context.getSharedPreferences("welcome_${System.nanoTime()}", 0))

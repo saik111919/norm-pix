@@ -397,7 +397,12 @@ fun AccountFormSheet(
         )
     }
     var bankError by remember { mutableStateOf<String?>(null) }
-    var owed by remember { mutableStateOf(opening < 0L) }
+    var owed by remember { mutableStateOf(opening < 0L || existing?.isLoan == true) }
+    // A loan is an account of the Loan kind, or another kind (never a card) with "This is a loan" on. Both have the same details.
+    var loanSwitch by remember { mutableStateOf(existing?.loan != null && existing.kind != AccountKind.Loan) }
+    val loanForm = remember { LoanFormState(existing?.loan, finance.currency.decimals) }
+    // A new loan's starting balance follows the amount borrowed until the balance is typed by hand.
+    var amountTouched by remember { mutableStateOf(existing != null) }
     var limit by remember {
         mutableStateOf(
             existing?.creditLimit?.let { minorToInputText(it, finance.currency.decimals) } ?: "",
@@ -433,10 +438,12 @@ fun AccountFormSheet(
         }
     }
 
+    val isLoan = kind == AccountKind.Loan || (loanSwitch && kind != AccountKind.Card)
     val initialSnapshot = remember {
-        listOf(name, amount, kind, bank.key, owed, makeDefault, limit, statementDay, dueDay, numberEnding, numberStart, cardNumber, cardId).joinToString("|")
+        listOf(name, amount, kind, bank.key, owed, makeDefault, limit, statementDay, dueDay, numberEnding, numberStart, cardNumber, cardId, loanSwitch, loanForm.snapshot())
+            .joinToString("|")
     }
-    val hasChanges = listOf(name, amount, kind, bank.key, owed, makeDefault, limit, statementDay, dueDay, numberEnding, numberStart, cardNumber, cardId)
+    val hasChanges = listOf(name, amount, kind, bank.key, owed, makeDefault, limit, statementDay, dueDay, numberEnding, numberStart, cardNumber, cardId, loanSwitch, loanForm.snapshot())
         .joinToString("|") != initialSnapshot
 
     DiscardChangesGuard(
@@ -484,6 +491,14 @@ fun AccountFormSheet(
             null
         }
 
+        // A loan's details are read (and each field that is wrong says so) only when the account is one.
+        val loanResult = if (isLoan) loanForm.resolve(finance.currency.decimals, finance.money) else null
+        if (loanResult != null) {
+            loanForm.borrowedError = loanResult.borrowedProblem
+            loanForm.rateError = loanResult.rateProblem
+            loanForm.termError = loanResult.termProblem
+        }
+
         // A card account's number is typed whole (or just its last four digits) and cut down to its start and end here; any
         // other account is given the last four digits. Nothing but those two pieces is ever put in the account.
         val isCardAccount = kind == AccountKind.Card
@@ -516,9 +531,12 @@ fun AccountFormSheet(
             numberError = "Enter all $NUMBER_ENDING_LENGTH digits, or leave it empty"
         }
 
-        if (nameError == null && amountError == null && bankError == null && limitError == null && numberError == null && parsed != null) {
+        if (nameError == null && amountError == null && bankError == null && limitError == null && numberError == null && parsed != null &&
+            (loanResult == null || loanResult.terms != null)
+        ) {
             val now = LocalDateTime.now()
-            val openingBalance = if (owed) -parsed else parsed
+            // A loan is always owed, whatever the switch says.
+            val openingBalance = if (owed || isLoan) -parsed else parsed
             val bankKey = if (hasBank) bank.key else null
             val savedCard = (if (cardsState is CardsState.Ready) shownCardId else cardId).takeIf { hasBank }
             val draft = if (existing != null) {
@@ -533,6 +551,7 @@ fun AccountFormSheet(
                     numberEnding = savedEnding,
                     numberStart = savedStart,
                     cardId = savedCard,
+                    loan = loanResult?.terms,
                     updatedAt = now,
                 )
             } else {
@@ -552,6 +571,7 @@ fun AccountFormSheet(
                     numberEnding = savedEnding,
                     numberStart = savedStart,
                     cardId = savedCard,
+                    loan = loanResult?.terms,
                 )
             }
             saving = true
@@ -583,7 +603,7 @@ fun AccountFormSheet(
         title = title,
         saveLabel = action,
         onSave = { save() },
-        subtitle = "Cash, a bank account, a card, or a wallet app",
+        subtitle = "Cash, a bank account, a card, a wallet app or a loan",
         saving = saving,
         errorText = formError,
         slideToSave = true,
@@ -615,8 +635,46 @@ fun AccountFormSheet(
             label = "Type",
             options = kinds,
             selected = kind,
-            onSelect = { kind = it },
+            onSelect = {
+                kind = it
+                // A loan is always owed.
+                if (it == AccountKind.Loan) owed = true
+            },
         )
+
+        // Any account but a card can be a loan; the Loan kind already is one. Either way it is owed, so that switch is turned on.
+        if (kind != AccountKind.Card && kind != AccountKind.Loan) {
+            Spacer(Modifier.height(AppSpacing.sm))
+            SwitchRow(
+                title = "This is a loan",
+                checked = loanSwitch,
+                onChange = {
+                    haptics.selection()
+                    loanSwitch = it
+                    if (it) owed = true
+                },
+                subtitle = if (loanSwitch) {
+                    "A loan is always owed, so \"I owe this amount\" is on. Fill in its details below."
+                } else {
+                    "Turn on for money you repay in EMIs. It is counted as owed."
+                },
+            )
+        }
+        if (isLoan) {
+            Spacer(Modifier.height(AppSpacing.lg))
+            LoanDetailsFields(
+                state = loanForm,
+                currency = finance.currency,
+                money = finance.money,
+                onBorrowedChange = { typed ->
+                    // The balance a new loan starts at is what was borrowed, owed - until the balance is typed by hand.
+                    if (!amountTouched) {
+                        amount = typed
+                        amountError = null
+                    }
+                },
+            )
+        }
 
         if (kind != AccountKind.Cash) {
             Spacer(Modifier.height(AppSpacing.lg))
@@ -629,31 +687,33 @@ fun AccountFormSheet(
                 optional = true,
                 errorText = bankError,
             )
-            Spacer(Modifier.height(AppSpacing.lg))
-            AccountNumberFields(
-                kind = kind,
-                numberEnding = numberEnding,
-                onNumberEnding = {
-                    numberEnding = it
-                    numberError = null
-                },
-                numberError = numberError,
-                cardNumber = cardNumber,
-                onCardNumber = {
-                    cardNumber = it
-                    numberError = null
-                },
-                keptStart = numberStart,
-                onForgetNumber = {
-                    numberEnding = ""
-                    numberStart = null
-                    cardNumber = ""
-                    numberError = null
-                },
-                cards = linkableCards(walletCards, finance.accounts, existing),
-                cardId = shownCardId,
-                onCardId = { cardId = it },
-            )
+            if (!isLoan) {
+                Spacer(Modifier.height(AppSpacing.lg))
+                AccountNumberFields(
+                    kind = kind,
+                    numberEnding = numberEnding,
+                    onNumberEnding = {
+                        numberEnding = it
+                        numberError = null
+                    },
+                    numberError = numberError,
+                    cardNumber = cardNumber,
+                    onCardNumber = {
+                        cardNumber = it
+                        numberError = null
+                    },
+                    keptStart = numberStart,
+                    onForgetNumber = {
+                        numberEnding = ""
+                        numberStart = null
+                        cardNumber = ""
+                        numberError = null
+                    },
+                    cards = linkableCards(walletCards, finance.accounts, existing),
+                    cardId = shownCardId,
+                    onCardId = { cardId = it },
+                )
+            }
         }
 
         if (kind == AccountKind.Card) {
@@ -712,6 +772,7 @@ fun AccountFormSheet(
             value = amount,
             onValueChange = {
                 amount = it
+                amountTouched = true
                 amountError = null
             },
             currency = finance.currency,
@@ -725,7 +786,11 @@ fun AccountFormSheet(
             label = "Starting balance",
         )
         Text(
-            text = "The balance before the first transaction you record here.",
+            text = if (isLoan) {
+                "What you owe on the loan before the first transaction you record here. A new loan starts at the amount borrowed."
+            } else {
+                "The balance before the first transaction you record here."
+            },
             modifier = Modifier.padding(top = AppSpacing.sm),
             color = scheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
@@ -734,12 +799,13 @@ fun AccountFormSheet(
 
         SwitchRow(
             title = "I owe this amount",
-            checked = owed,
+            checked = owed || isLoan,
             onChange = {
                 haptics.selection()
                 owed = it
             },
-            subtitle = owedSubtitle,
+            subtitle = if (isLoan) "A loan is always owed" else owedSubtitle,
+            enabled = !isLoan,
         )
 
         SwitchRow(

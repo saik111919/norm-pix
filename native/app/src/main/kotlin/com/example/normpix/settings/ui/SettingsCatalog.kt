@@ -24,6 +24,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import com.example.normpix.finance.ui.YEAR_START_TITLE
 import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
@@ -124,7 +125,16 @@ object SettingsCatalog {
         SettingsEntry("Default account", SettingsPage.Finance, listOf("default account", "preferred account")),
         SettingsEntry("Swipe actions", SettingsPage.Finance, listOf("swipe", "edit", "delete", "gesture", "list")),
         SettingsEntry("Ask before a swipe deletes", SettingsPage.Finance, listOf("swipe", "delete", "confirm", "confirmation", "ask", "undo", "remove")),
-        SettingsEntry("Financial year start", SettingsPage.Finance, listOf("financial year", "fiscal", "april", "january")),
+        SettingsEntry(
+            YEAR_START_TITLE,
+            SettingsPage.Finance,
+            listOf("financial year", "fiscal", "fiscal year", "fy", "april", "january", "calendar year", "tax year", "year start", "year by tag", "yearly review"),
+        ),
+        SettingsEntry(
+            TAGS_TITLE,
+            SettingsPage.Finance,
+            listOf("tags", "tag", "label", "labels", "tax", "tax-deductible", "tax deductible", "reimbursable", "rename tag", "delete tag", "year by tag"),
+        ),
 
         // Data & backup
         SettingsEntry("Sample data", SettingsPage.Data, listOf("sample data", "dummy data", "test", "mock", "demo")),
@@ -132,11 +142,16 @@ object SettingsCatalog {
         SettingsEntry("Import backup", SettingsPage.Data, listOf("restore", "import", "load", "recover")),
         SettingsEntry("Backup of everything", SettingsPage.Data, listOf("app backup", "everything", "full app backup", "zip", "new phone", "move to a new phone", "backup settings", "export settings", "backup profile", "backup font")),
         SettingsEntry("Restore settings", SettingsPage.Data, listOf("restore settings", "import settings", "restore app backup", "restore everything", "restore profile", "restore font")),
+        SettingsEntry("Import a bank statement", SettingsPage.Data, listOf("import", "csv", "bank statement", "statement", "excel", "spreadsheet", "upload transactions", "import transactions", "passbook", "bank file", "transactions file")),
         SettingsEntry("Reminders backup", SettingsPage.Data, listOf("reminders backup", "backup reminders", "export reminders", "restore reminders", "import reminders")),
+        SettingsEntry("Automatic backup", SettingsPage.Data, listOf("automatic backup", "auto backup", "autobackup", "back up automatically", "scheduled backup", "schedule", "daily", "weekly", "monthly", "backup folder", "folder", "drive", "google drive", "cloud", "backup password", "locked backup")),
 
         // Wallet
         SettingsEntry("Store cards", SettingsPage.Wallet, listOf("store cards", "don't store cards", "dont store cards", "do not store cards", "delete cards", "delete all cards", "remove cards", "erase cards", "no cards", "save cards", "card vault", "wallet cards", "accounts only")),
         SettingsEntry("Save CVV", SettingsPage.Wallet, listOf("cvv", "save cvv", "cvc", "security code", "don't save cvv", "dont save cvv", "do not store cvv", "delete cvv", "remove cvv", "card security code", "optional cvv"), cardsOnly = true),
+        SettingsEntry(KEYBOARD_CARD_FILL_TITLE, SettingsPage.Wallet, listOf("scan card", "keyboard scan", "autofill", "auto fill", "autofill with google", "keyboard", "fill card", "saved card", "google pay card", "card scanner"), cardsOnly = true),
+        // About a credit card account's own balance and limit, so no `cardsOnly`: it is there with Store cards off too.
+        SettingsEntry(CARD_LIMIT_WARNING_TITLE, SettingsPage.Wallet, listOf("card limit", "credit limit", "limit warning", "limit used", "over limit", "over the limit", "utilisation", "utilization", "credit utilisation", "credit utilization", "30%", "30 percent", "credit score", "cibil", "credit card", "warn", "alert", "notify", "notification")),
         SettingsEntry("Card number on account", SettingsPage.Wallet, listOf("card number on account", "account card number", "card number", "first 6 digits", "last 4 digits", "bin", "paid from", "receipts", "match receipts", "recognise card", "recognize card")),
         SettingsEntry("Export and import cards", SettingsPage.Wallet, listOf("export cards", "import cards", "card backup", "backup cards", "move cards", "transfer cards", "password"), cardsOnly = true),
         SettingsEntry("Card actions style", SettingsPage.Wallet, listOf("buttons", "menu", "context menu", "actions"), cardsOnly = true),
@@ -165,6 +180,7 @@ object SettingsCatalog {
         SettingsEntry("How often to check for updates", SettingsPage.Updates, listOf("how often", "frequency", "interval", "update schedule", "daily", "weekly", "twice a day", "once a day", "every 3 days", "once a week")),
         SettingsEntry("Update check time", SettingsPage.Updates, listOf("check time", "set time", "at a set time", "time of day", "when to check", "any time", "update time")),
         SettingsEntry("Check when NormPix opens", SettingsPage.Updates, listOf("check when opened", "check on open", "check at launch", "when i open", "open the app", "launch", "startup")),
+        SettingsEntry("Delete downloaded APK files", SettingsPage.Updates, listOf("apk", "delete apk", "leftover", "installer file", "downloads", "clean up", "storage", "update file")),
         SettingsEntry(
             "Welcome tour",
             null,

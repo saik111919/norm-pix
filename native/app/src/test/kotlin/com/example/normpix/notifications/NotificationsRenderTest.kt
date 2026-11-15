@@ -12,21 +12,31 @@ import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.PieChart
+import androidx.compose.material.icons.outlined.ReportProblem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.example.normpix.navigation.NotificationStrip
 import com.example.normpix.settings.ThemeMode
 import com.example.normpix.testing.TestEnvironment
 import com.example.normpix.ui.components.Banner
 import com.example.normpix.ui.components.BannerBar
+import com.example.normpix.ui.components.BannerCard
 import com.example.normpix.ui.components.BannerFigure
 import com.example.normpix.ui.components.BannerStack
 import com.example.normpix.ui.components.StatusAction
@@ -35,6 +45,8 @@ import com.example.normpix.ui.theme.StatusTone
 import java.io.File
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -91,13 +103,34 @@ class NotificationsRenderTest {
             message = "Rs 8,000 for November",
             // As the real one: its button opens the budgets, which is what pressing it does too.
             primary = StatusAction("View budgets", onClick = open),
-            bar = BannerBar(0.85f, "85% used"),
+            bar = BannerBar(0.85f, "85% used", "Rs 0", "Rs 8,000"),
             figure = BannerFigure("Left", "Rs 1,200"),
             onOpen = open,
         ),
     )
 
     private val open: () -> Unit = {}
+
+    private fun crash(): AppNotification = AppNotification(
+        NotificationKind.App,
+        Banner(
+            key = "crash-1",
+            tone = StatusTone.Warning,
+            icon = Icons.Outlined.ReportProblem,
+            eyebrow = "Closed unexpectedly",
+            title = "NormPix stopped working last time",
+            message = "A report was kept on this phone",
+            primary = StatusAction("View", onClick = {}),
+            secondary = StatusAction("Dismiss", onClick = {}),
+            onOpen = {},
+        ),
+    )
+
+    /** The font scale the next picture is drawn at: the test changes it and the same composition follows. */
+    private var fontScale by mutableFloatStateOf(1f)
+
+    /** The banner [aCardIsHomesBannerPixelForPixel] draws twice: as Home does, and as the page does. */
+    private var shown by mutableStateOf<Banner?>(null)
 
     private fun secondReminder(): AppNotification = AppNotification(
         NotificationKind.Reminders,
@@ -224,9 +257,11 @@ class NotificationsRenderTest {
         dump("home_needs_attention_dark")
     }
 
+    /** Every kind on the page, as banners of Home's design - in a window tall enough that nothing is scrolled out of the picture. */
     @Test
-    fun thePageWithFourKinds() {
-        val items = listOf(reminder(), secondReminder(), budget(), card(), backup(), update())
+    @Config(sdk = [34], qualifiers = "w360dp-h2600dp-xhdpi")
+    fun thePageWithEveryKind() {
+        val items = listOf(reminder(), secondReminder(), budget(), card(), backup(), crash(), update())
         env.preferences.setMode(ThemeMode.Light)
         compose.setContent {
             env.Content {
@@ -240,6 +275,118 @@ class NotificationsRenderTest {
         env.preferences.setMode(ThemeMode.Dark)
         compose.waitForIdle()
         dump("notifications_page_dark")
+    }
+
+    /** Large text (1.6x): each banner's panels stack, as Home's do. */
+    @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h3600dp-xhdpi")
+    fun thePageAtLargeText() {
+        val items = listOf(reminder(), budget(), backup(), update())
+        env.preferences.setMode(ThemeMode.Light)
+        compose.setContent {
+            env.Content {
+                val density = LocalDensity.current
+                CompositionLocalProvider(
+                    LocalDensity provides Density(density.density, 1.6f),
+                    LocalNotifications provides Notifications(items, emptySet()) {},
+                ) { Surface(color = MaterialTheme.colorScheme.background) { NotificationsPage() } }
+            }
+        }
+        compose.waitForIdle()
+        dump("notifications_page_large_light")
+        env.preferences.setMode(ThemeMode.Dark)
+        compose.waitForIdle()
+        dump("notifications_page_large_dark")
+    }
+
+    /**
+     * What the page draws for a notification is what Home draws for a banner: the same banner as `BannerStack` of one and as
+     * `BannerCard` are compared pixel for pixel - every kind, Light and Dark, normal and large text. The pictures are dumped for
+     * looking at too: Home's banner on top, the page's under it.
+     */
+    @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h2000dp-xhdpi")
+    fun aCardIsHomesBannerPixelForPixel() {
+        val banners = linkedMapOf(
+            "reminder" to reminder().banner,
+            "budget" to budget().banner,
+            "card" to card().banner,
+            "backup" to backup().banner,
+            "crash" to crash().banner,
+            "update" to update().banner,
+        )
+        compose.setContent {
+            env.Content {
+                val density = LocalDensity.current
+                CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
+                    Surface(color = MaterialTheme.colorScheme.background) {
+                        shown?.let { banner ->
+                            androidx.compose.foundation.layout.Column(
+                                Modifier.padding(16.dp),
+                                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+                            ) {
+                                BannerStack(listOf(banner), rememberDeckStackState(), Modifier.testTag("home"))
+                                BannerCard(banner, Modifier.testTag("card"))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        val shifts = listOf(0, 8, 16, 24)
+        // What differs at all, kept in the test's output (a hair at large text; nothing at normal).
+        val differing = sortedMapOf<String, String>()
+        for (mode in listOf(ThemeMode.Light, ThemeMode.Dark)) {
+            for (scale in listOf(1f, 1.6f)) {
+                env.preferences.setMode(mode)
+                compose.runOnIdle { fontScale = scale }
+                for ((name, banner) in banners) {
+                    compose.runOnIdle { shown = banner }
+                    compose.waitForIdle()
+                    val home = compose.onNodeWithTag("home").captureToImage().asAndroidBitmap()
+                    val page = compose.onNodeWithTag("card").captureToImage().asAndroidBitmap()
+                    val label = "$name / $mode / ${scale}x"
+                    assertEquals(home.width to home.height, page.width to page.height, "the same size as Home's banner: $label")
+                    if (!home.sameAs(page)) {
+                        // Say where they differ, and keep both pictures to look at.
+                        var count = 0
+                        var strongest = 0
+                        var left = Int.MAX_VALUE
+                        var top = Int.MAX_VALUE
+                        var right = -1
+                        var bottom = -1
+                        for (y in 0 until home.height) for (x in 0 until home.width) {
+                            val a = home.getPixel(x, y)
+                            val b = page.getPixel(x, y)
+                            if (a != b) {
+                                count++
+                                strongest = maxOf(strongest, shifts.maxOf { shift -> Math.abs(((a shr shift) and 0xFF) - ((b shr shift) and 0xFF)) })
+                                left = minOf(left, x); top = minOf(top, y); right = maxOf(right, x); bottom = maxOf(bottom, y)
+                            }
+                        }
+                        // Large text puts the stacked panels at fractional pixels, where Home's banner (drawn in its stack's layer) and
+                        // the page's (drawn straight) round a few edge pixels differently: a hair, not a layout. At normal text only a
+                        // curve does that - a bar's ring (since 2026-11-15) and the curved lines behind, smoothed inside the layer and
+                        // outside it: a few edge pixels by a faint shade (measured: 6 pixels by 6 of 255 on the ring, 30 by 1 on the
+                        // lines). So at normal text a difference must also be faint; anything stronger is a real difference.
+                        val allowed = home.width * home.height / 1000
+                        val faint = scale != 1f || strongest <= 8
+                        if (count > allowed || !faint) {
+                            for ((suffix, bitmap) in listOf("home" to home, "page" to page)) {
+                                File(outDir, "mismatch_${name}_${mode}_${scale}_$suffix.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                            }
+                            throw AssertionError(
+                                "the same pixels as Home's banner: $label - $count differ (at most $allowed), by up to $strongest of 255, " +
+                                    "within x $left..$right, y $top..$bottom of ${home.width} x ${home.height}",
+                            )
+                        }
+                        differing["$label"] = "$count pixels, by up to $strongest"
+                    }
+                    if (name == "reminder" || name == "budget" || (mode == ThemeMode.Light && scale == 1f)) dump("compare_${name}_${mode}_$scale")
+                }
+            }
+        }
+        println("Pictures that differ from Home's banner at all (all others are identical): $differing")
     }
 
     @Test

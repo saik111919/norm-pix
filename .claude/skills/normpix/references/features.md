@@ -47,11 +47,11 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
   Insights, Wallet, Settings) - top-level only (owner, 2026-11-08: a pushed page keeps its back button and its own actions
   instead), in all three top-bar styles through `LocalTopBarExtras`. It carries how many are new; tapping it opens a
   **Notifications page** that lists everything that needs the user -
-  overdue reminders, budgets over or nearly used, cards about to expire, a crash report, a backup due, an update waiting - **grouped by
-  kind** (Reminders, Budgets, Cards, Backup, NormPix = crash report + update) as the pages' own list pattern (2026-11-09, owner: "not
-  following the design patterns"): a `ListSection` per kind, one tonal row per notification (status disc, the status word in the status
-  colour as the overline, title, what it is about, its figure at the row's end, a bar when it has one, its buttons as one connected
-  group - none when the only one would do what pressing the row does; pressing the row opens what it is about). **Home's Needs attention is one banner** ("4 things need attention", the kinds in a line, the
+  overdue reminders, budgets over or nearly used, cards about to expire, credit cards near their limit (section 2), a crash report, a backup due (or an automatic backup that failed), an update waiting - **grouped by
+  kind** (Reminders, Budgets, Cards, Backup, NormPix = crash report + update), each notification drawn as **Home's banner** (since
+  2026-11-14, owner: "Notification screen cards are not following the new design"; `BannerCard`: its two panels over its bar of buttons,
+  the status colour throughout, never stacked; pressing the panels opens what it is about). From 2026-11-09 to 2026-11-13 they were
+  tonal list rows. **Home's Needs attention is one banner** ("4 things need attention", the kinds in a line, the
   colour of the worst) that opens this page (owner, 2026-11-09); **an update keeps its own banner on Home** with its own buttons, as before,
   and is also listed on the page. There is **no history**: a
   notification lives as long as the thing it says does. **Opening the page is seeing it all** (all keys listed are written as seen;
@@ -73,7 +73,83 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
   Undo snackbar - kept as the choice), details sheet with Delete/Edit and the attached picture. On a month's **last day** the month ends
   exactly at the cutoff, so the Upcoming query keys on `range.end == cutoff` (month view only) to keep next month's entries listed. *Plans* = Budgets (per category + overall, history page, sub-categories fold into the parent),
   Recurring (`RecurringView`/`RecurringEditor`; rows record themselves on their day; **a payment and its reminder are kept in step** -
-  section 5, `RecurringReminders`; a row with a reminder shows a small bell and says "with a reminder" to TalkBack), Reminders (`RemindersView`).
+  section 5, `RecurringReminders`; a row with a reminder shows a small bell and says "with a reminder" to TalkBack), Reminders (`RemindersView`), Goals (`GoalsView`, 2026-11-15: savings goals, see section 2).
+- **What repeating payments cost, and suggestions** (2026-11-14, no database change; `finance/domain/RepeatingCosts.kt`, `RepeatSuggestions.kt`,
+  `finance/ui/RepeatingCostsUi.kt`): at the top of Plans > Recurring, the two-panel banner (`SplitStatBanner`'s two-figure overload) says
+  **"A month" / "A year"**; it opens the page **Repeating costs** (`Routes.REPEATING_COSTS`, `openRepeatingCosts`): each active, not-finished
+  **expense** rule, biggest first with its amount and frequency, its cost a month, "Next 12 Dec" and a **switch** (the rule's `active` flag:
+  `FinanceActions.setRecurringPaused` saves the rule through `saveRecurringRule` - nothing is deleted; resuming moves `nextDate` to
+  `firstOccurrenceAfter(now)` as the editor does, so what was missed is skipped; the reminder follows via `ReminderLauncher.follow`); paused
+  ones are listed after, dimmed, and cost nothing. **Money rules**: cost a year = amount x (daily 365, weekly 52, monthly 12, yearly 1) / interval,
+  a month = the year / 12, both **rounded half up in integer paise**; the totals are the sum of the years and the year over 12 (so the rows,
+  each rounded alone, need not add up to the banner); transfers (a card bill, a SIP) are **not spending** and income is not a cost, so neither is
+  counted. **Suggestions** (`suggestRepeats`, pure; `FinanceRepository.repeatSuggestions`): past *expenses with a payee and no `recurring_id`*
+  grouped by `payeeKey` (trimmed, lower case, spaces collapsed); a group qualifies when going back from the newest payment the gaps fit one frequency
+  (weekly 6-8 days, monthly 26-35, yearly 350-380) for at least 3 payments in the last 13 months (the run is cut back from its oldest end while
+  the amounts are not all within 20% of the median, or a gap breaks it), the newest is at most 1.5 periods old (10 / 45 / 547 days), no *active*
+  rule has that payee and the user has not dismissed it. **Deviation from the brief: a yearly pattern needs only 2 payments** (looked for over
+  36 months) - three would take two years and a 13-month window can hold two at most, so it could never be offered. The dearest a year first,
+  at most 3 shown. Cards under the banner: **Add** opens `RecurringEditorSheet(suggestion = ...)` filled in (payee, amount, frequency, account and
+  category of the newest payment, first payment on the day expected, or the next one after it when that has gone by - never a past day, which
+  would record payments already in the ledger); **Not this one** keeps the payee key in the finance DB's **`meta` table** (`dismissed_repeat_payees`,
+  one key per line; not in a backup, kept across a restore and an Undo - `FinanceRepository.restore` puts it back - and cleared by a reset).
+- **Cash-flow forecast** (2026-11-14, no database change; `finance/domain/Forecast.kt`, `finance/data/PlanningData.kt`, `finance/ui/ForecastPage.kt`):
+  a page (`Routes.FORECAST`, `openForecast`) opened from the **Forecast** row at the top of Plans > Recurring (not a fourth Plans tab: four pills
+  do not fit the secondary tabs). It shows the *money that can be spent* day by day from today to an end date: chips **30 / 60 / 90 days**,
+  **Until payday** (the next occurrence of the active income rule with the biggest amount, `nextPayday`; the chip is absent with none) and
+  **Pick a date** (`DatePickerDialogFor(earliest = tomorrow, latest = today + 12 months)`; the page says "Pick a date up to 12 months ahead").
+  The choice and the everyday switch live on `ShellState` (`forecastEnd`, `forecastEveryday`): session only, never saved. A `SplitStatBanner`
+  (two-figure) gives the **end balance** and the **lowest point** (earliest day when tied) with the day; a notice says when it goes below zero;
+  `BalanceChart` (Charts.kt) draws the line (dashed zero line and a red wash below it when it goes negative, the lowest point ringed, touch to read
+  a day; TalkBack gets "lowest point ... ends at ...", not every point; with amounts hidden only the dates); then the **dated items grouped by
+  day**; the footnote "Only what's scheduled is known; everyday spending is an estimate." **Money rules** (`buildForecast`, pure, integer paise):
+  start = today's balances (as of end of today, `accountBalances(asOf)`) of the *spendable* accounts - kinds Cash, Bank, Wallet, Other, not archived,
+  and **not owed** - "owed" is the account form's switch, kept as a negative **opening** balance (`Forms.kt`); an account merely overdrawn today
+  still counts, its shortfall with it (main agent's review, 2026-11-15: leaving it out made the forecast look better than it is). Added on their
+  dates: entries already dated after today and the next occurrences of active rules up to the end date (`occurrencesUntil`, bounded by a date, with
+  interval and end date; a rule due later today counts today). An income into a spendable account adds; an expense from one takes away; a transfer
+  from spendable to non-spendable (a card bill, savings) takes away, the other way adds, between spendables is nothing. **An expense on a card is not an
+  outflow on its day**: it goes into the card's bill, due on the due date of the statement it falls in (`dueDateFor`); a card with no due day has no bill, so
+  its expense counts on its day. Card bills: each card's bill as Home shows it (`cardBill`, a late one counted today), what was charged since the last
+  statement (due after the next one), and the charges to come, each on its due date; a transfer onto the card dated by the due date **pays that much
+  of the bill** (so a repeating transfer that pays the card is not counted twice, and one that pays part leaves the rest). **Everyday spending**
+  (switch, on by default): the expenses of the last 90 days that came from no rule (`recurring_id` null), on every account, /90 rounded half up,
+  taken off every day after today; shown as "About Rs X a day ... It is a guess". Tests: `RepeatingCostsTest`, `RepeatSuggestionsTest`, `ForecastTest`,
+  `PlanningDataTest`, `RepeatingCostsPageTest`, `RepeatSuggestionCardsTest`, `ForecastPageTest`, `PlanningLargeTextTest`.
+- **Bills calendar** (2026-11-15, no database or backup change; `finance/domain/BillsCalendar.kt`, `finance/data/PlanningData.kt` `calendarLedger`, `finance/ui/BillsCalendarPage.kt`,
+  the markers of `MonthCalendar` in `DateTimeSheets.kt` - design-system section 2): a page (`Routes.BILLS_CALENDAR`, `openBillsCalendar`) opened from the **Bills calendar** row under
+  Forecast at the top of Plans > Recurring ("Card bills, repeating payments and reminders by day") and from a **Calendar** action on Home's **"Next 7 days"** heading (the heading is
+  what the brief called "Coming up"; the action is its `trailing` slot, before Plans, so the heading is built as it was; Home shows that section only while something falls in the next
+  7 days, so the action is there only then). **One month at a time**, the current one first, **one back and twelve ahead** (`calendarFirstMonth` / `calendarLastMonth`), switched
+  from memory (nothing is read again; the facts - the rules, the entries dated ahead to the end of the last month, the reminders, the cards' bills - are gathered once and `billsMonth`
+  is worked out per month); nothing about the month is kept (the page always opens on this one). The page: a `SplitStatBanner` (two figures) **"Due this month" / "Coming in"** with
+  the note "From today" or "In March" (this month counts from today, any other the whole month); the month grid (`MonthCalendar` with markers, in a panel of its own, then a legend
+  in words); the **chosen day's things** under a heading ("Today, 10 Mar", "Tomorrow, ...", "Wednesday, 12 Mar") - the day is today in this month, else the first day with
+  something (the month's first when empty), and a day touched stays until the month changes; a note at the foot. **What goes on it** (`billsMonth`, pure, integer paise): each card's
+  bill on its due date (`rememberDueBills`, one bill per card, the unpaid part of the last statement as Home shows it - the **next statements' bills are not known here**, the
+  Forecast works those out); the occurrences of the **active, not finished** repeating payments in the month (`occurrencesUntil`, with interval and end date); the entries
+  already entered with a date **after today**; the reminders **not done**, on their `effectiveDueAt` day (a snoozed one where it was put; **one item per reminder - a repeating
+  reminder is not expanded into its later times**, and there is no "dismissed" state: the alert card's Dismiss only puts the card away). **A reminder about a repeating payment that
+  has an occurrence that day, or about a card (account link) that has a bill that day, is folded into that item** ("With a reminder") instead of listed beside it - the payment and
+  its reminder are one thing; a reminder on another day, or about an account with no bill that day, is its own row, saying what it is about (`rememberResolvedLink`). **Past days
+  show what the sources still hold**: a bill that is overdue (said "Overdue"; an overdue bill from before last month is on no month), a reminder not done, a repeating payment not yet
+  recorded; a payment that was made is in the ledger and Activity, not here, and nothing says "paid" beyond what a source says of itself. **Summary rules**: "Due this month" =
+  bills (what is left unpaid of one, once - an overdue unpaid bill counts in the month it fell due even when before today) + expense occurrences and entries + **transfers that go
+  to an account that is not for spending** (a card, savings, a loan; a transfer between two spending accounts - cash, bank, wallet, other - is neither) ; an expense **charged to a
+  credit card with a due day is not counted** (it is in the card's bill); "Coming in" = income occurrences and entries, whichever account. **A transfer onto a card dated by its
+  bill's due date pays that much of the bill** (`by` = the due date, or today for a late one; the same netting as the Forecast), so the transfer counts in full and the bill what it
+  leaves - never twice; one dated after the due date, or in an earlier month for a later bill, follows the same rule by its date. Items before today in the current month are on the
+  calendar but outside the figures. A day lists, in order: the bill, what goes out (the dearer first), what comes in, the reminders. **Rows**: category avatar (a transfer's, a bill's
+  card icon, a reminder's category icon), title (payee, else the category, "Payment to <card>", "<card> bill"), amount or "Reminder", and a line of what it is in words ("Repeating
+  payment · HDFC", "Upcoming income · SBI", "Repeating card payment · HDFC → ICICI", "Card bill · Overdue", "Reminder · when · what it is about"); at 1.6x the amount goes under the
+  name. **A tap opens what it is about** with the existing openers: a repeating payment `editRecurring`, an entry `showDetails`, a bill `payBill(card, suggested = what is due)` (as Home's
+  banner), a reminder `ReminderFlows.edit`. TalkBack: each day reads "Tuesday, 10 March 2026, 3 things due" / "nothing due" and the grid is a collection; amounts hidden hide every figure,
+  the banner's spoken line included; reduced motion: no slide between months, no size animation. The sample data needs nothing added: its two cards' bills, eight repeating payments (on next month's
+  grid; this month's are recorded) and seven reminders fill the calendar. It has **no entries dated ahead on purpose** - `DummyDataTest` says nothing in it is in the future, and an
+  Upcoming row would show in the README pictures - so that kind is the one the sample data does not show. Tests: `BillsCalendarTest` (26: each source, interval + end date, paused/finished, reminders done and folded, the order,
+  the default day, the summary from today and for another month, the bill counted once beside a transfer, the transfer / card / income rules), `BillsCalendarPageTest` (markers on the
+  right days, selecting, each opener, month switching and its bounds, animated vs reduced, hidden amounts, empty, the two doors); `DateTimeSheetsTest` / `DateRangeSheetTest` unchanged.
+  Not seen on a phone.
 - **Insights** (`finance/ui/InsightsScreen.kt`, `finance/domain/Insights.kt`), redesigned 2026-11-13 after the owner ("not liking the
   insight screen design somehow and the chart also") and **two research reports** (Haiku 5.5 xhigh and Gemini 3.8 Flash High, same
   brief, checked against primary sources - `verified-facts.md` "Charts and Insights design"): one story, **this month before the months
@@ -116,6 +192,22 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
     again on the first resume of a new day.
   - A budget on an *archived* category stops adding its unspent limit to "Left to spend" from the current month on.
   - A card's "% used" follows the app's one percent rule (`percentLabel`), not truncation.
+  - **Credit card limit warning** (2026-11-15; owner, 2026-11-14: warn at 30% by default; `finance/domain/CardLimit.kt`, `cardLimitBanners` in
+    `screens/HomeBanners.kt`, Settings > Wallet & Cards > "Card limit warning", `CardLimitWarning`, key `card_limit_warning`, no database
+    change): Off / **30%** / 50% / 75% / 90%, chosen in an `OptionSheet`; the row says why (lenders look at how much of a limit is used;
+    under 30% is the usual advice). Each **active account with a credit limit above zero** whose owed share (`creditRoom`: the balance
+    below zero over the limit) is **at or above** the level is a banner under **Cards** on the Notifications page (so in Home's Needs
+    attention count as "card" and the bell), made as a budget's: Warning, **Error once over the limit** ("Over the limit", figure "Over by");
+    eyebrow "Limit used" (or "Over the limit"), title the account's name, message "₹45,000 of ₹1,00,000", the share as the ring ("45%",
+    full past the limit, "120%" inside; spoken "45% used"), figure "Available" with what is left, button **View card** =
+    `openAccountHistory` (the account page), most used first, no Later. **The words are short on purpose**: the brief's "45% of the limit
+    used" and "... of ₹1,00,000 used" were cut with an ellipsis in the panel beside the figure at 360 dp (seen in a render), and the ring
+    already says the share; at 411 dp even a ₹10,00,000 limit fits, at 360 dp a 7-digit limit still cuts. **Exact in whole paise** (`owed * 100 >= limit * level`: ₹30,000 of ₹1,00,000 warns at 30%, a paisa under
+    does not; the share shown is rounded half up, never under the level); archived, no-limit and zero-limit accounts and cards in credit
+    never; Off = none. **Nothing is stored**: it is derived from the balances at each look, so paying a card down under the level takes the
+    banner away at once and spending again brings it back (a key per card, `card-limit-<account id>`, so an unchanged banner stays seen).
+    Independent of Store cards (it is about the account, not the vault). Hidden amounts hide the message and figure (`money.format`); the
+    ring's share stays, as a budget banner's does. Tests: `CardLimitTest`, `CardLimitBannerTest`, `CardLimitWarningSettingTest`.
   - Paying a credit card's bill is a **transfer** (to the card account), not spending. Card bill recorded as spending is
     flagged by Check and recalculate ("Record as a payment onto ..."). Credit cards carry a limit, statement day and due day
     (`BillingCycle`, `CardBills`); `PayBillSheet` records the payment.
@@ -123,19 +215,138 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
     (`combineSelfTransfer`).
   - Duplicate detection for shares: a differing reference is never a duplicate; without references the window is +-3 hours
     when the time is known, the same day otherwise (`SAME_PAYMENT_WINDOW`).
+- **Loans and EMIs** (2026-11-15, Phase 72; owner, 2026-11-14: "both options"; database 14, backup format 4; `finance/domain/Loans.kt`, `finance/ui/LoanForm.kt`,
+  `LoanPage.kt`, `FinanceRepository.recordLoanEmi`). **Two ways to have a loan, one set of details**: an account of the new kind **Loan** (`AccountKind.Loan`, key
+  `loan`), or any other kind but Card with the form's **"This is a loan"** switch on. A loan is always owed: the Loan kind turns "I owe this amount" on and
+  disables it, the switch turns it on and says so, and a new loan's starting balance follows the amount borrowed (owed) until it is typed by hand (an older
+  loan: type what is owed now). `Account.loan: LoanTerms?` (principal, `rateBp`, `tenureMonths`, `emi`, `start` = the first EMI's day; `isLoan` = a loan or the
+  Loan kind); the columns are empty for every other account. **Forms**: Loan details = amount borrowed, interest a year (0-100, at most two decimals), a choice
+  **EMI | Months** (give the EMI and the months it takes are worked out - `monthsToPay` - or the months and the EMI is - `emiFor`; both are stored), the first
+  EMI's date (starts a month from today); errors sit under each field after Save, and an EMI that doesn't cover the first month's interest says that interest.
+  `saveAccount` refuses terms that don't hold (amount above zero, rate 0-100%, 1-600 months, EMI above zero), a card with a loan, and the Loan kind without
+  terms. **Maths** (pure, integer paise, BigDecimal, half up): monthly rate = bp / 10,000 / 12; EMI = P*i*(1+i)^n / ((1+i)^n - 1) (P / n with no rate; Rs 10,00,000
+  at 9% for 240 months = Rs 8,997.26); a schedule month's interest = what is owed x rate, principal = EMI - that, and **the last month pays exactly what is left** -
+  the month in which what is owed with its interest is within 5% over the EMI (a rounded-down EMI otherwise leaves a month of a few paise: Rs 1,000 over 12
+  months with no interest is 12 x Rs 83.33 and 4 paise short); an EMI below the first month's interest, or one that takes over 600 months, is refused.
+  **The loan's page** (the account's own page, `AccountHistoryPage`, `LoanPanel` above its history): the two-panel banner **Still to pay** (what the
+  balance says, as of today, turned round) / **Months left** with the payoff month, rows EMI, Interest a year, Interest still to pay and **Next EMI** (principal +
+  interest, its day), **Record EMI**, the line "Record each EMI here when it's paid." and the **Schedule** (six months, "Show all" on its heading). The next EMI's
+  day (`nextEmiIndex`): with none recorded the first on or after today; once one is, the one after the day it is *nearest to* (paid up to half a month early or
+  late covers that day), counted from the latest transfer onto the loan (`lastLoanPayment`). **No automatic EMI**: a repeating payment makes one entry and an EMI
+  is two, so nothing is recorded by itself and no recurring rule is made. **Record EMI** (`RecordEmiSheet`, also in the account's actions sheet): paid from the
+  account the last EMI came from, else the default account; the day (today); the principal and the interest, filled from the schedule, both editable (a line
+  says how the total stands against the EMI); the interest's category, **Loans & EMI** when the user still has it (no "interest" sub-category exists in
+  `CategorySuggestions`; asked only while the interest is above zero). "The principal lowers what you owe; the interest is spending." **Two entries in ONE SQL
+  transaction** (`recordLoanEmi`, each validated as it is written, so a failure of the second takes the first back out): a **Transfer** of the principal from
+  that account onto the loan (what is owed drops; not spending) and an **Expense** of the interest from the same account (payee = the loan's name), notes
+  "EMI Nov 2026 - principal" / "- interest" (`loanEmiNote`); a part of zero makes no entry. **Around it**: a loan is never in the forecast's spendable money
+  (`spendableAccounts` leaves `isLoan` out), is not a candidate for a shared receipt's account (`AccountMatching`), reads "Owed" in the Wallet and has its own
+  card colours; Check and recalculate leaves it alone. **Backup format 4**: an account may carry `"loan": {"principal", "rateBp", "tenureMonths", "emi",
+  "start": "yyyy-MM-dd"}` (only a loan has the key; an EMI left out is worked out; each term is validated like `saveAccount`, a bad one refuses the whole file
+  with `Account "X" has a loan ...`, and the kind `loan` needs its details); version 1 to 3 files restore as before and a file newer than 4 is refused. The sample
+  data has one home loan ("HDFC Home Loan") with its EMIs so far, in memory only. Tests: `LoansTest`, `LoanMigrationTest`, `LoanBackupTest`,
+  `LoanRepositoryTest`, `LoanUiTest`. Not seen on a phone.
+- **Tags and the year by tag** (2026-11-15, Phase 72; backlog round 2 item 8; database 15, backup format 5; `finance/domain/Tags.kt`,
+  `FinancialYear.kt`, `finance/ui/TagsUi.kt`, `YearByTagPage.kt`). **Free tags the user names** (1-30 characters, unique ignoring case),
+  any number on an **expense or income** (a transfer has none: it moves money between the user's own accounts, so the field is hidden);
+  "Tax-deductible" and "Reimbursable" are offered ready-made in the picker, created only when picked. The editor's **Tags** field shows chips
+  and opens the picker (find or add, tick, Edit tags to rename or delete - a delete asks first, saying how many transactions it is on, and
+  removes it from them, keeping the transactions). Stored in `tags` + `transaction_tags` (foreign keys ON DELETE CASCADE, so no link can
+  dangle), loaded with the transactions in batches, saved with the transaction in one SQL transaction. `TransactionQuery.tagIds` (any of
+  them) and the text search matches tag names; the filter sheet has Tags. **Year by tag** (from Insights, `YearByTagLink`; route
+  `YEAR_BY_TAG`): a **financial year** switcher - April to March by default, or January to December, the setting **Year starts in** (key
+  `year_start`, `YearStart`, Settings > Finance, in backups) - and per tag what was spent and received and how many transactions, Tax-deductible
+  first; transfers aren't counted and an entry dated after today counts from its own day; a tag opens its transactions for that year. A
+  transaction with two tags counts under both. Backup format 5: a top-level `tags` list and a transaction's `tags` (tag ids), both optional,
+  validated (names valid and unique ignoring case, every id known, no repeats); a restore clears the tag tables with the rest first. The CSV
+  export has a Tags column (names joined with "; "). Tests: `TagMigrationTest`, `TagBackupTest`, `TagRepositoryTest`, `FinancialYearTest`,
+  `TagsUiTest`, `YearByTagPageTest`.
+- **Savings goals** (2026-11-15, Phase 72; backlog round 2 item 9; database 16, backup format 6; `finance/domain/Goals.kt`, `finance/ui/GoalsUi.kt`,
+  `FinanceRepository` goals section, `FinanceActions.addGoal` / `openGoal`). A goal is a **target the user sets and a way of counting** - it moves no money and
+  changes no balance, total or budget (the screens say so). **Fields**: name (1-40 characters, tidied), target (paise, above zero), an optional target date, one emoji
+  (default 🎯; the app's `EmojiPicker`, as the person form uses it), and **how it counts what is saved, one of two**: **Linked to an account** - that account's balance
+  *as of today* (the balances in `FinanceState`, so an entry dated ahead is not in it; below zero counts as nothing) is what is saved, no second set of books; the
+  account must be cash, bank, wallet, savings or other, **not archived, not a card, not a loan** (`goalAccounts`; checked when the link is made or changed - a goal
+  keeps counting an account that is archived or has since become a card, and a card's balance is owed so it counts as nothing); or **On its own** - a `saved` amount
+  kept on the goal, changed with **Add money** / **Take out** (`adjustGoalSaved`, one SQL transaction; never below zero: "You can't take out more than is saved here.";
+  refused for a linked goal) - **no ledger entry**, the sheets say "This doesn't move money between accounts". A linked goal keeps **no amount of its own** (stored as
+  zero, `FinanceRows.goal`), so one whose account is deleted (`ON DELETE SET NULL`) is simply "On its own" with nothing saved. **Derived** (pure, integer paise):
+  `goalSaved`, `goalProgress` -> saved (uncapped), left (never below zero), fraction 0..1, reached (saved >= target), and with a date still ahead and the goal not reached
+  `monthsLeft` = the **calendar months from this month to the date's, at least 1** (a date this month or today is 1) and `monthlyNeeded` = left over those months **rounded up
+  to the whole rupee**; a date before today without the goal reached is `datePassed` ("The date has passed"); a reached goal has neither. `goalsSummary` counts **each goal
+  up to its own target** (so Saved + Still to go = what the goals ask for; a savings account holding 10 lakh does not make a 1 lakh goal look like 10). **UI**: **Plans gains
+  a fourth section, Goals** (`PlanSection.Goals`, last so the others keep their remembered places; the "+" button on it is "Add goal"): the two-figure banner **Saved / Still
+  to go** (not a button), then a row per goal - picture (`GoalAvatar`, the emoji on the avatar disc), name, share, a calm bar (success colour and a tick when reached),
+  "Rs X of Rs Y" and "Rs Z a month to reach it by Mar 2027" / "Reached" / "The date has passed" (no line for a goal with no date) - still-being-saved-for first, reached after;
+  "Add goal" under them; an empty state when there are none. **Four secondary pills do not fit side by side** ("Reminde…" at 411 dp), so `AppSecondaryTabs` now scrolls
+  (each pill as wide as its word, the chosen one kept in view) when it has more than three tabs - all four fit whole at 411 dp, and at 360 dp Goals is half in view and
+  scrolls; the large-text path was already this. Tapping a goal opens `GoalSheet` (name, bar, saved of target, left, date, what it counts, then Add money and Take out - only
+  for a goal on its own, Take out only while something is saved - Edit, Delete); **Delete asks first** ("The goal is removed. No account or balance changes." / "The goal and
+  the Rs X counted on it are removed. That money isn't in any account, so nothing moves.") and is undoable for a few seconds (the snapshot carries goals). `GoalFormSheet`
+  (`EditorSheet`): name, the target as the hero amount, a target date (optional, `DatePickerDialogFor` from today to 30 years, "Remove date"), the choice **Linked account |
+  On its own** (a new goal starts Linked when there is a Savings-kind account, else On its own) with `AccountSelector` or "Saved so far", and the emoji picker; messages sit
+  under their fields and the rest above Save. **Deleting an account** that goals count says so in its question ("A savings goal counts this account's balance: it stays, on
+  its own, with nothing saved"). Hidden amounts hide every figure (the bar and share stay). **Data**: table `goals` (migration 16, additive, `IF NOT EXISTS`, also created
+  by `onOpen` if missing); **backup format 6**: a top-level `goals` list (`id, name, target, targetDate "yyyy-MM-dd", emoji, accountId, saved, sortOrder, createdAt, updatedAt`),
+  optional - formats 1-5 restore exactly as before; validated (name 1-40 characters, target above zero, saved not below zero, one emoji or none, ids unique, the account
+  in the file, a date that is a date; a refused file says which goal: `Goal "Trip" has a target that is not above zero.`) - the account's *kind* is not checked (it may have
+  changed since); a restore writes the goals after the accounts in the same SQL transaction and `clearAll` deletes `goals` first; the snapshot (so Undo, Check and recalculate,
+  a reset) carries them. The sample data has two goals (an emergency fund counting SBI Savings, a Goa trip on its own), in memory only. Tests: `GoalsTest`, `GoalMigrationTest`,
+  `GoalBackupTest`, `GoalRepositoryTest`, `GoalsUiTest`. Not seen on a phone.
+- **Split payments** (2026-11-15, Phase 72; backlog round 2 item 11; database 17, backup format 7; `finance/domain/Splits.kt`, `finance/ui/SplitEditor.kt`,
+  `FinanceRepository` split section, `FinanceController.saveSplit`/`unsplit`/`releaseSplit`, `FinanceActions.showDetails`, `TransactionEditor`, `Receipt.kt`,
+  `FinanceWidgets.kt` `SplitChip`, `LedgerCheck.kt`, `settings/ui/LedgerCheckUi.kt`). **One real payment - an expense or an income, never a transfer - shown as 2 to 10
+  parts**, each its own transaction row with its own category, amount and note, all sharing a random UUID in the new `split_group` column and everything else: account,
+  date and time, payee, person ("For"), tags, picture. The payment's total is the parts' sum. Because each part is an ordinary row, **category totals, budgets, Insights,
+  the forecast and a category filter are right with no change**; only the count of transactions goes up. Repeating payments, shared receipts, CSV and statement imports
+  and NFC still make single rows. **What holds together** (`splitFault`, pure, the one rule the backup, the check and snapshots use): 2 to 10 rows, none a transfer, all
+  expenses or all income, one account, one exact date and time, one payee (blank = none, trimmed), one person. **Repository** (each in ONE SQL transaction, all or
+  nothing; each part is validated as it is written, so a failing later part takes the earlier ones back out): `saveSplit(payment, parts, group = null)` - `payment` says
+  what is shared and its amount must equal the parts' sum, a part naming an existing row (`SplitPart.id`) keeps that row (its id, when it was added, its repeating-payment
+  link), a new split may only reuse a plain row that is not already in a group, an edit deletes the rows no part names and refuses a part from another group; the tags go
+  to every part (`writeTags`), the picture name to every part; `unsplit(group, category?)` - the first part's row (lowest id) becomes the whole payment (total, the chosen
+  category or the largest part's, the notes joined with " · ", the shared fields stay) and the other rows go; it refuses a group that does not hold except one with a
+  single part left; `releaseSplit(group)` - only takes the mark off (what Check and recalculate's "Unsplit" does); `deleteTransaction(id)` of any part deletes **every
+  part**; `splitParts(group)` reads them. **`saveTransaction` of one part** (the form's Save) writes that row's own category, amount and note and **copies the shared
+  fields - account, date and time, payee, person, picture, tags - to every other part** in the same step (`savePartOfSplit`); a part can't change between spending and
+  income or become a transfer, a card bill or a repeating payment (refused in words: unsplit it first); a group id on a row that is saved on its own is ignored (only the
+  split functions make or end a group), and `combineSelfTransfer` refuses a part. **Pictures**: every part names the same file; `FinanceController.saveSplit(..., picture)`
+  keeps a new one first (deleted again if the save fails), deletes the replaced or removed one only after the save, and `TransactionPictures.sweep` keeps a file while
+  any row names it; deleting the payment keeps the file until the Undo is settled. **Data** (additive, `addSplitGroup`, safe to run twice, also in `createSchema` and as
+  an `onOpen` safety net): `split_group TEXT` and `idx_tx_split`; existing rows untouched. **Backup format 7**: a part carries `"splitGroup": "<id>"` (1 to 64 characters
+  of text; anything else is a damaged file); absent = not split, so formats 1-6 restore as before; `validate` refuses a group that does not hold with
+  `A split payment (transaction #12) is on more than one account.` and the like (the first row names it); `encode` writes the mark only for groups that hold, and
+  **`snapshot()` takes the mark off any group that does not hold** (nothing the app writes makes one), so a backup and an Undo are always restorable. **Check and
+  recalculate** finds a group that no longer holds (a part left alone, parts on two accounts, dates, kinds, payees or people) as a finding "Split payments that don't add
+  up" with an **Unsplit** button: it only takes the mark off (nothing is merged, since merging parts on two accounts would have to choose one), every amount stays, no
+  Undo; the other findings leave a part alone (never "entered twice", never half of a self-transfer, never a card bill). **UI**: the form's **Split** field
+  (`SplitField`, a tonal row after Tags; shown for an expense or income once the type is chosen, not for a transfer; "Enter the amount to split" first when there is none)
+  opens the split editor (`SplitEditorSheet`, an `EditorSheet` over the form): the **total** as the hero amount (editable), a line of what the parts share, then a card per
+  part (category field, amount, optional note; a way to remove one while more than two are left), "Add a part" up to 10, and the **running line pinned above Save** -
+  "₹120 left to share" / "₹50 over the total" / "Shared exactly" / "Give every part a category and an amount" (a tone is only a second cue) - with **Save enabled only when
+  the parts add up to the total and each has a category and an amount above zero**; the last part has "Add the ₹120 left". A new split starts with the original category
+  and the total as part 1 and an empty part 2; a part's own form (swipe Edit) shows "2 parts · Edit split" and opens the split editor with this part as the form has it and
+  the form's shared fields. **Activity**: each part is its own row (so a category filter and search find it), a small **Split** chip leading its details and "part of a
+  split payment" in what a screen reader hears; the **details** of a part show the whole payment (`receiptOf(..., parts)`: the total, "Split into 2 parts", a line per part
+  with its category, amount and note; `ReceiptRow.figure` keeps an amount whole at 1.6x text while the long category path wraps - it was broken one character to a line) and the actions **Edit split | Unsplit | Delete** (no Remind for a split; at 1.6x "Edit split" is cut to "Edit ..." by the segment, as the group always does); **Delete** asks "Delete this split payment?" and says it
+  removes all its N parts, with Undo ("Split payment deleted"); **Unsplit** asks which category (largest part's first) and has Undo. Hidden amounts hide every figure, the
+  running line's too (what is typed in a field stays). The sample data has one split (a DMart bill, ₹1,380 Staples & grains + ₹640 Household supplies, two days ago), in
+  memory only. Tests: `SplitsTest`, `SplitMigrationTest`, `SplitBackupTest`, `SplitRepositoryTest`, `SplitUiTest`, `SplitLargeTextTest` (native graphics; failed against the old row layout). Not seen on a phone.
 - **Check and recalculate** (Settings > Data & backup): `checkLedger` (pure, `LedgerCheck.kt`) and
   `FinanceRepository.checkAndRepair`, under a non-cancellable loading sheet. It fixes in one SQL transaction (with Undo): a
   sub-category whose parent is gone/archived/of the other kind; a budget on an income category; a recurring rule whose next
   date was already recorded; a default account archived or gone; then records repeats that were due. It only *shows*: entries
   dated after today, the same payment twice in a day, a card bill recorded as spending, an expense + matching income
-  (make it a transfer), archived accounts holding money, entries under a category of the other kind.
+  (make it a transfer), archived accounts holding money, entries under a category of the other kind, and a split payment that no longer holds together (offers "Unsplit", see "Split payments").
 
 ## 3. Reading receipts shared into the app
 
 Flow: another app shares text or a picture to NormPix (`ShareTransactionActivity`, exported, no UI) -> `SharedTextInbox`
 (memory only) -> MainActivity -> the transaction editor opens with a **draft the user checks and saves**; nothing is saved
 unseen. Pictures are read on the device by ML Kit (`MlKitSharedPictureReader`); the same picture can be attached to the
-transaction and read again to fill the form.
+transaction and read again to fill the form. Only another app's `content://` picture is taken (`sharedPictureOf`): never a file
+path, never NormPix's own providers - judged by the authority **after the last `@`** (`isOwnAuthority`), as Android reads
+`user@name` and `0@<own provider>` is the app's own files (2026-11-13).
 
 - Recognizer reality (not what the screen looks like): line order is **scrambled**; the rupee sign is read as `7`, `Z` or
   dropped (`rupeeRestored` uses ML Kit's per-symbol confidence: a misread symbol scores ~0.07-0.12, real digits 0.6-0.95);
@@ -183,6 +394,15 @@ transaction and read again to fill the form.
   public PPSE directory, then NDEF; **never GPO / READ RECORD**; a bank card prefills network/kind and explains that the
   number must be typed or scanned). Card numbers are never in a normal backup; a separate password-locked **cards file**
   moves them (`CardsTransfer`).
+- **Keyboard card fill** (2026-11-14, owner: "keyboard gives an option to scan the cards like how Swiggy does"; Settings > Wallet & Cards,
+  `cardKeyboardFill`, key `card_keyboard_fill`, **off by default**, never carried by a backup). That "Scan card" chip is the phone's
+  autofill service (Autofill with Google, shown by the keyboard), so turning it on routes the card form through a service outside the
+  app - hence opt-in. On: the form's fields carry `ContentType.CreditCardNumber` / `ExpirationMonth` / `ExpirationYear` / `SecurityCode`
+  and `PersonFullName` (`Modifier.cardAutofill`), a four-digit year from a service is kept as two (`expiryYearDigits`), and the session is
+  **cancelled** on save and as the sheet starts to close (`LocalSheetClosing`) - compose-ui 1.12.1 commits a session by itself when
+  content-typed fields leave the screen, which is what makes a service offer "Save card?". Off: every card field is
+  `ContentDataType.None`, so no service sees the form at all (before this the CVV field was reported as a password field); the account
+  form's card number is always None. `KeyboardCardFillTest`. Not seen on a device yet.
 - **Lock** (`wallet/AppLock.kt`, `AppLockService`): biometrics or device credential; scope Wallet only | Entire app;
   timeout immediate / 30 s / 1 min / 5 min / until closed. Locking closes every sheet (`AppOverlays.dismissAll`) and widgets
   show nothing of the ledger while NormPix is locked.
@@ -196,6 +416,35 @@ transaction and read again to fill the form.
 - **Card exchange between phones** (`wallet/nfc/NfcCardExchange`, HCE `NfcCardOutletService`; Receive / Share tabs). Offered
   only while the phone's NFC is on **and** the in-app switch allows it (`ScheduledFeature.NfcExchange`, default **Off**; the
   availability scheduler supports Always / Scheduled weekly windows / Off). `nfcExchangeOffered` is followed live.
+  **Encrypted since 2026-11-15 (exchange version 2; owner's choice 2026-11-14: Bluetooth-style numeric comparison).** Files:
+  `NfcPairing.kt` (the cryptography: a fresh P-256 key per share, ECDH, HKDF from HMAC-SHA256, the sender's commitment to its nonce,
+  a 6-digit code and an AES-256-GCM card key bound to the transcript, points checked on the curve), `NfcShareResponder.kt` (the
+  sharing phone's state machine; `NfcCardOutletService.processCommandApdu` hands it every command, `onDeactivated` ends its
+  session; one shared instance, `NfcCardOutletService.responder`), `NfcShareInitiator.kt` (the reader's side, blocking on the NFC
+  thread; `readTag` / `readIsoDep` run it; `ShareProblem` = why a share ended without a card). Short APDUs only:
+  1. R -> S `00 A4 04 00 07 F0010203040506 00` (SELECT) -> `4E 50 58 02` ("NPX" + version) `90 00`, or `6F 00` with nothing armed
+     or not allowed. Every SELECT starts a new session (fresh keys, fresh code).
+  2. `80 10 00 00 41` + R's point (65) `00` (KEYS) -> S's point (65) + commitment (32) `90 00`; a point not on P-256 -> `6A 80`.
+  3. `80 12 00 00 10` + Nr (16) `00` (NONCE) -> Ns (16) `90 00` and S shows the code; before KEYS `69 85`. R checks the commitment
+     ("This share was interfered with. Nothing was shared." when it fails) and shows the same code.
+  4. `80 14 P1P2 00` (CARD, P1P2 = offset), asked every 250 ms: `6F 10` while undecided, `6F 11` after Doesn't match (S disarms at
+     once), after **Match** the card sealed once and sent from offset 0 as a 2-byte length + 238 bytes, then 240 a time; when the last
+     byte goes out the card is disarmed (plain bytes zeroed: one reader, once) and the sheet says "Card shared". Wrong state `69 85`,
+     unknown command `6D 00`. R gives up after 60 s or when the phones part ("Keep the phones together until the card arrives").
+  The plain payload never travels; nothing about keys, nonces, codes or the card is logged (`logTagRead` names only the outcome).
+  `isAllowed` is asked at **every** command, so NormPix leaving the front stops a share mid-way. A Match carries the session's
+  `Pairing.id`, so it is never applied to a newer session. **Refused**: a phone answering SELECT with plain JSON (an older NormPix:
+  "That phone has an older NormPix. Update it there to share cards securely."; the card has already crossed in the clear from it,
+  but nothing is kept), a newer exchange version, a tampered KEYS answer. The NDEF path (tags written by NormPix, marker
+  `normpix_card`) is unchanged and plain. **What it does not stop:** a relay that forwards both sides faithfully - both screens then
+  honestly show the same code - so the sheet says "Only tap Match for a phone you can see." The service stays fenced as in the
+  2026-11-13 security review: **unlocked** phone only (`apduservice.xml` `requireDeviceUnlock="true"`), NormPix **in front**
+  (`ActivityHost.visible`). UI: Share shows the code large (grouped "123 456", tabular figures, TalkBack reads "Code 1 2 3 4 5 6"),
+  "Match - share the card" / "Doesn't match", then "Sending...", "Card shared" or "Not shared" with Share again; Receive
+  (`NfcTapPanel`, also the Add card tap sheet) shows the same code under "Compare the codes" while it waits (`NfcInletState.Comparing`,
+  `ShareFailed`). On Receive, a number that isn't one, or an expiry that isn't a month 1-12 and a 2- or 4-digit year, makes the
+  payload no card (`parseCardFromNfcPayload`). Tests: `NfcPairingTest`, `NfcShareExchangeTest` (both sides in one process),
+  `NfcCardOutletServiceTest`, `NfcTagReaderTest`, `NfcShareSheetTest`. **Not tried between two real phones yet.**
 - **Card tilt** (`wallet/motion/CardTilt.kt`): gyro/accelerometer lean (4 degree limit and a gain of 0.3 since 2026-11-08 - the owner found 6 degrees at 0.5 "tilting way too much" - dead zone, one shared listener, off under
   reduced motion). It leans the saved cards **and the accounts drawn as cards** (`AccountCardView(tilt)`: the carousel's front card and
   the list's cards; the accounts' stack stays flat; the cards' stacks, `CardStack` and `CardFolderStack`, lean their front card), with the
@@ -318,7 +567,15 @@ transaction and read again to fill the form.
   (database version 13, `CategorySuggestions.addedIn13`) also *Money sent* (sent to friends, lent, repaid, bill splits), *Gifts given*,
   *Fees & charges*, *Work expenses*, and for income *Money received*, *Investment returns*, *Sold items* - with icon keys
   `money_sent`, `money_received`, `sold_items`. An existing ledger gets them once (`addDefaultFamilies`: never where a category of
-  that kind already goes by the name).
+  that kind already goes by the name). **2026-11-14: +50 ready-made sub-categories** (owner: "Food & Dining subcategories like snacks,
+  lunch, dinner, Swiggy ... used in daily life"): Food & dining gained Snacks, Lunch, Dinner, Swiggy, Zomato, Tiffin & mess, Office
+  canteen, Sweets & mithai; Groceries Blinkit, Zepto, Instamart, BigBasket, DMart, Milk delivery; Transport Uber, Ola, Rapido, FASTag
+  recharge, RTO & licence; and more across Bills, Housing, Health, Fitness, Events, Education, Kids, Subscriptions, Loans, Salary and Other
+  income. No database change: a new install seeds them (`seedDefaults` walks `byParent`), an existing phone takes them from Banks &
+  Categories > "Add suggested sub-categories". Brand sub-categories carry their logo key (swiggy, zomato, blinkit ...). `MerchantCategories`
+  rules may name a newer sub with `Rule.orElseSub`, the broader sub to use on a phone that lacks it (Swiggy -> Swiggy, else Delivery apps;
+  Uber -> Uber, else Cabs & rideshare; FASTag -> FASTag recharge, else Tolls; "lunch"/"dinner"/"snacks"/"tiffin" words -> their sub, else
+  the parent). Families stay at most 18 sub-categories except Subscriptions (`CategorySuggestionsTest`).
 - **Locked backups** (since 2026-11-03, whole-app encryption stage 1): each restorable export first asks "Lock the backup?"
   (`BackupLockSheet` in `settings/ui/LockedBackupUi.kt`; **Lock it** is preselected, **Don't lock** saves the file exactly as before).
   Locked, the whole file is wrapped by `backup/LockedFile` and saved as `<name>.locked` (`application/octet-stream`); unlocked it is
@@ -326,7 +583,8 @@ transaction and read again to fill the form.
   asks for its password (again after a wrong one), is read through the usual `readBackup`, then read to its end (`BackupSource.finish`)
   so a cut or extended file is refused before anything changes. In a locked app backup the saved cards are locked with the backup's
   password (no second sheet), and restoring tries that password on them first. The CSV is never locked (it is for spreadsheets).
-  No password is stored anywhere; a forgotten one can't be recovered.
+  A manual backup's password is stored nowhere; a forgotten one can't be recovered. (The automatic backup's own password is the one
+  exception: kept sealed by the Keystore, see **Automatic locked backups** below.)
 - **Encrypted on the phone** (since 2026-11-03, stage 2): the finance and reminders databases are SQLCipher files
   (`*.encrypted.db`), key in the Keystore; an existing plain ledger is moved over on the first start of the new build and the plain
   file deleted only after the copy is proven identical (see `architecture.md` section 3). Settings > Security & Lock > Your data says
@@ -343,7 +601,83 @@ transaction and read again to fill the form.
   check and recalculate); `cancellable = false` work runs to its end once begun.
 - "Reset all settings" and deletes go through confirm sheets (destructive in error colours); deletes of transactions offer Undo.
 
-- **Backup reminder** (2026-11-07, `backup/BackupFreshness.kt`): only the *time* of the last restorable backup is kept (`last_backup_at`: the small file, the full zip or the app backup saved from the real data - not the CSV, not the sample set); Home's Needs attention says "Back up your data" when it is older than the reminder (Settings > Data & backup > Backup reminder: every week / 2 weeks / month, default 2 weeks, or off) or there was never one 3 days after install, only when there is something to keep, "Later" puts it off 3 days. `last_backup_at` and the snooze are in `BACKUP_EXCLUDED` and survive Reset settings. Automatic backups to a folder are **not built**: a locked backup's password is stored nowhere (see above), so unattended locking would need a deliberate opt-in change to that rule - the owner's call.
+- **Backup reminder** (2026-11-07, `backup/BackupFreshness.kt`): only the *time* of the last restorable backup is kept (`last_backup_at`: the small file, the full zip or the app backup saved from the real data - not the CSV, not the sample set); Home's Needs attention says "Back up your data" when it is older than the reminder (Settings > Data & backup > Backup reminder: every week / 2 weeks / month, default 2 weeks, or off) or there was never one 3 days after install, only when there is something to keep, "Later" puts it off 3 days. `last_backup_at` and the snooze are in `BACKUP_EXCLUDED` and survive Reset settings. An automatic backup that is written counts too (`recordAutoBackup` sets `last_backup_at`).
+- **Automatic locked backups** (2026-11-14, Phase 72; owner: "Set a one time password and your suggestion also user will decide";
+  `backup/AutoBackup.kt`, `AutoBackupFolder.kt`, `AutoBackupJob.kt`, `SealedSecret.kt`, UI `settings/ui/AutoBackupUi.kt`): Settings >
+  Data & backup > Automatic backup makes **the app backup** (the same zip as "Everything", via `AppBackupExporter`) by itself and writes it,
+  locked by `LockedFile.locker` exactly as a manual locked backup (PBKDF2 310,000 rounds), **straight into a folder the user picked**
+  (`ACTION_OPEN_DOCUMENT_TREE` + `takePersistableUriPermission` READ|WRITE; only the tree URI and its name are kept) as
+  `NormPix-auto-backup-YYYY-MM-DD.zip.locked` (`-2`, `-3` for more that day). The zip is streamed through the locker into the document:
+  never unlocked anywhere, not even the cache; a failed write deletes the partial document. It restores with the ordinary **Restore from
+  backup** (open the file, type the password) - no restore code of its own. **Its own password**, set once (twice, at least
+  `LockedFile.MIN_PASSWORD`), is the one secret NormPix keeps: sealed by `SealedSecret` (AES-256-GCM under Keystore alias
+  `normpix_auto_backup_key_v1`, **not** user-auth-bound so the job can open it; `noBackupFilesDir/auto_backup.key`, `[IV][ct+tag]`,
+  temp file + rename, read back); never in preferences, a backup or a log; handed around as `CharArray`/`ByteArray` and zeroed after
+  use (the Compose text field's `String` is the one copy that can't be). **Saved cards are left out** unless "Include saved cards" is on
+  (asks first, and unlocks while Wallet lock is on); then they go in as a cards file locked with the same password, as in a locked manual
+  backup; cards that can't be read are left out and that is said (`CardsLeftOut`). **Retention**: the newest 5 (`AutoBackupNames.KEEP`; owner, 2026-11-14: "delete old backups if it's more than 5")
+  - only files directly in that folder whose name matches the exact pattern are ever deleted, never the one just written. **Schedule**:
+  `AutoBackupSchedule` (JobScheduler job 7_602, periodic Daily / **Weekly** (default) / Monthly, flex the last quarter, persisted, battery
+  and storage not low, no network), `AutoBackupJobService` (not exported, `BIND_JOB_SERVICE`), re-synced from `NormPixApplication`
+  (`followAutoBackupSettings`, which also deletes a password left behind with the feature off). **Turning on** = a sheet that explains,
+  the folder picker, the password sheet, then on and the first backup at once under `overlays.loading`; **off** asks, then deletes the
+  sealed file and releases the folder grant (backups made stay). Rows while on: the last backup (date · file) or the last problem, Folder,
+  How often (`OptionSheet`), Include saved cards, Change password (backups made keep theirs), Back up now (same code path). **Failures**
+  are recorded as `AutoBackupProblem` (FolderGone "Choose the folder again", PasswordMissing, OutOfSpace, CardsLeftOut, Failed;
+  SampleData is only the guard's) and shown on the page and as a Backup notification (`autoBackupProblemBanner` in `HomeBanners.kt`,
+  which then stands in for the "Back up your data" nudge); no system notification. **Sample data**: the one `AutoBackupService` is built
+  over the real container (`ContainerBackupData`) and handed to the sample set as it is, and refuses a container with `isSampleData`, so
+  the sample set is never written. All its preferences (`auto_backup_*`, `AUTO_BACKUP_KEYS`) are in `BACKUP_EXCLUDED` and **kept by Reset
+  settings** (a reset must not orphan the sealed password; turning it off is its own switch). The footer says a cloud folder's app may
+  upload the (locked) file; NormPix sends nothing. Not checked on a phone yet (SAF providers, Drive folders, the job firing).
+- **Importing a bank statement** (2026-11-15, Phase 72, round-2 item 7; **no database or backup-format change**; the pure part is `finance/statement/`,
+  the flow and sheets `settings/ui/StatementImportUi.kt`, the row is Settings > Data & backup > **Import** > "Import a bank statement", "A CSV file from your
+  bank's website or app", disabled - and saying why - while sample data is on). **The file**: `BackupFiles.openStatement(maxBytes)` (the default reads through
+  `open()`; the real picker is the `OpenStatement` contract: `ACTION_OPEN_DOCUMENT` + `CATEGORY_OPENABLE`, `BackupFiles.STATEMENT_TYPES` = text/csv,
+  text/comma-separated-values, text/plain, application/csv, application/vnd.ms-excel and, beyond the brief, text/x-csv and text/tab-separated-values, after
+  `lock.expectExternalActivity()`); **2 MB** (`StatementCsv.MAX_BYTES`; read no further than the cap, then "That file is too large"); the bytes are read once,
+  never copied, kept or logged (no parser message holds a cell); a PDF or workbook (magic bytes) is refused in words. **Parser** (`StatementCsv`): UTF-8 (BOM
+  dropped) else Windows-1252; the delimiter is whichever of comma / semicolon / tab splits the first 300 records into the most rows of one width; RFC 4180
+  (a quote opens a quoted cell only where a cell starts, `""`, line breaks inside quotes); blank records dropped. **The table** (`StatementLayout.find`): the
+  first record with a date-like and an amount-like (or debit / credit) heading; what is before it is the preamble, what is after it the body; a body record
+  whose date column is no date (a summary, a footer, a heading printed again at a page break) is skipped and counted. **Guesses** (`guess`; headings compared as
+  lower-case letters and digits with bracketed words dropped, so "Chq./Ref.No." is `chqrefno`): Date (a transaction / txn / tran / plain date before a posting date
+  before a value date), Description (Narration, Particulars, Details, Remarks, ...; else the widest text column), Debit and Credit (Withdrawal Amt., Deposit Amt.,
+  Dr, Cr, ...; if either exists money is read from them), else one Amount, with a Dr / Cr marker column **only when every value in it is a Dr / Cr word** (a
+  "Type" column of UPI / NEFT is not), Reference (Chq./Ref.No., Ref No, UTR, Transaction ID, ...); balance columns are never read. `StatementMapping.with` keeps a column
+  on one field and the two ways of giving money apart. **Dates** (`StatementDates`): nine formats read by hand, English month names, an optional time (24 h or
+  am / pm), year 1990 to next year, a two-digit year in this century unless that is past next year; the format is the one that reads the most cells, and when
+  dd/MM/yyyy and MM/dd/yyyy read the same cells but to different dates **the user is asked** ("Both ways of reading fit every date ..." with two dates read both
+  ways; Review waits for an answer) - dates that mean the same both ways are not a question. **Amounts** (`StatementAmounts` over `parseMinorUnits`): Rs / INR / the
+  rupee sign, a minus or brackets, a Dr / Cr beside the figure, Indian grouping, a decimal comma only when one or two digits follow the last comma. **Which way**
+  (`StatementReader`): debit and credit columns - both, neither, zero or a non-amount skips the row; one amount - a Dr / Cr beside it, then the marker column, then
+  its sign (a row "Positive amounts are Money in | Money out" appears when there is no marker; the default is money out for a **Card** account, whose statement
+  shows spending as a plain amount). **Account**: an `AccountSelector` over the active accounts that are not loans; preselected only when there is just one
+  (empty beats wrong). **The entry** (`StatementNarration`, borrowing `narrationOf` and `tidyName` from `finance/share`): payee = the other side's name from a UPI /
+  IMPS / NEFT narration, else the first part that could be a name (not a reference, UPI id, IFSC or masked number), "ATM withdrawal" for a cash withdrawal, an
+  uncoded narration as it is, 60 characters at most; note = **"Ref 428312345678 · " and then the narration as written, 300 characters at most** (the Ref first, so the
+  repository's first-`Ref` reading is the bank's); reference = the reference column's letters and digits (6 to 35, the zeros some banks pad a number with taken
+  off an all-digit one - HDFC's `0000428312345678` is the UPI reference `428312345678` a payment app shows), else a UPI path's or a lone 12-digit number in
+  the narration. A row with only a day is saved at **noon** (`StatementImport.DAY_ONLY_TIME`), one with a time keeps it. **Category** (`StatementImport.prepare`): the user's
+  last filing of the payee (`lastCategoryForPayee`), else `MerchantCategories` by the payee then the whole narration (expenses only), else the top-level "Other" /
+  "Other income", else the first top-level of its kind, else none - and then the row says "No category to file it under", is unticked and can't be ticked.
+  **Already in NormPix**: two passes of `possibleDuplicates` (first with the bank's payee, then - for the rows left - on reference, amount and day alone, so
+  "Store near home" and "EXAMPLE STORE" still match), `timeKnown` only when the statement gave a time (so the window is the same day, else three hours), **one entry
+  accounts for one row** (a claimed set: two equal rows are not both put on one entry), a reference match is checked as a whole `Ref` token (the repository's
+  search is a substring), in **any** account - the tag then names it, "Already in NormPix, in Cash" - and such a row starts unticked (every row can be ticked). So a
+  second import of the same statement finds every row. **The flow** (`StatementImportFlows.run`): picker -> loading "Reading the statement" -> the setup sheet
+  (`EditorSheet`: account, the columns - a `PickerFieldRow` per field opening an `OptionSheet` of the columns with their first three values and "None" - and Date format
+  right under Date, status line "3 transactions found, 4 lines skipped" live) -> loading "Checking against NormPix" -> the preview sheet (a tick box per row: payee, date
+  · type · category, the narration, amount, the tag; "Import 23 of 27 (4 already in NormPix, 2 lines skipped)", Select all / Clear all, the arrow back to the columns, **Import 23**;
+  at font scale over 1.3 the amount goes under the name) -> loading "Importing" (not cancellable) -> `FinanceController.saveTransactionsUndoably` ->
+  `FinanceRepository.saveTransactions` (each row validated as a single save is, **one SQL transaction: all or none**; a failure alerts "Nothing was imported") -> a snackbar
+  "23 transactions imported into HDFC Savings" **with Undo**, said once the sheets have closed. **Not in this version**: recognising transfers between the user's own
+  accounts and card bill payments (they import as expenses and income to edit), loan accounts as a target, a row's category or payee edited in the preview,
+  narrations that run on over several records (counted as skipped lines), `.xlsx` and PDF files, number formats with a decimal comma beyond the one-or-two-digit
+  rule. Tests: `StatementCsvTest`, `StatementLayoutTest`, `StatementDatesTest`, `StatementAmountsTest`, `StatementReaderTest`, `StatementNarrationTest` (pure, made-up
+  statements in `StatementFixtures`), `StatementImportTest` (a real in-memory ledger: categories, duplicates, all-or-nothing, notes, undo), `StatementImportFlowTest` (the page,
+  the picker's intent, refused files, the columns, the date question, the preview, the import and the same file again), `StatementImportCatalogTest`. Not tried with a real
+  bank's file or on a phone.
 - **Crash log** (2026-11-07, `diagnostics/`; owner asked 2026-10-31): a default uncaught-exception handler (installed first in `NormPixApplication`) keeps a report - app and Android version, device model, thread, exception class and stack, **messages scrubbed** (4+ digit numbers, `name@bank` handles, anything in quotes taken out) - as one file each in `files/crash-log/`, the newest 20, 12,000 characters at most; the system's record of an app-not-responding or native crash (`ApplicationExitInfo`, Android 11+) is kept too, once. About > Crash log lists, shares (the newest 5, through Android's own share sheet) and clears (asks first); Home offers the last crash on the next start until seen or dismissed (`crash_log_seen_at`, excluded from backups). Nothing is sent by the app.
 
 ## 7. Updates
@@ -360,6 +694,14 @@ transaction and read again to fill the form.
 - **Update now** downloads the APK (foreground `UpdateDownloadService` so it continues with the app closed; notification with
   Cancel/Install), verifies size, SHA-256, package name, version and **signing key**, and only then hands it to Android's
   installer, which asks the user. The app never uninstalls itself. Only release builds update themselves.
+- **Leftover APKs** (2026-11-14, owner: "if an apk is left can we give an option to delete it"): the app's own downloads are deleted once installed
+  (`UpdateDownloader.clearInstalled`); one a browser or the GitHub app saved in Downloads is not NormPix's to list. Settings > Automatic updates >
+  "Update files" > **Delete downloaded APK files** (`UpdateFilesSection`, on the page in every state; `settings/ui/ApkCleanup.kt`, logic in
+  `updates/ApkFiles.kt`) opens the system picker for APKs (`OpenMultipleDocuments`, after `lock.expectExternalActivity()`), then a confirm sheet lists the files
+  (name, size, "Not named like a NormPix update" - `isNormPixApkName` - still deletable; "Can't be deleted from here" when the provider's
+  `FLAG_SUPPORTS_DELETE` is off, then not counted or tried), deletes with `DocumentsContract.deleteDocument` and says the result in a snackbar after the sheet
+  closes. **It uses the picker on purpose: listing Downloads would need `MANAGE_EXTERNAL_STORAGE`, a new permission and a Play Protect risk.** Never log
+  a file's name. Tests: `ApkFilesTest`, `ApkCleanupTest` (a fake registry answers the picker, a fake `ApkFileStore` stands for the files), `UpdateUiTest`.
 - **Changelog**: the update page holds a **Changelog pill** opening `ChangelogPage` (all published versions, newest first,
   from the releases' own notes, cached for offline reading). The changelog loads only there.
 - **Preview update channel** (opt-in builds from `features`): designed, **not built** - no code exists. See the owner notes:
@@ -562,3 +904,7 @@ spending, Categories in Insights, Accounts, Cards). Search finds each choice by 
 - Recurring-payment rows have no swipe actions.
 - Renaming/deleting a bank the user added (Settings > Banks & Categories lists and adds them, but cannot rename or delete).
 - Fixtures for self-transfer receipts are synthetic until a real one is shared.
+- "Recommendations, round 2" (TASKS.md Backlog): item 1, automatic locked backups, built 2026-11-14 (Phase 72; not tried on a phone -
+  a real folder picker, Google Drive's folder, the job firing on its own); items 2-11 are next, in that order.
+- Bank statement import (item 7), built 2026-11-15 (section 6): not tried with a real bank's CSV or on a phone; transfers between own accounts and
+  card bill payments in a statement are not recognised.

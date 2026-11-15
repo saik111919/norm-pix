@@ -1,7 +1,10 @@
 package com.example.normpix.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,7 +41,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -102,14 +109,7 @@ fun BannerStack(banners: List<Banner>, state: DeckStackState, modifier: Modifier
         state = state,
         modifier = modifier,
         // The item is one thing to a screen reader, so its buttons are offered as actions on it.
-        extraActions = { banner ->
-            listOfNotNull(banner.secondary, banner.primary).map { action ->
-                CustomAccessibilityAction(action.label) {
-                    action.onClick()
-                    true
-                }
-            }
-        },
+        extraActions = { banner -> banner.accessibilityActions() },
         behindDim = BehindDim,
         footerGap = Seam,
         footer = { banner -> BannerActions(banner) },
@@ -117,6 +117,60 @@ fun BannerStack(banners: List<Banner>, state: DeckStackState, modifier: Modifier
         face = { banner -> BannerTop(banner, plate = false) },
     )
 }
+
+/**
+ * One banner on its own, not in a stack: the panels ([BannerTop]) over the bar of buttons ([BannerActions]), joined by the same seam as
+ * on Home, where this is what a [BannerStack] of one draws. For a page that lists every banner - the Notifications page (owner,
+ * 2026-11-14: "notification screen cards are not following the new design we have", and chose Home's banner design).
+ *
+ * It is the same thing to press and to read as the front item of a [DeckStack]: the panels are one button that opens what it is
+ * about ([Banner.onOpen]) and sink under a finger, the bar's buttons are pressed by touch, and a screen reader reads [Banner.spoken]
+ * once with the buttons offered as actions on it. It is as wide as the room it is given.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun BannerCard(banner: Banner, modifier: Modifier = Modifier) {
+    val actions = remember(banner) { banner.accessibilityActions() }
+    val press = remember { MutableInteractionSource() }
+    val spoken = remember(banner) { banner.spoken() }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Seam)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                // Sinks under a finger, as the deck's front item does (nothing happens on a hold: the sink is all).
+                .holdFocus(press, StackedTop, longPress = false)
+                .focusRing(press, StackedTop)
+                .combinedClickable(
+                    interactionSource = press,
+                    indication = null,
+                    onClickLabel = OpenLabel,
+                    onClick = banner.onOpen,
+                )
+                .clearAndSetSemantics {
+                    contentDescription = spoken
+                    role = Role.Button
+                    onClick(label = OpenLabel) {
+                        banner.onOpen()
+                        true
+                    }
+                    if (actions.isNotEmpty()) customActions = actions
+                },
+        ) { BannerTop(banner, plate = false) }
+        BannerActions(banner)
+    }
+}
+
+/** What pressing a banner does, as a screen reader says it (the deck's own wording). */
+private const val OpenLabel = "Opens the details"
+
+/** The banner's buttons as actions on the banner itself: it is one thing to read, and its inner buttons are hidden from a screen reader. */
+private fun Banner.accessibilityActions(): List<CustomAccessibilityAction> =
+    listOfNotNull(secondary, primary).map { action ->
+        CustomAccessibilityAction(action.label) {
+            action.onClick()
+            true
+        }
+    }
 
 /** How much darker each banner behind the front one is: a pale surface needs a hint of shade to read as a card behind, not a slab. */
 private const val BehindDim = 0.06f
@@ -215,6 +269,7 @@ private fun BannerTop(banner: Banner, plate: Boolean) {
 
     val info: @Composable (Shape, Modifier, Boolean) -> Unit = { shape, modifier, fillHeight ->
         Panel(shape, colors.surface, ink, null, modifier, fillHeight, edge, shown) {
+            val bar = banner.bar
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(28.dp).background(role.color, CircleShape), contentAlignment = Alignment.Center) {
@@ -227,7 +282,13 @@ private fun BannerTop(banner: Banner, plate: Boolean) {
                         color = colors.accent,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
                     )
+                    // A bar with no figure panel to sit in (a download) goes at the end of this row; see the figure panel below.
+                    if (bar != null && figure == null) {
+                        Spacer(Modifier.width(AppSpacing.sm))
+                        BannerRing(bar, fill = role.color, ink = ink)
+                    }
                 }
                 Spacer(Modifier.height(AppSpacing.sm))
                 // Beside a figure the panel is narrow, so a title may take two lines - and then always has the room for two, so the
@@ -243,15 +304,15 @@ private fun BannerTop(banner: Banner, plate: Boolean) {
                 )
                 Text(banner.message, style = text.bodyMedium, color = quiet, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            banner.bar?.let { bar ->
-                Spacer(Modifier.height(AppSpacing.md))
-                PillBody(bar, fill = role.color, onFill = colors.icon, ink = ink, quiet = quiet)
-            }
         }
     }
     val figurePanel: @Composable (Shape, Modifier, Boolean) -> Unit = { shape, modifier, fillHeight ->
         if (figure != null) {
-            Panel(shape, colors.surface, ink, null, modifier, fillHeight, edge, shown) { FigureBody(figure, quiet) }
+            // A banner's bar (a budget's use, a card limit's) is a ring at the figure panel's top end, beside its title, in the status
+            // colour with the percent inside (owner, 2026-11-15: the full-width pill under the lines - "make it circle", "The Circle to
+            // right side"). The left panel's lines keep their whole width, and the pill's row is gone.
+            val ring: (@Composable () -> Unit)? = banner.bar?.let { bar -> { BannerRing(bar, fill = role.color, ink = ink) } }
+            Panel(shape, colors.surface, ink, null, modifier, fillHeight, edge, shown) { FigureBody(figure, quiet, aside = ring) }
         }
     }
 

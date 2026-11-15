@@ -115,8 +115,8 @@ class ShareTransactionFlowTest {
         amountField().assert(hasText("250"))
         compose.onNodeWithText("SWIGGY").assertExists()
         compose.onNodeWithText("Ref 428312345678").assertExists()
-        // A merchant the app knows comes with its category.
-        compose.onNodeWithText("Food & dining › Delivery apps").assertExists()
+        // A merchant the app knows comes with its category: Swiggy has a sub-category of its own.
+        compose.onNodeWithText("Food & dining › Swiggy").assertExists()
         // Opening a draft records nothing.
         assertTrue(stored().isEmpty())
 
@@ -127,7 +127,7 @@ class ShareTransactionFlowTest {
         assertEquals(TransactionType.Expense, saved.type)
         assertEquals(25_000L, saved.amount)
         assertEquals("SWIGGY", saved.payee)
-        assertEquals(categoryId("Delivery apps"), saved.categoryId)
+        assertEquals(categoryId("Swiggy"), saved.categoryId)
         assertEquals("Ref 428312345678", saved.note)
         assertEquals(LocalDate.of(2026, 10, 10), saved.occurredAt.toLocalDate())
         assertEquals(env.container.finance.state.value.defaultAccount?.id, saved.accountId)
@@ -335,7 +335,7 @@ class ShareTransactionFlowTest {
         assertEquals(listOf(receipt), pictures.asked)
         amountField().assert(hasText("250"))
         compose.onNodeWithText("Swiggy").assertExists()
-        compose.onNodeWithText("Food & dining › Delivery apps").assertExists()
+        compose.onNodeWithText("Food & dining › Swiggy").assertExists()
         assertTrue(stored().isEmpty())
 
         compose.onNodeWithText("Save expense").performClick()
@@ -345,7 +345,7 @@ class ShareTransactionFlowTest {
         assertEquals("Swiggy", saved.payee)
         assertEquals("Ref 428312345678", saved.note)
         assertEquals(LocalDateTime.of(2026, 10, 10, 12, 34), saved.occurredAt)
-        assertEquals(categoryId("Delivery apps"), saved.categoryId)
+        assertEquals(categoryId("Swiggy"), saved.categoryId)
     }
 
     @Test
@@ -363,7 +363,7 @@ class ShareTransactionFlowTest {
         compose.onNodeWithText("New expense").assertExists()
         amountField().assert(hasText("1499"))
         compose.onNodeWithText("ZOMATO").assertExists()
-        compose.onNodeWithText("Food & dining › Delivery apps").assertExists()
+        compose.onNodeWithText("Food & dining › Zomato").assertExists()
     }
 
     @Test

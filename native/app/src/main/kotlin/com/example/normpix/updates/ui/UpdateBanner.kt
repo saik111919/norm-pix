@@ -100,15 +100,13 @@ internal fun updateBannerFor(
             state.release,
             Icons.Outlined.Download,
             title = "Downloading ${state.release.versionName}",
-            message = "Checked before it installs",
+            // How much of how much: the ring beside it shows how far it is (it was under a pill until 2026-11-15).
+            message = "${bytes(state.done)} of ${bytes(state.total)}",
             primary = StatusAction("Details", onClick = open),
             secondary = StatusAction("Cancel", onClick = actions.cancelDownload),
-            // The download as the pill: how far it is, and how much of how much.
             bar = BannerBar(
                 fraction = state.fraction.coerceIn(0f, 1f),
                 label = "${(state.fraction * 100).toInt()}%",
-                from = bytes(state.done),
-                to = bytes(state.total),
             ),
         )
         UpdateState.Idle, UpdateState.Checking, is UpdateState.UpToDate, is UpdateState.Installing, is UpdateState.Failed -> null

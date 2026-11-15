@@ -83,6 +83,22 @@ fun upcomingOccurrences(rule: RecurringRule, count: Int): List<LocalDateTime> {
 }
 
 /**
+ * Every occurrence of [rule] from its next date up to and including the day [until] (and not after its end date), oldest first:
+ * what a forecast that looks as far as a date needs, where [upcomingOccurrences] counts instead. [cap] stops a rule that repeats
+ * every day over a long stretch from making an endless list.
+ */
+fun occurrencesUntil(rule: RecurringRule, until: LocalDate, cap: Int = 2_000): List<LocalDateTime> {
+    val dates = mutableListOf<LocalDateTime>()
+    var next = rule.nextDate
+    val end = rule.endDate
+    while (dates.size < cap && !next.toLocalDate().isAfter(until) && (end == null || !next.isAfter(end))) {
+        dates += next
+        next = rule.following(next)
+    }
+    return dates
+}
+
+/**
  * The first occurrence of [rule]'s schedule (anchored at its start date)
  * strictly after [after]. Used when a rule is resumed or its schedule
  * changes, so occurrences missed while paused are skipped rather than

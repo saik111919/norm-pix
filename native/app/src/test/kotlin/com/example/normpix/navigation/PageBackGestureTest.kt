@@ -45,11 +45,12 @@ class PageBackGestureTest {
     private lateinit var nav: NavHostController
 
     /** A blue page with a red page opened over it, in the page [style]; the back gesture closes it as [backStyle] does. */
-    private fun show(style: PageAnimationType, backStyle: PageAnimationType = style) {
+    private fun show(style: PageAnimationType, backStyle: PageAnimationType = style, android: Boolean = false) {
         compose.setContent {
             CompositionLocalProvider(
                 LocalPageAnimation provides style,
                 LocalBackAnimation provides backStyle,
+                LocalAndroidBack provides android,
                 LocalReducedMotionOverride provides false,
             ) {
                 nav = rememberNavController()
@@ -58,7 +59,7 @@ class PageBackGestureTest {
                         navController = nav,
                         startDestination = "beneath",
                         pages = PageTransitions(style, reduced = false),
-                        gesture = BackGestureTransitions(backStyle, BackGestureSpeed.Standard.ms, reduced = false),
+                        gesture = BackGestureTransitions(backStyle, BackGestureSpeed.Standard.ms, reduced = false, android = android),
                         beneath = ShellBeneath(),
                         contentAlignment = if (style == PageAnimationType.LinuxWindow) Alignment.BottomCenter else Alignment.Center,
                     ) {
@@ -149,6 +150,22 @@ class PageBackGestureTest {
         assertNotEquals(Color.Blue, middle)
         assertEquals(middle, pixelAt(0.08f, 0.5f), "nothing like a card at 0.7 of the screen, which would have ended at 0.15")
         assertEquals(middle, pixelAt(0.5f, 0.06f))
+    }
+
+    @Test
+    fun androidsOwn_followsTheFingerAtOnce_shrinkingTheWholePageTowardsIt() {
+        // A short pull - a third of the way - in the window style's pages: an eased close would have the window hardly sunk yet.
+        show(PageAnimationType.LinuxWindow, android = true)
+        drag(0.3f)
+        dump("android")
+        assertEquals(Color.Red, pixelAt(0.5f, 0.5f), "the page is still there, whole, not faded")
+        assertNotEquals(Color.Red, pixelAt(0.5f, 0.015f), "it has already shrunk away from the top edge")
+        assertEquals(Color.Blue, pixelAt(0.03f, 0.5f), "the page beneath waits off to the side the finger came from")
+        assertEquals(Color.Red, pixelAt(0.95f, 0.5f), "it has drifted towards the finger, not shrunk to the middle")
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        assertEquals("beneath", nav.currentDestination?.route)
+        for ((x, y) in listOf(0.02f to 0.02f, 0.5f to 0.5f, 0.98f to 0.98f)) assertEquals(Color.Blue, pixelAt(x, y))
     }
 
     /** What is on screen, to look at: `app/build/qa_back_gesture/`. */

@@ -79,6 +79,36 @@ class NfcCardExchangeTest {
     }
 
     @Test
+    fun anExpiryThatIsNotAMonthAndAYear_isRefused() {
+        val valid = card.toNfcExchangePayload()
+        val month = "\"expiryMonth\":\"09\""
+        val year = "\"expiryYear\":\"29\""
+        assertTrue(month in valid && year in valid, "the payload spells the expiry as the test expects")
+        val refused = listOf(
+            valid.replace(month, "\"expiryMonth\":\"13\""),
+            valid.replace(month, "\"expiryMonth\":\"0\""),
+            valid.replace(month, "\"expiryMonth\":\"\""),
+            valid.replace(month, "\"expiryMonth\":\"Sep\""),
+            valid.replace(month, "\"expiryMonth\":\"009\""),
+            valid.replace(month, "\"expiryMonth\":null"),
+            valid.replace(month, "\"expiryMonth\":\"${"9".repeat(500)}\""),
+            valid.replace(year, "\"expiryYear\":\"2\""),
+            valid.replace(year, "\"expiryYear\":\"202\""),
+            valid.replace(year, "\"expiryYear\":\"20299\""),
+            valid.replace(year, "\"expiryYear\":\"<b>29</b>\""),
+            valid.replace(year, "\"expiryYear\":\"${"x".repeat(500)}\""),
+        )
+        for (payload in refused) assertNull(parseCardFromNfcPayload(payload), "should refuse: ${payload.take(160)}")
+
+        // What a card can say is still read: a month without its zero, a year in full, and a tag written without either.
+        assertEquals("9", assertNotNull(parseCardFromNfcPayload(valid.replace(month, "\"expiryMonth\":\"9\""))).expiryMonth)
+        assertEquals("2029", assertNotNull(parseCardFromNfcPayload(valid.replace(year, "\"expiryYear\":\"2029\""))).expiryYear)
+        val bare = assertNotNull(parseCardFromNfcPayload("""{"type":"normpix_card","cardNumber":"4111111111111111"}"""))
+        assertEquals("12", bare.expiryMonth)
+        assertEquals("30", bare.expiryYear)
+    }
+
+    @Test
     fun oversizedText_isCapped_andGroupedNumbersAreAccepted() {
         val long = "x".repeat(500)
         val received = assertNotNull(

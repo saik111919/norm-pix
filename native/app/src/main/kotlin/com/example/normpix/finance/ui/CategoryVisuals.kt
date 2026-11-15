@@ -397,6 +397,7 @@ val AccountKind.icon: ImageVector
         AccountKind.Card -> Icons.Outlined.CreditCard
         AccountKind.Wallet -> Icons.Outlined.AccountBalanceWallet
         AccountKind.Savings -> Icons.Outlined.Savings
+        AccountKind.Loan -> Icons.Outlined.RequestQuote
         AccountKind.Other -> Icons.Outlined.Wallet
     }
 
@@ -407,5 +408,6 @@ val AccountKind.label: String
         AccountKind.Card -> "Card"
         AccountKind.Wallet -> "UPI / e-wallet"
         AccountKind.Savings -> "Savings"
+        AccountKind.Loan -> "Loan"
         AccountKind.Other -> "Other"
     }

@@ -1,5 +1,6 @@
 package com.example.normpix.finance.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import com.example.normpix.ui.components.AppLinearProgress
 
@@ -57,6 +59,7 @@ import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.MoneyFormatter
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.pathName
+import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.StatusTone
 import com.example.normpix.ui.theme.resolve
@@ -97,7 +100,9 @@ fun TransactionTile(
     val spokenDetails = if (showDate) details + shortDate(t.occurredAt) else details
     val amountText = finance.money.format(t.amount)
     val spoken = "${direction?.label ?: t.type.label}, $amountText, $title, ${spokenDetails.joinToString(", ")}" +
-        if (t.recurringId != null) ", recurring" else ""
+        (if (t.recurringId != null) ", recurring" else "") +
+        // One part of a payment that was shared out between categories: its own row, its own category and amount.
+        (if (t.splitGroup != null) ", part of a split payment" else "")
 
     LedgerRow(
         title = title,
@@ -111,6 +116,7 @@ fun TransactionTile(
         repeating = t.recurringId != null,
         note = if (showDate) shortDate(t.occurredAt) else null,
         direction = direction,
+        split = t.splitGroup != null,
     )
 }
 
@@ -137,6 +143,8 @@ internal fun LedgerRow(
     muted: Boolean = false,
     /** A reminder is set for it (a repeating payment's): a small bell shows after the repeat mark. */
     reminder: Boolean = false,
+    /** It is one part of a split payment: a small "Split" chip leads its line of details. */
+    split: Boolean = false,
 ) {
     val finance = rememberFinanceState()
     // At large text a row gets room for a second line of its title and its details, instead of cutting them short.
@@ -157,6 +165,10 @@ internal fun LedgerRow(
         headlineContent = { Text(title, maxLines = if (roomy) 2 else 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (split) {
+                    SplitChip()
+                    Spacer(Modifier.width(AppSpacing.xs))
+                }
                 if (repeating) {
                     Icon(Icons.Rounded.Repeat, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(AppSpacing.xs))
@@ -181,6 +193,21 @@ internal fun LedgerRow(
                 }
             }
         },
+    )
+}
+
+/** The small tonal "Split" tag on the row of one part of a split payment (the row's spoken words say it too: it is never colour alone). */
+@Composable
+internal fun SplitChip(modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    Text(
+        "Split",
+        style = MaterialTheme.typography.labelSmall,
+        color = scheme.onSecondaryContainer,
+        modifier = modifier
+            .clip(AppRadius.rFull)
+            .background(scheme.secondaryContainer)
+            .padding(horizontal = AppSpacing.sm, vertical = AppSpacing.xxs),
     )
 }
 

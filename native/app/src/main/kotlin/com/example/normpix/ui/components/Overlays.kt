@@ -301,6 +301,13 @@ class SheetDismissGuard {
 private val LocalSheetDismissGuard = compositionLocalOf<SheetDismissGuard?> { null }
 
 /**
+ * Inside a sheet: whether it is on its way out - saved, swiped away, backed out of, its scrim tapped - from the moment it starts to go
+ * until it has gone, while what is in it is still on screen. False outside a sheet. Read it in a snapshot flow: it changes as the
+ * sheet moves. (The card form ends its autofill session here, before its fields leave the screen; see `AddCardSheet`.)
+ */
+val LocalSheetClosing = compositionLocalOf<() -> Boolean> { { false } }
+
+/**
  * Inside a sheet: while [needed] is true, a dismissal gesture first runs [confirm] and the sheet only
  * closes if it returns true. Closing through the sheet's own `dismiss` callback is never held up.
  */
@@ -431,8 +438,12 @@ fun OverlayHost(overlays: AppOverlays) {
                                 .union(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
                         ),
                 ) {
+                    // Shown, and now heading for hidden: not the first frames, when it starts hidden on its way up.
+                    val closing = remember(sheetState) {
+                        { sheetState.currentValue != SheetValue.Hidden && sheetState.targetValue == SheetValue.Hidden }
+                    }
                     SeeThroughColors(surface.blurBehind, surface.ground) {
-                        CompositionLocalProvider(LocalSheetDismissGuard provides guard) {
+                        CompositionLocalProvider(LocalSheetDismissGuard provides guard, LocalSheetClosing provides closing) {
                             request.content { value ->
                                 scope.launch {
                                     guard.released = true

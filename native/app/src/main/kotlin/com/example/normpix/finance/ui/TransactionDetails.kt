@@ -11,8 +11,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ContentCut
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.NotificationAdd
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Button
@@ -46,7 +48,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class DetailAction { Edit, Remind, Delete }
+enum class DetailAction { Edit, Remind, Delete, EditSplit, Unsplit }
 
 /**
  * One transaction as a receipt - the badge, who it was with and the amount above a torn line, the details below it - with
@@ -63,9 +65,18 @@ fun TransactionDetailsSheet(
     snapshot: suspend (GraphicsLayer) -> Bitmap = { it.toImageBitmap().asAndroidBitmap() },
     /** Whether "Remind me" is offered (a reminder about this transaction, already attached to it). */
     canRemind: Boolean = false,
+    /** Opens the transactions with a tag of this one's (its chips under the receipt); null shows the chips without a way on. */
+    onTag: ((Long) -> Unit)? = null,
+    /**
+     * Every part of the split payment [transaction] is one part of (this one among them), in the order they were entered; empty for a
+     * payment that is not split. The receipt is then the whole payment - its total and a line for each part - and the actions are Edit
+     * split, Unsplit and Delete (which deletes every part).
+     */
+    parts: List<FinanceTransaction> = emptyList(),
     onAction: (DetailAction?) -> Unit,
 ) {
     val finance = rememberFinanceState()
+    val isSplit = parts.size >= 2
     val scheme = MaterialTheme.colorScheme
     // The sheet's own tone, solid: the receipt's paper is a tint over it (the sheet lets the page show through), so the picture
     // has to be laid on this and not on the tint, which would leave it as transparent as the sheet is.
@@ -75,7 +86,7 @@ fun TransactionDetailsSheet(
     val receipts = LocalAppContainer.current.receipts
     val density = LocalDensity.current
     val is24Hour = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
-    val receipt = receiptOf(transaction, finance, is24Hour)
+    val receipt = receiptOf(transaction, finance, is24Hour, parts)
     // What the receipt draws is recorded as it is drawn, so it can be drawn again as the picture that is shared.
     val layer = rememberGraphicsLayer()
     val picture: suspend () -> Boolean = {
@@ -99,6 +110,13 @@ fun TransactionDetailsSheet(
                 drawLayer(layer)
             },
         )
+        // Its tags, under the receipt rather than on it: they are the user's own labels, not part of what is shared. Each opens its
+        // tag's transactions.
+        val tags = finance.tagsOf(transaction.tagIds)
+        if (tags.isNotEmpty()) {
+            Spacer(Modifier.height(AppSpacing.md))
+            TagChips(tags, onOpen = { tag -> tag.id?.let { id -> onTag?.invoke(id) } })
+        }
         Spacer(Modifier.height(AppSpacing.lg))
         Button(
             // The options sheet opens over this one, so the receipt stays where it is behind it.
@@ -117,9 +135,16 @@ fun TransactionDetailsSheet(
         ConnectedButtonGroup(
             buttons = buildList {
                 // One calm fill for all: only Delete's words are in the warning colour, so it is visibly destructive without shouting.
-                add(GroupButton("Edit", Icons.Outlined.Edit, scheme.surfaceContainerHighest, scheme.onSurface) { onAction(DetailAction.Edit) })
-                if (canRemind) {
-                    add(GroupButton("Remind", Icons.Outlined.NotificationAdd, scheme.surfaceContainerHighest, scheme.onSurface) { onAction(DetailAction.Remind) })
+                if (isSplit) {
+                    // A split payment: its parts are edited together, or put back as one. (No Remind here: three segments are what a phone's
+                    // width holds, and a reminder is about one payment.)
+                    add(GroupButton("Edit split", Icons.Outlined.ContentCut, scheme.surfaceContainerHighest, scheme.onSurface) { onAction(DetailAction.EditSplit) })
+                    add(GroupButton("Unsplit", Icons.Outlined.Layers, scheme.surfaceContainerHighest, scheme.onSurface) { onAction(DetailAction.Unsplit) })
+                } else {
+                    add(GroupButton("Edit", Icons.Outlined.Edit, scheme.surfaceContainerHighest, scheme.onSurface) { onAction(DetailAction.Edit) })
+                    if (canRemind) {
+                        add(GroupButton("Remind", Icons.Outlined.NotificationAdd, scheme.surfaceContainerHighest, scheme.onSurface) { onAction(DetailAction.Remind) })
+                    }
                 }
                 add(GroupButton("Delete", Icons.Outlined.DeleteOutline, scheme.surfaceContainerHighest, scheme.error) { onAction(DetailAction.Delete) })
             },

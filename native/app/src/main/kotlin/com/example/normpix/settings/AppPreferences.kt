@@ -7,6 +7,7 @@ import com.materialkolor.PaletteStyle
 import com.example.normpix.availability.AvailabilityRule
 import com.example.normpix.availability.ScheduledFeature
 import com.example.normpix.availability.WeeklySchedule
+import com.example.normpix.backup.AutoBackupProblem
 import com.example.normpix.backup.BackupFreshness
 import java.time.DayOfWeek
 import java.time.LocalTime
@@ -83,23 +84,33 @@ enum class PageAnimationType(val label: String, val description: String) {
 
 /**
  * What the back gesture shows as it is dragged, everywhere it goes back - a tab, a pushed page, a sheet (owner, 2026-11-11: "not
- * consistent throughout the app ... include multiple options"). [PageStyle], the default, is what it always was meant to be: the page
- * closing the way the page style closes it. The others close it one fixed way, whatever the pages use.
+ * consistent throughout the app ... include multiple options"). [System], the default since 2026-11-14 (owner: "the predictive back
+ * follows the system back gesture for better feel"), is Android's own back preview, following the finger as it moves; a phone that
+ * chose another style keeps it. [PageStyle] (the default before) closes the page the way the page style closes it; the others close
+ * it one fixed way, whatever the pages use. Stored by name.
  */
 enum class BackGestureStyle(val label: String, val description: String) {
+    System("Android", "Follows your finger the way Android's own back does: what you leave shrinks towards your finger over what you go back to, and leaves when you let go"),
     PageStyle("Match pages", "What you leave closes under your finger the way your page style closes it"),
     Shrink("Shrink", "It shrinks a little and drifts towards your finger as it fades, like Android's own back preview"),
     Slide("Slide", "It slides off to the side with your finger"),
     Fade("Fade", "It fades away where it is"),
     ;
 
-    /** The page style whose way of closing a gesture in this style plays: the pages' own ([pages]), or the one it names. */
+    /**
+     * The page style whose way of closing a gesture in this style plays: the pages' own ([pages]), or the one it names. [System] draws
+     * Android's own preview instead ([isAndroid]); the type it names is only what stands in for it where a page style is asked for.
+     */
     fun animation(pages: PageAnimationType): PageAnimationType = when (this) {
+        System -> PageAnimationType.System
         PageStyle -> pages
         Shrink -> PageAnimationType.System
         Slide -> PageAnimationType.SlideHorizontal
         Fade -> PageAnimationType.FadeThrough
     }
+
+    /** Whether this is Android's own back preview, which follows the finger as it is (not the start of a page style's close). */
+    val isAndroid: Boolean get() = this == System
 }
 
 /**
@@ -371,6 +382,40 @@ enum class UpdateCheckWhen(val label: String, val description: String) {
 /** The time of day a check at a set time is made around until the user picks another: 9:00 PM, as minutes since midnight. */
 const val DEFAULT_UPDATE_CHECK_MINUTE = 21 * 60
 
+/** How often an automatic backup is made (Settings > Data & backup > Automatic backup): weekly until the user picks another. */
+enum class AutoBackupEvery(val label: String, val description: String, val intervalMs: Long) {
+    Daily("Daily", "Every day", 24L * 60 * 60 * 1000),
+    Weekly("Weekly", "Every week", 7L * 24 * 60 * 60 * 1000),
+    Monthly("Monthly", "Every 30 days", 30L * 24 * 60 * 60 * 1000),
+}
+
+/**
+ * How much of a credit card's limit may be used before NormPix says so (Settings > Wallet & Cards > Card limit warning): a card at
+ * or past [percent] of its limit gets a notification, and one that is paid back under it loses the notification at once. Lenders
+ * look at how much of a limit is used, and keeping a card under 30% is the usual advice, so that is where it starts (owner,
+ * 2026-11-14). The names are what is stored, so they never change.
+ */
+enum class CardLimitWarning(val label: String, val description: String, val percent: Int) {
+    Off("Off", "No warnings about how much of a card's limit is used", 0),
+    At30("30%", "The usual advice: keep a card under 30% of its limit", 30),
+    At50("50%", "When half of a card's limit is used", 50),
+    At75("75%", "When three-quarters of a card's limit is used", 75),
+    At90("90%", "Only when a card's limit is nearly all used", 90),
+    ;
+
+    /** Whether any card is warned about. */
+    val on: Boolean get() = percent > 0
+}
+
+/**
+ * Where the year starts for the yearly review by tag (Settings > Finance > Year starts in): April, as India's financial year does
+ * (April to March), until the user picks January (the calendar year). The names are what is stored, so they never change.
+ */
+enum class YearStart(val label: String, val description: String, val month: java.time.Month) {
+    April("April", "India's financial year, April to March", java.time.Month.APRIL),
+    January("January", "The calendar year, January to December", java.time.Month.JANUARY),
+}
+
 /** The longest name the profile keeps: enough for a full name, short enough for a header. */
 const val MAX_PROFILE_NAME = 40
 
@@ -391,7 +436,7 @@ data class AppPrefsState(
     /** How the dock moves its pill from one tab to the next. */
     val dockSelection: DockSelectionStyle = DockSelectionStyle.Glide,
     /** What the back gesture shows as it is dragged, and how long its close takes (Settings > Appearance > Transitions > Back gesture). */
-    val backGestureStyle: BackGestureStyle = BackGestureStyle.PageStyle,
+    val backGestureStyle: BackGestureStyle = BackGestureStyle.System,
     val backGestureSpeed: BackGestureSpeed = BackGestureSpeed.Standard,
     val walletCardActionStyle: WalletCardActionStyle = WalletCardActionStyle.Bar,
     val bankIconStyle: BankIconStyle = BankIconStyle.Full,
@@ -413,6 +458,11 @@ data class AppPrefsState(
      * confirmation"). Off is the way it was: gone at once, with Undo for a few seconds.
      */
     val swipeDeleteAsks: Boolean = true,
+    /**
+     * Settings > Finance > Year starts in: the month a year of the review by tag starts in (April, India's financial year, until the
+     * user picks January). About the user's money, not this phone, so a backup carries it.
+     */
+    val yearStart: YearStart = YearStart.April,
     val clipboardTimeout: ClipboardTimeout = ClipboardTimeout.Sec10,
     /** Cards tilt a few degrees with the phone's motion. Off, or with animations removed system-wide, they stay flat. */
     val cardTiltEnabled: Boolean = true,
@@ -426,6 +476,17 @@ data class AppPrefsState(
      * scan, an NFC tap or a cards file is kept without one. Turning it off deletes the CVVs already saved, after asking.
      */
     val cardCvvEnabled: Boolean = true,
+    /**
+     * Whether the card form tells the phone's autofill service (Autofill with Google, a password manager) which of its fields are
+     * the card's, so the keyboard can offer a saved card or "Scan card" (owner, 2026-11-14: "like how Swiggy does"). Off by default:
+     * what is picked or scanned then goes through that service, which is not this app. NormPix never asks it to save a card.
+     */
+    val cardKeyboardFill: Boolean = false,
+    /**
+     * Settings > Wallet & Cards > Card limit warning: how much of a credit card's limit may be used before it is a notification
+     * (30% until the user picks another, or Off). Not about this phone, so a backup carries it.
+     */
+    val cardLimitWarning: CardLimitWarning = CardLimitWarning.At30,
     /**
      * Settings > Wallet & Cards > Store cards. Off, NormPix keeps no cards at all: the vault is emptied (after asking), the Wallet
      * shows accounts only, and everything about cards leaves the settings and the search. Turning it back on starts empty.
@@ -486,6 +547,26 @@ data class AppPrefsState(
     val backupReminderDays: Int = BackupFreshness.DEFAULT_REMINDER_DAYS,
     /** Until when "Later" on the backup banner has put it off (epoch millis; 0 for not at all). About this phone, like [lastBackupAt]. */
     val backupNudgeSnoozedUntil: Long = 0L,
+    /**
+     * Settings > Data & backup > Automatic backup (see `backup/AutoBackup.kt`): a locked app backup made by itself into a folder the
+     * user picked. Everything about it is about this phone - the folder's access, the password sealed here - so none of it is in a
+     * backup, and resetting settings keeps it (the password would otherwise be left without its switch).
+     */
+    val autoBackupEnabled: Boolean = false,
+    /** The folder automatic backups go to: the tree URI the user picked, whose access NormPix keeps; empty when there is none. */
+    val autoBackupFolder: String = "",
+    /** That folder's name, as the picker showed it when it was picked. */
+    val autoBackupFolderName: String = "",
+    val autoBackupEvery: AutoBackupEvery = AutoBackupEvery.Weekly,
+    /** Saved cards go into automatic backups too, locked with their password. Off unless the user turns it on. */
+    val autoBackupCards: Boolean = false,
+    /** When the last automatic backup was written (epoch millis; 0 for none), and its file's name. */
+    val autoBackupLastAt: Long = 0L,
+    val autoBackupLastFile: String = "",
+    /** What went wrong with the last automatic backup (or, for [AutoBackupProblem.CardsLeftOut], what it left out); null when nothing. */
+    val autoBackupProblem: AutoBackupProblem? = null,
+    /** When [autoBackupProblem] happened (epoch millis). */
+    val autoBackupProblemAt: Long = 0L,
     /** The newest crash report the user has seen or dismissed (epoch millis; 0 for none): a newer one is offered on Home. About this phone. */
     val crashLogSeenAt: Long = 0L,
     /** Which notifications (see `notifications/`) have been seen on this phone: their keys, as the Notifications page last showed them. */
@@ -499,8 +580,9 @@ data class AppPrefsState(
     /** How the built-in category icons are drawn, wherever a category shows. */
     val categoryIconStyle: CategoryIconStyle = CategoryIconStyle.ThreeD,
     /**
-     * Settings' own icons (the groups on the main Settings list) follow [categoryIconStyle] when it is 3D: a 3D picture on each
-     * group's tinted tile. Off keeps them the flat Material icons there, whatever the style.
+     * Settings' own icons (the groups on the main Settings list, and the leading icons of the rows on the pages under it) follow
+     * [categoryIconStyle] when it is 3D: a 3D picture on each group's tinted tile, a larger one in place of a row's own icon. Off
+     * keeps them the flat Material icons there, whatever the style.
      */
     val settingsIcons3d: Boolean = true,
     /** The shape behind those icons (and the people's avatars): a circle, as they have always been, unless the user picks another. */
@@ -624,10 +706,13 @@ class AppPreferences(private val prefs: SharedPreferences) {
             swipeActionsEnabled = prefs.getBoolean(K_SWIPE_ENABLED, defaults.swipeActionsEnabled),
             transactionSwipeActions = prefs.enum(K_TRANSACTION_SWIPE, defaults.transactionSwipeActions),
             swipeDeleteAsks = prefs.getBoolean(K_SWIPE_DELETE_ASKS, defaults.swipeDeleteAsks),
+            yearStart = prefs.enum(K_YEAR_START, defaults.yearStart),
             clipboardTimeout = prefs.enum(K_CLIPBOARD_TIMEOUT, defaults.clipboardTimeout),
             cardTiltEnabled = prefs.getBoolean(K_CARD_TILT, defaults.cardTiltEnabled),
             heroWeather = prefs.getBoolean(K_HERO_WEATHER, defaults.heroWeather),
             cardCvvEnabled = prefs.getBoolean(K_CARD_CVV, defaults.cardCvvEnabled),
+            cardKeyboardFill = prefs.getBoolean(K_CARD_KEYBOARD_FILL, defaults.cardKeyboardFill),
+            cardLimitWarning = prefs.enum(K_CARD_LIMIT_WARNING, defaults.cardLimitWarning),
             walletCardsEnabled = prefs.getBoolean(K_WALLET_CARDS, defaults.walletCardsEnabled),
             sheetBlurEnabled = prefs.getBoolean(K_SHEET_BLUR, defaults.sheetBlurEnabled),
             artworkColors = prefs.getBoolean(K_ARTWORK_COLORS, defaults.artworkColors),
@@ -645,6 +730,15 @@ class AppPreferences(private val prefs: SharedPreferences) {
             lastBackupAt = prefs.getLong(K_LAST_BACKUP_AT, defaults.lastBackupAt).coerceAtLeast(0L),
             backupReminderDays = BackupFreshness.normalise(prefs.getInt(K_BACKUP_REMINDER_DAYS, defaults.backupReminderDays)),
             backupNudgeSnoozedUntil = prefs.getLong(K_BACKUP_NUDGE_SNOOZED_UNTIL, defaults.backupNudgeSnoozedUntil).coerceAtLeast(0L),
+            autoBackupEnabled = prefs.getBoolean(K_AUTO_BACKUP, defaults.autoBackupEnabled),
+            autoBackupFolder = prefs.getString(K_AUTO_BACKUP_FOLDER, null) ?: defaults.autoBackupFolder,
+            autoBackupFolderName = prefs.getString(K_AUTO_BACKUP_FOLDER_NAME, null) ?: defaults.autoBackupFolderName,
+            autoBackupEvery = prefs.enum(K_AUTO_BACKUP_EVERY, defaults.autoBackupEvery),
+            autoBackupCards = prefs.getBoolean(K_AUTO_BACKUP_CARDS, defaults.autoBackupCards),
+            autoBackupLastAt = prefs.getLong(K_AUTO_BACKUP_LAST_AT, defaults.autoBackupLastAt).coerceAtLeast(0L),
+            autoBackupLastFile = prefs.getString(K_AUTO_BACKUP_LAST_FILE, null) ?: defaults.autoBackupLastFile,
+            autoBackupProblem = prefs.getString(K_AUTO_BACKUP_PROBLEM, null)?.let { name -> AutoBackupProblem.entries.firstOrNull { it.name == name } },
+            autoBackupProblemAt = prefs.getLong(K_AUTO_BACKUP_PROBLEM_AT, defaults.autoBackupProblemAt).coerceAtLeast(0L),
             crashLogSeenAt = prefs.getLong(K_CRASH_LOG_SEEN_AT, defaults.crashLogSeenAt).coerceAtLeast(0L),
             // One string, a key to a line: a set of strings is a value type the backup codec does not carry (and this is never backed up).
             notificationsSeen = prefs.getString(K_NOTIFICATIONS_SEEN, null).orEmpty().split('\n').filter { it.isNotEmpty() }.toSet(),
@@ -773,6 +867,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
     fun setSwipeDeleteAsks(asks: Boolean) =
         change({ copy(swipeDeleteAsks = asks) }) { putBoolean(K_SWIPE_DELETE_ASKS, asks) }
 
+    fun setYearStart(start: YearStart) =
+        change({ copy(yearStart = start) }) { putString(K_YEAR_START, start.name) }
+
     fun setClipboardTimeout(timeout: ClipboardTimeout) =
         change({ copy(clipboardTimeout = timeout) }) { putString(K_CLIPBOARD_TIMEOUT, timeout.name) }
 
@@ -784,6 +881,12 @@ class AppPreferences(private val prefs: SharedPreferences) {
     /** Only the settings flow that has dealt with the CVVs already saved should call this (see `CardsSettingsFlows`). */
     fun setCardCvvEnabled(enabled: Boolean) =
         change({ copy(cardCvvEnabled = enabled) }) { putBoolean(K_CARD_CVV, enabled) }
+
+    fun setCardKeyboardFill(enabled: Boolean) =
+        change({ copy(cardKeyboardFill = enabled) }) { putBoolean(K_CARD_KEYBOARD_FILL, enabled) }
+
+    fun setCardLimitWarning(level: CardLimitWarning) =
+        change({ copy(cardLimitWarning = level) }) { putString(K_CARD_LIMIT_WARNING, level.name) }
 
     /** Only the settings flow that has erased the cards already saved should call this with false (see `CardsSettingsFlows`). */
     fun setWalletCardsEnabled(enabled: Boolean) =
@@ -852,6 +955,93 @@ class AppPreferences(private val prefs: SharedPreferences) {
     /** Settings > Data & backup > Backup reminder: 0 (off) or one of [BackupFreshness.REMINDER_CHOICES]. */
     fun setBackupReminderDays(days: Int) = BackupFreshness.normalise(days).let { chosen ->
         change({ copy(backupReminderDays = chosen) }) { putInt(K_BACKUP_REMINDER_DAYS, chosen) }
+    }
+
+    /**
+     * Automatic backups are on, into the folder [folder] (a tree URI) called [folderName]. Only `AutoBackupService` calls this, once it
+     * has kept the folder's access and sealed the password. A problem from before is forgotten.
+     */
+    fun turnOnAutoBackup(folder: String, folderName: String) =
+        change({ copy(autoBackupEnabled = true, autoBackupFolder = folder, autoBackupFolderName = folderName, autoBackupProblem = null, autoBackupProblemAt = 0L) }) {
+            putBoolean(K_AUTO_BACKUP, true)
+            putString(K_AUTO_BACKUP_FOLDER, folder)
+            putString(K_AUTO_BACKUP_FOLDER_NAME, folderName)
+            remove(K_AUTO_BACKUP_PROBLEM)
+            remove(K_AUTO_BACKUP_PROBLEM_AT)
+        }
+
+    /**
+     * Automatic backups are off: the switch, the folder, "Include saved cards" and any problem are forgotten (how often, and when the
+     * last one was made, stay). Only `AutoBackupService` calls this, once the password is deleted and the folder's access given back.
+     */
+    fun turnOffAutoBackup() =
+        change({ copy(autoBackupEnabled = false, autoBackupFolder = "", autoBackupFolderName = "", autoBackupCards = false, autoBackupProblem = null, autoBackupProblemAt = 0L) }) {
+            remove(K_AUTO_BACKUP)
+            remove(K_AUTO_BACKUP_FOLDER)
+            remove(K_AUTO_BACKUP_FOLDER_NAME)
+            remove(K_AUTO_BACKUP_CARDS)
+            remove(K_AUTO_BACKUP_PROBLEM)
+            remove(K_AUTO_BACKUP_PROBLEM_AT)
+        }
+
+    /** Automatic backups go to [folder] (called [folderName]) from now on; a "folder gone" problem is over. Only `AutoBackupService` calls this. */
+    fun setAutoBackupFolder(folder: String, folderName: String) {
+        val clears = _state.value.autoBackupProblem == AutoBackupProblem.FolderGone
+        change({ copy(autoBackupFolder = folder, autoBackupFolderName = folderName, autoBackupProblem = if (clears) null else autoBackupProblem) }) {
+            putString(K_AUTO_BACKUP_FOLDER, folder)
+            putString(K_AUTO_BACKUP_FOLDER_NAME, folderName)
+            if (clears) {
+                remove(K_AUTO_BACKUP_PROBLEM)
+                remove(K_AUTO_BACKUP_PROBLEM_AT)
+            }
+        }
+    }
+
+    fun setAutoBackupEvery(every: AutoBackupEvery) = change({ copy(autoBackupEvery = every) }) { putString(K_AUTO_BACKUP_EVERY, every.name) }
+
+    /** Saved cards in automatic backups. Turning it on is for the settings flow that asked (and unlocked, with Wallet lock on). */
+    fun setAutoBackupCards(include: Boolean) = change({ copy(autoBackupCards = include) }) { putBoolean(K_AUTO_BACKUP_CARDS, include) }
+
+    /**
+     * An automatic backup was written at [atMillis] as [fileName]: it is the last one, and a real backup for "back up your data"
+     * ([recordBackup]: it is always the user's own data, whatever the screens show). [problem] is what it left out
+     * ([AutoBackupProblem.CardsLeftOut]), or null for a backup with nothing to say.
+     */
+    fun recordAutoBackup(atMillis: Long, fileName: String, problem: AutoBackupProblem? = null) =
+        change({
+            copy(
+                autoBackupLastAt = atMillis,
+                autoBackupLastFile = fileName,
+                autoBackupProblem = problem,
+                autoBackupProblemAt = if (problem != null) atMillis else 0L,
+                lastBackupAt = atMillis,
+                backupNudgeSnoozedUntil = 0L,
+            )
+        }) {
+            putLong(K_AUTO_BACKUP_LAST_AT, atMillis)
+            putString(K_AUTO_BACKUP_LAST_FILE, fileName)
+            if (problem != null) {
+                putString(K_AUTO_BACKUP_PROBLEM, problem.name)
+                putLong(K_AUTO_BACKUP_PROBLEM_AT, atMillis)
+            } else {
+                remove(K_AUTO_BACKUP_PROBLEM)
+                remove(K_AUTO_BACKUP_PROBLEM_AT)
+            }
+            putLong(K_LAST_BACKUP_AT, atMillis)
+            remove(K_BACKUP_NUDGE_SNOOZED_UNTIL)
+        }
+
+    /** An automatic backup at [atMillis] didn't happen, because of [problem]. */
+    fun recordAutoBackupProblem(problem: AutoBackupProblem, atMillis: Long) =
+        change({ copy(autoBackupProblem = problem, autoBackupProblemAt = atMillis) }) {
+            putString(K_AUTO_BACKUP_PROBLEM, problem.name)
+            putLong(K_AUTO_BACKUP_PROBLEM_AT, atMillis)
+        }
+
+    /** The last automatic backup's problem was dealt with (a new password was set). */
+    fun clearAutoBackupProblem() = change({ copy(autoBackupProblem = null, autoBackupProblemAt = 0L) }) {
+        remove(K_AUTO_BACKUP_PROBLEM)
+        remove(K_AUTO_BACKUP_PROBLEM_AT)
     }
 
     /** The crash reports up to [atMillis] have been seen (or dismissed): only a newer one is offered again. Never moves back. */
@@ -1031,10 +1221,12 @@ class AppPreferences(private val prefs: SharedPreferences) {
     fun resetToDefaults() {
         // The welcome tour is not a setting either: resetting settings must not bring it back, or take it away mid-way.
         // Nor is when the last backup was made: forgetting it would say "never backed up" about data that was.
+        // Nor are automatic backups: they rest on a password sealed on this phone and a folder's access kept here, which a reset
+        // of the preferences alone would leave behind without their switch. They are turned off where they are, never by a reset.
         val keep = setOf(
             K_EXACT_ALARM_PROMPTED, K_PROFILE_NAME, K_PROFILE_EMOJI, K_PROFILE_PHOTO, K_ONBOARDING_DONE,
             K_LAST_BACKUP_AT, K_BACKUP_NUDGE_SNOOZED_UNTIL, K_CRASH_LOG_SEEN_AT, K_CRASH_EXITS_CHECKED_AT, K_NOTIFICATIONS_SEEN,
-        )
+        ) + AUTO_BACKUP_KEYS
         _state.update {
             AppPrefsState(
                 profileName = it.profileName,
@@ -1043,6 +1235,15 @@ class AppPreferences(private val prefs: SharedPreferences) {
                 onboardingDone = it.onboardingDone,
                 lastBackupAt = it.lastBackupAt,
                 backupNudgeSnoozedUntil = it.backupNudgeSnoozedUntil,
+                autoBackupEnabled = it.autoBackupEnabled,
+                autoBackupFolder = it.autoBackupFolder,
+                autoBackupFolderName = it.autoBackupFolderName,
+                autoBackupEvery = it.autoBackupEvery,
+                autoBackupCards = it.autoBackupCards,
+                autoBackupLastAt = it.autoBackupLastAt,
+                autoBackupLastFile = it.autoBackupLastFile,
+                autoBackupProblem = it.autoBackupProblem,
+                autoBackupProblemAt = it.autoBackupProblemAt,
                 crashLogSeenAt = it.crashLogSeenAt,
                 notificationsSeen = it.notificationsSeen,
                 crashExitsCheckedAt = it.crashExitsCheckedAt,
@@ -1143,10 +1344,14 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_SWIPE_ENABLED = "swipe_actions_enabled"
         const val K_TRANSACTION_SWIPE = "transaction_swipe_actions"
         const val K_SWIPE_DELETE_ASKS = "swipe_delete_asks"
+        /** Where a year of the review by tag starts ([YearStart] by name). Persisted: never rename it. */
+        const val K_YEAR_START = "year_start"
         const val K_CLIPBOARD_TIMEOUT = "clipboard_timeout"
         const val K_CARD_TILT = "card_tilt_enabled"
         const val K_HERO_WEATHER = "hero_weather"
         const val K_CARD_CVV = "card_cvv_enabled"
+        const val K_CARD_KEYBOARD_FILL = "card_keyboard_fill"
+        const val K_CARD_LIMIT_WARNING = "card_limit_warning"
         const val K_WALLET_CARDS = "wallet_cards_enabled"
         const val K_SHEET_BLUR = "sheet_blur_enabled"
         const val K_ARTWORK_COLORS = "artwork_colors"
@@ -1164,6 +1369,32 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_LAST_BACKUP_AT = "last_backup_at"
         const val K_BACKUP_REMINDER_DAYS = "backup_reminder_days"
         const val K_BACKUP_NUDGE_SNOOZED_UNTIL = "backup_nudge_snoozed_until"
+        const val K_AUTO_BACKUP = "auto_backup_enabled"
+        const val K_AUTO_BACKUP_FOLDER = "auto_backup_folder"
+        const val K_AUTO_BACKUP_FOLDER_NAME = "auto_backup_folder_name"
+        const val K_AUTO_BACKUP_EVERY = "auto_backup_every"
+        const val K_AUTO_BACKUP_CARDS = "auto_backup_cards"
+        const val K_AUTO_BACKUP_LAST_AT = "auto_backup_last_at"
+        const val K_AUTO_BACKUP_LAST_FILE = "auto_backup_last_file"
+        const val K_AUTO_BACKUP_PROBLEM = "auto_backup_problem"
+        const val K_AUTO_BACKUP_PROBLEM_AT = "auto_backup_problem_at"
+
+        /**
+         * Everything about automatic backups (see [AppPrefsState.autoBackupEnabled]): about this phone - its folder's access, the
+         * password sealed here - so never in a backup (a restored file must not turn them on or point them at a folder) and kept by
+         * a reset of the settings.
+         */
+        val AUTO_BACKUP_KEYS: Set<String> = setOf(
+            K_AUTO_BACKUP,
+            K_AUTO_BACKUP_FOLDER,
+            K_AUTO_BACKUP_FOLDER_NAME,
+            K_AUTO_BACKUP_EVERY,
+            K_AUTO_BACKUP_CARDS,
+            K_AUTO_BACKUP_LAST_AT,
+            K_AUTO_BACKUP_LAST_FILE,
+            K_AUTO_BACKUP_PROBLEM,
+            K_AUTO_BACKUP_PROBLEM_AT,
+        )
         const val K_CRASH_LOG_SEEN_AT = "crash_log_seen_at"
         const val K_NOTIFICATIONS_SEEN = "notifications_seen"
         const val K_CRASH_EXITS_CHECKED_AT = "crash_exits_checked_at"
@@ -1211,6 +1442,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
          *   registered here (kept apart, under a key that never leaves this phone), and it is a lock like the one above.
          * - [K_CARD_CVV], [K_WALLET_CARDS]: whether this phone keeps CVVs and cards at all. Each is tied to what is stored here
          *   (turning one off deletes it, after asking), so a file must neither switch it off over saved cards nor back on.
+         * - [K_CARD_KEYBOARD_FILL]: whether the card form is shown to this phone's autofill service; opening it up is this phone's call.
          * - [K_REMINDER_OVERLAY]: whether reminders float over other apps; it rests on a permission granted on this phone.
          * Update records and the card vault are in files of their own, not in these preferences.
          */
@@ -1235,10 +1467,15 @@ class AppPreferences(private val prefs: SharedPreferences) {
             K_NFC_REVEAL_REGISTERED,
             K_CARD_CVV,
             K_WALLET_CARDS,
+            // Letting the phone's autofill service see the card form is a choice made on this phone, for its autofill service: a
+            // file must not be able to switch it on.
+            K_CARD_KEYBOARD_FILL,
             // Floating reminders draw over other apps on this phone, under a permission only this phone's user grants: a file
             // must not be able to switch them on. (The list of apps they keep away from is carried; it is only names.)
             K_REMINDER_OVERLAY,
-        )
+            // Automatic backups write into a folder this phone was given, locked with a password sealed on this phone: a file must
+            // neither turn them on, nor point them at a folder, nor say when the last one was.
+        ) + AUTO_BACKUP_KEYS
 
         fun ScheduledFeature.key(field: String) = "availability_${name.lowercase()}_$field"
         fun LocalTime.minuteOfDay() = hour * 60 + minute

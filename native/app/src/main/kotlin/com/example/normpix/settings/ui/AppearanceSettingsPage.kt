@@ -111,6 +111,20 @@ internal val AppearanceSection.icon: ImageVector
         AppearanceSection.Layouts -> Icons.Outlined.ViewCarousel
     }
 
+/** The emoji a section is pictured by when Settings' icons are 3D ([SettingsGlyph]): one of its own, as its colour is. */
+internal val AppearanceSection.emoji: String
+    get() = when (this) {
+        AppearanceSection.Colors -> SettingsRowEmoji.PALETTE
+        AppearanceSection.AppIcon -> SettingsRowEmoji.PHONE
+        AppearanceSection.InterfaceFont -> SettingsRowEmoji.PEN
+        AppearanceSection.CategoryIcons -> SettingsRowEmoji.TAG
+        AppearanceSection.ProgressIndicators -> SettingsRowEmoji.HOURGLASS
+        AppearanceSection.Transitions -> SettingsRowEmoji.SWIPE
+        AppearanceSection.Effects -> SettingsRowEmoji.SPARKLES
+        AppearanceSection.Controls -> SettingsRowEmoji.JOYSTICK
+        AppearanceSection.Layouts -> SettingsRowEmoji.FILE_BOX
+    }
+
 /** What a section's row says under its name: the choice made now. [appIcon] is the launcher icon in use (Android holds that one). */
 internal fun AppearanceSection.summary(prefs: AppPrefsState, appIcon: AppIcon): String = when (this) {
     AppearanceSection.Colors -> when {
@@ -182,6 +196,7 @@ fun AppearanceSettingsPage() {
                                         supporting = section.summary(prefs, appIcon),
                                         icon = section.icon,
                                         hue = section.hue,
+                                        emoji = section.emoji,
                                         checked = prefs.colorSource == ColorSource.System && wallpaperColors,
                                         enabled = wallpaperColors,
                                         switchLabel = USE_WALLPAPER_COLORS,
@@ -197,6 +212,7 @@ fun AppearanceSettingsPage() {
                                         supporting = section.summary(prefs, appIcon),
                                         icon = section.icon,
                                         hue = section.hue,
+                                        emoji = section.emoji,
                                         onClick = { navigator.openAppearance(section) },
                                         trailing = {
                                             Icon(

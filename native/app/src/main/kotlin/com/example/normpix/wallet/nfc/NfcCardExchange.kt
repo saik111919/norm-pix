@@ -10,11 +10,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import java.io.IOException
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -28,6 +30,12 @@ sealed class NfcInletState {
     /** Something touched the phone and is being read. */
     object Detected : NfcInletState()
     object Receiving : NfcInletState()
+
+    /** A phone sharing a card and this one agreed a key: both show [code]; waiting for Match on the other phone. */
+    data class Comparing(val code: String) : NfcInletState()
+
+    /** A phone sharing a card was found, but no card came ([problem] says why). Nothing was stored. */
+    data class ShareFailed(val problem: ShareProblem) : NfcInletState()
 
     /** A card was received. [alreadySaved]: the wallet already holds it, so nothing was added. */
     data class Success(val card: StoredCard, val alreadySaved: Boolean = false) : NfcInletState()
@@ -52,8 +60,20 @@ sealed class NfcInletState {
 
 /** Lifecycle state for the NFC Outlet (card sender) mode. */
 sealed class NfcOutletState {
+    /** [card] is armed; waiting for a phone on Receive. */
     data class Active(val card: StoredCard) : NfcOutletState()
+
+    /**
+     * A phone got as far as the code: [pairing]'s code is shown with Match and Doesn't match. [confirmed]: Match was tapped and
+     * the sealed card is on its way.
+     */
+    data class Comparing(val card: StoredCard, val pairing: NfcShareResponder.Pairing, val confirmed: Boolean = false) : NfcOutletState()
+
+    /** The card went, sealed, to the phone whose code matched; nothing is armed any more. */
     data class Transferred(val card: StoredCard) : NfcOutletState()
+
+    /** Doesn't match was tapped: nothing was shared and nothing is armed (Share again re-arms). */
+    data class NotShared(val card: StoredCard) : NfcOutletState()
 }
 
 /**
@@ -92,8 +112,10 @@ fun parseCardFromNfcPayload(raw: String): StoredCard? = runCatching {
     // A card number is digits (spaces and dashes are only grouping): anything else is not a card.
     val digits = cardNumber.filter { it.isDigit() }
     if (cardNumber.any { !it.isDigit() && it != ' ' && it != '-' } || digits.length !in MIN_DIGITS..MAX_DIGITS) return null
-    val expiryMonth = json["expiryMonth"]?.jsonPrimitive?.content ?: "12"
-    val expiryYear = json["expiryYear"]?.jsonPrimitive?.content ?: "30"
+    // An expiry is a month and a year in digits. What arrives is whatever the tag or phone that was tapped chose to send, so
+    // anything else in their place makes it no card, as a number that isn't one does: it is never kept, or shown on a card.
+    val expiryMonth = expiryOf(json["expiryMonth"], missing = "12") { it.length <= 2 && it.toInt() in 1..12 } ?: return null
+    val expiryYear = expiryOf(json["expiryYear"], missing = "30") { it.length == 2 || it.length == 4 } ?: return null
     // Optional, and only ever a 3-4 digit code: anything else (absent, null, empty, junk) means the card has none.
     val cvv = (json["cvv"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.length in 3..4 && it.all(Char::isDigit) }.orEmpty()
     val kindKey = json["kind"]?.jsonPrimitive?.content ?: "credit"
@@ -111,6 +133,12 @@ fun parseCardFromNfcPayload(raw: String): StoredCard? = runCatching {
         createdAt = LocalDateTime.now(),
     )
 }.getOrNull()
+
+/** An expiry field as it arrived: [missing] when the payload has none, null when what it has isn't plain digits that [fits] takes. */
+private fun expiryOf(field: JsonElement?, missing: String, fits: (String) -> Boolean): String? {
+    val text = field?.jsonPrimitive?.content?.trim() ?: return missing
+    return text.takeIf { it.isNotEmpty() && it.all { c -> c in '0'..'9' } && fits(it) }
+}
 
 private const val MAX_TEXT = 64
 private const val MIN_DIGITS = 12
@@ -143,13 +171,57 @@ class NfcExchangeController(private val host: ActivityHost) {
     @Volatile
     private var session = 0
 
-    /** Starts NFC Outlet mode to broadcast [card] via HCE. */
+    /**
+     * Starts NFC Outlet mode: [card] is armed for the card-emulation service, to go sealed to the next reader whose code the user
+     * matches. The service's events arrive on the main thread (where Android runs it).
+     */
     fun startOutlet(card: StoredCard) {
         stopInlet()
         _outletState.value = NfcOutletState.Active(card)
-        NfcCardOutletService.setOutletCard(card.toNfcExchangePayload()) {
-            _outletState.value = NfcOutletState.Transferred(card)
+        NfcCardOutletService.setOutletCard(
+            card.toNfcExchangePayload(),
+            object : NfcShareResponder.Events {
+                override fun onCode(pairing: NfcShareResponder.Pairing) {
+                    _outletState.value = NfcOutletState.Comparing(card, pairing)
+                }
+
+                override fun onCodeWithdrawn() {
+                    if (_outletState.value is NfcOutletState.Comparing) _outletState.value = NfcOutletState.Active(card)
+                }
+
+                override fun onTransferred() {
+                    _outletState.value = NfcOutletState.Transferred(card)
+                }
+            },
+        )
+    }
+
+    /**
+     * The user tapped Match for [pairing]'s code. The card goes at the reader's next request; if that share has already ended
+     * (the phones parted), the sheet goes back to waiting and a new share needs its own Match.
+     */
+    fun confirmShare(pairing: NfcShareResponder.Pairing) {
+        val shown = _outletState.value as? NfcOutletState.Comparing ?: return
+        if (shown.pairing != pairing || shown.confirmed) return
+        _outletState.value = if (NfcCardOutletService.responder.confirm(pairing.id)) {
+            shown.copy(confirmed = true)
+        } else {
+            NfcOutletState.Active(shown.card)
         }
+    }
+
+    /**
+     * The user tapped Doesn't match: the card is disarmed at once (even if that share had just ended - they said no) and the
+     * reader, if it is still there, is told nothing will come.
+     */
+    fun declineShare(pairing: NfcShareResponder.Pairing) {
+        NfcCardOutletService.responder.decline(pairing.id)
+        val card = when (val shown = _outletState.value) {
+            is NfcOutletState.Comparing -> shown.card
+            is NfcOutletState.Active -> shown.card
+            else -> return
+        }
+        _outletState.value = NfcOutletState.NotShared(card)
     }
 
     /** Stops NFC Outlet mode. */
@@ -202,7 +274,21 @@ class NfcExchangeController(private val host: ActivityHost) {
                     if (session == current) _inletState.value = NfcInletState.Detected
                 }
                 val channel = AndroidTagChannel(tag)
-                val read = readTag(channel)
+                // A phone sharing a card: the code goes up as soon as both phones have it, while this thread waits for Match.
+                val read = readTag(
+                    channel,
+                    onCode = { code ->
+                        activity.runOnUiThread {
+                            if (session == current) _inletState.value = NfcInletState.Comparing(code)
+                        }
+                    },
+                    // Once this session is over (the sheet closed, scanning restarted) the reader stops asking for the card, so the
+                    // other phone never sends one that nothing here would keep. The read then ends as "parted" and is dropped.
+                    sleep = { ms ->
+                        Thread.sleep(ms)
+                        if (session != current) throw IOException("The Inlet stopped")
+                    },
+                )
                 logTagRead(channel.techs, read)
                 activity.runOnUiThread {
                     if (session == current) onTagRead(read, isAlreadySaved, onCardReceived)
@@ -235,6 +321,12 @@ class NfcExchangeController(private val host: ActivityHost) {
             is NfcTagRead.PaymentCard -> {
                 releaseReader()
                 _inletState.value = NfcInletState.PaymentCard(read.info)
+            }
+            is NfcTagRead.ShareFailed -> {
+                // The reader stops, so the reason stays on screen (a phone held there again would otherwise replace it with
+                // "isn't sharing"); Try again starts a new session.
+                releaseReader()
+                _inletState.value = NfcInletState.ShareFailed(read.problem)
             }
             is NfcTagRead.Unsupported -> _inletState.value = NfcInletState.Unsupported(read.tag)
             NfcTagRead.Lost -> _inletState.value = NfcInletState.Lost

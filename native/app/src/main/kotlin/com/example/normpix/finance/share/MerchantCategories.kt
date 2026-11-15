@@ -16,15 +16,28 @@ import com.example.normpix.finance.domain.TransactionType
 object MerchantCategories {
     /**
      * Payments to any of [names] go in [parent] › [sub] (or [parent] itself without a sub). [olderHome] is where they went
-     * before [parent] was one of the app's categories, for an install from then that doesn't have it.
+     * before [parent] was one of the app's categories, for an install from then that doesn't have it. [orElseSub] is the sub-category
+     * to try when [sub] is not there yet: a phone that has not added the newer, more specific one ("Swiggy") keeps getting the
+     * broader one it always did ("Delivery apps") rather than dropping to [parent].
      */
-    private class Rule(val parent: String, val sub: String?, vararg val names: String, val olderHome: Pair<String, String?>? = null)
+    private class Rule(
+        val parent: String,
+        val sub: String?,
+        vararg val names: String,
+        val olderHome: Pair<String, String?>? = null,
+        val orElseSub: String? = null,
+    )
 
     private val rules = listOf(
-        // Groceries before food: the quick-commerce arms of food apps sell groceries.
-        Rule("Groceries", null, "instamart", "blinkit", "zepto", "bigbasket", "bb now", "jiomart", "dmart", "avenue supermarts",
-            "reliance fresh", "reliance smart", "more retail", "more supermarket", "spencers", "ratnadeep", "natures basket", "star bazaar",
-            "kirana", "supermarket", "flipkart minutes", "amazon fresh", "metro cash"),
+        // Groceries before food: the quick-commerce arms of food apps sell groceries. A brand with its own sub-category files there;
+        // on a phone without it, the sub is missing and Groceries itself is used, exactly as before the sub-category existed.
+        Rule("Groceries", "Instamart", "instamart"),
+        Rule("Groceries", "Blinkit", "blinkit"),
+        Rule("Groceries", "Zepto", "zepto"),
+        Rule("Groceries", "BigBasket", "bigbasket", "bb now"),
+        Rule("Groceries", "DMart", "dmart", "avenue supermarts"),
+        Rule("Groceries", null, "jiomart", "reliance fresh", "reliance smart", "more retail", "more supermarket", "spencers", "ratnadeep",
+            "natures basket", "star bazaar", "kirana", "supermarket", "flipkart minutes", "amazon fresh", "metro cash"),
         Rule("Groceries", "Dairy & eggs", "country delight", "milkbasket", "akshayakalpa", "milk"),
         Rule("Groceries", "Meat & fish", "licious", "freshtohome", "fresh to home"),
         Rule("Subscriptions", "Netflix", "netflix"),
@@ -41,7 +54,9 @@ object MerchantCategories {
         Rule("Subscriptions", "Google One", "google one"),
         Rule("Subscriptions", "Microsoft 365", "microsoft"),
         Rule("Subscriptions", "Audible", "audible"),
-        Rule("Food & dining", "Delivery apps", "swiggy", "zomato", "eatsure", "box8", "faasos", "rebel foods"),
+        Rule("Food & dining", "Swiggy", "swiggy", orElseSub = "Delivery apps"),
+        Rule("Food & dining", "Zomato", "zomato", orElseSub = "Delivery apps"),
+        Rule("Food & dining", "Delivery apps", "eatsure", "box8", "faasos", "rebel foods"),
         Rule("Food & dining", "Pizza", "dominos", "domino s", "pizza hut", "la pinoz", "pizza"),
         Rule("Food & dining", "Fast food", "mcdonald", "mcdonalds", "kfc", "burger king", "subway", "wow momo", "taco bell"),
         Rule("Food & dining", "Coffee & tea", "starbucks", "cafe coffee day", "ccd", "chaayos", "third wave", "blue tokai", "chai point"),
@@ -49,10 +64,14 @@ object MerchantCategories {
         Rule("Food & dining", "Restaurants", "barbeque nation", "haldiram", "restaurant", "hotel saravana", "biryani", "dhaba", "cafe"),
         // Before transport's "metro".
         Rule("Shopping", "Footwear", "bata", "metro shoes", "puma", "nike", "adidas"),
-        Rule("Transport", "Cabs & rideshare", "uber", "ola", "olacabs", "ola cabs", "rapido", "blusmart", "namma yatri", "meru"),
+        Rule("Transport", "Uber", "uber", orElseSub = "Cabs & rideshare"),
+        Rule("Transport", "Ola", "ola", "olacabs", "ola cabs", orElseSub = "Cabs & rideshare"),
+        Rule("Transport", "Rapido", "rapido", orElseSub = "Cabs & rideshare"),
+        Rule("Transport", "Cabs & rideshare", "blusmart", "namma yatri", "meru"),
         Rule("Transport", "Trains", "irctc", "indian railways"),
         Rule("Transport", "Bus & metro", "redbus", "abhibus", "dmrc", "bmrcl", "metro", "bmtc", "best bus", "ksrtc", "tsrtc", "apsrtc"),
-        Rule("Transport", "Tolls", "fastag", "nhai", "toll"),
+        Rule("Transport", "FASTag recharge", "fastag", orElseSub = "Tolls"),
+        Rule("Transport", "Tolls", "nhai", "toll"),
         Rule("Transport", "Petrol & diesel", "indian oil", "iocl", "hpcl", "hindustan petroleum", "bpcl", "bharat petroleum", "shell",
             "nayara", "jio bp", "petrol", "fuel", "filling station"),
         Rule("Transport", "EV charging", "statiq", "tata power ez charge", "ather grid"),
@@ -103,7 +122,13 @@ object MerchantCategories {
         Rule("Transport", "Parking", "parking"),
         Rule("Transport", "Tolls", "toll", "fastag"),
         Rule("Food & dining", "Coffee & tea", "tea", "chai", "coffee"),
-        Rule("Food & dining", null, "breakfast", "lunch", "dinner", "snacks", "tiffin", "food"),
+        // A meal's own word files in its sub-category; without it on the phone, Food & dining itself, as these always did.
+        Rule("Food & dining", "Breakfast", "breakfast"),
+        Rule("Food & dining", "Lunch", "lunch"),
+        Rule("Food & dining", "Dinner", "dinner"),
+        Rule("Food & dining", "Snacks", "snacks"),
+        Rule("Food & dining", "Tiffin & mess", "tiffin"),
+        Rule("Food & dining", null, "food"),
         Rule("Groceries", null, "groceries", "grocery", "vegetables", "fruits"),
         Rule("Groceries", "Dairy & eggs", "milk", "eggs"),
         Rule("Health", "Pharmacy", "medicine", "medicines", "pharmacy"),
@@ -112,7 +137,10 @@ object MerchantCategories {
     )
 
     /** Every category a rule files into, by name: (top-level, sub-category or null). */
-    internal val targets: List<Pair<String, String?>> get() = (rules + messageRules).map { it.parent to it.sub }
+    internal val targets: List<Pair<String, String?>>
+        get() = (rules + messageRules)
+            .flatMap { rule -> listOfNotNull(rule.parent to rule.sub, rule.orElseSub?.let { rule.parent to it }) }
+            .distinct()
 
     /** The words of [name], lower case, as one spaced string: "SWIGGY.IN@AXISBANK" -> " swiggy in axisbank ". */
     private fun words(name: String): String =
@@ -133,7 +161,7 @@ object MerchantCategories {
             }
         } ?: return null
         val usable = categories.filter { it.type == CategoryType.Expense && !it.archived }
-        return idOf(rule.parent, rule.sub, usable) ?: rule.olderHome?.let { (parent, sub) -> idOf(parent, sub, usable) }
+        return idOf(rule.parent, rule.sub, usable, rule.orElseSub) ?: rule.olderHome?.let { (parent, sub) -> idOf(parent, sub, usable) }
     }
 
     /**
@@ -146,13 +174,16 @@ object MerchantCategories {
         val said = words(message).trim()
         val rule = messageRules.firstOrNull { rule -> said in rule.names } ?: return null
         val usable = categories.filter { it.type == CategoryType.Expense && !it.archived }
-        return idOf(rule.parent, rule.sub, usable)
+        return idOf(rule.parent, rule.sub, usable, rule.orElseSub)
     }
 
-    /** The id of [sub] under the top-level [parent] among [usable], else of [parent]; null when there is no [parent]. */
-    private fun idOf(parent: String, sub: String?, usable: List<Category>): Long? {
+    /**
+     * The id of [sub] under the top-level [parent] among [usable], else of [orElseSub], else of [parent]; null when there is no
+     * [parent].
+     */
+    private fun idOf(parent: String, sub: String?, usable: List<Category>, orElseSub: String? = null): Long? {
         val top = usable.firstOrNull { it.parentId == null && it.name.equals(parent, ignoreCase = true) } ?: return null
-        val child = sub?.let { wanted -> usable.firstOrNull { it.parentId == top.id && it.name.equals(wanted, ignoreCase = true) } }
-        return (child ?: top).id
+        fun child(wanted: String?) = wanted?.let { name -> usable.firstOrNull { it.parentId == top.id && it.name.equals(name, ignoreCase = true) } }
+        return (child(sub) ?: child(orElseSub) ?: top).id
     }
 }

@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import com.example.normpix.finance.domain.Account
@@ -244,7 +245,8 @@ class AccountsAndTransfersDisplayTest {
         compose.onNodeWithText("Add account").performClick()
         waitFor("New account")
         compose.onNodeWithText("New account").assertIsDisplayed()
-        compose.onNodeWithText(offText).assertIsDisplayed()
+        // The form has a row more since loans (the switch under Type), so what is at its foot is scrolled to in this short window.
+        compose.onNodeWithText(offText).performScrollTo().assertIsDisplayed()
 
         compose.onNodeWithText("Name").performTextInput("Test Card")
         compose.onNode(hasText("I owe this amount") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch)).performClick()

@@ -86,6 +86,7 @@ fun TransactionFilterSheet(
     var accounts by remember { mutableStateOf(current.accountIds) }
     var categories by remember { mutableStateOf(current.categoryIds) }
     var people by remember { mutableStateOf(current.personIds) }
+    var tags by remember { mutableStateOf(current.tagIds) }
     var range by remember { mutableStateOf(current.range) }
     var min by remember { mutableStateOf(current.minAmount?.let { minorToInputText(it, decimals) }.orEmpty()) }
     var max by remember { mutableStateOf(current.maxAmount?.let { minorToInputText(it, decimals) }.orEmpty()) }
@@ -115,6 +116,7 @@ fun TransactionFilterSheet(
                 accountIds = accounts,
                 categoryIds = categories,
                 personIds = people,
+                tagIds = tags,
                 minAmount = lo,
                 maxAmount = hi,
                 range = range,
@@ -128,6 +130,7 @@ fun TransactionFilterSheet(
         accounts = emptySet()
         categories = emptySet()
         people = emptySet()
+        tags = emptySet()
         range = null
         min = ""
         max = ""
@@ -279,6 +282,11 @@ fun TransactionFilterSheet(
                         }
                     },
                 )
+            }
+            // Only once there are tags to filter by (a filter already chosen stays in reach, to be cleared).
+            if (finance.tags.isNotEmpty() || tags.isNotEmpty()) {
+                Heading("Tags")
+                TagFilterRow(selected = tags, onChange = { tags = it })
             }
             Heading("Categories")
             // A hundred-odd categories do not fit as chips: each type opens the same searchable picker the editor uses.

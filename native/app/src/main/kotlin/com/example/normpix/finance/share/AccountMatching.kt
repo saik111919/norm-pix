@@ -50,7 +50,8 @@ internal object AccountMatching {
         masks: List<MaskedNumber>,
         cards: List<StoredCard>,
     ): Pick {
-        val active = accounts.filter { !it.archived }
+        // A loan is paid by EMIs, not spent from: no receipt is about it, and it must not make a bank's accounts look ambiguous.
+        val active = accounts.filter { !it.archived && !it.isLoan }
         val fits = active.associateWith { AccountNumbers.fit(it, masks, cards) }
         val bank = bankOf(text, counterparty, catalog)
         val ofBank = bank?.let { key -> inBank(key, instrument, active) }.orEmpty()

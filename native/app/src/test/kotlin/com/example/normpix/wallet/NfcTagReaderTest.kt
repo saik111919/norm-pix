@@ -4,7 +4,9 @@ import com.example.normpix.wallet.nfc.DetectedTag
 import com.example.normpix.wallet.nfc.NfcCardOutletService
 import com.example.normpix.wallet.nfc.NfcExchangeController
 import com.example.normpix.wallet.nfc.NfcInletState
+import com.example.normpix.wallet.nfc.NfcShareResponder
 import com.example.normpix.wallet.nfc.NfcTagRead
+import com.example.normpix.wallet.nfc.ShareProblem
 import com.example.normpix.wallet.nfc.PaymentCardInfo
 import com.example.normpix.wallet.nfc.PhoneNfcArea
 import com.example.normpix.wallet.nfc.SELECT_PPSE
@@ -91,12 +93,30 @@ class NfcTagReaderTest {
     }
 
     @Test
-    fun aSharingPhone_givesTheWholeCard() {
+    fun aSharingPhone_givesTheWholeCard_sealed_afterMatch() {
+        val payload = card.toNfcExchangePayload()
+        val responder = NfcShareResponder(isAllowed = { true })
+        val sheet = object : NfcShareResponder.Events {
+            override fun onCode(pairing: NfcShareResponder.Pairing) {
+                responder.confirm(pairing.id)
+            }
+            override fun onCodeWithdrawn() = Unit
+            override fun onTransferred() = Unit
+        }
+        responder.arm(payload.toByteArray(), sheet)
+        val phone = FakeTag(setOf("IsoDep", "NfcA"), apdu = responder::answer)
+        assertEquals(NfcTagRead.NormPixPayload(payload), readTag(phone))
+        // SELECT, KEYS, NONCE, then one CARD: the card fits one answer.
+        assertEquals(4, phone.sent.size)
+    }
+
+    @Test
+    fun anOlderNormPixSendingTheCardInTheClear_isRefused() {
         val payload = card.toNfcExchangePayload()
         val phone = FakeTag(setOf("IsoDep", "NfcA")) { command ->
             if (command.contentEquals(NfcCardOutletService.SELECT_AID_COMMAND)) payload.toByteArray() + ok else fileNotFound
         }
-        assertEquals(NfcTagRead.NormPixPayload(payload), readTag(phone))
+        assertEquals(NfcTagRead.ShareFailed(ShareProblem.OlderPhone), readTag(phone))
         assertEquals(1, phone.sent.size)
     }
 
@@ -263,5 +283,10 @@ class NfcTagReaderTest {
 
         inlet.onTagRead(NfcTagRead.NormPixPayload("{\"type\":\"normpix_card\"}"), { false }) { error("no card expected") }
         assertIs<NfcInletState.Error>(inlet.inletState.value)
+
+        for (problem in ShareProblem.entries) {
+            inlet.onTagRead(NfcTagRead.ShareFailed(problem), { false }) { error("no card expected") }
+            assertEquals(NfcInletState.ShareFailed(problem), inlet.inletState.value)
+        }
     }
 }

@@ -70,6 +70,7 @@ CurrencyExchange=arrow-right-left
 DarkMode=moon
 DateRange=calendar-range
 DeleteForever=trash
+DeleteSweep=trash
 DeleteOutline=trash
 DeliveryDining=moped
 Description=file-text

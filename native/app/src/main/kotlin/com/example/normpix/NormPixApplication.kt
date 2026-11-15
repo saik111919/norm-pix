@@ -8,6 +8,10 @@ import com.example.normpix.widgets.RecentWidget
 import android.app.Application
 import android.content.Context
 import com.example.normpix.availability.ScheduledFeature
+import com.example.normpix.backup.AutoBackupSchedule
+import com.example.normpix.backup.AutoBackupService
+import com.example.normpix.backup.ContainerBackupData
+import com.example.normpix.backup.autoBackupPlan
 import com.example.normpix.diagnostics.CrashReporting
 import com.example.normpix.availability.availabilityAt
 import com.example.normpix.finance.data.FinanceDatabase
@@ -106,6 +110,13 @@ class AppContainer(
      * unlocked, then cleared. Shared with the sample set, as the widgets are the app's, whichever data is showing.
      */
     val widgetRequests: MutableStateFlow<WidgetRequest?> = MutableStateFlow(null),
+    /**
+     * Automatic backups (Settings > Data & backup): the app's one service, bound to the user's own data when the app is built, and
+     * handed to the sample set as it is - so a backup is never of the sample set. Null where nothing is backed up (tests).
+     */
+    val autoBackup: AutoBackupService? = null,
+    /** True only for the in-memory sample set ([DummyData]): data that is never backed up, and never the user's. */
+    val isSampleData: Boolean = false,
 ) {
     /** A reminder whose alert screen should open (notification tapped), consumed by the UI. */
     val reminderAlerts = MutableStateFlow<Long?>(null)
@@ -142,15 +153,34 @@ class NormPixApplication : Application() {
         welcomeNewInstall(hadData)
         ReminderNotifications.createChannel(this)
         CardExpiryNotifications.createChannel(this)
-        // The card-emulation service is started by the system, not by the UI, so it asks the schedule itself.
+        // The card-emulation service is started by the system, not by the UI, so it asks the schedule itself - and whether NormPix is
+        // the app in front: a card left ready to share in a sheet behind another app is not handed to a reader nobody is looking at.
         NfcCardOutletService.isAllowed = {
-            container.preferences.state.value.availabilityOf(ScheduledFeature.NfcExchange).availabilityAt(LocalDateTime.now()).isOpen
+            container.host.visible &&
+                container.preferences.state.value.availabilityOf(ScheduledFeature.NfcExchange).availabilityAt(LocalDateTime.now()).isOpen
         }
         followCardsForExpiry()
         followCardsForBanks()
         container.updates?.start()
         followUpdateSettings()
+        followAutoBackupSettings()
         followLedgerForWidgets()
+    }
+
+    /**
+     * The automatic backup's job follows Settings > Data & backup > Automatic backup (on with a folder, and how often): scheduled,
+     * changed or cancelled with it, and set again at every start. A password left behind with them off is deleted first.
+     */
+    private fun followAutoBackupSettings() {
+        val service = container.autoBackup ?: return
+        val preferences = container.preferences
+        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            runCatching { service.tidy() }
+            preferences.state
+                .map { it.autoBackupPlan() }
+                .distinctUntilChanged()
+                .collect { plan -> AutoBackupSchedule.sync(this@NormPixApplication, plan) }
+        }
     }
 
     /**
@@ -237,8 +267,13 @@ class NormPixApplication : Application() {
             val lock = AppLockService()
             // The ledger and the reminders are encrypted on the phone (each moved over from its plain file the first time it opens).
             val databases = EncryptedDatabases.forApp(app)
-            return AppContainer(
-                preferences = AppPreferences(prefs),
+            val preferences = AppPreferences(prefs)
+            // Automatic backups read this container - the user's own data - whichever set the screens show (the sample set is handed
+            // this same service). It is only read once a backup is made, long after the container is built.
+            lateinit var built: AppContainer
+            val autoBackup = AutoBackupService.forApp(app, preferences) { ContainerBackupData(app, built) }
+            built = AppContainer(
+                preferences = preferences,
                 finance = FinanceController(FinanceRepository(FinanceDatabase(app, engine = databases)), TransactionPictures(app)),
                 reminders = RemindersController(ReminderDao(RemindersDatabase(app, engine = databases)), alarms),
                 vault = FileCardVault(File(app.filesDir, "card_vault.bin")),
@@ -260,7 +295,9 @@ class NormPixApplication : Application() {
                     scheduler = AlarmExpiryScheduler(app),
                     notifier = SystemExpiryNotifier(app),
                 ),
+                autoBackup = autoBackup,
             )
+            return built
         }
     }
 }

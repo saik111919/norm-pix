@@ -22,9 +22,10 @@ import com.example.normpix.navigation.AppNavigator
 import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.navigation.SettingsPage
+import com.example.normpix.settings.ui.SettingsLeadingBadge
+import com.example.normpix.settings.ui.SettingsRowEmoji
 import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.LeadingBadge
-import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.theme.AppRadius
@@ -77,7 +78,7 @@ fun GuidePage(topic: GuideTopic) {
                             item {
                                 ListRow(
                                     headline = tip,
-                                    leading = { LeadingIcon(Icons.Outlined.AutoAwesome, size = 32.dp) },
+                                    leading = { SettingsLeadingBadge(Icons.Outlined.AutoAwesome, SettingsRowEmoji.SPARKLES, size = 32.dp) },
                                 )
                             }
                         }

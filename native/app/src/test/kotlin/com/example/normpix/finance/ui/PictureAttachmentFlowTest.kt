@@ -142,7 +142,8 @@ class PictureAttachmentFlowTest {
         compose.onNodeWithText("Attached").assertExists()
         amountField().assert(hasText("250"))
         compose.onNodeWithText("SWIGGY").assertExists()
-        compose.onNodeWithText("Food & dining › Delivery apps").assertExists()
+        // Swiggy has a sub-category of its own since 2026-11-14 (a new install has it; see MerchantCategories).
+        compose.onNodeWithText("Food & dining › Swiggy").assertExists()
         assertTrue(stored().isEmpty())
 
         compose.onNodeWithText("Save expense").performClick()
@@ -440,9 +441,10 @@ class PictureAttachmentFlowTest {
 
         compose.onNodeWithText("Cancel").performClick()
         waitGone(READING_PICTURE)
-        // Back on the form, as it was.
-        compose.onNodeWithText("New expense").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Picture, Choose one").assertExists()
+        // Back on the form, as it was. Its title is there but may be scrolled above the window: the form scrolled to the picture
+        // row when one was chosen, and since the Tags field (2026-11-15) the form is taller than this test's window.
+        compose.onNodeWithText("New expense").assertExists()
+        compose.onNodeWithContentDescription("Picture, Choose one").assertIsDisplayed()
         assertTrue(compose.onAllNodesWithText("Attached").fetchSemanticsNodes().isEmpty())
         amountField().assert(hasText(""))
         until { drafts().isEmpty() }

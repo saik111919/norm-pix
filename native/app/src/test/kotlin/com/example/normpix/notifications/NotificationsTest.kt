@@ -4,8 +4,18 @@ import androidx.activity.ComponentActivity
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -14,10 +24,12 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.unit.Density
 import com.example.normpix.navigation.NotificationStrip
 import com.example.normpix.settings.AppPreferences
 import com.example.normpix.testing.TestEnvironment
 import com.example.normpix.ui.components.Banner
+import com.example.normpix.ui.components.BannerBar
 import com.example.normpix.ui.components.BannerFigure
 import com.example.normpix.ui.components.StatusAction
 import com.example.normpix.ui.theme.StatusTone
@@ -26,6 +38,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -54,6 +67,7 @@ class NotificationsTest {
         tone: StatusTone = StatusTone.Error,
         message: String = "About $title",
         figure: BannerFigure? = null,
+        bar: BannerBar? = null,
         onPrimary: () -> Unit = {},
         onSecondary: (() -> Unit)? = null,
         onOpen: () -> Unit = {},
@@ -67,6 +81,7 @@ class NotificationsTest {
             title = title,
             message = message,
             figure = figure,
+            bar = bar,
             primary = StatusAction("Open $title", onClick = onPrimary),
             secondary = onSecondary?.let { StatusAction("Later $title", onClick = it) },
             onOpen = onOpen,
@@ -127,15 +142,19 @@ class NotificationsTest {
             env.Content { CompositionLocalProvider(LocalNotifications provides notifications(*items) { saw = it }) { NotificationsPage() } }
         }
         compose.waitForIdle()
-        // A titled group for each kind, as every list on the other pages is, and a row in it for each notification.
+        // A titled group for each kind, as every list on the other pages is, and a banner in it for each notification.
         for (heading in listOf("Reminders", "Budgets", "Cards")) compose.onAllNodesWithText(heading).assertCountEquals(1)
         for (title in listOf("Pay rent", "Food budget", "HDFC card")) {
-            compose.onNodeWithText(title).assertIsDisplayed()
-            compose.onNodeWithText("About $title").assertIsDisplayed()
-            compose.onNodeWithText("Open $title").assertIsDisplayed()
+            // Banners are tall: the page is a list, so each is scrolled to, as it is composed then.
+            compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription(spokenOf(title)))
+            // One sentence to a screen reader, as Home's banner is - its panels are drawn, not read one by one.
+            compose.onNodeWithContentDescription(spokenOf(title)).assertIsDisplayed()
+            // What it is stays a word on each banner, not only a colour.
+            compose.onNode(hasText("Overdue") and hasAnyAncestor(hasContentDescription(spokenOf(title))), useUnmergedTree = true).assertIsDisplayed()
+            compose.onNodeWithText("About $title", useUnmergedTree = true).assertIsDisplayed()
+            // Its button is on the bar under the panels.
+            compose.onNodeWithText("Open $title", useUnmergedTree = true).assertIsDisplayed()
         }
-        // What it is stays a word on each row, not only a colour.
-        compose.onAllNodesWithText("Overdue").assertCountEquals(3)
         assertEquals(setOf("r1", "b1", "c1"), saw, "opening the page is seeing it all")
         // The way to Settings is at the foot of the page, past the notifications: scrolled to, as it is composed then.
         compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Notification settings"))
@@ -148,12 +167,15 @@ class NotificationsTest {
         compose.setContent { env.Content { CompositionLocalProvider(LocalNotifications provides notifications(*items)) { NotificationsPage() } } }
         compose.waitForIdle()
         compose.onAllNodesWithText("NormPix").assertCountEquals(1)
-        compose.onNodeWithText("Stopped working").assertIsDisplayed()
-        compose.onNodeWithText("NormPix 1.5.10").assertIsDisplayed()
+        compose.onNodeWithContentDescription(spokenOf("Stopped working")).assertIsDisplayed()
+        compose.onNodeWithContentDescription(spokenOf("NormPix 1.5.10")).assertIsDisplayed()
     }
 
+    /** What a screen reader says of [note]'s banner (its eyebrow, title and message). */
+    private fun spokenOf(title: String) = "Overdue. $title. About $title"
+
     @Test
-    fun aRowOpensWhatItIsAbout_andItsButtonsDoTheirOwnThings() {
+    fun aBannerOpensWhatItIsAbout_andItsButtonsDoTheirOwnThings() {
         val calls = mutableListOf<String>()
         val item = note(
             NotificationKind.Reminders, "r1", "Pay rent",
@@ -162,11 +184,63 @@ class NotificationsTest {
         compose.setContent { env.Content { CompositionLocalProvider(LocalNotifications provides notifications(item)) { NotificationsPage() } } }
         compose.waitForIdle()
 
-        compose.onNodeWithText("Later Pay rent").performClick()
-        compose.onNodeWithText("Open Pay rent").performClick()
-        // The row itself is the way in: pressing its text is opening it, not pressing one of the buttons.
-        compose.onNodeWithText("Pay rent").performClick()
+        // The bar's buttons are pressed by touch: a screen reader has them as actions on the banner (below), so they are not nodes
+        // of their own in the merged tree.
+        compose.onNodeWithText("Later Pay rent", useUnmergedTree = true).performClick()
+        compose.onNodeWithText("Open Pay rent", useUnmergedTree = true).performClick()
+        // The panels are the way in: pressing them is opening it, not pressing one of the buttons.
+        compose.onNodeWithContentDescription(spokenOf("Pay rent")).performClick()
         assertEquals(listOf("secondary", "primary", "open"), calls)
+    }
+
+    @Test
+    fun aBannerIsOneButtonToAScreenReader_withItsButtonsAsActionsOnIt() {
+        val calls = mutableListOf<String>()
+        val item = note(
+            NotificationKind.Reminders, "r1", "Pay rent",
+            onPrimary = { calls += "primary" }, onSecondary = { calls += "secondary" }, onOpen = { calls += "open" },
+        )
+        compose.setContent { env.Content { CompositionLocalProvider(LocalNotifications provides notifications(item)) { NotificationsPage() } } }
+        compose.waitForIdle()
+
+        val config = compose.onNodeWithContentDescription(spokenOf("Pay rent")).fetchSemanticsNode().config
+        assertEquals(Role.Button, config[SemanticsProperties.Role])
+        // The quieter button first, as on the bar.
+        val actions = config[SemanticsActions.CustomActions]
+        assertEquals(listOf("Later Pay rent", "Open Pay rent"), actions.map { it.label })
+        actions.forEach { assertTrue(it.action()) }
+        assertTrue(config[SemanticsActions.OnClick].action!!.invoke())
+        assertEquals(listOf("secondary", "primary", "open"), calls)
+        // Neither the panels' words nor the buttons' are a thing of their own to read: the banner is one sentence.
+        compose.onAllNodesWithText("Open Pay rent").assertCountEquals(0)
+        compose.onAllNodesWithText("Pay rent").assertCountEquals(0)
+    }
+
+    @Test
+    fun theBannersPanelsSitSideBySide_andLargeTextStacksThem_asHomesDo() {
+        var scale by mutableFloatStateOf(1f)
+        val late = note(NotificationKind.Reminders, "r", "Pay rent", message = "Payments", figure = BannerFigure("Late by", "3 days", "Was due 6 Nov"))
+        compose.setContent {
+            env.Content {
+                val density = LocalDensity.current
+                CompositionLocalProvider(
+                    LocalDensity provides Density(density.density, scale),
+                    LocalNotifications provides notifications(late),
+                ) { NotificationsPage() }
+            }
+        }
+        compose.waitForIdle()
+        fun panels() = compose.onNodeWithText("Pay rent", useUnmergedTree = true).getBoundsInRoot() to
+            compose.onNodeWithText("Late by", useUnmergedTree = true).getBoundsInRoot()
+
+        val (title, figure) = panels()
+        assertTrue(figure.left >= title.right, "the figure is beside what it is about: $figure beside $title")
+        assertTrue(figure.top < title.bottom, "level with it, not under it: $figure, $title")
+
+        compose.runOnIdle { scale = 1.6f }
+        compose.waitForIdle()
+        val (largeTitle, largeFigure) = panels()
+        assertTrue(largeFigure.top >= largeTitle.bottom, "large text puts the figure's panel under the other: $largeFigure under $largeTitle")
     }
 
     @Test
@@ -212,26 +286,21 @@ class NotificationsTest {
     }
 
     @Test
-    fun aRowShowsItsFigureAtItsEnd_unlessTheWordsAlreadySayIt() {
-        val late = note(NotificationKind.Reminders, "r", "Rent", message = "Payments", figure = BannerFigure("Late by", "3 days")).banner
-        assertEquals("3 days", late.rowFigure()?.figure)
-        val backup = note(NotificationKind.Backup, "b", "Back up", message = "Last backup 30 days ago", figure = BannerFigure("Last backup", "30 days")).banner
-        assertNull(backup.rowFigure(), "the figure is in the sentence already")
-        assertNull(note(NotificationKind.Reminders, "r", "Rent").banner.rowFigure())
-
+    fun aBannerDrawsItsFigureInItsOwnPanel_andSaysItToo() {
+        val late = note(NotificationKind.Reminders, "r", "Rent", message = "Payments", figure = BannerFigure("Late by", "3 days", "Was due 6 Nov"))
         compose.setContent {
-            env.Content {
-                CompositionLocalProvider(LocalNotifications provides notifications(AppNotification(NotificationKind.Reminders, late))) { NotificationsPage() }
-            }
+            env.Content { CompositionLocalProvider(LocalNotifications provides notifications(late)) { NotificationsPage() } }
         }
         compose.waitForIdle()
-        // Beside the lines, not under them: what it is, and the figure.
-        compose.onNodeWithText("Late by").assertIsDisplayed()
-        compose.onNodeWithText("3 days").assertIsDisplayed()
+        // A panel beside what it is about: the figure's title, the figure and its note, as Home's banner draws them - and read too.
+        compose.onNodeWithText("Late by", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("3 days", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("Was due 6 Nov", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Overdue. Rent. Payments. Late by 3 days, Was due 6 Nov").assertIsDisplayed()
     }
 
     @Test
-    fun aRowWhoseOnlyButtonOpensIt_hasNoButton_theRowIsTheButton() {
+    fun aBannerWithOneButton_hasItOnItsBar_whetherOrNotItDoesWhatPressingTheBannerDoes() {
         var opened = 0
         val open: () -> Unit = { opened++ }
         val budget = Banner(
@@ -242,22 +311,23 @@ class NotificationsTest {
             title = "Food budget",
             message = "Rs 8,000 for November",
             primary = StatusAction("View budgets", onClick = open),
+            bar = BannerBar(0.85f, "85% used"),
             onOpen = open,
         )
-        assertEquals(emptyList(), budget.rowActions())
-        // With a second button, or a main one that does something else, both are there, the quieter one first.
-        val reminder = note(NotificationKind.Reminders, "r", "Rent", onSecondary = {}).banner
-        assertEquals(listOf("Later Rent", "Open Rent"), reminder.rowActions().map { it.label })
-
         compose.setContent {
             env.Content {
                 CompositionLocalProvider(LocalNotifications provides notifications(AppNotification(NotificationKind.Budgets, budget))) { NotificationsPage() }
             }
         }
         compose.waitForIdle()
-        compose.onAllNodesWithText("View budgets").assertCountEquals(0)
-        compose.onNodeWithText("Food budget").performClick()
-        assertEquals(1, opened)
+        // As on Home, where every banner has its bar: the button is there, and so is the bar - a ring beside the lines (since
+        // 2026-11-15) with how far along it is inside; the words a screen reader hears ("85% used") stay the bar's label.
+        compose.onNodeWithText("View budgets", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("85%", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("85% used", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("View budgets", useUnmergedTree = true).performClick()
+        compose.onNodeWithContentDescription("Nearly used. Food budget. Rs 8,000 for November. 85% used").performClick()
+        assertEquals(2, opened)
     }
 
     @Test

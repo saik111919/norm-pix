@@ -27,8 +27,8 @@ Contents: 1 Theme and tokens · 2 The shared components · 3 Sheets, messages an
   counts raw `Color(0x..)`, `RoundedCornerShape(<n>.dp)` and the half-step spacings `AppSpacing` has no step for (6, 10, 14, 18, 22 dp);
   a file with **more** than its recorded count fails (use `AppSpacing`, `AppRadius` or a theme colour), one with **fewer** fails too (lower
   the line, so a clean-up's slack is not spent again; `-PdesignBaseline=write` rewrites the file), and a file not listed has none. Art that
-  is meant to have its own colours (bank cards, logos, the guide's pictures) is simply in the list. Today: 514 colours (art), 49 hand-sized
-  corners, 221 half-steps. Do not sweep them: that moves the phone's design; snap one when you are in its file anyway.
+  is meant to have its own colours (bank cards, logos, the guide's pictures) is simply in the list. Today: 518 colours (art), 49 hand-sized
+  corners, 216 half-steps. Do not sweep them: that moves the phone's design; snap one when you are in its file anyway.
 - Type: interface font is GS Flex (Google Sans Flex, variable) by default - weight/width/roundness axes via presets or hand
   values; Nunito (bundled, variable), System font or the user's own file or Google Fonts zip are alternatives (features.md
   section "Interface font"). Money and hero numbers use the "hero amount" styles.
@@ -41,14 +41,14 @@ Use these before writing anything new:
 
 - **Pages**: `AppPage` (tab pages), `AppSubPage` (pushed pages; owns the back button styles), `Pages.kt`. Lists: `Lists.kt`
   (`ListSection`, `SectionSubheader`, grouped segments with 4 dp inner / 20 dp outer corners).
-- **Sheets**: `EditorSheet` (every add/edit form: titled sheet, scrolling body, and a **floating Save bar** - `FloatingActionBar` (`FloatingActionBar.kt`),
+- **Sheets**: `EditorSheet` (`saveEnabled` dims Save while the form cannot be saved yet, `status` pins a line of how the form stands above it as `errorText` is - the split editor's running line; every add/edit form: titled sheet, scrolling body, and a **floating Save bar** - `FloatingActionBar` (`FloatingActionBar.kt`),
   a pill with a soft shadow and a solid `solidColorScheme` fill, below the form with a gap around it. The form ends in `fadingBottomEdge()` (its last 16 dp fade
   out into the sheet), so it goes on under the pill's top edge without a hard cut. The form is **not** laid under the bar (tried 2026-11-07 and dropped): a field
   that gets focus is scrolled into the form's own bounds, which would put it behind the bar (the notes field, while typing), and `performScrollTo` + a tap in the
   tests landed on the bar.
   Secondary icon buttons (`FloatingActionIconButton`: Delete, Remind, Reset) go in its `actions` slot; `errorText` stays a line above it.
   The filter sheet uses the same bar and fade. No Cancel/close,
-  `DiscardChangesGuard` asks before dropping unsaved changes, on Back too - section 3), `ConfirmSheetContent` (every confirm/alert),
+  `DiscardChangesGuard` asks before dropping unsaved changes, on Back too - section 3), `ConfirmSheetContent` (every confirm/alert; an optional `body` slot holds what the decision is about, e.g. the files to delete, capped in height so the buttons stay in reach),
   `OptionSheet` (`OptionSheet.kt`: the one sheet for a single or a multiple choice; a header with an optional subtitle and, for multiple choice only, a 48 dp
   confirm circle; a search field only when `searchPlaceholder` is given (banks); the options as one `ListSegment` group (20 dp outer / 4 dp inner corners) with
   a radio or checkbox, the label in `primary` + SemiBold when chosen, and a leading / trailing slot (bank logos, category avatars); an optional full-width tonal
@@ -89,23 +89,29 @@ Use these before writing anything new:
   beside a figure, `minLines = 2` so a kind stays one size -, the detail, and an optional **bar**) and an optional **figure** on the right - over a bar with the
   buttons (the main one measured first, the quieter one gets what is left), all in the status colour as before (washed surface, hairline, curved lines, pill
   in the colour). `Banner` gained `bar: BannerBar?` and `figure: BannerFigure?`; each kind says its own: an **overdue reminder** the time it is late by
-  ("Late by 3 days", noted with when it was due); a **budget** its use as the pill ("112% used", ends 0 and the limit) and what is over or left; a **card's
+  ("Late by 3 days", noted with when it was due); a **budget** its use as the ring ("112%"; spoken "112% used") and what is over or left; a **card's
+  limit warning** (features.md section 2) the same - the share as the ring, what is owed against the limit, what is available or over; a **card's
   expiry** "Valid thru 12/26" with "next month"; **backup** how long ago and how often it asks; an **update** its size, and - while downloading - the download
-  as the pill with how much of how much; the **crash** report has neither (one full-width panel). Large text stacks the panels. The pieces
-  (`Panel`, `FigureBody`, `PillBody`, `CyclePill`, the shapes) are the summary banner's, made `internal`. `spoken()` says the figure and the pill too. Items of a
+  as the ring, with how much of how much as its message ("3 MB of 12 MB"); the **crash** report has neither (one full-width panel). Large text
+  stacks the panels. **A status banner's bar is a ring, not a pill** (owner, 2026-11-15, on a budget banner: "move this to left place and make it circle"):
+  `BannerRing` (`SplitStatBanner.kt`) sits at the **figure panel's top end, beside its title** (owner's follow-up: "The Circle to right side";
+  `FigureBody(aside = ...)`), or at the end of the eyebrow row when there is no figure panel (a download), 40 dp, a 4 dp arc in the status colour over a faint
+  track, `BannerBar.short` inside ("85%"; the fraction's percent when not given); it grows with its words ("120%", large text) and answers the
+  intrinsic questions itself (`RingPolicy`) - the default answers made the panel as tall as the screen. The title and message keep the panel's
+  whole width; the bar's ends (`from`/`to`) are the summary banner's only. The pieces (`Panel`, `FigureBody`, `PillBody`, `CyclePill`, the
+  shapes) are the summary banner's, made `internal`. `spoken()` says the figure and the bar's `label` too. Items of a
   deck must be the same size, so keep each line to one line (the title excepted as above). The ratchet counts hand-set spacing: `BannerStack.kt` is now clean.
   **Home shows one of these for everything waiting** (2026-11-09, `attentionBanner`: no figure panel, so the kinds' line has the full width) that opens
-  the Notifications page, plus the update's own; the other banners are **not drawn as banners any more** - the Notifications page lists them as
-  `ListSection` rows (`ListRow` with `overline` = the status word in the status colour, a `LeadingIcon` in the solid status colour, the figure **at the
-  row's end** - `Banner.rowFigure()`, "Late by / 3 days", dropped where the words already say it - (owner, 2026-11-11: "utilize space well"), an
-  `AppLinearProgress(calm = true)` in line with the text for a bar, and the buttons as one `ConnectedButtonGroup` across the row; a row whose only
-  button would do what pressing it does has none, `Banner.rowActions()`). `BannerCard` (the earlier full banners on that page, 2026-11-08) was removed
-  with that. Holding a deck still spreads it (cards, top spending).
-- **A group of buttons follows the shape it is set in** (2026-11-13, owner: "follow the background shape", on the banner's bar and the
-  Notifications rows): `ConnectedButtonGroup(outerTop, outerBottom)` take the corner of each outer end - a pill by default, else the
-  container's corner less the inset (`BannerActions`: top `Inner - 4 dp`, bottom `Outer - 4 dp`; a notification row: top 8 dp, bottom the
-  group's large corner less the inset for the last row of a group, else the small one between rows). A full pill in a bar with small top
-  corners bulged out of it.
+  the Notifications page, plus the update's own; the other banners are listed on the **Notifications page, each as Home's banner**
+  (`BannerCard`, 2026-11-14, owner: "Notification screen cards are not following the new design" - Home's banner design): the panels
+  (`BannerTop`) over the bar (`BannerActions`), joined by the same seam - what a `BannerStack` of one draws - one under another beneath
+  the kind's `SectionSubheader`, none stacked, every one with its bar of buttons. Pressing the panels opens what it is about; TalkBack reads
+  `spoken()` once with the buttons as custom actions (`Banner.accessibilityActions()`, shared with the stack). Pixel-compared with a
+  `BannerStack` of one in `NotificationsRenderTest` (identical at 1x; at 1.6x within 1/255 on a few edge pixels). The rows of 2026-11-09..13
+  (`rowFigure`, `rowActions`, `NotificationRow`) are gone. Holding a deck still spreads it (cards, top spending).
+- **A group of buttons follows the shape it is set in** (2026-11-13, owner: "follow the background shape", on the banner's bar):
+  `ConnectedButtonGroup(outerTop, outerBottom)` take the corner of each outer end - a pill by default, else the container's corner less
+  the inset (`BannerActions`: top `Inner - 4 dp`, bottom `Outer - 4 dp`). A full pill in a bar with small top corners bulged out of it.
 - **Pulling a stack shows what is under it** (2026-11-13, owner: "can't we show the back cards' details"; `DeckStack`): the front item writes
   how far it has been pulled (`DragShare`, 0..1 of what makes a swipe count) as it is dragged and as it comes home; the next two items
   behind it (`peekWeight`: 1 and 0.5) compose their `face` **only while a pull is on** (one derived bit) and print it at alpha
@@ -138,8 +144,25 @@ Use these before writing anything new:
   a `tone` puts the pill in that status colour (`Warning` for a bill within `BillDue.DUE_SOON_DAYS`), none uses `primary`. Above font scale 1.3 (the hero
   tiles' threshold) the panels stack - a stacked panel must hold its content and not fill the height (it once filled the screen). The quieter lines are
   `quietInk` (78% ink, or full ink where that would not reach 4.5:1: Light/Green's container is near the limit). Tests: `SplitStatBannerTest`,
-  `HomeBillsTest`, `BillingCycleTest`. Anything with "how long is left" and "how much" can use it.
+  `HomeBillsTest`, `BillingCycleTest`. Anything with "how long is left" and "how much" can use it. **A second form takes a figure in each panel**
+  (2026-11-14, `SplitStatBanner(first: BannerFigure, second: BannerFigure, spoken, ...)`: equal panels, the same seam, corners, curved lines and
+  stacking above font scale 1.3, no pill): Plans > Recurring's "A month / A year" and the Forecast's "End balance / Lowest point". The two panels
+  are equal, so the middle of the banner is the 4 dp seam: a test that clicks it must touch a panel (`click(Offset(width * 0.25f, ...))`).
+- **The date sheet can be bounded** (2026-11-14): `DatePickerDialogFor(..., latest, earliest)` / `DateSheet(..., earliest)` / `MonthCalendar(..., earliest)` - days outside
+  are not tappable, quick picks outside are left out, the calendar stops stepping at their months; defaults change nothing (the Forecast's "Pick a date"
+  is tomorrow to twelve months ahead).
+- **`MonthCalendar` can carry day markers** (2026-11-15, the Bills calendar; `DateTimeSheets.kt`): a new optional `markers: Map<LocalDate, DayMarks>?`, **null by default, and
+  then the calendar is exactly what the date pickers always had** (44 dp tiles, six weeks, no grid semantics; `thePickerCalendarHasNoMarkersAndNoGrid`). With a map: each tile is
+  `MarkedDayHeight` 54 dp - the 40 dp number circle, a 2 dp gap and a row of up to `MARKS_SHOWN` 3 dots - and a "+" (two drawn lines) when there are more things than dots; the month
+  has **only the weeks it needs** (a size change that `reduced` motion also takes away: its transition is `using null`); the grid says it is one (`CollectionInfo` rows x 7, every
+  day a `CollectionItemInfo`) and a day reads "Tuesday, 10 March 2026, chosen, today, 3 things due" (`DayMarks.spoken`: "nothing due", "1 thing due", "N things due"). `DayMarks(kinds,
+  count)` is built by `dayMarksOf(items)` from a day's `CalendarItem`s. **A kind is a dot's shape as well as its colour** (`DayMarkDot`): money out a filled circle in the expense
+  warm, money in a diamond in the income positive (`TransactionType.role()`), a reminder a ring in `primary`; the page's legend says them in words (hidden from TalkBack, where each
+  day already says its count). The dot size is `AppSpacing.sm - AppSpacing.xxs`: a literal 6.dp is a ratchet half-step. A selected day is the picker's filled circle (`first = last = day`).
 - **Chrome**: `FloatingNavBar` (dock), `BottomControls.kt`, `Tabs.kt`, `FocusRing.kt`, `LockGate.kt`, `Snackbar.kt`.
+- **Secondary tabs** (`AppSecondaryTabs`, `Tabs.kt`; Plans' Budgets | Recurring | Reminders | Goals): up to three are equal pills (the chosen one a little wider, with its
+  icon); with large text (1.3+) **or more than three tabs** (`SECONDARY_FIT_ACROSS`, 2026-11-15, when Goals made four and "Reminders" read "Reminde…" at 411 dp) the row
+  scrolls sideways, each pill as wide as its word, icons dropped, the chosen one kept in view - four whole words fit 411 dp, at 360 dp the last is half in view.
 - **Fields**: tonal fill `surfaceContainerHighest`, `TonalFieldShape`, min 64 dp, `IconBadge`; typed fields (Paid to, Note,
   names, numbers) get a soft outline, picking fields stay tonal.
 - **The amount** (`HeroAmountField` in `FormSelectors.kt`, drawn by `AmountTransformation` in `AmountInput.kt`; the transaction,
@@ -158,7 +181,12 @@ Use these before writing anything new:
 - **Icons/art**: `ui/theme/AppIcons.kt` (app icon set; Wallet uses the supplied Google Wallet artwork), `finance/ui/CategoryArt`
   / `CategoryVisuals` / `BrandLogos`, `banks/ui/BankBadge`, `AssetImage`, `SvgAsset`. Illustrations (the welcome tour's,
   `onboarding/TourArt.kt`) are Fluent 3D emoji from `assets/fluent3d` on pads of M3 Expressive shapes (`graphics-shapes`) in the theme's
-  containers; those pictures are 128 px, so keep one under ~80 dp or it goes soft on a 3x screen.
+  containers; those pictures are 128 px, so keep one under ~80 dp or it goes soft on a 3x screen. **Settings pages follow "3D icons in
+  Settings"** (2026-11-14, owner: "Settings sub pages are not following the 3D icons"): on any Settings page use `SettingsLeadingIcon` (a
+  bare 32 dp picture where the flat icon was bare), `SettingsLeadingBadge` (the same disc, picture at 70%) or `SettingsRow(emoji = ...)`
+  (the main list's 44 dp tile), with a `SettingsRowEmoji` constant - never a bare `Icon` / `LeadingIcon`; functional icons (chevrons, option
+  radios, swatches, logos, status) stay flat; off, every page is exactly as before. Settings search results wear pictures too.
+  `SettingsIcons3dTest` checks every constant has a bundled picture and no call site uses a literal; renders in `SettingsSubPagesRenderTest`.
 - **Interface icons: Material or Lucide** (2026-11-07, owner: "can you use these icons" - Lucide, https://lucide.dev; Settings > Appearance > Icons > Interface
   icons, `IconStyle`, preference `icon_style`, **Material by default** so no one's icons change by an update). The code names Material icons everywhere
   (~840 uses of 297 icons), so Lucide is a **lookup at draw time**, not new names: every file imports `com.example.normpix.ui.components.Icon`
@@ -345,6 +373,25 @@ Use these before writing anything new:
   (Material settles a sheet more than 56 dp from rest *by position*, which would close it). A form that must ask first is not moved
   (`SheetDismissConfirmation`'s handler is newer). Tests: `BackGestureTest`, `PageBackGestureTest` (a real host and a real gesture;
   pictures in `app/build/qa_back_gesture/`), `TabBackPreviewTest`, `SheetBackTest`.
+- **"Android" is the default Back gesture style** (2026-11-14, owner: "the predictive back follows the system back gesture for better
+  feel"; `BackGestureStyle.System`, `isAndroid`; a phone that chose another style keeps it). `AndroidBack` (`navigation/BackGesture.kt`) is
+  Android's own preview with the platform's numbers (`verified-facts.md`): the page shrinks to 90%, rounds, lifts and drifts ((w/20)-8)dp
+  towards the finger (`DRIFT` 0.03) while the screen beneath waits at 90% and 96 dp to the other side (`ENTER_OFFSET` 0.23); past
+  `PREVIEW_BY` (half the timeline) the page fades within a fifth and the screen beneath comes forward on the emphasized curve. It is **not
+  eased by raw^1.7**: Android's page says to feed the progress through a *decelerating* curve (moves most at the start), and the platform
+  has already eased it - the old curve on top is what felt late. Its clock is `TIME` (2.15) x the speed (`clockMs`), so the commit is
+  Android's 450 ms at Standard. Everything that draws the gesture asks one `BackLook` (`rememberBackLook()`: `eased`, `leaving`, `revealed`;
+  `LocalAndroidBack` beside `LocalBackAnimation`), and `BackGestureTransitions(android = ...)` gives the host the same motion. Sheets in this
+  style follow the finger part way (`AndroidBack.sheet`, at most `SHEET_SHARE` 0.4 of the way out).
+- **A step back inside a screen is a back gesture too** (2026-11-14, owner: "Activity & Plan screen is not following the predictive back",
+  Banks & Categories should "step back to Banks first"): what is left closes under the finger over what it goes back to, letting go
+  finishes it and makes the step (a `handoff` moment so what was beneath does not arrive again), giving up eases back. Plans & Activity
+  (`WithinTabBack` in `AppShell`: the Plans view over Activity in the inner `TabHost`s, a section over Budgets in the list item - posed on
+  the part on screen, `ShownPart` / `applyBackPose(pose, shown)`); Banks & Categories (back from the side it did not open on returns to it
+  first, `StepBackHandler` + `StepBackLayers` in `navigation/StepBack.kt`, each side keyed so the one beneath carries on); Settings
+  two-pane (a step inside a page, e.g. an Appearance screen, over its page); the welcome tour (the pager follows the finger). While a
+  view is beneath, each view's own switch shows that view. Tests: `StepBackTest`, `StepBackGestureTest` (whole app, real gesture,
+  pictures in `qa_back_gesture/`), `OnboardingTourTest`.
 
 ## 6. Motion
 
@@ -376,6 +423,12 @@ sheets; do not invent custom sheet motion (the back gesture on a sheet moves it 
   a one-sentence footer saying what the lines are and how to read a day; fewer grid lines because the chart can be touched, and the whole plot
   area is the touch target; the main message is a sentence above the chart (`verdict()`), so nothing critical needs a touch; change is never
   colour alone (arrow + figure + word, and not red/green); the canvas is hidden from TalkBack and a spoken summary stands in for it.
+  **`BalanceChart`** (2026-11-14, the Forecast's line, in the same file): the scale reaches below zero, a dashed line marks zero and the part below it is
+  the error colour with its own wash (shape and colour, and the page also says it in words), the lowest point is a ringed dot, the last day a filled one,
+  touch or drag reads a day, and the spoken summary gives the lowest point and the end, never every day (only dates when amounts are hidden).
+- **Large text on a row with an amount** (2026-11-14, Repeating costs and Forecast rows): above `HERO_STATS_STACK_SCALE` (1.3) the amount goes *under the
+  name*, not beside it - beside it at 1.6x a figure broke in two ("₹24,000.0 / 0"). `PlanningLargeTextTest` (native graphics) pins it; the Recurring rows
+  (`LedgerRow`) were not touched and still squeeze at 1.6x.
 
 ## 8. Wide screens
 

@@ -1,8 +1,12 @@
 package com.example.normpix.settings.ui
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -20,6 +24,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.example.normpix.about.GuideTopic
 import com.example.normpix.about.ui.AboutPage
 import com.example.normpix.about.ui.GuideIndexPage
@@ -27,8 +33,14 @@ import com.example.normpix.about.ui.GuidePage
 import com.example.normpix.navigation.AppNavigator
 import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.navigation.FloatingBackRow
+import com.example.normpix.navigation.rememberBackLook
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.navigation.SettingsPage
+import com.example.normpix.navigation.StepBackHandler
+import com.example.normpix.navigation.TabBackPreview
+import com.example.normpix.navigation.applyBackPose
+import com.example.normpix.navigation.rememberStepBack
+import com.example.normpix.ui.theme.rememberReducedMotion
 import com.example.normpix.settings.BackButtonStyle
 import com.example.normpix.ui.components.DetailPane
 import com.example.normpix.ui.components.LocalDetailPane
@@ -198,8 +210,15 @@ fun SettingsTwoPane(opens: SettingsDetail? = null) {
     val listNavigator = remember(outer) { PaneNavigator(outer, show, leave = outer::back) }
     val pageNavigator = remember(outer) { PaneNavigator(outer, show, leave = up) }
 
-    // Back inside a step (an Appearance screen) goes up to its page before it leaves Settings.
-    BackHandler(enabled = detail.parent != null) { up() }
+    // Back inside a step (an Appearance screen) goes up to its page before it leaves Settings - as a back gesture like any other
+    // (2026-11-14): the page beside the list closes under the finger over the page it goes up to. The target is not an index here: 0 is
+    // "the parent of what is shown".
+    val stepBack = rememberStepBack()
+    StepBackHandler(stepBack, enabled = detail.parent != null, to = 0) { up() }
+    val reduced = rememberReducedMotion()
+    val look = rememberBackLook()
+    val stepPreview = stepBack.preview.takeIf { !reduced && it.target != TabBackPreview.NO_TAB }
+    val beneath = if (stepPreview != null) detail.parent else null
 
     // In the bottom-dock style the dock is one pill across the foot of the window, not of the list: the panes keep their room for it
     // (see LocalDockHosted) and it is drawn here, over both, as glass over what they show.
@@ -215,9 +234,32 @@ fun SettingsTwoPane(opens: SettingsDetail? = null) {
                 // The page is a panel of its own tone, set off from the list by that and not by a line.
                 Box(Modifier.weight(1f).fillMaxHeight().background(panel)) {
                     CompositionLocalProvider(LocalNavigator provides pageNavigator) {
-                        Crossfade(
+                        if (beneath != null && stepPreview != null) {
+                            Box(
+                                Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer { applyBackPose(look.revealed(stepPreview.progress, stepPreview.direction)) }
+                                    .clearAndSetSemantics {},
+                            ) {
+                                CompositionLocalProvider(LocalDetailPane provides DetailPane(canGoBack = beneath.parent != null, container = panel)) {
+                                    SettingsDetailPage(beneath)
+                                }
+                            }
+                        }
+                        val fade = tween<Float>(AppMotion.duration(AppMotion.SHORT_MS))
+                        AnimatedContent(
                             targetState = detail,
-                            animationSpec = tween(AppMotion.duration(AppMotion.SHORT_MS)),
+                            modifier = if (beneath != null && stepPreview != null) {
+                                Modifier
+                                    .graphicsLayer { applyBackPose(look.leaving(stepPreview.progress, stepPreview.direction)) }
+                                    .background(panel)
+                            } else {
+                                Modifier
+                            },
+                            // A finished back gesture has already closed the page and shown the one beneath: it is simply there.
+                            transitionSpec = {
+                                if (stepBack.handoff) EnterTransition.None togetherWith ExitTransition.None else fadeIn(fade) togetherWith fadeOut(fade)
+                            },
                             label = "settings_detail",
                         ) { shown ->
                             CompositionLocalProvider(LocalDetailPane provides DetailPane(canGoBack = shown.parent != null, container = panel)) {

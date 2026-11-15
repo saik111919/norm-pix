@@ -283,6 +283,8 @@ fun InsightsScreen(listState: LazyListState = rememberLazyListState()) {
                                     if (hasActivity) PacePanel(data)
                                     if (data.expenses.isNotEmpty()) WhereMoneyWent(data)
                                     if (data.expenses.isNotEmpty()) ByPerson(data)
+                                    // The way on to the year by tag (a page of its own: a financial year, not this month).
+                                    YearByTagLink()
                                     Trend(data)
                                     if (hasDetail) MoreDetail(data)
                                     Footnote()
@@ -292,6 +294,7 @@ fun InsightsScreen(listState: LazyListState = rememberLazyListState()) {
                                     if (hasActivity) PacePanel(data)
                                     if (data.expenses.isNotEmpty()) WhereMoneyWent(data)
                                     if (data.expenses.isNotEmpty()) ByPerson(data)
+                                    YearByTagLink()
                                 },
                                 right = {
                                     Trend(data)

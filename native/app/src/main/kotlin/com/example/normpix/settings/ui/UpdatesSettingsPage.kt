@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.InstallMobile
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PhoneAndroid
@@ -117,10 +118,11 @@ fun UpdatesSettingsPage() {
                         item {
                             ListRow(
                                 headline = "Updates come with release builds",
-                                leading = { LeadingIcon(Icons.Outlined.UpdateDisabled) },
+                                leading = { SettingsLeadingBadge(Icons.Outlined.UpdateDisabled, SettingsRowEmoji.BOX) },
                             )
                         }
                     }
+                    UpdateFilesSection()
                     return@Column
                 }
                 ListSection(
@@ -133,6 +135,7 @@ fun UpdatesSettingsPage() {
                             supporting = automaticChecksSupporting(prefs),
                             icon = Icons.Outlined.Update,
                             hue = SettingsPageUpdatesHue,
+                            emoji = SettingsRowEmoji.UPDATES,
                             checked = prefs.updateChecksEnabled,
                             onCheckedChange = { on ->
                                 haptics.selection()
@@ -147,11 +150,16 @@ fun UpdatesSettingsPage() {
                             supporting = updateSummary(update, updater),
                             icon = Icons.Outlined.SystemUpdate,
                             hue = SettingsPageUpdatesHue,
+                            emoji = SettingsRowEmoji.MAGNIFIER,
                             onClick = { system.checkForUpdates() },
                         )
                     }
                 }
-                if (!prefs.updateChecksEnabled) return@Column
+                if (!prefs.updateChecksEnabled) {
+                    // A file left in Downloads is there whether or not NormPix checks by itself.
+                    UpdateFilesSection()
+                    return@Column
+                }
 
                 ListSection(title = "How often", modifier = Modifier.selectableGroup()) {
                     for (choice in UpdateCheckEvery.entries) {
@@ -197,7 +205,7 @@ fun UpdatesSettingsPage() {
                             ListRow(
                                 headline = "Time",
                                 supporting = updateCheckTimesText(prefs, is24Hour),
-                                leading = { LeadingIcon(Icons.Outlined.Schedule) },
+                                leading = { SettingsLeadingBadge(Icons.Outlined.Schedule, SettingsRowEmoji.CLOCK) },
                                 onClick = { pickingTime = true },
                             )
                         }
@@ -217,7 +225,7 @@ fun UpdatesSettingsPage() {
                                 haptics.selection()
                                 preferences.setUpdateCheckOnOpen(on)
                             },
-                            leading = { LeadingIcon(Icons.Outlined.PhoneAndroid) },
+                            leading = { SettingsLeadingBadge(Icons.Outlined.PhoneAndroid, SettingsRowEmoji.PHONE) },
                         )
                     }
                 }
@@ -270,7 +278,7 @@ fun UpdatesSettingsPage() {
                                     haptics.selection()
                                     preferences.setUpdateOnMobileData(on)
                                 },
-                                leading = { LeadingIcon(Icons.Outlined.SignalCellularAlt) },
+                                leading = { SettingsLeadingBadge(Icons.Outlined.SignalCellularAlt, SettingsRowEmoji.MOBILE_DATA) },
                             )
                         }
                     }
@@ -284,7 +292,7 @@ fun UpdatesSettingsPage() {
                             ListRow(
                                 headline = "Allow NormPix to install updates",
                                 supporting = "Turn on \"Allow from this source\" for NormPix",
-                                leading = { LeadingIcon(Icons.Outlined.InstallMobile) },
+                                leading = { SettingsLeadingBadge(Icons.Outlined.InstallMobile, SettingsRowEmoji.KEY) },
                                 onClick = { updater.openInstallSetting() },
                             )
                         }
@@ -299,12 +307,13 @@ fun UpdatesSettingsPage() {
                             ListRow(
                                 headline = "Notifications",
                                 supporting = "Turn them on to hear about updates",
-                                leading = { LeadingIcon(Icons.Outlined.NotificationsOff) },
+                                leading = { SettingsLeadingBadge(Icons.Outlined.NotificationsOff, SettingsRowEmoji.BELL) },
                                 onClick = { navigator.openSettings(SettingsPage.Notifications) },
                             )
                         }
                     }
                 }
+                UpdateFilesSection()
             }
             if (pickingTime) {
                 TimePickerDialogFor(
@@ -316,6 +325,32 @@ fun UpdatesSettingsPage() {
                     onDismiss = { pickingTime = false },
                 )
             }
+        }
+    }
+}
+
+/**
+ * "Update files": clearing away an APK a browser or the GitHub app left in Downloads. The updates NormPix downloads itself are
+ * deleted once installed ([com.example.normpix.updates.UpdateDownloader.clearInstalled]); these are the user's, and NormPix can
+ * only reach the ones they pick (the system's picker; no storage permission), so the row opens it. See [rememberApkCleanup].
+ * Shown whatever else the page shows: with updates off, and in a build that never updates itself.
+ */
+@Composable
+private fun UpdateFilesSection() {
+    val pickApks = rememberApkCleanup()
+    ListSection(
+        title = "Update files",
+        footer = "Updates NormPix downloads itself are deleted once they're installed. A file your browser saved stays in " +
+            "Downloads until it's deleted; NormPix only touches the files you pick.",
+    ) {
+        item {
+            SettingsRow(
+                headline = "Delete downloaded APK files",
+                supporting = "Pick NormPix files left in Downloads after an update",
+                icon = Icons.Outlined.DeleteSweep,
+                hue = SettingsPageUpdatesHue,
+                onClick = pickApks,
+            )
         }
     }
 }
