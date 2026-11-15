@@ -523,6 +523,139 @@ fun runningTotals(daily: List<DailyTotal>, days: Int): List<Long> {
     return totals.toList()
 }
 
+/**
+ * The money that can be spent, day by day - the cash-flow forecast - as a line with a soft wash under it, ending in a dot at the last
+ * day, and a ringed dot where it is lowest. [balances] has one value for each day, today first (minor units). Unlike [PaceChart] it can
+ * go below zero, so the scale reaches down to the lowest of it and a dashed line marks zero; the part below zero is drawn in
+ * [belowColor] with a wash of its own - a different shape and a different colour, never the colour alone (the screen says it too).
+ * No gridlines or axis values: the amounts are said above it. Tapping or dragging along it reads a day ([onScrub], an index into
+ * [balances]; null when the finger lifts or the day is tapped again).
+ */
+@Composable
+fun BalanceChart(
+    balances: List<Long>,
+    semanticsLabel: String,
+    lineColor: Color,
+    belowColor: Color,
+    guideColor: Color,
+    ringColor: Color,
+    modifier: Modifier = Modifier,
+    scrubIndex: Int? = null,
+    onScrub: (Int?) -> Unit = {},
+    height: Dp = 168.dp,
+) {
+    if (balances.isEmpty()) return
+    val progress by rememberGrowIn()
+    val haptics = rememberAppHaptics()
+
+    val current by rememberUpdatedState(scrubIndex)
+    val currentOnScrub by rememberUpdatedState(onScrub)
+    val read = { index: Int? ->
+        if (index != current) {
+            if (index != null) haptics.selection()
+            currentOnScrub(index)
+        }
+    }
+    val lowestIndex = balances.indices.minBy { balances[it] }
+    fun indexAt(x: Float, width: Float): Int =
+        if (balances.size < 2) 0 else ((x / width) * (balances.size - 1)).roundToInt().coerceIn(0, balances.size - 1)
+
+    Canvas(
+        modifier
+            .fillMaxWidth()
+            .height(height)
+            .clearAndSetSemantics {
+                contentDescription = semanticsLabel
+                role = Role.Image
+            }
+            .pointerInput(balances.size) {
+                detectTapGestures {
+                    val index = indexAt(it.x, size.width.toFloat())
+                    read(if (index == current) null else index)
+                }
+            }
+            .pointerInput(balances.size) {
+                detectHorizontalDragGestures(
+                    onDragStart = { read(indexAt(it.x, size.width.toFloat())) },
+                    onDragEnd = { read(null) },
+                    onDragCancel = { read(null) },
+                ) { change, _ ->
+                    change.consume()
+                    read(indexAt(change.position.x, size.width.toFloat()))
+                }
+            },
+    ) {
+        // Room at the ends for the dot's ring; a little headroom over the highest and under the lowest.
+        val inset = 7.dp.toPx()
+        val plotRight = size.width - inset
+        val plotTop = inset
+        val plotBottom = size.height - 1.dp.toPx()
+        val low = minOf(0L, balances.min())
+        val high = maxOf(0L, balances.max())
+        val span = (high - low).coerceAtLeast(1L).toFloat()
+        fun x(i: Int) = if (balances.size < 2) plotRight / 2 else plotRight * i / (balances.size - 1)
+        fun y(value: Long) = plotBottom - (plotBottom - plotTop) * ((value - low) / span)
+        val zeroY = y(0L)
+        val hairline = 1.dp.toPx()
+        val goesBelow = low < 0L
+
+        // Zero: a baseline, or - where the money goes under it - a dashed line the line can be seen crossing.
+        drawLine(
+            guideColor,
+            Offset(0f, zeroY),
+            Offset(plotRight, zeroY),
+            strokeWidth = hairline,
+            pathEffect = if (goesBelow) PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx())) else null,
+        )
+
+        val line = Path().apply {
+            balances.forEachIndexed { i, balance -> if (i == 0) moveTo(x(0), y(balance)) else lineTo(x(i), y(balance)) }
+        }
+        val wash = Path().apply {
+            addPath(line)
+            lineTo(x(balances.size - 1), zeroY)
+            lineTo(x(0), zeroY)
+            close()
+        }
+        val stroke = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        // The line draws itself in from today.
+        clipRect(right = plotRight * progress + inset) {
+            clipRect(bottom = zeroY) {
+                drawPath(wash, Brush.verticalGradient(listOf(lineColor.copy(alpha = 0.28f), lineColor.copy(alpha = 0f)), startY = plotTop, endY = zeroY))
+                drawPath(line, lineColor, style = stroke)
+            }
+            if (goesBelow) {
+                clipRect(top = zeroY) {
+                    drawPath(wash, belowColor.copy(alpha = 0.22f))
+                    drawPath(line, belowColor, style = stroke)
+                }
+            }
+        }
+
+        // The ring round a dot, half a step of the spacing scale (6 dp).
+        val ring = (AppSpacing.md / 2).toPx()
+        fun dot(at: Offset, fill: Color) {
+            drawCircle(ringColor, radius = ring, center = at)
+            drawCircle(fill, radius = 4.dp.toPx(), center = at)
+        }
+        val index = scrubIndex
+        if (index != null && index in balances.indices) {
+            val dx = x(index)
+            drawLine(guideColor, Offset(dx, plotTop), Offset(dx, plotBottom), strokeWidth = hairline)
+            dot(Offset(dx, y(balances[index])), if (balances[index] < 0L) belowColor else lineColor)
+        } else if (progress >= 1f) {
+            // The lowest point is ringed (a hollow dot) and the last day has the filled one.
+            if (lowestIndex != balances.lastIndex) {
+                val at = Offset(x(lowestIndex), y(balances[lowestIndex]))
+                drawCircle(lineColor.takeIf { balances[lowestIndex] >= 0L } ?: belowColor, radius = ring, center = at, style = Stroke(width = 2.dp.toPx()))
+                drawCircle(ringColor, radius = 5.dp.toPx(), center = at)
+            }
+            val lastAt = Offset(x(balances.lastIndex), y(balances.last()))
+            dot(lastAt, if (balances.last() < 0L) belowColor else lineColor)
+        }
+    }
+}
+
 // --- legends and readouts ---------------------------------------------------------------------------------------------
 
 /** The key for a line in a legend: a short stroke of its color (dashed for a reference), never a filled box. */

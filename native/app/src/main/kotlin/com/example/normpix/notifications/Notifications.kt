@@ -25,6 +25,7 @@ import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.screens.backupBanners
 import com.example.normpix.screens.budgetBanners
 import com.example.normpix.screens.cardExpiryBanners
+import com.example.normpix.screens.cardLimitBanners
 import com.example.normpix.screens.crashBanners
 import com.example.normpix.screens.reminderBanners
 import com.example.normpix.screens.updateBanners
@@ -63,7 +64,7 @@ class AppNotification(val kind: NotificationKind, val banner: Banner) {
 
 /**
  * Everything that needs the user, in one place: the same facts Home's "Needs attention" shows (overdue reminders, budgets over or
- * nearly used, cards to renew, a crash report, a backup, an update), as one list, the most pressing kind first. There is no
+ * nearly used, cards to renew or near their limit, a crash report, a backup, an update), as one list, the most pressing kind first. There is no
  * history: a notification is as long-lived as the thing it says, and goes when it is dealt with.
  *
  * [seen] are the keys the user had seen the last time the Notifications page was open; the rest are [unread] - what the bell
@@ -123,6 +124,7 @@ internal fun notificationItems(budgets: BudgetOverview?): List<AppNotification> 
     reminderBanners().forEach { add(AppNotification(NotificationKind.Reminders, it)) }
     if (budgets != null) budgetBanners(budgets).forEach { add(AppNotification(NotificationKind.Budgets, it)) }
     cardExpiryBanners().forEach { add(AppNotification(NotificationKind.Cards, it)) }
+    cardLimitBanners().forEach { add(AppNotification(NotificationKind.Cards, it)) }
     backupBanners().forEach { add(AppNotification(NotificationKind.Backup, it)) }
     crashBanners().forEach { add(AppNotification(NotificationKind.App, it)) }
     updateBanners().forEach { add(AppNotification(NotificationKind.Update, it)) }

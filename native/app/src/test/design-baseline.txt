@@ -49,7 +49,7 @@ com/example/normpix/ui/components/Tabs.kt|0|0|1
 com/example/normpix/ui/theme/StatusColors.kt|3|0|0
 com/example/normpix/ui/theme/Theme.kt|127|0|0
 com/example/normpix/updates/ui/ChangelogSection.kt|0|0|1
-com/example/normpix/wallet/AccountCardView.kt|33|0|5
+com/example/normpix/wallet/AccountCardView.kt|37|0|5
 com/example/normpix/wallet/AccountCarousel.kt|0|0|1
 com/example/normpix/wallet/BankCardDesign.kt|262|0|0
 com/example/normpix/wallet/BankLogos.kt|35|12|16

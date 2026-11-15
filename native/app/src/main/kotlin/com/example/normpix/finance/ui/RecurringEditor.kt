@@ -68,6 +68,7 @@ import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.RecurrenceFrequency
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.RepeatEnd
+import com.example.normpix.finance.domain.RepeatSuggestion
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.dueOccurrences
 import com.example.normpix.finance.domain.firstOccurrenceAfter
@@ -76,6 +77,7 @@ import com.example.normpix.finance.domain.notBefore
 import com.example.normpix.finance.domain.parseMinorUnits
 import com.example.normpix.finance.domain.recurrenceStep
 import com.example.normpix.finance.domain.resolve
+import com.example.normpix.finance.domain.startOnOrAfter
 import com.example.normpix.finance.domain.startOfDay
 import com.example.normpix.finance.domain.upcomingOccurrences
 import com.example.normpix.ui.components.AppLoadingState
@@ -93,6 +95,7 @@ import com.example.normpix.ui.theme.AppMotion
 import com.example.normpix.ui.theme.AppRadius
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.rememberReducedMotion
+import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -105,12 +108,18 @@ internal const val MAX_INTERVAL = 99
  *
  * The transaction editor's layout and controls (see [TransactionEditorSheet]), shown as a bottom
  * sheet: type, amount, category and account first, then the schedule. Calls [onDone] with true once
- * saved or deleted, or null when closed without saving.
+ * saved or deleted, or null when closed without saving. A new one can start from a [suggestion] - a payee that looks like it
+ * repeats (see `suggestRepeats`) - with what the payments so far say already filled in; nothing is saved until the user saves.
  */
 @Composable
-fun RecurringEditorSheet(existingId: Long?, onDone: (Boolean?) -> Unit, onRemind: ((RecurringRule) -> Unit)? = null) {
+fun RecurringEditorSheet(
+    existingId: Long?,
+    onDone: (Boolean?) -> Unit,
+    onRemind: ((RecurringRule) -> Unit)? = null,
+    suggestion: RepeatSuggestion? = null,
+) {
     if (existingId == null) {
-        RecurringEditor(existing = null, onDone = onDone, onRemind = null)
+        RecurringEditor(existing = null, onDone = onDone, onRemind = null, suggestion = suggestion)
         return
     }
     val controller = LocalFinance.current
@@ -133,7 +142,12 @@ fun RecurringEditorSheet(existingId: Long?, onDone: (Boolean?) -> Unit, onRemind
 }
 
 @Composable
-private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit, onRemind: ((RecurringRule) -> Unit)?) {
+private fun RecurringEditor(
+    existing: RecurringRule?,
+    onDone: (Boolean?) -> Unit,
+    onRemind: ((RecurringRule) -> Unit)?,
+    suggestion: RepeatSuggestion? = null,
+) {
     val controller = LocalFinance.current
     val finance = rememberFinanceState()
     val overlays = LocalOverlays.current
@@ -145,17 +159,22 @@ private fun RecurringEditor(existing: RecurringRule?, onDone: (Boolean?) -> Unit
     val isEditing = existing != null
 
     var type by remember { mutableStateOf(existing?.type ?: TransactionType.Expense) }
-    var amount by remember { mutableStateOf(existing?.let { minorToInputText(it.amount, finance.currency.decimals) }.orEmpty()) }
-    var payee by remember { mutableStateOf(existing?.payee.orEmpty()) }
+    var amount by remember {
+        mutableStateOf((existing?.amount ?: suggestion?.amount)?.let { minorToInputText(it, finance.currency.decimals) }.orEmpty())
+    }
+    var payee by remember { mutableStateOf(existing?.payee ?: suggestion?.payee.orEmpty()) }
     var note by remember { mutableStateOf(existing?.note.orEmpty()) }
-    var categoryId by remember { mutableStateOf(existing?.categoryId) }
-    var accountId by remember { mutableStateOf(existing?.accountId ?: finance.defaultAccount?.id) }
+    var categoryId by remember { mutableStateOf(existing?.categoryId ?: suggestion?.categoryId) }
+    var accountId by remember { mutableStateOf(existing?.accountId ?: suggestion?.accountId ?: finance.defaultAccount?.id) }
     var toAccountId by remember { mutableStateOf(existing?.toAccountId) }
     // Who the expenses it records are spent on; only an expense has someone.
     var personId by remember { mutableStateOf(existing?.personId) }
-    var frequency by remember { mutableStateOf(existing?.frequency ?: RecurrenceFrequency.Monthly) }
+    var frequency by remember { mutableStateOf(existing?.frequency ?: suggestion?.frequency ?: RecurrenceFrequency.Monthly) }
     var interval by remember { mutableIntStateOf(existing?.interval ?: 1) }
-    var start by remember { mutableStateOf(existing?.startDate ?: startOfDay(LocalDateTime.now())) }
+    // A suggestion starts on the day the next payment is expected (or the next one after it, when that has gone by).
+    var start by remember {
+        mutableStateOf(existing?.startDate ?: suggestion?.startOnOrAfter(LocalDate.now())?.atStartOfDay() ?: startOfDay(LocalDateTime.now()))
+    }
     // How it stops. A rule keeps only the day of its last payment, so a saved one reads back as "On a date" (the form then says
     // how many payments that is); "After 12 payments" is worked out into that day when the rule is saved.
     var ends by remember { mutableStateOf(RepeatEnd.of(existing?.endDate)) }

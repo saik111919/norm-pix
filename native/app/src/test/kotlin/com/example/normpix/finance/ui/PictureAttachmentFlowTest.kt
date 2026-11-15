@@ -441,9 +441,10 @@ class PictureAttachmentFlowTest {
 
         compose.onNodeWithText("Cancel").performClick()
         waitGone(READING_PICTURE)
-        // Back on the form, as it was.
-        compose.onNodeWithText("New expense").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Picture, Choose one").assertExists()
+        // Back on the form, as it was. Its title is there but may be scrolled above the window: the form scrolled to the picture
+        // row when one was chosen, and since the Tags field (2026-11-15) the form is taller than this test's window.
+        compose.onNodeWithText("New expense").assertExists()
+        compose.onNodeWithContentDescription("Picture, Choose one").assertIsDisplayed()
         assertTrue(compose.onAllNodesWithText("Attached").fetchSemanticsNodes().isEmpty())
         amountField().assert(hasText(""))
         until { drafts().isEmpty() }

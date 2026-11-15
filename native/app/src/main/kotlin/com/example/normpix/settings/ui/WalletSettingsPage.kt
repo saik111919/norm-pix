@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CreditCard
+import androidx.compose.material.icons.outlined.CreditScore
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.ViewCarousel
 import androidx.compose.material.icons.rounded.SaveAlt
@@ -21,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import com.example.normpix.navigation.AppearanceSection
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
+import com.example.normpix.settings.CardLimitWarning
 import com.example.normpix.settings.ClipboardTimeout
 import com.example.normpix.settings.WalletCardActionStyle
 import com.example.normpix.ui.components.AppSubPage
@@ -29,6 +31,8 @@ import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.components.LocalAppScope
 import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalSnackbars
+import com.example.normpix.ui.components.OptionSheet
+import com.example.normpix.ui.components.OptionSheetItem
 import com.example.normpix.ui.components.RadioRow
 import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.SwitchRow
@@ -45,6 +49,9 @@ import kotlinx.coroutines.launch
  */
 /** The switch that lets the phone's autofill service see the card form (and so offer Scan card above the keyboard). */
 const val KEYBOARD_CARD_FILL_TITLE = "Keyboard card fill"
+
+/** The row that sets how much of a credit card's limit may be used before NormPix says so (and its sheet's title). */
+const val CARD_LIMIT_WARNING_TITLE = "Card limit warning"
 
 @Composable
 fun WalletSettingsPage() {
@@ -95,6 +102,26 @@ fun WalletSettingsPage() {
                 snackbars.show("Something went wrong. Nothing was changed.", SnackbarKind.Error)
             } finally {
                 busy = null
+            }
+        }
+    }
+
+    /** Asks how much of a credit card's limit may be used before NormPix says so (Off, 30%, 50%, 75% or 90%). */
+    fun chooseLimitWarning() {
+        scope.launch {
+            val current = prefs.cardLimitWarning
+            val chosen = overlays.sheet<CardLimitWarning> { dismiss ->
+                OptionSheet(
+                    title = CARD_LIMIT_WARNING_TITLE,
+                    subtitle = "Tell me when a credit card has used this much of its limit",
+                    options = CardLimitWarning.entries.map { OptionSheetItem(it, it.label, it.description) },
+                    selected = setOf(current),
+                    onSelect = { dismiss(it) },
+                )
+            } ?: return@launch
+            if (chosen != current) {
+                haptics.selection()
+                preferences.setCardLimitWarning(chosen)
             }
         }
     }
@@ -221,6 +248,22 @@ fun WalletSettingsPage() {
                             supporting = "In Appearance > Layouts, beside Home's. Bank logos and card tilt are in Appearance too",
                             leading = { SettingsLeadingIcon(Icons.Outlined.ViewCarousel, SettingsRowEmoji.FILE_BOX, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                             onClick = { navigator.openAppearance(AppearanceSection.Layouts) },
+                        )
+                    }
+                }
+                // About a credit card account's own balance and limit, not the saved cards: it is here with Store cards off too.
+                ListSection(
+                    title = "Credit card limit",
+                    footer = "A card is listed in Notifications while it is at or past this, and drops off as soon as it is paid down.",
+                ) {
+                    item {
+                        ListRow(
+                            headline = CARD_LIMIT_WARNING_TITLE,
+                            supporting = (if (prefs.cardLimitWarning.on) "Warns at ${prefs.cardLimitWarning.label} of a card's limit used. " else "No warnings. ") +
+                                "Lenders look at how much of a card's limit is used, and keeping it under 30% is the usual advice.",
+                            leading = { SettingsLeadingIcon(Icons.Outlined.CreditScore, SettingsRowEmoji.SPREADSHEET, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            supportingMaxLines = 5,
+                            onClick = { chooseLimitWarning() },
                         )
                     }
                 }

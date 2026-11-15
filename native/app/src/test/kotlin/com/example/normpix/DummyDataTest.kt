@@ -9,11 +9,21 @@ import com.example.normpix.finance.data.FinanceDatabase
 import com.example.normpix.finance.data.FinanceRepository
 import com.example.normpix.finance.data.TransactionPictures
 import com.example.normpix.finance.data.TransactionQuery
+import com.example.normpix.finance.data.forecastFacts
+import com.example.normpix.finance.data.repeatSuggestions
 import com.example.normpix.finance.domain.BudgetHealth
 import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.FinanceTransaction
+import com.example.normpix.finance.domain.AccountKind
+import com.example.normpix.finance.domain.ForecastSource
+import com.example.normpix.finance.domain.loanOutlook
+import com.example.normpix.finance.domain.nextEmiIndex
 import com.example.normpix.finance.domain.MonthKey
+import com.example.normpix.finance.domain.RecurrenceFrequency
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.finance.domain.buildForecast
+import com.example.normpix.finance.domain.goalSaved
+import com.example.normpix.finance.domain.repeatingCosts
 import com.example.normpix.finance.ui.FinanceController
 import com.example.normpix.finance.ui.FinanceStatus
 import com.example.normpix.finance.ui.PictureEdit
@@ -106,6 +116,81 @@ class DummyDataTest {
     }
 
     @Test
+    fun theSampleSetHasRepeatingPaymentsToCost_somethingThatLooksLikeOne_andAForecastToDraw() = runBlocking {
+        val dummy = DummyData.open(context, real) { now }
+        try {
+            val repo = dummy.container.finance.repository
+            val today = now.toLocalDate()
+            // What repeats costs something a month and a year.
+            val costs = repeatingCosts(repo.recurringRules())
+            assertTrue(costs.active.isNotEmpty() && costs.perMonth > 0 && costs.perYear > 0, "$costs")
+            // Payments made by hand on a rhythm (the electricity, a mobile recharge) look like repeating payments; ones that already
+            // repeat (Netflix, the rent) are not offered again.
+            val suggestions = repo.repeatSuggestions(today)
+            assertTrue(suggestions.isNotEmpty(), "nothing in the sample set looks like a repeating payment")
+            assertTrue(suggestions.all { it.frequency == RecurrenceFrequency.Monthly }, "$suggestions")
+            assertTrue(suggestions.none { it.key == "netflix" || it.key == "ramesh iyer" }, "$suggestions")
+            // The forecast has the salary and the rent to come, and the cards' bills.
+            val forecast = buildForecast(repo.forecastFacts(today), today.plusDays(60), everyday = true)
+            assertTrue(forecast.startBalance > 0)
+            assertTrue(forecast.items.any { it.source == ForecastSource.Repeating && it.effect > 0 }, "the salary")
+            assertTrue(forecast.items.any { it.source == ForecastSource.Repeating && it.effect < 0 }, "the rent")
+            assertTrue(forecast.items.any { it.source == ForecastSource.CardBill }, "a credit card's bill")
+            assertTrue(forecast.everydayPerDay > 0)
+        } finally {
+            dummy.close()
+        }
+    }
+
+    @Test
+    fun theSampleSetHasTwoSavingsGoals_oneCountingAnAccountAndOneOnItsOwn_inMemoryOnly() = runBlocking {
+        val dummy = DummyData.open(context, real) { now }
+        try {
+            val state = dummy.container.finance.state.value
+            val goals = state.goals
+            assertEquals(2, goals.size)
+            val fund = goals.first { it.name == "Emergency fund" }
+            val trip = goals.first { it.name == "Trip to Goa" }
+            // One counts an account's balance, the other keeps its own amount; both have a date still ahead.
+            assertEquals("SBI Savings", state.account(fund.accountId)?.name)
+            assertNull(trip.accountId)
+            assertTrue(trip.saved > 0 && trip.saved < trip.target)
+            assertTrue(goals.all { it.targetDate!!.isAfter(now.toLocalDate()) })
+            assertTrue(goalSaved(fund, state.balances) in 1 until fund.target, "the account's balance is some of it, not all")
+            // The user's own ledger has none: the sample set is in memory only.
+            assertTrue(real.finance.state.value.goals.isEmpty())
+            assertTrue(real.finance.repository.goals().isEmpty())
+        } finally {
+            dummy.close()
+        }
+    }
+
+    @Test
+    fun theSampleSetHasOneSplitPayment_asARowForEachPart_inMemoryOnly() = runBlocking {
+        val dummy = DummyData.open(context, real) { now }
+        try {
+            val repo = dummy.container.finance.repository
+            val rows = repo.transactions(TransactionQuery(), limit = 10_000).items.filter { it.splitGroup != null }
+            // One supermarket bill, shared between two categories: a row each, one account, one moment, one payee, never in the future.
+            assertEquals(2, rows.size)
+            assertEquals(1, rows.map { it.splitGroup }.toSet().size)
+            assertEquals(setOf("DMart"), rows.map { it.payee }.toSet())
+            assertEquals(setOf(TransactionType.Expense), rows.map { it.type }.toSet())
+            assertEquals(1, rows.map { it.accountId }.toSet().size)
+            assertEquals(1, rows.map { it.occurredAt }.toSet().size)
+            assertTrue(rows.all { !it.occurredAt.isAfter(now) })
+            assertEquals(2, rows.map { it.categoryId }.toSet().size, "two categories")
+            assertEquals(202_000L, rows.sumOf { it.amount })
+            assertTrue(rows.all { !it.note.isNullOrBlank() })
+            // It holds together, as the check reads it, and the user's own ledger has none.
+            assertTrue(com.example.normpix.finance.domain.brokenSplitGroups(rows).isEmpty())
+            assertTrue(real.finance.repository.transactions(TransactionQuery(), limit = 10).items.none { it.splitGroup != null })
+        } finally {
+            dummy.close()
+        }
+    }
+
+    @Test
     fun sampleSetIsRealisticAndConsistent() = runBlocking {
         val dummy = DummyData.open(context, real) { now }
         try {
@@ -113,10 +198,25 @@ class DummyDataTest {
             val repo = dummy.container.finance.repository
             assertEquals(FinanceStatus.Ready, state.status)
             assertEquals(
-                listOf("Cash", "HDFC Savings", "ICICI Credit Card", "Paytm Wallet", "SBI Savings", "Axis Credit Card"),
+                listOf("Cash", "HDFC Savings", "ICICI Credit Card", "Paytm Wallet", "SBI Savings", "Axis Credit Card", "HDFC Home Loan"),
                 state.accounts.map { it.name },
             )
             assertEquals("HDFC Savings", state.defaultAccount?.name)
+
+            // A home loan with a few EMIs recorded: each one a transfer of the principal onto it and an expense of the interest in
+            // Loans & EMI, so what is owed is what was borrowed less the principal parts only.
+            val homeLoan = state.accounts.single { it.name == "HDFC Home Loan" }
+            val terms = assertNotNull(homeLoan.loan)
+            assertEquals(AccountKind.Loan, homeLoan.kind)
+            assertEquals(-terms.principal, homeLoan.openingBalance, "owed what was borrowed when it began")
+            val onLoan = repo.transactions(TransactionQuery(accountIds = setOf(homeLoan.id!!)), limit = 100).items
+            assertTrue(onLoan.size in 3..5, "a few EMIs so far, got ${onLoan.size}")
+            assertTrue(onLoan.all { it.type == TransactionType.Transfer && it.note!!.startsWith("EMI ") && it.note!!.endsWith(" - principal") })
+            val interests = repo.transactions(TransactionQuery(), limit = 1_000).items.filter { it.type == TransactionType.Expense && it.note?.endsWith(" - interest") == true }
+            assertEquals(onLoan.size, interests.size, "one interest expense with each principal transfer")
+            assertTrue(interests.all { it.payee == "HDFC Home Loan" && state.category(it.categoryId)?.name == "Loans & EMI" })
+            assertEquals(-terms.principal + onLoan.sumOf { it.amount }, state.balanceOf(homeLoan.id!!))
+            assertNotNull(loanOutlook(terms, -state.balanceOf(homeLoan.id!!), nextEmiIndex(terms, onLoan.maxOf { it.occurredAt.toLocalDate() }, now.toLocalDate())), "the loan can be paid off")
 
             val all = repo.transactions(TransactionQuery(), limit = 1_000).items
             assertTrue(all.size > 200, "about six months of day-to-day spending, got ${all.size}")

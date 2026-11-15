@@ -13,19 +13,33 @@ import com.example.normpix.finance.domain.emojiOf
 import com.example.normpix.finance.domain.CurrencySpec
 import com.example.normpix.finance.domain.CustomBank
 import com.example.normpix.finance.domain.FinanceTransaction
+import com.example.normpix.finance.domain.GoalFault
+import com.example.normpix.finance.domain.LoanTerms
+import com.example.normpix.finance.domain.MAX_SPLIT_GROUP_LENGTH
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.NUMBER_ENDING_LENGTH
 import com.example.normpix.finance.domain.NUMBER_START_LENGTH
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.RecurrenceFrequency
+import com.example.normpix.finance.domain.MAX_LOAN_RATE_BP
 import com.example.normpix.finance.domain.RecurringRule
+import com.example.normpix.finance.domain.SavingsGoal
+import com.example.normpix.finance.domain.MAX_TAG_NAME
+import com.example.normpix.finance.domain.Tag
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.finance.domain.cleanGoalName
 import com.example.normpix.finance.domain.cleanPersonName
+import com.example.normpix.finance.domain.cleanTagName
+import com.example.normpix.finance.domain.tagNameFault
+import com.example.normpix.finance.domain.emiFor
+import com.example.normpix.finance.domain.fault
 import com.example.normpix.finance.domain.isPictureName
 import com.example.normpix.finance.domain.isSingleEmoji
 import com.example.normpix.finance.domain.minorToDecimalString
 import com.example.normpix.finance.domain.numberEndingOrNull
 import com.example.normpix.finance.domain.numberStartOrNull
+import com.example.normpix.finance.domain.splitFault
+import com.example.normpix.finance.domain.splitGroupsOf
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -68,6 +82,10 @@ data class FinanceSnapshot(
      * again, all but these.
      */
     val removedDefaults: List<DefaultCategoryRef>? = null,
+    /** The tags the user named (the transactions say which they carry); backups from before tags existed simply have none. */
+    val tags: List<Tag> = emptyList(),
+    /** The savings goals the user set; backups from before goals existed simply have none. */
+    val goals: List<SavingsGoal> = emptyList(),
 )
 
 /** A default category by what the app calls it: its kind ("expense" / "income"), its name and, for a sub-category, its family's. */
@@ -146,8 +164,28 @@ object FinanceBackupCodec {
      * 3 (2026-11-12): the file may leave out the default categories nothing used ([trimmedForBackup]) and names the ones the
      * user removed ("removedDefaultCategories"). Version 1 and 2 files list every category and are restored exactly as before;
      * an app from before this refuses a version 3 file rather than restoring it short of the categories it left out.
+     *
+     * 4 (2026-11-15): an account may carry a "loan" - what was borrowed, the rate, the length, the EMI and the day of the first one -
+     * and its kind may be "loan". Only a loan has the key, so a file of version 1 to 3 (which has none) is read and restored exactly as
+     * before; an app from before this refuses a version 4 file rather than restoring a loan as a plain account without its terms.
+     *
+     * 5 (2026-11-15): tags. A top-level "tags" list (`{"id", "name", "createdAt"}`) and, on a transaction that has any, a "tags" list
+     * of their ids. Both are optional - absent is none - so a file of version 1 to 4 is read and restored exactly as before; an app
+     * from before this refuses a version 5 file rather than restoring it without its tags.
+     *
+     * 6 (2026-11-15): savings goals. A top-level "goals" list (`{"id", "name", "target", "targetDate", "emoji", "accountId", "saved",
+     * "sortOrder", "createdAt", "updatedAt"}`; the account by its id, `targetDate` as "yyyy-MM-dd"). Optional - absent is none - so a file
+     * of version 1 to 5 is read and restored exactly as before; an app from before this refuses a version 6 file rather than restoring
+     * it without its goals.
+     *
+     * 7 (2026-11-15): split payments. A transaction that is one part of a split payment carries `"splitGroup": "<id>"` - the id all its
+     * parts share (a random UUID; any string of 1 to 64 characters is read). Optional - absent is not split - so a file of version 1
+     * to 6 is read and restored exactly as before; an app from before this refuses a version 7 file rather than restoring a payment's
+     * parts as separate payments. A group is only valid when it holds together (`splitFault` in `Splits.kt`): 2 to 10 rows, all
+     * expenses or all income, on one account, at one date and time, with one payee and one person; else the file is refused. A file
+     * this app writes never carries the mark of a group that does not hold.
      */
-    const val FORMAT_VERSION = 3
+    const val FORMAT_VERSION = 7
 
     private val prettyJson = Json { prettyPrint = true }
     private val isoLocal: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")
@@ -157,6 +195,9 @@ object FinanceBackupCodec {
     private fun iso(d: LocalDateTime): String = isoLocal.format(d)
 
     fun encode(s: FinanceSnapshot, exportedAt: LocalDateTime): String {
+        // Only the marks of groups that hold together are written: a file that this app wrote must be one it can read back, and a mark on a
+        // group that doesn't (nothing the app writes makes one) would make the whole file refused. The rows themselves are written as they are.
+        val holding = splitGroupsOf(s.transactions).filterValues { splitFault(it) == null }.keys
         val root = buildJsonObject {
             put("format", FORMAT)
             put("version", FORMAT_VERSION)
@@ -184,6 +225,19 @@ object FinanceBackupCodec {
                                 put("numberEnding", a.numberEnding)
                                 put("numberStart", a.numberStart)
                                 put("cardId", a.cardId)
+                                // Only a loan has one: every other account is written as it always was.
+                                a.loan?.let { loan ->
+                                    put(
+                                        "loan",
+                                        buildJsonObject {
+                                            put("principal", loan.principal)
+                                            put("rateBp", loan.rateBp)
+                                            put("tenureMonths", loan.tenureMonths)
+                                            put("emi", loan.emi)
+                                            put("start", loan.start.toString())
+                                        },
+                                    )
+                                }
                             },
                         )
                     }
@@ -216,6 +270,42 @@ object FinanceBackupCodec {
                                 put("archived", p.archived)
                                 put("createdAt", iso(p.createdAt))
                                 put("updatedAt", iso(p.updatedAt))
+                            },
+                        )
+                    }
+                },
+            )
+            put(
+                "tags",
+                buildJsonArray {
+                    for (tag in s.tags) {
+                        add(
+                            buildJsonObject {
+                                put("id", tag.id)
+                                put("name", tag.name)
+                                put("createdAt", iso(tag.createdAt))
+                            },
+                        )
+                    }
+                },
+            )
+            put(
+                "goals",
+                buildJsonArray {
+                    for (g in s.goals) {
+                        add(
+                            buildJsonObject {
+                                put("id", g.id)
+                                put("name", g.name)
+                                put("target", g.target)
+                                put("targetDate", g.targetDate?.toString())
+                                put("emoji", g.emoji)
+                                put("accountId", g.accountId)
+                                // A linked goal keeps no amount of its own (see FinanceRows.goal): the account's balance is what is saved.
+                                put("saved", if (g.accountId != null) 0L else g.saved)
+                                put("sortOrder", g.sortOrder)
+                                put("createdAt", iso(g.createdAt))
+                                put("updatedAt", iso(g.updatedAt))
                             },
                         )
                     }
@@ -280,6 +370,12 @@ object FinanceBackupCodec {
                                 put("picture", t.picture)
                                 put("createdAt", iso(t.createdAt))
                                 put("updatedAt", iso(t.updatedAt))
+                                // Only on a transaction that has tags: every other one is written as it always was.
+                                if (t.tagIds.isNotEmpty()) {
+                                    put("tags", buildJsonArray { for (id in t.tagIds.sorted()) add(JsonPrimitive(id)) })
+                                }
+                                // Only on a part of a split payment (that holds): every other one is written as it always was.
+                                if (t.splitGroup != null && t.splitGroup in holding) put("splitGroup", t.splitGroup)
                             },
                         )
                     }
@@ -381,10 +477,27 @@ object FinanceBackupCodec {
             }
         }
 
+        // When the file was made: what a tag written without its own date is said to have been made at.
+        val exportedAt = root.string("exportedAt")?.let(::parseDateTime)
+
         return FinanceSnapshot(
             currencyCode = currency,
             defaultAccountId = defaultAccountId,
             removedDefaults = removedDefaults,
+            // Absent in every file before version 5: no tags.
+            tags = list("tags").map { m ->
+                Tag(
+                    id = m.requireLong("id", "tag"),
+                    name = cleanTagName(m.requireString("name", "tag")),
+                    createdAt = if (m["createdAt"].let { it == null || it is JsonNull }) {
+                        exportedAt ?: LocalDateTime.now()
+                    } else {
+                        m.date("createdAt", "tag")
+                    },
+                )
+            },
+            // Absent in every file before version 6: no goals.
+            goals = list("goals").map(::goalOf),
             accounts = list("accounts").map { m ->
                 Account(
                     id = m.requireLong("id", "account"),
@@ -403,6 +516,8 @@ object FinanceBackupCodec {
                     // Absent in backups made before a card account could keep the start of its number.
                     numberStart = m.stringOrNull("numberStart"),
                     cardId = m.stringOrNull("cardId"),
+                    // Absent in every file before version 4, and in the account of one that is not a loan.
+                    loan = loanOf(m),
                 )
             },
             banks = list("banks").map { m ->
@@ -438,8 +553,9 @@ object FinanceBackupCodec {
                 )
             },
             transactions = list("transactions").map { m ->
+                val id = m.requireLong("id", "transaction")
                 FinanceTransaction(
-                    id = m.requireLong("id", "transaction"),
+                    id = id,
                     type = m.enumValue(TransactionType.entries, { it.key }, "type", "transaction"),
                     amount = m.requireLong("amount", "transaction"),
                     accountId = m.requireLong("accountId", "transaction"),
@@ -454,6 +570,10 @@ object FinanceBackupCodec {
                     personId = m.longOrNull("personId", "transaction"),
                     // Only a name the app could have given it: anything else is not a picture of this app's.
                     picture = m.stringOrNull("picture")?.takeIf(::isPictureName),
+                    // Absent in every file before version 5, and on a transaction with none.
+                    tagIds = tagIdsOf(m, id),
+                    // Absent in every file before version 7, and on a transaction that is not part of a split payment.
+                    splitGroup = splitGroupOf(m, id),
                 )
             },
             budgets = list("budgets").map { m ->
@@ -487,6 +607,87 @@ object FinanceBackupCodec {
             },
         )
     }
+
+    /**
+     * An account's loan, or null where it has none (the key is missing or null). The terms are read as they are written - a number
+     * that is no number, or a day that is no day, is a damaged file - and checked by [validate] with the rest. An EMI left out is worked
+     * out from the other terms, when those hold.
+     */
+    private fun loanOf(account: JsonObject): LoanTerms? {
+        val value = account["loan"]
+        if (value == null || value is JsonNull) return null
+        val loan = value as? JsonObject ?: throw BackupFormatError("An account has an invalid \"loan\".")
+        val principal = loan.requireLong("principal", "loan")
+        val rateBp = loan.requireLong("rateBp", "loan").toIntOrClamped()
+        val tenure = loan.requireLong("tenureMonths", "loan").toIntOrClamped()
+        val start = loan.string("start")?.let(::parseDateTime)?.toLocalDate()
+            ?: throw BackupFormatError("A loan has an invalid date in \"start\".")
+        val given = loan.longOrNull("emi", "loan")
+        val emi = given ?: if (principal > 0 && tenure in 1..600 && rateBp in 0..MAX_LOAN_RATE_BP) emiFor(principal, rateBp, tenure) else 0L
+        return LoanTerms(principal, rateBp, tenure, emi, start)
+    }
+
+    /**
+     * One goal as the file writes it. Every number and date is read as it is written - one that is no number, or a day that is no day, is a
+     * damaged file - and what is read is checked by [validate] with the rest. `targetDate` is a day ("yyyy-MM-dd"), or missing or null for
+     * a goal with no date; `saved` missing is nothing saved.
+     */
+    private fun goalOf(m: JsonObject): SavingsGoal {
+        val date = m["targetDate"]
+        val targetDate = if (date == null || date is JsonNull) {
+            null
+        } else {
+            m.string("targetDate")?.let(::parseDateTime)?.toLocalDate() ?: throw BackupFormatError("A goal has an invalid date in \"targetDate\".")
+        }
+        return SavingsGoal(
+            id = m.requireLong("id", "goal"),
+            name = cleanGoalName(m.requireString("name", "goal")),
+            target = m.requireLong("target", "goal"),
+            targetDate = targetDate,
+            emoji = m.stringOrNull("emoji"),
+            accountId = m.longOrNull("accountId", "goal"),
+            saved = m.longOrNull("saved", "goal") ?: 0L,
+            sortOrder = (m.longOrNull("sortOrder", "goal") ?: 0L).coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt(),
+            createdAt = m.date("createdAt", "goal"),
+            updatedAt = m.date("updatedAt", "goal"),
+        )
+    }
+
+    /**
+     * The tags of the transaction [transactionId] as its "tags" list names them (their ids), or none where the key is missing or null.
+     * A list that is no list of whole numbers is a damaged file, and so is one that names a tag twice: a set would quietly drop the
+     * second, and nothing this app writes has one. Whether each tag is in the file is for [validate].
+     */
+    private fun tagIdsOf(transaction: JsonObject, transactionId: Long): Set<Long> {
+        val value = transaction["tags"]
+        if (value == null || value is JsonNull) return emptySet()
+        val list = value as? JsonArray ?: throw BackupFormatError("Transaction #$transactionId has an invalid \"tags\".")
+        val ids = list.map { entry ->
+            (entry as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull
+                ?: throw BackupFormatError("Transaction #$transactionId has an invalid \"tags\".")
+        }
+        val set = LinkedHashSet(ids)
+        if (set.size != ids.size) throw BackupFormatError("Transaction #$transactionId has the same tag twice.")
+        return set
+    }
+
+    /**
+     * The split group of the transaction [transactionId] as its "splitGroup" says, or none where the key is missing or null. Anything
+     * but a text of 1 to [MAX_SPLIT_GROUP_LENGTH] characters (that isn't blank) is a damaged file. Whether the group holds together is for
+     * [validate].
+     */
+    private fun splitGroupOf(transaction: JsonObject, transactionId: Long): String? {
+        val value = transaction["splitGroup"]
+        if (value == null || value is JsonNull) return null
+        val group = (value as? JsonPrimitive)?.takeIf { it.isString }?.content
+        if (group == null || group.isBlank() || group.length > MAX_SPLIT_GROUP_LENGTH) {
+            throw BackupFormatError("Transaction #$transactionId has an invalid \"splitGroup\".")
+        }
+        return group
+    }
+
+    /** A number as an Int, one outside Int's range kept as the nearest Int that is outside any range a loan allows (not wrapped into one). */
+    private fun Long.toIntOrClamped(): Int = coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
 
     /**
      * An account's bank. Backups made before banks existed have no `bankKey` at all (not even null), so they get the same
@@ -527,6 +728,8 @@ object FinanceBackupCodec {
         val categoryIds = ids(s.categories.map { it.id }, "category")
         val ruleIds = ids(s.recurringRules.map { it.id }, "recurring rule")
         val personIds = ids(s.people.map { it.id }, "person")
+        val tagIds = ids(s.tags.map { it.id }, "tag")
+        ids(s.goals.map { it.id }, "goal")
         ids(s.transactions.map { it.id }, "transaction")
         ids(s.budgets.map { it.id }, "budget")
         val categoryTypes = s.categories.associate { it.id to it.type }
@@ -549,6 +752,15 @@ object FinanceBackupCodec {
             if (a.numberStart != null && numberStartOrNull(a.numberStart) == null) add("Account \"${a.name}\" has a number start that is not $NUMBER_START_LENGTH digits.")
             if (a.kind == AccountKind.Cash) add("Account \"${a.name}\" has a number or a card but is cash.")
         }
+        for (a in s.accounts) {
+            val loan = a.loan
+            if (loan == null) {
+                if (a.kind == AccountKind.Loan) add("Account \"${a.name}\" is a loan but has no loan details.")
+                continue
+            }
+            loan.fault()?.let { add("Account \"${a.name}\" ${it.reason}.") }
+            if (a.kind == AccountKind.Card) add("Account \"${a.name}\" has loan details but is a card.")
+        }
         val bankKeys = s.banks.mapTo(mutableSetOf()) { it.key }
         if (bankKeys.size != s.banks.size) add("The backup has duplicate banks.")
         for (b in s.banks) if (b.name.isBlank()) add("A bank has no name.")
@@ -562,6 +774,28 @@ object FinanceBackupCodec {
         }
         if (s.people.map { cleanPersonName(it.name).lowercase() }.let { it.size != it.toSet().size }) {
             add("The backup has two people with the same name.")
+        }
+        // A tag's name holds as the app's own does (1 to 30 characters), and no two tags share one whatever its case.
+        for (tag in s.tags) {
+            val name = cleanTagName(tag.name)
+            when {
+                name.isEmpty() -> add("A tag has no name.")
+                tagNameFault(name) != null -> add("Tag \"$name\" has a name longer than $MAX_TAG_NAME characters.")
+            }
+        }
+        if (s.tags.map { cleanTagName(it.name).lowercase() }.let { it.size != it.toSet().size }) {
+            add("The backup has two tags with the same name.")
+        }
+        // A goal holds as the app's own do (a name of 1 to 40 characters, a target above zero, nothing saved below zero, one emoji or none)
+        // and counts an account that is in the file, or none. What kind the account is does not matter here: it may have been changed
+        // since the goal was made (a goal is never refused for that), and a card or a loan then counts as nothing saved.
+        for (g in s.goals) {
+            when (val fault = g.fault()) {
+                null -> Unit
+                GoalFault.Name -> add("A goal has no name.")
+                else -> add("Goal \"${cleanGoalName(g.name)}\" ${fault.reason}.")
+            }
+            if (g.accountId != null && g.accountId !in accountIds) add("Goal \"${cleanGoalName(g.name)}\" is linked to an account that is not in the backup.")
         }
         for (c in s.categories) if (c.name.isBlank()) add("A category has no name.")
         val categoriesById = s.categories.associateBy { it.id }
@@ -609,6 +843,15 @@ object FinanceBackupCodec {
                 if (t.type != TransactionType.Expense) add("Transaction #${t.id} names a person but is not an expense.")
                 if (t.personId !in personIds) add("Transaction #${t.id} refers to a missing person.")
             }
+            if (t.tagIds.isNotEmpty()) {
+                if (t.type == TransactionType.Transfer) add("Transaction #${t.id} is a transfer with tags.")
+                if (t.tagIds.any { it !in tagIds }) add("Transaction #${t.id} refers to a missing tag.")
+            }
+        }
+        // A split payment holds together as the app's own do: 2 to 10 rows, all spending or all income (never a transfer), on one account,
+        // at one date and time, with one payee and one person. The first of its rows names it, as the rows themselves have no name.
+        for ((_, rows) in splitGroupsOf(s.transactions)) {
+            splitFault(rows)?.let { add("A split payment (transaction #${rows.first().id}) ${it.problem}.") }
         }
         for (r in s.recurringRules) {
             shapeProblem(r.type, r.amount, r.accountId, r.toAccountId, r.categoryId)
@@ -645,9 +888,10 @@ object FinanceBackupCodec {
         val accounts = s.accounts.associate { it.id to it.name }
         val categories = s.categories.associate { it.id to s.categories.pathName(it) }
         val people = s.people.associate { it.id to it.name }
+        val tags = s.tags.associate { it.id to it.name }
         return buildString {
             appendLine(
-                csvRow(listOf("Date", "Type", "Amount", "Currency", "Account", "To account", "Category", "Payee", "Note", "Person")),
+                csvRow(listOf("Date", "Type", "Amount", "Currency", "Account", "To account", "Category", "Payee", "Note", "Person", "Tags")),
             )
             for (t in s.transactions) {
                 appendLine(
@@ -663,6 +907,8 @@ object FinanceBackupCodec {
                             t.payee ?: "",
                             t.note ?: "",
                             t.personId?.let { people[it] } ?: "",
+                            // Its tags' names, alphabetical, in one cell ("Reimbursable; Tax-deductible").
+                            t.tagIds.mapNotNull { tags[it] }.sortedWith(String.CASE_INSENSITIVE_ORDER).joinToString("; "),
                         ),
                     ),
                 )

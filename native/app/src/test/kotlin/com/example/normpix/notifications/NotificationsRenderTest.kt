@@ -364,10 +364,14 @@ class NotificationsRenderTest {
                                 left = minOf(left, x); top = minOf(top, y); right = maxOf(right, x); bottom = maxOf(bottom, y)
                             }
                         }
-                        // Exact at normal text. Large text puts the stacked panels at fractional pixels, where Home's banner (drawn in
-                        // its stack's layer) and the page's (drawn straight) round a few edge pixels differently: a hair, not a layout.
-                        val allowed = if (scale == 1f) 0 else home.width * home.height / 1000
-                        if (count > allowed) {
+                        // Large text puts the stacked panels at fractional pixels, where Home's banner (drawn in its stack's layer) and
+                        // the page's (drawn straight) round a few edge pixels differently: a hair, not a layout. At normal text only a
+                        // curve does that - a bar's ring (since 2026-11-15) and the curved lines behind, smoothed inside the layer and
+                        // outside it: a few edge pixels by a faint shade (measured: 6 pixels by 6 of 255 on the ring, 30 by 1 on the
+                        // lines). So at normal text a difference must also be faint; anything stronger is a real difference.
+                        val allowed = home.width * home.height / 1000
+                        val faint = scale != 1f || strongest <= 8
+                        if (count > allowed || !faint) {
                             for ((suffix, bitmap) in listOf("home" to home, "page" to page)) {
                                 File(outDir, "mismatch_${name}_${mode}_${scale}_$suffix.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
                             }

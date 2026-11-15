@@ -135,6 +135,8 @@ internal object SettingsRowEmoji {
     const val KEY = "🔑"
     const val SHIELD = "🛡️"
     const val TAG = "🏷️"
+    /** A tag the user names on transactions (Settings > Finance > Tags): the label emoji, apart from the categories' price tag. */
+    const val LABEL = "🔖"
     const val PHONE = "📱"
     const val SCREEN = "🖥️"
 

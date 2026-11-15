@@ -3,25 +3,34 @@ package com.example.normpix.finance.ui
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import com.example.normpix.finance.data.repeatSuggestions
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.finance.domain.repeatingCosts
 import com.example.normpix.finance.domain.upcomingOccurrences
+import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.ui.components.AppEmptyState
 import com.example.normpix.ui.components.AppErrorState
 import com.example.normpix.ui.components.AppLoadingState
+import com.example.normpix.ui.components.Icon
 import com.example.normpix.ui.components.LeadingIcon
 import com.example.normpix.ui.components.ListRow
 import com.example.normpix.ui.components.ListSection
 import com.example.normpix.ui.theme.AppSpacing
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 /**
@@ -31,13 +40,44 @@ import java.time.LocalDateTime
 @Composable
 fun RecurringView() {
     val actions = rememberFinanceActions()
+    val navigator = LocalNavigator.current
     val rules by rememberFinanceQuery(Unit) { recurringRules() }
+    val today = LocalDate.now()
+    val suggested by rememberFinanceQuery(today) { repeatSuggestions(today) }
     Column(Modifier.padding(AppSpacing.page)) {
         when (val value = rules) {
             is AsyncValue.Loading -> AppLoadingState(label = "Loading recurring payments")
             is AsyncValue.Failure -> AppErrorState(title = "Couldn't load this", message = "Your data is safe on this device. Try again.")
             is AsyncValue.Data -> {
                 val all = value.value
+                // What the repeating payments cost, and the payees that look like they should be one; a suggestion that failed to load is none.
+                val costs = repeatingCosts(all)
+                if (costs.active.isNotEmpty()) {
+                    RepeatingCostsBanner(costs, onOpen = navigator::openRepeatingCosts)
+                    Spacer(Modifier.height(AppSpacing.sm))
+                }
+                RepeatSuggestions((suggested as? AsyncValue.Data)?.value.orEmpty())
+                // The forecast is about the money to come as a whole, so it is here whether or not anything repeats.
+                ListSection(modifier = Modifier.padding(vertical = AppSpacing.sm)) {
+                    item {
+                        ListRow(
+                            headline = "Forecast",
+                            supporting = "See your money day by day, to a date you pick",
+                            leading = { LeadingIcon(Icons.AutoMirrored.Outlined.ShowChart) },
+                            trailing = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
+                            onClick = navigator::openForecast,
+                        )
+                    }
+                    item {
+                        ListRow(
+                            headline = "Bills calendar",
+                            supporting = "Card bills, repeating payments and reminders by day",
+                            leading = { LeadingIcon(Icons.Outlined.CalendarMonth) },
+                            trailing = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
+                            onClick = navigator::openBillsCalendar,
+                        )
+                    }
+                }
                 if (all.isEmpty()) {
                     AppEmptyState(
                         icon = Icons.Outlined.EventRepeat,

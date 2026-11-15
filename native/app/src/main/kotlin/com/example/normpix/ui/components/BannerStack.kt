@@ -269,6 +269,7 @@ private fun BannerTop(banner: Banner, plate: Boolean) {
 
     val info: @Composable (Shape, Modifier, Boolean) -> Unit = { shape, modifier, fillHeight ->
         Panel(shape, colors.surface, ink, null, modifier, fillHeight, edge, shown) {
+            val bar = banner.bar
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(28.dp).background(role.color, CircleShape), contentAlignment = Alignment.Center) {
@@ -281,7 +282,13 @@ private fun BannerTop(banner: Banner, plate: Boolean) {
                         color = colors.accent,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
                     )
+                    // A bar with no figure panel to sit in (a download) goes at the end of this row; see the figure panel below.
+                    if (bar != null && figure == null) {
+                        Spacer(Modifier.width(AppSpacing.sm))
+                        BannerRing(bar, fill = role.color, ink = ink)
+                    }
                 }
                 Spacer(Modifier.height(AppSpacing.sm))
                 // Beside a figure the panel is narrow, so a title may take two lines - and then always has the room for two, so the
@@ -297,15 +304,15 @@ private fun BannerTop(banner: Banner, plate: Boolean) {
                 )
                 Text(banner.message, style = text.bodyMedium, color = quiet, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            banner.bar?.let { bar ->
-                Spacer(Modifier.height(AppSpacing.md))
-                PillBody(bar, fill = role.color, onFill = colors.icon, ink = ink, quiet = quiet)
-            }
         }
     }
     val figurePanel: @Composable (Shape, Modifier, Boolean) -> Unit = { shape, modifier, fillHeight ->
         if (figure != null) {
-            Panel(shape, colors.surface, ink, null, modifier, fillHeight, edge, shown) { FigureBody(figure, quiet) }
+            // A banner's bar (a budget's use, a card limit's) is a ring at the figure panel's top end, beside its title, in the status
+            // colour with the percent inside (owner, 2026-11-15: the full-width pill under the lines - "make it circle", "The Circle to
+            // right side"). The left panel's lines keep their whole width, and the pill's row is gone.
+            val ring: (@Composable () -> Unit)? = banner.bar?.let { bar -> { BannerRing(bar, fill = role.color, ink = ink) } }
+            Panel(shape, colors.surface, ink, null, modifier, fillHeight, edge, shown) { FigureBody(figure, quiet, aside = ring) }
         }
     }
 

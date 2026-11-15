@@ -15,11 +15,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.PieChart
+import androidx.compose.material.icons.outlined.Savings
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.PieChart
+import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +35,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.ui.BudgetsView
+import com.example.normpix.finance.ui.GoalsView
 import com.example.normpix.finance.ui.RecurringView
 import com.example.normpix.finance.ui.TransactionHistory
 import com.example.normpix.navigation.AmountsVisibilityButton
@@ -177,6 +180,7 @@ private val PlanSection.icon
         PlanSection.Budgets -> Icons.Outlined.PieChart
         PlanSection.Recurring -> Icons.Outlined.Repeat
         PlanSection.Reminders -> Icons.Outlined.Notifications
+        PlanSection.Goals -> Icons.Outlined.Savings
     }
 
 private val PlanSection.selectedIcon
@@ -184,9 +188,10 @@ private val PlanSection.selectedIcon
         PlanSection.Budgets -> Icons.Rounded.PieChart
         PlanSection.Recurring -> Icons.Rounded.Repeat
         PlanSection.Reminders -> Icons.Rounded.Notifications
+        PlanSection.Goals -> Icons.Rounded.Savings
     }
 
-/** Budgets | Recurring | Reminders: the level under the primary switch - pills with their icons, lighter than the switch above. */
+/** Budgets | Recurring | Reminders | Goals: the level under the primary switch - pills with their icons, lighter than the switch above. */
 @Composable
 private fun PlanSectionTabs() {
     val shell = LocalShellState.current
@@ -213,7 +218,7 @@ private fun PlanSectionTabs() {
     )
 }
 
-/** Plans: monthly budgets, recurring payments and reminders. */
+/** Plans: monthly budgets, recurring payments, reminders and savings goals. */
 @Composable
 private fun Plans(listState: LazyListState, switch: @Composable () -> Unit, back: WithinTabBack?) {
     val shell = LocalShellState.current
@@ -304,6 +309,7 @@ private fun SectionBody(section: PlanSection) {
         PlanSection.Budgets -> BudgetsView()
         PlanSection.Recurring -> RecurringView()
         PlanSection.Reminders -> RemindersView()
+        PlanSection.Goals -> GoalsView()
     }
 }
 

@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.MaterialTheme
@@ -28,7 +30,13 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.IntrinsicMeasurable
+import androidx.compose.ui.layout.IntrinsicMeasureScope
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasurePolicy
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -153,6 +161,60 @@ fun SplitStatBanner(
     }
 }
 
+/**
+ * The banner with a figure in each panel, side by side and as wide as each other (a month's cost and a year's; the money a
+ * forecast ends with and the least it gets to): the same panels, seam, corners and curved lines, for two things that are both
+ * just an amount. [spoken] is the whole of it for a screen reader; with an [onClick] the whole banner is one button.
+ */
+@Composable
+fun SplitStatBanner(
+    first: BannerFigure,
+    second: BannerFigure,
+    spoken: String,
+    modifier: Modifier = Modifier,
+    onClickLabel: String? = null,
+    onClick: (() -> Unit)? = null,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val container = scheme.secondaryContainer
+    val ink = scheme.onSecondaryContainer
+    val stacked = LocalDensity.current.fontScale > StackAtFontScale
+    val quiet = quietInk(ink, container)
+
+    val left: @Composable (Shape, Modifier, Boolean) -> Unit = { shape, panel, fillHeight ->
+        Panel(shape, container, ink, onClick, panel, fillHeight) { FigureBody(first, quiet) }
+    }
+    val right: @Composable (Shape, Modifier, Boolean) -> Unit = { shape, panel, fillHeight ->
+        Panel(shape, container, ink, onClick, panel, fillHeight) { FigureBody(second, quiet) }
+    }
+    val press = onClick
+    val semantics = Modifier.semantics(mergeDescendants = true) {
+        contentDescription = spoken
+        if (press != null) {
+            role = Role.Button
+            // `this.`: the parameter is also called onClick, and must not be what this resolves to.
+            this.onClick(label = onClickLabel) {
+                press()
+                true
+            }
+        }
+    }
+    if (stacked) {
+        Column(modifier.fillMaxWidth().then(semantics), verticalArrangement = Arrangement.spacedBy(Seam)) {
+            left(StackedTop, Modifier.fillMaxWidth(), false)
+            right(StackedBottom, Modifier.fillMaxWidth(), false)
+        }
+    } else {
+        Row(
+            modifier.fillMaxWidth().height(IntrinsicSize.Min).then(semantics),
+            horizontalArrangement = Arrangement.spacedBy(Seam),
+        ) {
+            left(SideStart, Modifier.weight(FigureWeight).fillMaxHeight(), true)
+            right(SideEnd, Modifier.weight(FigureWeight).fillMaxHeight(), true)
+        }
+    }
+}
+
 /** [ink] at [SecondaryAlpha] over [container], or in full where that would not read at 4.5:1 (some accents' containers are near the limit). */
 internal fun quietInk(ink: Color, container: Color): Color =
     readableOn(container, ink.copy(alpha = SecondaryAlpha).compositeOver(container), ink)
@@ -192,14 +254,111 @@ internal fun Panel(
     }
 }
 
-/** A bar for a banner: a pill that has gone [fraction] of the way with [label] inside it, and - if given - its two ends under it. */
+/**
+ * A bar for a banner: how far something has gone ([fraction]) and what that is in words ([label], "83% used" - what a screen reader
+ * says). The summary banner draws it as a pill with [label] inside and - if given - its two ends under it; a status banner
+ * (`BannerStack`) as a ring with [short] inside ("83%"; the percentage of [fraction] when not given).
+ */
 @Immutable
-class BannerBar(val fraction: Float, val label: String, val from: String? = null, val to: String? = null)
+class BannerBar(
+    val fraction: Float,
+    val label: String,
+    val from: String? = null,
+    val to: String? = null,
+    val short: String? = null,
+)
+
+/**
+ * A status banner's bar as a ring, beside its lines (owner, 2026-11-15, on a budget banner's full-width pill: "move this to left
+ * place and make it circle", so it takes less room): the arc goes [BannerBar.fraction] of the way round from the top in [fill],
+ * over a faint track of [ink], with the bar's short words in [ink] inside. It is [RingSize] across, or as much more as its words
+ * need - "120%" at large text still fits inside the ring, never over it.
+ */
+@Composable
+internal fun BannerRing(bar: BannerBar, fill: Color, ink: Color, modifier: Modifier = Modifier) {
+    val track = ink.copy(alpha = TrackAlpha)
+    val words = bar.short ?: "${(bar.fraction.coerceIn(0f, 1f) * 100).roundToInt()}%"
+    Layout(
+        content = {
+            Text(
+                words,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = ink,
+                maxLines = 1,
+                softWrap = false,
+            )
+        },
+        modifier = modifier.drawBehind {
+            val stroke = RingStroke.toPx()
+            val inset = Offset(stroke / 2, stroke / 2)
+            val arc = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke)
+            drawArc(track, startAngle = 0f, sweepAngle = 360f, useCenter = false, topLeft = inset, size = arc, style = Stroke(stroke))
+            val sweep = 360f * bar.fraction.coerceIn(0f, 1f)
+            if (sweep > 0f) {
+                drawArc(
+                    fill,
+                    startAngle = -90f,
+                    sweepAngle = sweep,
+                    useCenter = false,
+                    topLeft = inset,
+                    size = arc,
+                    style = Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+                )
+            }
+        },
+        measurePolicy = RingPolicy,
+    )
+}
+
+/**
+ * The ring's size: a square as wide as its words plus its stroke and a little room each side, never less than [RingSize]. It answers
+ * the intrinsic questions itself: the banner's panels are made one height through them, and the default answers (made by measuring
+ * with a stand-in width) made the ring - and the panel round it - as tall as the screen (rendered and seen, 2026-11-15).
+ */
+private val RingPolicy = object : MeasurePolicy {
+    private fun IntrinsicMeasureScope.side(textWidth: Int, textHeight: Int): Int =
+        max(RingSize.roundToPx(), max(textWidth, textHeight) + (RingStroke + AppSpacing.xs).roundToPx() * 2)
+
+
+    private fun IntrinsicMeasureScope.sideOf(measurables: List<IntrinsicMeasurable>): Int {
+        val words = measurables[0]
+        val width = words.maxIntrinsicWidth(Constraints.Infinity)
+        return side(width, words.minIntrinsicHeight(width))
+    }
+
+    override fun MeasureScope.measure(measurables: List<Measurable>, constraints: Constraints): MeasureResult {
+        val text = measurables[0].measure(Constraints())
+        val side = side(text.width, text.height)
+        return layout(side, side) { text.placeRelative((side - text.width) / 2, (side - text.height) / 2) }
+    }
+
+    override fun IntrinsicMeasureScope.minIntrinsicWidth(measurables: List<IntrinsicMeasurable>, height: Int) = sideOf(measurables)
+
+    override fun IntrinsicMeasureScope.maxIntrinsicWidth(measurables: List<IntrinsicMeasurable>, height: Int) = sideOf(measurables)
+
+    override fun IntrinsicMeasureScope.minIntrinsicHeight(measurables: List<IntrinsicMeasurable>, width: Int) = sideOf(measurables)
+
+    override fun IntrinsicMeasureScope.maxIntrinsicHeight(measurables: List<IntrinsicMeasurable>, width: Int) = sideOf(measurables)
+}
+
+/** How wide a banner's ring is (it grows for longer words): in the icon's place, a little larger than its disc. How thick its arc. */
+private val RingSize = AppSpacing.xxxl + AppSpacing.sm
+private val RingStroke = AppSpacing.xs
 
 /** The right panel's contents: its title, then the figure and its note at the bottom. Shared with the status banners. */
 @Composable
-internal fun FigureBody(figure: BannerFigure, quiet: Color) {
-    Text(figure.title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold), maxLines = 1)
+internal fun FigureBody(figure: BannerFigure, quiet: Color, aside: (@Composable () -> Unit)? = null) {
+    val title = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+    if (aside == null) {
+        Text(figure.title, style = title, maxLines = 1)
+    } else {
+        // Something beside the title at the panel's top end: a status banner's ring.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            Text(figure.title, style = title, maxLines = 1, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(AppSpacing.sm))
+            aside()
+        }
+    }
     Spacer(Modifier.height(AppSpacing.md))
     Column {
         val style = MaterialTheme.typography.headlineSmall

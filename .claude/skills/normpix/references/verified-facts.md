@@ -226,6 +226,18 @@ Format: `claim - applies to - source - status/date`.
 - The keyboard's "Scan card" chip is the autofill service's (Autofill with Google via inline suggestions, Android 11+), not the keyboard's
   own; FLAG_SECURE does not block autofill - both researchers, partly dated sources; not seen on a device.
 
+## NFC exchange (2026-11-14: Haiku 5.5 xhigh + Gemini 3.8 Flash High, cross-checked by the main agent; built 2026-11-15)
+
+- `HostApduService.processCommandApdu` runs on the app's **main thread**; keep each answer quick (key generation and ECDH take
+  milliseconds, fine) - Android HCE - both researchers, 2026-11-14.
+- Short APDUs: command data at most **255** bytes, response data at most **256**; don't rely on extended-length APDUs between phones.
+  NormPix sends the sealed card in pieces of at most **240** bytes - both researchers, 2026-11-14.
+- One SELECT per session: a new SELECT starts a new session (fresh keys, fresh code) - both researchers, 2026-11-14.
+- A faithful relay still produces matching codes: comparing the code stops key substitution (a man in the middle), not distance; hence
+  "Only tap Match for a phone you can see" - both researchers, 2026-11-14.
+- P-256 ECDH is in the platform from long before minSdk 26 (X25519 only from API 33); there is no HKDF in the platform (built from
+  HMAC-SHA256 per RFC 5869; test case 1 in `NfcPairingTest`) - `NfcPairing.kt` header - 2026-11-14.
+
 ## How to add an entry
 
 `claim - applies to (library/API level/version) - source (URL or path:line) - status/date`. If a fact is later disproved, delete it

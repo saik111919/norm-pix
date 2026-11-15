@@ -35,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Wallet
 import androidx.compose.material.icons.rounded.Add
@@ -124,7 +125,15 @@ fun AccountHistoryPage(accountId: Long) {
                 }
             }
         },
-        header = if (account == null) null else ({ AccountBalanceHeader(accountId) }),
+        header = if (account == null) {
+            null
+        } else {
+            {
+                AccountBalanceHeader(accountId)
+                // A loan: what is still to pay and when, its EMI, Record EMI and the schedule, above its history.
+                if (account.isLoan) LoanPanel(account)
+            }
+        },
     )
 }
 
@@ -326,6 +335,7 @@ fun TransactionHistory(
         (if (lockedAccountId == null) filters.accountIds.size else 0) +
         (if (lockedPersonId == null) filters.personIds.size else 0) +
         filters.categoryIds.size +
+        filters.tagIds.size +
         (if (filters.minAmount != null || filters.maxAmount != null) 1 else 0) +
         (if (filters.range != null) 1 else 0)
 
@@ -849,6 +859,15 @@ private fun activeFilterChips(
                 "Remove category filter",
                 glyph = { CategoryGlyph(category?.icon ?: "other", LocalContentColor.current, 18.dp) },
             ) { update(filters.copy(categoryIds = filters.categoryIds - id)) }
+        }
+    }
+    for (id in filters.tagIds) {
+        chips += {
+            Chip(
+                Icons.AutoMirrored.Outlined.Label,
+                finance.tag(id)?.name ?: "Tag",
+                "Remove tag filter",
+            ) { update(filters.copy(tagIds = filters.tagIds - id)) }
         }
     }
     if (filters.minAmount != null || filters.maxAmount != null) {

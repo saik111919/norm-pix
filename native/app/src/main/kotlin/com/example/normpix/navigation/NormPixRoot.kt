@@ -64,11 +64,16 @@ import com.example.normpix.AppContainer
 import com.example.normpix.about.GuideTopic
 import com.example.normpix.DummyData
 import com.example.normpix.finance.domain.DateRange
+import com.example.normpix.finance.domain.ForecastEnd
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.ui.AccountHistoryPage
 import com.example.normpix.finance.ui.BudgetHistoryPage
 import com.example.normpix.finance.ui.CategoryHistoryPage
 import com.example.normpix.finance.ui.FinanceStatus
+import com.example.normpix.finance.ui.BillsCalendarPage
+import com.example.normpix.finance.ui.ForecastPage
+import com.example.normpix.finance.ui.TagHistoryPage
+import com.example.normpix.finance.ui.YearByTagPage
 import com.example.normpix.finance.ui.LocalCategoryIconShape
 import com.example.normpix.finance.ui.LocalCategoryIconStyle
 import com.example.normpix.finance.ui.LocalFinance
@@ -77,6 +82,7 @@ import com.example.normpix.finance.ui.LocalWalletCards
 import com.example.normpix.reminders.rememberReminderFlows
 import com.example.normpix.finance.ui.PeoplePage
 import com.example.normpix.finance.ui.PersonDetailPage
+import com.example.normpix.finance.ui.RepeatingCostsPage
 import com.example.normpix.finance.ui.rememberFinanceState
 import com.example.normpix.finance.share.ReceiveSharedTransactions
 import com.example.normpix.updates.ui.OfferAppUpdates
@@ -126,11 +132,18 @@ object Routes {
     const val NOTIFICATIONS = "notifications"
     const val CATEGORIES = "categories"
     const val BUDGET_HISTORY = "budget-history"
+    const val REPEATING_COSTS = "repeating-costs"
+    const val FORECAST = "forecast"
+    const val BILLS_CALENDAR = "bills-calendar"
     const val PEOPLE = "people"
     const val PERSON = "person/{personId}"
     /** [from] and [to] (epoch days, [to] exclusive) are optional: given, the history shows those days instead of the month. */
     const val CATEGORY_HISTORY = "category/{categoryId}/{month}?from={from}&to={to}"
     const val ACCOUNT_HISTORY = "account/{accountId}"
+    /** One tag's transactions; [from] and [to] (epoch days, [to] exclusive) are optional: given, those days, else all time. */
+    const val TAG_HISTORY = "tag/{tagId}?from={from}&to={to}"
+    /** The yearly review by tag. */
+    const val YEAR_BY_TAG = "year-by-tag"
     const val SETTINGS = "settings"
     const val SETTINGS_PAGE = "settings/{page}"
     /** One screen of Settings > Appearance, named by an [AppearanceSection]. */
@@ -153,6 +166,8 @@ object Routes {
         "category/$categoryId/${MonthKey.of(range.start).toInt()}" +
             "?from=${range.start.toLocalDate().toEpochDay()}&to=${range.end.toLocalDate().toEpochDay()}"
     fun accountHistory(accountId: Long) = "account/$accountId"
+    fun tagHistory(tagId: Long, range: DateRange? = null) =
+        "tag/$tagId" + (range?.let { "?from=${it.start.toLocalDate().toEpochDay()}&to=${it.end.toLocalDate().toEpochDay()}" } ?: "")
     fun person(personId: Long) = "person/$personId"
     fun settingsPage(page: SettingsPage) = "settings/${page.name}"
     fun appearanceSection(section: AppearanceSection) = "appearance/${section.name}"
@@ -171,6 +186,15 @@ class ShellState(index: Int = 0, section: Int = 0, plansTab: Int = 0) {
 
     /** Whether the transaction history shows everything (true) or one month at a time. Kept here so Home's "See all" can set it. */
     var transactionsAllTime by mutableStateOf(false)
+
+    /**
+     * How far the forecast looks, as the user last chose: for the session only (it is not saved, so a new start is 30 days again), kept
+     * here so leaving the page and coming back finds the choice as it was.
+     */
+    var forecastEnd by mutableStateOf<ForecastEnd>(ForecastEnd.Days(30))
+
+    /** Whether the forecast counts everyday spending, as the user last left the switch (on to begin with); also for the session only. */
+    var forecastEveryday by mutableStateOf(true)
 
     val destination: AppDestination get() = AppDestination.entries.getOrElse(selected) { AppDestination.Home }
     val section: PlanSection get() = PlanSection.entries.getOrElse(planSection) { PlanSection.Budgets }
@@ -576,6 +600,9 @@ private fun AppNavigation(
             shellPage(Routes.MAIN, shellBeneath)
             page(Routes.CATEGORIES) { BanksAndCategoriesPage(BanksAndCategoriesTab.Categories) }
             page(Routes.BUDGET_HISTORY) { BudgetHistoryPage() }
+            page(Routes.REPEATING_COSTS) { RepeatingCostsPage() }
+            page(Routes.FORECAST) { ForecastPage() }
+            page(Routes.BILLS_CALENDAR) { BillsCalendarPage() }
             page(Routes.PEOPLE) { PeoplePage() }
             page(Routes.NOTIFICATIONS) { NotificationsPage() }
             page(
@@ -614,6 +641,33 @@ private fun AppNavigation(
                 Routes.ACCOUNT_HISTORY,
                 arguments = listOf(navArgument("accountId") { type = NavType.LongType }),
             ) { entry -> AccountHistoryPage(entry.arguments!!.getLong("accountId")) }
+            page(
+                Routes.TAG_HISTORY,
+                arguments = listOf(
+                    navArgument("tagId") { type = NavType.LongType },
+                    navArgument("from") {
+                        type = NavType.LongType
+                        defaultValue = NO_DAY
+                    },
+                    navArgument("to") {
+                        type = NavType.LongType
+                        defaultValue = NO_DAY
+                    },
+                ),
+            ) { entry ->
+                val args = entry.arguments!!
+                val from = args.getLong("from", NO_DAY)
+                val to = args.getLong("to", NO_DAY)
+                TagHistoryPage(
+                    tagId = args.getLong("tagId"),
+                    range = if (from != NO_DAY && to > from) {
+                        DateRange(LocalDate.ofEpochDay(from).atStartOfDay(), LocalDate.ofEpochDay(to).atStartOfDay())
+                    } else {
+                        null
+                    },
+                )
+            }
+            page(Routes.YEAR_BY_TAG) { YearByTagPage() }
             // Settings and the pages in it: a window with room shows the list with the page beside it (see SettingsRoute).
             page(Routes.SETTINGS) { SettingsRoute() }
             page(
@@ -703,6 +757,18 @@ class NavControllerNavigator(private val nav: NavHostController, private val she
 
     override fun openBudgetHistory() = nav.navigate(Routes.BUDGET_HISTORY)
 
+    override fun openRepeatingCosts() {
+        nav.navigate(Routes.REPEATING_COSTS) { launchSingleTop = true }
+    }
+
+    override fun openForecast() {
+        nav.navigate(Routes.FORECAST) { launchSingleTop = true }
+    }
+
+    override fun openBillsCalendar() {
+        nav.navigate(Routes.BILLS_CALENDAR) { launchSingleTop = true }
+    }
+
     override fun openPeople() {
         nav.navigate(Routes.PEOPLE) { launchSingleTop = true }
     }
@@ -725,6 +791,14 @@ class NavControllerNavigator(private val nav: NavHostController, private val she
 
     override fun openAccountHistory(accountId: Long) {
         nav.navigate(Routes.accountHistory(accountId))
+    }
+
+    override fun openTagHistory(tagId: Long, range: DateRange?) {
+        nav.navigate(Routes.tagHistory(tagId, range))
+    }
+
+    override fun openYearByTag() {
+        nav.navigate(Routes.YEAR_BY_TAG) { launchSingleTop = true }
     }
 
     override fun openSettings(page: SettingsPage?) {

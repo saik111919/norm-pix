@@ -2,6 +2,7 @@
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -15,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.RecurrenceFrequency
@@ -108,7 +110,9 @@ class RecurringAddTest {
         // Not the empty state's: that is only for an empty list.
         assertEquals(0, count("No recurring payments"))
         assertEquals(1, count("Add recurring payment"))
-        compose.onNodeWithText("Add recurring payment").performScrollTo().performClick()
+        // The list is longer than the screen now (the banner, the forecast row and the suggestions come first), and scrolling to the
+        // row leaves it at the window's edge, under the floating dock: press it through its action rather than at its centre.
+        compose.onNodeWithText("Add recurring payment").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         compose.waitForIdle()
         compose.onNodeWithText("New recurring expense").assertIsDisplayed()
     }

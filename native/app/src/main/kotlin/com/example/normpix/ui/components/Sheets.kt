@@ -197,6 +197,10 @@ fun EditorSheet(
     /** Why the form could not be saved, said above Save where it cannot scroll out of sight; null says nothing. */
     errorText: String? = null,
     slideToSave: Boolean = false,
+    /** False while the form can't be saved yet (what it still lacks is said by [status] or the form): Save is then dimmed. */
+    saveEnabled: Boolean = true,
+    /** A line of how the form stands, kept above Save like [errorText] so it stays in sight however far the form is scrolled. */
+    status: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(modifier.fillMaxWidth()) {
@@ -238,6 +242,13 @@ fun EditorSheet(
                     .politeLiveRegion(),
             )
         }
+        if (status != null) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = AppSpacing.xxl, top = AppSpacing.xs, end = AppSpacing.xxl),
+            ) { status() }
+        }
         Box(
             Modifier
                 .fillMaxWidth()
@@ -248,7 +259,7 @@ fun EditorSheet(
                     SlideToConfirm(
                         label = "Slide to " + saveLabel.replaceFirstChar { it.lowercase() },
                         onConfirm = onSave,
-                        enabled = !saving,
+                        enabled = !saving && saveEnabled,
                         busy = saving,
                         modifier = Modifier.weight(1f),
                     )
@@ -257,7 +268,7 @@ fun EditorSheet(
                 FloatingActionBar(
                     primaryLabel = saveLabel,
                     onPrimary = onSave,
-                    primaryEnabled = !saving,
+                    primaryEnabled = !saving && saveEnabled,
                     primaryColors = saveColors,
                     actions = actions,
                 )

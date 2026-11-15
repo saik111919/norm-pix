@@ -9,11 +9,16 @@ import com.example.normpix.finance.domain.Category
 import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.CustomBank
 import com.example.normpix.finance.domain.FinanceTransaction
+import com.example.normpix.finance.domain.LoanTerms
+import com.example.normpix.finance.domain.MAX_LOAN_RATE_BP
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.RecurrenceFrequency
 import com.example.normpix.finance.domain.RecurringRule
+import com.example.normpix.finance.domain.SavingsGoal
+import com.example.normpix.finance.domain.Tag
 import com.example.normpix.finance.domain.TransactionType
+import com.example.normpix.finance.domain.emiFor
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 
@@ -92,6 +97,12 @@ internal object FinanceRows {
         putNullable("number_ending", a.numberEnding)
         putNullable("number_start", a.numberStart)
         putNullable("card_id", a.cardId)
+        // An account is a loan when it has a principal; the five columns are all set or all empty.
+        putNullable("loan_principal", a.loan?.principal)
+        putNullable("loan_rate_bp", a.loan?.rateBp)
+        putNullable("loan_tenure_months", a.loan?.tenureMonths)
+        putNullable("loan_emi", a.loan?.emi)
+        putNullable("loan_start", a.loan?.start?.atStartOfDay()?.toStorage())
     }
 
     fun bank(b: CustomBank) = ContentValues().apply {
@@ -122,7 +133,22 @@ internal object FinanceRows {
         numberEnding = c.stringOrNull("number_ending"),
         numberStart = c.stringOrNull("number_start"),
         cardId = c.stringOrNull("card_id"),
+        loan = loan(c),
     )
+
+    /**
+     * The loan an account row describes, or null for an account that is not one. A row with a principal but a missing term (nothing in
+     * this app writes one) is read as no loan rather than failing every read of the ledger; its columns are left as they are.
+     */
+    private fun loan(c: Cursor): LoanTerms? {
+        val principal = c.longOrNull("loan_principal") ?: return null
+        val rateBp = c.intOrNull("loan_rate_bp") ?: return null
+        val tenure = c.intOrNull("loan_tenure_months") ?: return null
+        val start = c.longOrNull("loan_start")?.toLocalDateTime()?.toLocalDate() ?: return null
+        // The EMI is worked out from the others where it was left empty (a loan made outside the app); nothing writes it so.
+        val emi = c.longOrNull("loan_emi") ?: if (principal > 0 && tenure > 0 && rateBp in 0..MAX_LOAN_RATE_BP) emiFor(principal, rateBp, tenure) else return null
+        return LoanTerms(principal, rateBp, tenure, emi, start)
+    }
 
     fun category(cat: Category) = ContentValues().apply {
         cat.id?.let { put("id", it) }
@@ -165,6 +191,7 @@ internal object FinanceRows {
         put("updated_at", t.updatedAt.toStorage())
         putNullable("person_id", t.personId)
         putNullable("picture", t.picture)
+        putNullable("split_group", t.splitGroup)
     }
 
     fun person(p: Person) = ContentValues().apply {
@@ -202,6 +229,49 @@ internal object FinanceRows {
         updatedAt = c.long("updated_at").toLocalDateTime(),
         personId = c.longOrNull("person_id"),
         picture = c.stringOrNull("picture"),
+        splitGroup = c.stringOrNull("split_group"),
+    )
+
+    fun tag(t: Tag) = ContentValues().apply {
+        t.id?.let { put("id", it) }
+        put("name", t.name)
+        put("created_at", t.createdAt.toStorage())
+    }
+
+    fun toTag(c: Cursor) = Tag(
+        id = c.long("id"),
+        name = c.string("name"),
+        createdAt = c.long("created_at").toLocalDateTime(),
+    )
+
+    /**
+     * A goal's row. A goal linked to an account keeps no amount of its own - the account's balance is what is saved - so its `saved` is
+     * written as zero whatever the goal carries: one whose account is deleted then falls back to "on its own" with nothing saved.
+     */
+    fun goal(g: SavingsGoal) = ContentValues().apply {
+        g.id?.let { put("id", it) }
+        put("name", g.name)
+        put("target", g.target)
+        putNullable("target_date", g.targetDate?.atStartOfDay()?.toStorage())
+        putNullable("emoji", g.emoji)
+        putNullable("account_id", g.accountId)
+        put("saved", if (g.accountId != null) 0L else g.saved)
+        put("sort_order", g.sortOrder)
+        put("created_at", g.createdAt.toStorage())
+        put("updated_at", g.updatedAt.toStorage())
+    }
+
+    fun toGoal(c: Cursor) = SavingsGoal(
+        id = c.long("id"),
+        name = c.string("name"),
+        target = c.long("target"),
+        targetDate = c.longOrNull("target_date")?.toLocalDateTime()?.toLocalDate(),
+        emoji = c.stringOrNull("emoji"),
+        accountId = c.longOrNull("account_id"),
+        saved = c.long("saved"),
+        sortOrder = c.int("sort_order"),
+        createdAt = c.long("created_at").toLocalDateTime(),
+        updatedAt = c.long("updated_at").toLocalDateTime(),
     )
 
     fun toBudget(c: Cursor) = Budget(

@@ -178,6 +178,12 @@ internal object AccountCardDesign {
             listOf(Color(0xFF7C2D12), Color(0xFF4A1A09), Color(0xFF260D04)),
             BankPatternType.MinimalGeometric, Color(0xFFFDBA74), EmvChipFinish.Gold,
         ),
+        // A loan is owed money, so it is drawn in a dark wine rather than a card's blues and greens.
+        AccountKind.Loan to kindTheme(
+            AccountKind.Loan, "Loan",
+            listOf(Color(0xFF6B1F3A), Color(0xFF431327), Color(0xFF220912)),
+            BankPatternType.MinimalGeometric, Color(0xFFFDA4C3), EmvChipFinish.Silver,
+        ),
         AccountKind.Other to kindTheme(
             AccountKind.Other, "Account",
             listOf(Color(0xFF3F2B96), Color(0xFF261961), Color(0xFF130B33)),

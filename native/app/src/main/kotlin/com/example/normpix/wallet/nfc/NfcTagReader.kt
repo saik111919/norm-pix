@@ -23,7 +23,9 @@ import java.nio.charset.StandardCharsets
  * and holds no NDEF message, which is why tapping one used to end in "Unsupported NFC card".
  *
  * Full card details (saved straight to the wallet):
- *  - ISO-DEP answering SELECT F0010203040506: another phone in NormPix's Share (Outlet) mode.
+ *  - ISO-DEP answering SELECT F0010203040506: another phone in NormPix's Share (Outlet) mode. The card then comes
+ *    sealed, after both phones showed the same code and the person sharing tapped Match (NfcShareInitiator). A phone that
+ *    answers with the card in the clear (an older NormPix) is refused.
  *  - NDEF (any NFC Forum tag type) holding a NormPix card record.
  *
  * Identified only, nothing secret is read:
@@ -44,8 +46,11 @@ import java.nio.charset.StandardCharsets
 
 /** What reading one tapped tag produced. */
 sealed interface NfcTagRead {
-    /** A NormPix card: another phone sharing one, or a tag written by NormPix. */
+    /** A NormPix card: another phone sharing one (opened from the sealed exchange), or a tag written by NormPix. */
     data class NormPixPayload(val payload: String) : NfcTagRead
+
+    /** A phone running NormPix was sharing, but no card came: why. */
+    data class ShareFailed(val problem: ShareProblem) : NfcTagRead
 
     /** A contactless payment card or phone wallet: only its public payment directory was read. */
     data class PaymentCard(val info: PaymentCardInfo) : NfcTagRead
@@ -133,13 +138,20 @@ internal class AndroidTagChannel(private val tag: Tag) : TagChannel {
 }
 
 /**
- * Reads one tag: NormPix's own AID first (a sharing phone), then the payment directory (a bank
- * card), then NDEF. Runs on the NFC binder thread; blocking I/O is fine there.
+ * Reads one tag: NormPix's own AID first (a sharing phone, which takes the whole encrypted exchange of [NfcShareInitiator]),
+ * then the payment directory (a bank card), then NDEF. Runs on the NFC binder thread; blocking I/O, and waiting up to a minute
+ * for the person sharing to tap Match, are fine there. [onCode] gets the code both phones show; [sleep] and [clock] (milliseconds)
+ * pace the waiting.
  */
-internal fun readTag(tag: TagChannel): NfcTagRead {
+internal fun readTag(
+    tag: TagChannel,
+    onCode: (String) -> Unit = {},
+    sleep: (Long) -> Unit = { Thread.sleep(it) },
+    clock: () -> Long = { System.nanoTime() / 1_000_000 },
+): NfcTagRead {
     var lost = false
     val viaIsoDep = try {
-        tag.isoDep(::readIsoDep)
+        tag.isoDep { send -> readIsoDep(send, onCode, sleep, clock) }
     } catch (_: IOException) {
         // TagLostException is an IOException too: the card moved, or the link dropped mid-exchange.
         lost = true
@@ -175,11 +187,14 @@ internal fun readTag(tag: TagChannel): NfcTagRead {
     )
 }
 
-private fun readIsoDep(send: (ByteArray) -> ByteArray): NfcTagRead? {
-    val normPix = send(NfcCardOutletService.SELECT_AID_COMMAND)
-    if (normPix.statusWord() == SW_OK) return NfcTagRead.NormPixPayload(String(normPix.body(), StandardCharsets.UTF_8))
-    // Only NormPix's own service is registered for this private AID, and it answers this way when it has nothing to send.
-    if (normPix.statusWord() == NfcCardOutletService.SW_NOTHING_SHARED) return NfcTagRead.Unsupported(DetectedTag.PhoneNotSharing)
+private fun readIsoDep(send: (ByteArray) -> ByteArray, onCode: (String) -> Unit, sleep: (Long) -> Unit, clock: () -> Long): NfcTagRead? {
+    when (val share = NfcShareInitiator.run(send, onCode, sleep, clock)) {
+        is NfcShareInitiator.Result.Card -> return NfcTagRead.NormPixPayload(share.payload)
+        is NfcShareInitiator.Result.Failed -> return NfcTagRead.ShareFailed(share.problem)
+        // Only NormPix's own service is registered for this private AID, and it answers this way when it has nothing to send.
+        NfcShareInitiator.Result.NotSharing -> return NfcTagRead.Unsupported(DetectedTag.PhoneNotSharing)
+        NfcShareInitiator.Result.NotNormPix -> Unit
+    }
 
     val directory = send(SELECT_PPSE)
     if (directory.statusWord() == SW_OK) return parsePaymentDirectory(directory.body())?.let { NfcTagRead.PaymentCard(it) }
@@ -189,10 +204,12 @@ private fun readIsoDep(send: (ByteArray) -> ByteArray): NfcTagRead? {
 private const val NORMPIX_MARKER = "normpix_card"
 private const val SW_OK = 0x9000
 
-private fun ByteArray.statusWord(): Int =
+/** The status word at the end of an APDU answer, or -1 when it is too short to have one. */
+internal fun ByteArray.statusWord(): Int =
     if (size < 2) -1 else ((this[size - 2].toInt() and 0xFF) shl 8) or (this[size - 1].toInt() and 0xFF)
 
-private fun ByteArray.body(): ByteArray = copyOfRange(0, (size - 2).coerceAtLeast(0))
+/** An APDU answer without its status word. */
+internal fun ByteArray.body(): ByteArray = copyOfRange(0, (size - 2).coerceAtLeast(0))
 
 /** SELECT by name "2PAY.SYS.DDF01": the contactless Proximity Payment System Environment (EMV Book B). */
 internal val SELECT_PPSE: ByteArray = byteArrayOf(0x00, 0xA4.toByte(), 0x04, 0x00, 0x0E) +
@@ -305,11 +322,15 @@ private fun walkTlv(bytes: ByteArray, depth: Int = 0, visit: (Tlv) -> Unit) {
 
 private fun ByteArray.toHex(): String = joinToString("") { "%02X".format(it.toInt() and 0xFF) }
 
-/** Debug builds log what each tap was, so the reported technologies can be checked on real cards. Never the card data. */
+/**
+ * Debug builds log what each tap was, so the reported technologies can be checked on real cards. Never the card data, and nothing
+ * of a share's keys, nonces or code: a share is "NormPix card" or why it ended.
+ */
 internal fun logTagRead(techs: Set<String>, read: NfcTagRead) {
     if (!BuildConfig.DEBUG) return
     val what = when (read) {
         is NfcTagRead.NormPixPayload -> "NormPix card"
+        is NfcTagRead.ShareFailed -> "NormPix share ended: ${read.problem.name}"
         is NfcTagRead.PaymentCard -> "payment card network=${read.info.networkName} kind=${read.info.kind} label=${read.info.label}"
         is NfcTagRead.Unsupported -> "unsupported ${read.tag}"
         NfcTagRead.Lost -> "lost"

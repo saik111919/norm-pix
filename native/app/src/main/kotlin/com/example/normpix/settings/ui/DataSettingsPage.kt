@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.FactCheck
@@ -89,6 +90,12 @@ fun DataSettingsPage() {
     val appContext = LocalContext.current.applicationContext
     val appBackup = remember(appContext, container, overlays, snackbars, files, scope, haptics) {
         AppBackupFlows(appContext, container, overlays, snackbars, files, scope, haptics)
+    }
+    // Automatic backups: one service for the app, the same whichever data set is showing (it always backs up the user's own).
+    val folderPicker = rememberFolderPicker()
+    val autoBackup = container.autoBackup
+    val autoBackupFlows = remember(autoBackup, container, overlays, snackbars, folderPicker, haptics) {
+        autoBackup?.let { AutoBackupFlows(it, container, overlays, snackbars, folderPicker, haptics) }
     }
     /** The operation in progress, if any (disables the other rows). */
     var busy by remember { mutableStateOf<String?>(null) }
@@ -318,14 +325,21 @@ fun DataSettingsPage() {
         snackbars.offerUndo(if (isSample) "Sample data reset" else "Finance data deleted", finance, undo, scope)
     }
 
+    // Reading a bank statement: the file, the columns, a preview with the entries already in NormPix unticked, one all-or-nothing save.
+    val statementImport = remember(finance, overlays, snackbars, files, scope, haptics) {
+        StatementImportFlows(finance, overlays, snackbars, files, scope, haptics)
+    }
+
+    fun importStatement() = run("statement") { statementImport.run() }
+
     @Composable
-    fun Row(id: String, icon: ImageVector, emoji: String, title: String, subtitle: String, onClick: () -> Unit, destructive: Boolean = false) {
+    fun Row(id: String, icon: ImageVector, emoji: String, title: String, subtitle: String, onClick: () -> Unit, destructive: Boolean = false, enabled: Boolean = true) {
         val color = if (destructive) MaterialTheme.colorScheme.error else Color.Unspecified
         ListRow(
             headline = title,
             supporting = subtitle,
             headlineColor = color,
-            enabled = busy == null,
+            enabled = busy == null && enabled,
             onClick = onClick,
             leading = {
                 SettingsLeadingIcon(icon, emoji, tint = if (destructive) color else MaterialTheme.colorScheme.onSurfaceVariant, busy = busy == id)
@@ -400,6 +414,7 @@ fun DataSettingsPage() {
                         Row("csv", Icons.Outlined.TableView, SettingsRowEmoji.SPREADSHEET, "Transactions as a spreadsheet", "A .csv for Excel or Sheets. Not restorable.", ::exportCsv)
                     }
                 }
+                if (autoBackupFlows != null) AutoBackupSection(prefs, autoBackupFlows, busy, ::run)
                 ListSection(
                     title = "Backup reminder",
                     footer = "Everything NormPix keeps is on this phone, so a copy is what saves it if the phone is lost or broken. " +
@@ -449,6 +464,27 @@ fun DataSettingsPage() {
                                 "A backup of everything or a full backup (.zip), or one without pictures (.json), locked or not. It's checked first, and you confirm what is replaced before anything is."
                             },
                             ::restore,
+                        )
+                    }
+                }
+                ListSection(
+                    title = "Import",
+                    footer = "NormPix reads the file once, on this phone, and keeps nothing of it. What is in NormPix already is " +
+                        "left unticked, so a statement can be imported again safely. Everything ticked is added together, or nothing is.",
+                ) {
+                    item {
+                        Row(
+                            "statement",
+                            Icons.Outlined.AccountBalance,
+                            SettingsRowEmoji.BANK,
+                            "Import a bank statement",
+                            if (prefs.dummyDataEnabled) {
+                                "Sample data is on. Turn it off to import into your own accounts."
+                            } else {
+                                "A CSV file from your bank's website or app"
+                            },
+                            ::importStatement,
+                            enabled = !prefs.dummyDataEnabled,
                         )
                     }
                 }

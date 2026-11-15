@@ -23,6 +23,7 @@ import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -584,11 +585,14 @@ private fun ComingUp(recurring: List<Pair<LocalDateTime, RecurringRule>>, onSeeA
     }.sortedBy { it.first }
     if (items.isEmpty()) return
 
+    val navigator = LocalNavigator.current
     SectionHeader(
         title = "Next 7 days",
         actionLabel = "Plans",
         onAction = { onSeeAll(if (recurring.isNotEmpty()) PlanSection.Recurring else PlanSection.Reminders) },
         padding = HomeSectionPadding,
+        // A small action beside Plans: the same things, a month at a time, on a calendar.
+        trailing = { TextButton(onClick = navigator::openBillsCalendar) { Text("Calendar") } },
     )
     ListSection {
         for ((_, row) in items.take(COMING_UP_MAX)) item { row() }

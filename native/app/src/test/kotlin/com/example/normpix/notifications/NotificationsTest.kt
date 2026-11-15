@@ -320,9 +320,11 @@ class NotificationsTest {
             }
         }
         compose.waitForIdle()
-        // As on Home, where every banner has its bar: the button is there, and so is the bar's pill with how far along it is.
+        // As on Home, where every banner has its bar: the button is there, and so is the bar - a ring beside the lines (since
+        // 2026-11-15) with how far along it is inside; the words a screen reader hears ("85% used") stay the bar's label.
         compose.onNodeWithText("View budgets", useUnmergedTree = true).assertIsDisplayed()
-        compose.onNodeWithText("85% used", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("85%", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("85% used", useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithText("View budgets", useUnmergedTree = true).performClick()
         compose.onNodeWithContentDescription("Nearly used. Food budget. Rs 8,000 for November. 85% used").performClick()
         assertEquals(2, opened)

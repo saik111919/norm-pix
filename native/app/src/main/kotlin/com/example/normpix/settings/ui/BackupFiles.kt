@@ -52,9 +52,30 @@ interface BackupFiles {
     /** Asks for a file, then hands what is in it to [read] as it is read. Null if the user cancelled. */
     suspend fun <T> openStreaming(read: suspend (InputStream) -> T): T? = open()?.let { read(ByteArrayInputStream(it)) }
 
+    /**
+     * Asks the user for one bank statement (a CSV file; see [STATEMENT_TYPES]) and gives back its bytes: read once, kept nowhere else.
+     * Null if they cancelled; throws [BackupTooLargeException] for a file longer than [maxBytes] (nothing more of it is read), and an
+     * [IOException] if it couldn't be read.
+     */
+    suspend fun openStatement(maxBytes: Long): ByteArray? = open()?.also { if (it.size > maxBytes) throw BackupTooLargeException() }
+
     companion object {
         /** Far above any real ledger; protects memory from picking a huge unrelated file. */
         const val MAX_BYTES = 32L * 1024 * 1024
+
+        /**
+         * What the picker offers for a bank statement: the types a CSV is filed under (text, the old Excel type that CSVs from a bank's
+         * site often carry, and the tab-separated ones). A workbook (.xlsx) or a PDF is not among them: neither is read.
+         */
+        val STATEMENT_TYPES = arrayOf(
+            "text/csv",
+            "text/comma-separated-values",
+            "text/plain",
+            "application/csv",
+            "application/vnd.ms-excel",
+            "text/x-csv",
+            "text/tab-separated-values",
+        )
     }
 }
 
@@ -80,6 +101,20 @@ private class OpenDocument : ActivityResultContract<Unit, Uri?>() {
         if (resultCode == Activity.RESULT_OK) intent?.data else null
 }
 
+/** The system's document picker for a bank statement: one openable file of the types in [BackupFiles.STATEMENT_TYPES]. */
+internal class OpenStatement : ActivityResultContract<Array<String>, Uri?>() {
+    override fun createIntent(context: Context, input: Array<String>): Intent =
+        Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .putExtra(Intent.EXTRA_MIME_TYPES, input)
+            .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)
+            // With a list of types the intent's own is the wildcard, as Android's own contract does it.
+            .setType("*/*")
+
+    override fun parseResult(resultCode: Int, intent: Intent?): Uri? =
+        if (resultCode == Activity.RESULT_OK) intent?.data else null
+}
+
 /** [BackupFiles] backed by the system document picker, for the current activity. */
 @Composable
 fun rememberBackupFiles(): BackupFiles {
@@ -88,8 +123,9 @@ fun rememberBackupFiles(): BackupFiles {
     val pending = remember { arrayOfNulls<CompletableDeferred<Uri?>>(1) }
     val createLauncher = rememberLauncherForActivityResult(CreateDocument()) { uri -> pending[0]?.complete(uri) }
     val openLauncher = rememberLauncherForActivityResult(OpenDocument()) { uri -> pending[0]?.complete(uri) }
+    val statementLauncher = rememberLauncherForActivityResult(OpenStatement()) { uri -> pending[0]?.complete(uri) }
 
-    return remember(context, lock, createLauncher, openLauncher) {
+    return remember(context, lock, createLauncher, openLauncher, statementLauncher) {
         object : BackupFiles {
             private suspend fun pick(launch: () -> Unit): Uri? {
                 val result = CompletableDeferred<Uri?>()
@@ -142,6 +178,27 @@ fun rememberBackupFiles(): BackupFiles {
                 val uri = pick { openLauncher.launch(Unit) } ?: return null
                 val stream = withContext(Dispatchers.IO) { openToRead(context.contentResolver, uri) } ?: throw IOException("Couldn't open the file")
                 return stream.use { raw -> raw.buffered().use { read(it) } }
+            }
+
+            override suspend fun openStatement(maxBytes: Long): ByteArray? {
+                val uri = pick { statementLauncher.launch(BackupFiles.STATEMENT_TYPES) } ?: return null
+                return withContext(Dispatchers.IO) {
+                    val stream = context.contentResolver.openInputStream(uri) ?: throw IOException("Couldn't open the file")
+                    stream.use { input ->
+                        val out = ByteArrayOutputStream()
+                        val buffer = ByteArray(64 * 1024)
+                        var total = 0L
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            total += read
+                            // Nothing past the limit is read: a statement is a small file, and this is not one.
+                            if (total > maxBytes) throw BackupTooLargeException()
+                            out.write(buffer, 0, read)
+                        }
+                        out.toByteArray()
+                    }
+                }
             }
 
             override suspend fun open(): ByteArray? {

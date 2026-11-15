@@ -25,9 +25,12 @@ import com.example.normpix.finance.domain.FinanceConflictException
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.FinanceValidationException
 import com.example.normpix.finance.domain.MAX_PERSON_NAME
+import com.example.normpix.finance.domain.MAX_SPLIT_PARTS
+import com.example.normpix.finance.domain.MIN_SPLIT_PARTS
 import com.example.normpix.finance.domain.NUMBER_ENDING_LENGTH
 import com.example.normpix.finance.domain.NUMBER_START_LENGTH
 import com.example.normpix.finance.domain.LedgerIssues
+import com.example.normpix.finance.domain.LoanEmi
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.MonthTotals
 import com.example.normpix.finance.domain.PeopleSpending
@@ -36,23 +39,38 @@ import com.example.normpix.finance.domain.StatementFigures
 import com.example.normpix.finance.domain.previousOnDay
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.PersonTotal
+import com.example.normpix.finance.domain.cleanGoalName
 import com.example.normpix.finance.domain.cleanPersonName
 import com.example.normpix.finance.domain.isSingleEmoji
 import com.example.normpix.finance.domain.numberEndingOrNull
 import com.example.normpix.finance.domain.numberStartOrNull
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.RepeatSchedule
+import com.example.normpix.finance.domain.SavingsGoal
 import com.example.normpix.finance.domain.SelfTransferPair
+import com.example.normpix.finance.domain.SplitFault
+import com.example.normpix.finance.domain.SplitPart
+import com.example.normpix.finance.domain.MAX_TAG_NAME
+import com.example.normpix.finance.domain.Tag
+import com.example.normpix.finance.domain.TagTotal
+import com.example.normpix.finance.domain.cleanTagName
+import com.example.normpix.finance.domain.tagNameFault
 import com.example.normpix.finance.domain.asTransfer
 import com.example.normpix.finance.domain.checkLedger
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.accountBalance
 import com.example.normpix.finance.domain.buildBudgetOverview
 import com.example.normpix.finance.domain.dueOccurrences
+import com.example.normpix.finance.domain.fault
+import com.example.normpix.finance.domain.joinedSplitNotes
+import com.example.normpix.finance.domain.largestPartCategory
+import com.example.normpix.finance.domain.loanEmiEntries
 import com.example.normpix.finance.domain.nextRecurrence
 import com.example.normpix.finance.domain.resolveBudgets
 import com.example.normpix.finance.domain.settledBy
+import com.example.normpix.finance.domain.splitFault
 import com.example.normpix.finance.domain.startOfDay
+import com.example.normpix.finance.domain.withoutBrokenSplits
 import com.example.normpix.wallet.BankLogoResolver
 import com.example.normpix.storage.insert
 import com.example.normpix.storage.insertOrThrow
@@ -64,6 +82,7 @@ import com.example.normpix.storage.update
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.util.UUID
 import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -80,12 +99,14 @@ data class TransactionQuery(
     val personIds: Set<Long> = emptySet(),
     val minAmount: Long? = null,
     val maxAmount: Long? = null,
-    /** Case-insensitive match on payee, note, category, account or person name. */
+    /** Case-insensitive match on payee, note, category, account, person or tag name. */
     val text: String? = null,
     /** Only what is dated before this moment, whatever the [range] says: what has happened by then (see `settledCutoff`). */
     val before: LocalDateTime? = null,
     /** Only what is dated at or after this moment: what is still to come, when it is the settled cutoff. */
     val notBefore: LocalDateTime? = null,
+    /** Only transactions that carry any of these tags. */
+    val tagIds: Set<Long> = emptySet(),
 ) {
     /** True when anything besides [range] narrows the results. */
     val hasFilters: Boolean
@@ -93,6 +114,7 @@ data class TransactionQuery(
             accountIds.isNotEmpty() ||
             categoryIds.isNotEmpty() ||
             personIds.isNotEmpty() ||
+            tagIds.isNotEmpty() ||
             minAmount != null ||
             maxAmount != null ||
             !text.isNullOrBlank()
@@ -248,6 +270,12 @@ class FinanceRepository(
                 arrayOf(cardId, (account.id ?: -1L).toString()),
             ).map { it.string("name") }.firstOrNull()
             if (holder != null) throw FinanceValidationException("That card is already the card of \"$holder\".")
+        }
+        // A loan has terms that hold, is never a card (a card has a bill, not EMIs), and an account of the Loan kind always has them.
+        account.loan?.fault()?.let { throw FinanceValidationException(it.advice) }
+        if (account.loan != null && isCard) throw FinanceValidationException("A card can't be a loan. Choose another type, or leave the loan off.")
+        if (account.kind == AccountKind.Loan && account.loan == null) {
+            throw FinanceValidationException("Enter what you borrowed, the interest and the EMI.")
         }
         val toSave = account.copy(
             name = name,
@@ -799,24 +827,36 @@ class FinanceRepository(
         validateShape(t.type, t.amount, t.accountId, t.toAccountId, t.categoryId)
         validatePerson(t.type, t.personId, t.id)
         validatePicture(t.picture)
-        val toSave = t.copy(payee = clean(t.payee), note = clean(t.note), updatedAt = clock())
-        if (t.id == null) {
-            val id = insertOrThrow(FinanceDatabase.TRANSACTIONS, null, FinanceRows.transaction(toSave))
-            toSave.copy(id = id)
-        } else {
-            val count = update(
-                FinanceDatabase.TRANSACTIONS,
-                FinanceRows.transaction(toSave),
-                "id = ?",
-                arrayOf(t.id.toString()),
-            )
-            if (count == 0) throw FinanceConflictException("This transaction no longer exists.")
-            toSave
+        validateTags(t.type, t.tagIds)
+        // A split group is never set here: only the split functions below make or end one (a new row is on its own; an edited one keeps
+        // the group it has, or none).
+        val toSave = t.copy(payee = clean(t.payee), note = clean(t.note), updatedAt = clock(), splitGroup = null)
+        // The row and its tags are one step: both are written, or neither.
+        transaction {
+            if (t.id == null) {
+                val id = insertOrThrow(FinanceDatabase.TRANSACTIONS, null, FinanceRows.transaction(toSave))
+                writeTags(id, toSave.tagIds)
+                toSave.copy(id = id)
+            } else {
+                val group = splitGroupOf(t.id)
+                if (group != null) return@transaction savePartOfSplit(toSave.copy(splitGroup = group), group)
+                val count = update(
+                    FinanceDatabase.TRANSACTIONS,
+                    FinanceRows.transaction(toSave),
+                    "id = ?",
+                    arrayOf(t.id.toString()),
+                )
+                if (count == 0) throw FinanceConflictException("This transaction no longer exists.")
+                writeTags(t.id, toSave.tagIds)
+                toSave
+            }
         }
     }
 
     /**
-     * Inserts multiple transactions in a single SQLite transaction.
+     * Inserts multiple transactions in a single SQLite transaction: each is checked as [saveTransaction] checks one, and one that
+     * fails (an account that has gone, a category of the wrong kind) takes every other back out, so it is all of them or none. Used for
+     * the sample data and for a bank statement's rows.
      */
     suspend fun saveTransactions(transactions: List<FinanceTransaction>) = io {
         val now = clock()
@@ -825,10 +865,462 @@ class FinanceRepository(
                 validateShape(t.type, t.amount, t.accountId, t.toAccountId, t.categoryId)
                 validatePerson(t.type, t.personId, t.id)
                 validatePicture(t.picture)
-                val toSave = t.copy(payee = clean(t.payee), note = clean(t.note), updatedAt = now)
-                insertOrThrow(FinanceDatabase.TRANSACTIONS, null, FinanceRows.transaction(toSave))
+                validateTags(t.type, t.tagIds)
+                val toSave = t.copy(payee = clean(t.payee), note = clean(t.note), updatedAt = now, splitGroup = null)
+                val id = insertOrThrow(FinanceDatabase.TRANSACTIONS, null, FinanceRows.transaction(toSave))
+                writeTags(id, toSave.tagIds)
             }
         }
+    }
+
+    // ------------------------------------------------------------------ tags
+
+    /** Every tag, by name. */
+    suspend fun tags(): List<Tag> = io { readTags() }
+
+    private fun SupportSQLiteDatabase.readTags(): List<Tag> =
+        query(FinanceDatabase.TAGS, null, null, null, null, null, "name COLLATE NOCASE ASC, id ASC").map(FinanceRows::toTag)
+
+    /**
+     * Saves a tag, new or renamed. The name is tidied ([cleanTagName]), 1 to [MAX_TAG_NAME] characters, and new to the list whatever
+     * its case - "tax" and "Tax" are one tag. Renaming keeps its id, so it is renamed on every transaction that has it.
+     */
+    suspend fun saveTag(tag: Tag): Tag = io {
+        val name = cleanTagName(tag.name)
+        tagNameFault(name)?.let { throw FinanceValidationException(it) }
+        val clash = readTags().firstOrNull { it.id != tag.id && it.name.equals(name, ignoreCase = true) }
+        if (clash != null) throw FinanceConflictException("You already have a tag called ${clash.name}.")
+        val toSave = tag.copy(name = name)
+        if (tag.id == null) {
+            val made = toSave.copy(createdAt = clock())
+            made.copy(id = insertOrThrow(FinanceDatabase.TAGS, null, FinanceRows.tag(made)))
+        } else {
+            val count = update(FinanceDatabase.TAGS, ContentValues().apply { put("name", name) }, "id = ?", arrayOf(tag.id.toString()))
+            if (count == 0) throw FinanceConflictException("This tag no longer exists.")
+            toSave
+        }
+    }
+
+    /**
+     * Deletes a tag. It comes off every transaction that had it - the transactions themselves are kept as they are, in every balance and
+     * total - all in one step. Returns how many transactions it was on.
+     */
+    suspend fun deleteTag(id: Long): Int = io {
+        transaction {
+            val removed = delete(FinanceDatabase.TRANSACTION_TAGS, "tag_id = ?", arrayOf(id.toString()))
+            delete(FinanceDatabase.TAGS, "id = ?", arrayOf(id.toString()))
+            removed
+        }
+    }
+
+    /** How many transactions each tag is on, by tag id (a tag on none is left out). */
+    suspend fun tagUsage(): Map<Long, Int> = io {
+        rawQuery("SELECT tag_id, COUNT(*) AS n FROM ${FinanceDatabase.TRANSACTION_TAGS} GROUP BY tag_id", null)
+            .map { it.long("tag_id") to it.int("n") }
+            .toMap()
+    }
+
+    /**
+     * What the transactions with each tag came to over [range] - their expenses and their income apart, and how many - for the yearly
+     * review. With [asOf], only what is dated before it: what has happened by then (see `settledCutoff`), so an entry made ahead counts
+     * from its own day. Transfers never count (they have no tags, and are neither spending nor income). A tag with nothing in the range is
+     * left out; a transaction with two tags counts under both.
+     */
+    suspend fun tagTotals(range: DateRange, asOf: LocalDateTime? = null): List<TagTotal> = io {
+        val end = asOf?.takeIf { it.isBefore(range.end) } ?: range.end
+        val totals = LinkedHashMap<Long, TagTotal>()
+        rawQuery(
+            "SELECT tt.tag_id AS tag_id, t.type AS type, SUM(t.amount) AS total, COUNT(*) AS n " +
+                "FROM ${FinanceDatabase.TRANSACTION_TAGS} tt JOIN ${FinanceDatabase.TRANSACTIONS} t ON t.id = tt.transaction_id " +
+                "WHERE t.type IN ('expense', 'income') AND t.occurred_at >= ${range.start.toStorage()} AND t.occurred_at < ${end.toStorage()} " +
+                "GROUP BY tt.tag_id, t.type",
+            null,
+        ).map { Triple(it.long("tag_id"), it.string("type"), it.long("total") to it.int("n")) }
+            .forEach { (tag, type, sum) ->
+                val (amount, count) = sum
+                val was = totals[tag] ?: TagTotal(tag)
+                totals[tag] = if (type == TransactionType.Expense.key) {
+                    was.copy(spent = amount, count = was.count + count)
+                } else {
+                    was.copy(received = amount, count = was.count + count)
+                }
+            }
+        totals.values.toList()
+    }
+
+    /**
+     * How many times the tags of a set of transactions have been read: one query a page or a batch, never one a row. Read by a test
+     * that pins it; nothing in the app reads it.
+     */
+    internal var tagBatchReads: Int = 0
+        private set
+
+    /** [items] with their tags, read in one query for the whole list (see [tagLinks]). */
+    private fun SupportSQLiteDatabase.withTags(items: List<FinanceTransaction>): List<FinanceTransaction> {
+        if (items.isEmpty()) return items
+        val links = tagLinks(items.mapNotNull { it.id })
+        if (links.isEmpty()) return items.map { if (it.tagIds.isEmpty()) it else it.copy(tagIds = emptySet()) }
+        return items.map { t -> t.copy(tagIds = links[t.id].orEmpty()) }
+    }
+
+    /**
+     * The tags of the transactions [ids], by transaction id, in one query: by the ids themselves for a page, or - for more than
+     * [INLINE_IDS], as a backup reads every transaction - the whole (small) link table, kept to the ones asked for.
+     */
+    private fun SupportSQLiteDatabase.tagLinks(ids: Collection<Long>): Map<Long, Set<Long>> {
+        if (ids.isEmpty()) return emptyMap()
+        tagBatchReads++
+        val inline = ids.size <= INLINE_IDS
+        val wanted = if (inline) null else ids.toHashSet()
+        val where = if (inline) " WHERE transaction_id IN (${ids.joinToString(",")})" else ""
+        val result = HashMap<Long, MutableSet<Long>>()
+        rawQuery("SELECT transaction_id, tag_id FROM ${FinanceDatabase.TRANSACTION_TAGS}$where ORDER BY transaction_id, tag_id", null).use { cursor ->
+            while (cursor.moveToNext()) {
+                val transaction = cursor.getLong(0)
+                if (wanted == null || transaction in wanted) result.getOrPut(transaction) { LinkedHashSet() } += cursor.getLong(1)
+            }
+        }
+        return result
+    }
+
+    /** Makes [tagIds] exactly the tags on the transaction [transactionId]: the links it had go, these are written. */
+    private fun SupportSQLiteDatabase.writeTags(transactionId: Long, tagIds: Set<Long>) {
+        delete(FinanceDatabase.TRANSACTION_TAGS, "transaction_id = ?", arrayOf(transactionId.toString()))
+        for (tag in tagIds) {
+            insertOrThrow(
+                FinanceDatabase.TRANSACTION_TAGS,
+                null,
+                ContentValues().apply {
+                    put("transaction_id", transactionId)
+                    put("tag_id", tag)
+                },
+            )
+        }
+    }
+
+    /** The tags a transaction of [type] may carry: none on a transfer, and only tags that exist. */
+    private fun SupportSQLiteDatabase.validateTags(type: TransactionType, tagIds: Set<Long>) {
+        if (tagIds.isEmpty()) return
+        if (type == TransactionType.Transfer) {
+            throw FinanceValidationException("A transfer can't have tags: it only moves money between your own accounts.")
+        }
+        val known = scalarLong("SELECT COUNT(*) FROM ${FinanceDatabase.TAGS} WHERE id IN (${tagIds.joinToString(",")})") ?: 0
+        if (known != tagIds.size.toLong()) throw FinanceValidationException("Choose tags from the list, or add them first.")
+    }
+
+    // --------------------------------------------------------- split payments
+
+    /**
+     * The rows of the split payment [group], in the order they were entered (by id), each with its tags: its parts. Empty when there
+     * is no such group.
+     */
+    suspend fun splitParts(group: String): List<FinanceTransaction> = io { readSplitRows(group) }
+
+    private fun SupportSQLiteDatabase.readSplitRows(group: String): List<FinanceTransaction> =
+        query(FinanceDatabase.TRANSACTIONS, null, "split_group = ?", arrayOf(group), null, null, "id ASC")
+            .map(FinanceRows::toTransaction)
+            .let { withTags(it) }
+
+    /** The split group the row [id] is a part of, or null for a row that is not (or that is not there). */
+    private fun SupportSQLiteDatabase.splitGroupOf(id: Long): String? =
+        rawQuery("SELECT split_group FROM ${FinanceDatabase.TRANSACTIONS} WHERE id = ?", arrayOf(id.toString()))
+            .use { if (it.moveToFirst() && !it.isNull(0)) it.getString(0) else null }
+
+    /**
+     * Saves one payment as a split into [parts] (see `Splits.kt`), as one step - **all of it or none of it**, in one SQL transaction -
+     * and gives back the rows saved, in the order of [parts].
+     *
+     * [payment] says what the parts share: the type (an expense or an income, never a transfer), the account, the date and time, the
+     * payee, who it was spent on, the tags and the picture; its amount is the total and must be what the [parts] add up to, each part
+     * above zero with a category of the type's kind. The note and the category of [payment] itself are not used: a part's are its own.
+     *
+     * - **A new split** (no [group]): a part that names a row ([SplitPart.id]) is that existing plain row made into the first part - it
+     *   keeps its id and when it was added; a row that is already in a split, or is not there, is refused. Every other part is a new row.
+     * - **A split edited** ([group] is its id): a part that names a row of the group keeps it; a part without one is a new row; the rows
+     *   of the group that no part names are deleted (their tag links go with them). A part that names a row of another group is refused.
+     *
+     * Every part gets the shared fields as [payment] has them, the tags written to each, and the group's id. A part that is refused
+     * (a category of the wrong kind, an account that has gone) takes back whatever was written before it.
+     */
+    suspend fun saveSplit(payment: FinanceTransaction, parts: List<SplitPart>, group: String? = null): List<FinanceTransaction> = io {
+        if (payment.type == TransactionType.Transfer) {
+            throw FinanceValidationException("A transfer can't be split: it only moves money between your own accounts.")
+        }
+        if (parts.size < MIN_SPLIT_PARTS) throw FinanceValidationException("Split a payment into at least $MIN_SPLIT_PARTS parts.")
+        if (parts.size > MAX_SPLIT_PARTS) throw FinanceValidationException("A payment can be split into at most $MAX_SPLIT_PARTS parts.")
+        val named = parts.mapNotNull { it.id }
+        if (named.size != named.toSet().size) throw FinanceValidationException("The same part is in the split twice.")
+        val total = try {
+            parts.fold(0L) { sum, part -> Math.addExact(sum, part.amount) }
+        } catch (_: ArithmeticException) {
+            throw FinanceValidationException("That is more than NormPix can keep.")
+        }
+        if (payment.amount != total) throw FinanceValidationException("The parts have to add up to the total.")
+        validatePicture(payment.picture)
+        validateTags(payment.type, payment.tagIds)
+        val now = clock()
+        val shared = payment.copy(payee = clean(payment.payee), toAccountId = null, updatedAt = now)
+        transaction {
+            val inGroup = if (group == null) emptyList() else readSplitRows(group)
+            if (group != null && inGroup.isEmpty()) throw FinanceConflictException("This split payment no longer exists.")
+            val groupId = group ?: UUID.randomUUID().toString()
+            // The rows the parts keep, as they are stored now (what a part reuses it keeps of its own: when it was added, the repeating
+            // payment that recorded it).
+            val kept = HashMap<Long, FinanceTransaction>()
+            for (id in named) {
+                val row = inGroup.firstOrNull { it.id == id }
+                    ?: if (group == null) readPlainRow(id) else throw FinanceConflictException("A part of this split payment no longer exists.")
+                kept[id] = row
+            }
+            // Who it was spent on: an archived person keeps what is already theirs, but takes nothing new.
+            validatePersonLink(shared.type, shared.personId) { kept.values.any { it.personId == shared.personId } }
+            val saved = parts.map { part ->
+                val old = part.id?.let { kept.getValue(it) }
+                val row = shared.copy(
+                    id = part.id,
+                    amount = part.amount,
+                    categoryId = part.categoryId,
+                    note = clean(part.note),
+                    recurringId = old?.recurringId ?: shared.recurringId,
+                    createdAt = old?.createdAt ?: now,
+                    splitGroup = groupId,
+                )
+                // Each part is checked as it is written, so one that fails takes the ones before it back out.
+                validateShape(row.type, row.amount, row.accountId, null, row.categoryId)
+                val written = if (row.id == null) {
+                    row.copy(id = insertOrThrow(FinanceDatabase.TRANSACTIONS, null, FinanceRows.transaction(row)))
+                } else {
+                    val count = update(FinanceDatabase.TRANSACTIONS, FinanceRows.transaction(row), "id = ?", arrayOf(row.id.toString()))
+                    if (count == 0) throw FinanceConflictException("A part of this split payment no longer exists.")
+                    row
+                }
+                writeTags(written.id!!, written.tagIds)
+                written
+            }
+            // The rows of the group that are no longer parts go (their tag links with them: those cascade).
+            val still = saved.mapTo(HashSet()) { it.id }
+            for (gone in inGroup) if (gone.id !in still) delete(FinanceDatabase.TRANSACTIONS, "id = ?", arrayOf(gone.id.toString()))
+            saved
+        }
+    }
+
+    /** The row [id] for a new split to start from: it has to be there and be on its own - not already part of a split. */
+    private fun SupportSQLiteDatabase.readPlainRow(id: Long): FinanceTransaction {
+        val row = query(FinanceDatabase.TRANSACTIONS, null, "id = ?", arrayOf(id.toString()), null, null, null)
+            .use { if (it.moveToFirst()) FinanceRows.toTransaction(it) else null }
+            ?: throw FinanceConflictException("This transaction no longer exists.")
+        if (row.splitGroup != null) throw FinanceValidationException("This payment is already split.")
+        return withTags(listOf(row)).single()
+    }
+
+    /**
+     * Saves [row], one part of the split payment [group], with what it has of its own (its category, amount and note) and **what the
+     * parts share changed in every part** - the account, the date and time, the payee, who it was spent on, the tags and the picture -
+     * in the one step the caller is in. A part can't be changed between spending and income, nor to a transfer: that is a different
+     * payment; unsplit it first.
+     */
+    private fun SupportSQLiteDatabase.savePartOfSplit(row: FinanceTransaction, group: String): FinanceTransaction {
+        val parts = readSplitRows(group)
+        val old = parts.firstOrNull { it.id == row.id } ?: throw FinanceConflictException("This transaction no longer exists.")
+        if (row.type != old.type) {
+            throw FinanceValidationException("This is one part of a split payment, so it can't change between spending and income. Unsplit it first.")
+        }
+        val count = update(FinanceDatabase.TRANSACTIONS, FinanceRows.transaction(row), "id = ?", arrayOf(row.id.toString()))
+        if (count == 0) throw FinanceConflictException("This transaction no longer exists.")
+        writeTags(row.id!!, row.tagIds)
+        for (other in parts) {
+            if (other.id == row.id) continue
+            update(
+                FinanceDatabase.TRANSACTIONS,
+                ContentValues().apply {
+                    put("account_id", row.accountId)
+                    put("occurred_at", row.occurredAt.toStorage())
+                    putNullable("payee", row.payee)
+                    putNullable("person_id", row.personId)
+                    putNullable("picture", row.picture)
+                    put("updated_at", row.updatedAt.toStorage())
+                },
+                "id = ?",
+                arrayOf(other.id.toString()),
+            )
+            writeTags(other.id!!, row.tagIds)
+        }
+        return row
+    }
+
+    /**
+     * Makes the split payment [group] one payment again, as one step: the first part's row (the lowest id) becomes the whole payment -
+     * the total of every part, the category [categoryId] (the largest part's when none is given), the parts' notes joined by " · " -
+     * and the other parts' rows go. The account, date, payee, person, tags and picture are the parts' shared ones and stay. A group that
+     * does not hold together (see `splitFault`) is refused, whatever its fault, except one with a single part left, which is simply
+     * a payment on its own. Gives back the one row.
+     */
+    suspend fun unsplit(group: String, categoryId: Long? = null): FinanceTransaction = io {
+        transaction {
+            val rows = readSplitRows(group)
+            if (rows.isEmpty()) throw FinanceConflictException("This split payment no longer exists.")
+            splitFault(rows)?.takeIf { it != SplitFault.TooFew }?.let {
+                throw FinanceValidationException("This split payment doesn't hold together: it ${it.problem}. Check and recalculate, in Settings, can put it right.")
+            }
+            val first = rows.first()
+            val category = categoryId ?: largestPartCategory(rows)
+            val total = rows.sumOf { it.amount }
+            validateShape(first.type, total, first.accountId, null, category)
+            val whole = first.copy(
+                amount = total,
+                categoryId = category,
+                note = joinedSplitNotes(rows),
+                splitGroup = null,
+                updatedAt = clock(),
+            )
+            val count = update(FinanceDatabase.TRANSACTIONS, FinanceRows.transaction(whole), "id = ?", arrayOf(first.id.toString()))
+            if (count == 0) throw FinanceConflictException("This split payment no longer exists.")
+            for (other in rows.drop(1)) delete(FinanceDatabase.TRANSACTIONS, "id = ?", arrayOf(other.id.toString()))
+            whole
+        }
+    }
+
+    /**
+     * Takes the split mark off every row of [group]: each row stays as it is, in every total, and is simply a payment of its own now.
+     * What Check and recalculate does for a group that no longer holds together (a part left alone; parts on different accounts, dates
+     * or kinds), where merging the rows would have to choose one account, one date or one kind. Gives back how many rows it was on.
+     */
+    suspend fun releaseSplit(group: String): Int = io {
+        val released = update(
+            FinanceDatabase.TRANSACTIONS,
+            ContentValues().apply {
+                putNull("split_group")
+                put("updated_at", clock().toStorage())
+            },
+            "split_group = ?",
+            arrayOf(group),
+        )
+        if (released == 0) throw FinanceConflictException("This split payment no longer exists.")
+        released
+    }
+
+    // ----------------------------------------------------------------- goals
+
+    /** Every savings goal, in the order the user keeps them. */
+    suspend fun goals(): List<SavingsGoal> = io { readGoals() }
+
+    private fun SupportSQLiteDatabase.readGoals(): List<SavingsGoal> =
+        query(FinanceDatabase.GOALS, null, null, null, null, null, "sort_order ASC, id ASC").map(FinanceRows::toGoal)
+
+    private fun SupportSQLiteDatabase.goalById(id: Long): SavingsGoal? =
+        query(FinanceDatabase.GOALS, null, "id = ?", arrayOf(id.toString()), null, null, null)
+            .use { if (it.moveToFirst()) FinanceRows.toGoal(it) else null }
+
+    /**
+     * Saves a goal, new or edited. It must hold (`SavingsGoal.fault`: a name of 1 to 40 characters, a target above zero, one emoji or
+     * none). A goal linked to an account keeps no amount of its own - its [SavingsGoal.saved] is stored as zero - and the account must
+     * be one a goal can count: not archived, not a card, not a loan (an account the goal already counts is left as it is, whatever it
+     * has become since). A new goal goes last in the order; an edited one keeps its place and its date of making.
+     */
+    suspend fun saveGoal(goal: SavingsGoal): SavingsGoal = io {
+        val toSave = goal.copy(
+            name = cleanGoalName(goal.name),
+            emoji = goal.emoji?.trim()?.takeIf { it.isNotEmpty() },
+            saved = if (goal.accountId != null) 0L else goal.saved,
+        )
+        toSave.fault()?.let { throw FinanceValidationException(it.advice) }
+        val stored = goal.id?.let { goalById(it) ?: throw FinanceConflictException("This goal no longer exists.") }
+        val accountId = toSave.accountId
+        if (accountId != null && accountId != stored?.accountId) {
+            val account = query(FinanceDatabase.ACCOUNTS, null, "id = ?", arrayOf(accountId.toString()), null, null, null)
+                .use { if (it.moveToFirst()) FinanceRows.toAccount(it) else null }
+                ?: throw FinanceValidationException("Choose an account from the list.")
+            if (account.archived) throw FinanceValidationException("That account is archived. Choose another one, or restore it first.")
+            if (account.kind == AccountKind.Card || account.isLoan) {
+                throw FinanceValidationException("A goal can count a cash, bank, wallet, savings or other account - not a card or a loan.")
+            }
+        }
+        val now = clock()
+        if (stored == null) {
+            val order = (scalarLong("SELECT MAX(sort_order) FROM ${FinanceDatabase.GOALS}") ?: -1L).toInt() + 1
+            val made = toSave.copy(sortOrder = order, createdAt = now, updatedAt = now)
+            made.copy(id = insertOrThrow(FinanceDatabase.GOALS, null, FinanceRows.goal(made)))
+        } else {
+            val edited = toSave.copy(sortOrder = stored.sortOrder, createdAt = stored.createdAt, updatedAt = now)
+            update(FinanceDatabase.GOALS, FinanceRows.goal(edited), "id = ?", arrayOf(stored.id.toString()))
+            edited
+        }
+    }
+
+    /** Deletes a goal. It is only a target: no account, balance or entry changes. */
+    suspend fun deleteGoal(id: Long) = io {
+        if (delete(FinanceDatabase.GOALS, "id = ?", arrayOf(id.toString())) == 0) throw FinanceConflictException("This goal no longer exists.")
+    }
+
+    /**
+     * Adds [delta] to what a goal on its own has saved - positive for Add money, negative for Take out - and gives the goal back. It
+     * makes no ledger entry: it does not move money between accounts. Refused for a goal linked to an account (what is saved there is
+     * that account's balance) and for a change that would leave less than nothing saved.
+     */
+    suspend fun adjustGoalSaved(id: Long, delta: Long): SavingsGoal = io {
+        if (delta == 0L) throw FinanceValidationException("Enter an amount above zero.")
+        transaction {
+            val goal = goalById(id) ?: throw FinanceConflictException("This goal no longer exists.")
+            if (goal.isLinked) {
+                throw FinanceValidationException("This goal counts the balance of an account, so there is nothing to add or take out here. Record the money in that account instead.")
+            }
+            val next = try {
+                Math.addExact(goal.saved, delta)
+            } catch (_: ArithmeticException) {
+                throw FinanceValidationException("That is more than NormPix can keep.")
+            }
+            if (next < 0) throw FinanceValidationException("You can't take out more than is saved here.")
+            val now = clock()
+            update(
+                FinanceDatabase.GOALS,
+                ContentValues().apply {
+                    put("saved", next)
+                    put("updated_at", now.toStorage())
+                },
+                "id = ?",
+                arrayOf(id.toString()),
+            )
+            goal.copy(saved = next, updatedAt = now)
+        }
+    }
+
+    /**
+     * Records one EMI on a loan (see `Loans.kt`): a Transfer of the principal from [LoanEmi.fromAccountId] onto the loan - what is owed
+     * goes down by that and no money is spent - and an Expense of the interest from the same account in the interest category - which
+     * is spending. The two are saved in **one SQL transaction**, each checked as it is written, so either both are in the ledger or
+     * neither is: one that fails (a category of the wrong kind, an account that has gone) takes the other back out with it. A part of
+     * zero makes no entry. Returns what was saved, with its ids.
+     */
+    suspend fun recordLoanEmi(emi: LoanEmi): List<FinanceTransaction> = io {
+        val loan = query(FinanceDatabase.ACCOUNTS, null, "id = ?", arrayOf(emi.loanId.toString()), null, null, null)
+            .use { if (it.moveToFirst()) FinanceRows.toAccount(it) else null }
+            ?: throw FinanceConflictException("This loan no longer exists.")
+        if (!loan.isLoan) throw FinanceValidationException("This account isn't a loan.")
+        val entries = loanEmiEntries(emi, clock())
+        transaction {
+            entries.map { t ->
+                validateShape(t.type, t.amount, t.accountId, t.toAccountId, t.categoryId)
+                t.copy(id = insertOrThrow(FinanceDatabase.TRANSACTIONS, null, FinanceRows.transaction(t)))
+            }
+        }
+    }
+
+    /**
+     * The latest payment made onto the loan [loanId] as of [asOf] (a transfer onto it dated before that): which day the last EMI was
+     * paid, and from which account - what Record EMI starts from. Null when nothing has been paid onto it.
+     */
+    suspend fun lastLoanPayment(loanId: Long, asOf: LocalDateTime): FinanceTransaction? = io {
+        query(
+            FinanceDatabase.TRANSACTIONS,
+            null,
+            "type = ? AND to_account_id = ? AND occurred_at < ${asOf.toStorage()}",
+            arrayOf(TransactionType.Transfer.key, loanId.toString()),
+            null,
+            null,
+            "occurred_at DESC, id DESC",
+            "1",
+        ).use { if (it.moveToFirst()) FinanceRows.toTransaction(it) else null }
+            ?.let { withTags(listOf(it)).single() }
     }
 
     // The picture is only ever a file name the app made: never a path, so a row can't point outside the app's own pictures.
@@ -841,13 +1333,25 @@ class FinanceRepository(
         rawQuery("SELECT picture FROM ${FinanceDatabase.TRANSACTIONS} WHERE picture IS NOT NULL", null).map { it.string("picture") }.toSet()
     }
 
+    /**
+     * Deletes the transaction - and, when it is one part of a split payment, the **whole payment**, every part, in the same step (a
+     * part alone would leave the others, and the payment, wrong). Gives back how many rows went.
+     */
     suspend fun deleteTransaction(id: Long) = io {
-        delete(FinanceDatabase.TRANSACTIONS, "id = ?", arrayOf(id.toString()))
+        transaction {
+            val group = splitGroupOf(id)
+            if (group == null) {
+                delete(FinanceDatabase.TRANSACTIONS, "id = ?", arrayOf(id.toString()))
+            } else {
+                delete(FinanceDatabase.TRANSACTIONS, "split_group = ?", arrayOf(group))
+            }
+        }
     }
 
     suspend fun transactionById(id: Long): FinanceTransaction? = io {
         query(FinanceDatabase.TRANSACTIONS, null, "id = ?", arrayOf(id.toString()), null, null, null)
             .use { if (it.moveToFirst()) FinanceRows.toTransaction(it) else null }
+            ?.let { withTags(listOf(it)).single() }
     }
 
     /** WHERE clause + string bind args. Numbers are inlined: they are `Long`s, never text. */
@@ -873,14 +1377,21 @@ class FinanceRepository(
             clauses += "(t.category_id IN ($ids) OR c.parent_id IN ($ids))"
         }
         if (q.personIds.isNotEmpty()) clauses += "t.person_id IN (${q.personIds.joinToString(",")})"
+        if (q.tagIds.isNotEmpty()) {
+            // Any of them: a transaction with one of the tags is in, however many of the others it has.
+            clauses += "EXISTS (SELECT 1 FROM ${FinanceDatabase.TRANSACTION_TAGS} tt " +
+                "WHERE tt.transaction_id = t.id AND tt.tag_id IN (${q.tagIds.joinToString(",")}))"
+        }
         q.minAmount?.let { clauses += "t.amount >= $it" }
         q.maxAmount?.let { clauses += "t.amount <= $it" }
         val text = q.text?.trim()
         if (!text.isNullOrEmpty()) {
             val pattern = "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
             clauses += "(t.payee LIKE ? ESCAPE '\\' OR t.note LIKE ? ESCAPE '\\' " +
-                "OR c.name LIKE ? ESCAPE '\\' OR a.name LIKE ? ESCAPE '\\' OR p.name LIKE ? ESCAPE '\\')"
-            repeat(5) { args += pattern }
+                "OR c.name LIKE ? ESCAPE '\\' OR a.name LIKE ? ESCAPE '\\' OR p.name LIKE ? ESCAPE '\\' " +
+                "OR EXISTS (SELECT 1 FROM ${FinanceDatabase.TRANSACTION_TAGS} st JOIN ${FinanceDatabase.TAGS} g ON g.id = st.tag_id " +
+                "WHERE st.transaction_id = t.id AND g.name LIKE ? ESCAPE '\\'))"
+            repeat(6) { args += pattern }
         }
         return (if (clauses.isEmpty()) "1 = 1" else clauses.joinToString(" AND ")) to args
     }
@@ -906,7 +1417,8 @@ class FinanceRepository(
             args.toTypedArray(),
         ).map(FinanceRows::toTransaction)
         val hasMore = rows.size > limit
-        val items = rows.take(limit)
+        // The page's tags in one more query, whatever its size (not one a row).
+        val items = withTags(rows.take(limit))
         TransactionPage(
             items,
             if (hasMore && items.isNotEmpty()) {
@@ -937,6 +1449,61 @@ class FinanceRepository(
     }
 
     suspend fun summary(range: DateRange): PeriodSummary = summaryFor(TransactionQuery(range = range))
+
+    /** Everything dated from [from] up to (not including) [to], oldest first: what a forecast reads of the days ahead. */
+    suspend fun transactionsBetween(from: LocalDateTime, to: LocalDateTime): List<FinanceTransaction> = io {
+        query(
+            FinanceDatabase.TRANSACTIONS,
+            null,
+            "occurred_at >= ${from.toStorage()} AND occurred_at < ${to.toStorage()}",
+            null,
+            null,
+            null,
+            "occurred_at ASC, id ASC",
+        ).map(FinanceRows::toTransaction).let { withTags(it) }
+    }
+
+    /**
+     * What was spent from [from] up to (not including) [to] that no repeating payment recorded - on every account, transfers never
+     * counting as spending. A forecast reads a day's share of this as what the days to come will cost besides what is scheduled.
+     */
+    suspend fun spentOutsideRepeats(from: LocalDateTime, to: LocalDateTime): Long = io {
+        scalarLong(
+            "SELECT SUM(amount) FROM ${FinanceDatabase.TRANSACTIONS} WHERE type = 'expense' AND recurring_id IS NULL " +
+                "AND occurred_at >= ${from.toStorage()} AND occurred_at < ${to.toStorage()}",
+        ) ?: 0L
+    }
+
+    /**
+     * The expenses with a payee that no repeating payment recorded, dated from [from] up to (not including) [to], oldest first: what
+     * the detector of payments that look like they repeat reads.
+     */
+    suspend fun expensesOutsideRepeats(from: LocalDateTime, to: LocalDateTime): List<FinanceTransaction> = io {
+        query(
+            FinanceDatabase.TRANSACTIONS,
+            null,
+            "type = 'expense' AND recurring_id IS NULL AND payee IS NOT NULL AND TRIM(payee) != '' " +
+                "AND occurred_at >= ${from.toStorage()} AND occurred_at < ${to.toStorage()}",
+            null,
+            null,
+            null,
+            "occurred_at ASC, id ASC",
+        ).map(FinanceRows::toTransaction).let { withTags(it) }
+    }
+
+    /**
+     * The payees the user said "not this one" to when they were offered as a repeating payment (their `payeeKey`s). Kept in the
+     * `meta` table - no migration - as one line each; not in a backup, and kept when one is restored or an Undo puts the ledger back.
+     */
+    suspend fun dismissedRepeatPayees(): Set<String> = io { readDismissedRepeats() }
+
+    /** Remembers that the payee [key] (a `payeeKey`) is not to be offered as a repeating payment again. */
+    suspend fun dismissRepeatPayee(key: String) = io {
+        if (key.isNotBlank()) setMeta(DISMISSED_REPEATS, (readDismissedRepeats() + key).sorted().joinToString("\n"))
+    }
+
+    private fun SupportSQLiteDatabase.readDismissedRepeats(): Set<String> =
+        meta(DISMISSED_REPEATS)?.split('\n')?.filter { it.isNotEmpty() }?.toSet().orEmpty()
 
     /** Totals per category for [type] (income or expense), largest first. */
     suspend fun categoryTotals(range: DateRange, type: TransactionType): List<CategoryTotal> = io {
@@ -1025,7 +1592,7 @@ class FinanceRepository(
                 .filter { other -> ref == null || referenceIn(other.note).let { it == null || it.equals(ref, ignoreCase = true) } }
                 .forEach { found.putIfAbsent(it.id!!, it) }
         }
-        found.values.take(limit)
+        withTags(found.values.take(limit))
     }
 
     /** The reference an entry made from a shared payment carries in its note ("Ref 428312345678"), or null. */
@@ -1268,7 +1835,9 @@ class FinanceRepository(
         validateShape(t.type, t.amount, t.accountId, t.toAccountId, t.categoryId)
         validatePerson(t.type, t.personId, t.id)
         validatePicture(t.picture)
+        validateTags(t.type, t.tagIds)
         if (t.recurringId != null) throw FinanceValidationException("This is already part of a repeating payment.")
+        if (t.id != null && splitGroupOf(t.id) != null) throw FinanceValidationException("A part of a split payment can't be made to repeat.")
         if (schedule.interval < 1) throw FinanceValidationException("Repeat at least every 1.")
         if (schedule.endDate != null && schedule.endDate.isBefore(startOfDay(t.occurredAt))) {
             throw FinanceValidationException("The last repeat must be on or after the first payment.")
@@ -1293,7 +1862,7 @@ class FinanceRepository(
                 personId = t.personId,
             )
             val ruleId = insertOrThrow(FinanceDatabase.RECURRING_RULES, null, FinanceRows.recurring(rule))
-            val toSave = t.copy(payee = clean(t.payee), note = clean(t.note), recurringId = ruleId, updatedAt = now)
+            val toSave = t.copy(payee = clean(t.payee), note = clean(t.note), recurringId = ruleId, updatedAt = now, splitGroup = null)
             val saved = if (t.id == null) {
                 toSave.copy(id = insertOrThrow(FinanceDatabase.TRANSACTIONS, null, FinanceRows.transaction(toSave)))
             } else {
@@ -1301,6 +1870,8 @@ class FinanceRepository(
                 if (count == 0) throw FinanceConflictException("This transaction no longer exists.")
                 toSave
             }
+            // The tags are this transaction's only: what the rule records later is untagged (a rule has no tags of its own).
+            writeTags(saved.id!!, saved.tagIds)
             saved to rule.copy(id = ruleId)
         }
     }
@@ -1446,9 +2017,14 @@ class FinanceRepository(
     suspend fun combineSelfTransfer(pair: SelfTransferPair): FinanceTransaction = io {
         val transfer = pair.asTransfer(clock())
         validateShape(transfer.type, transfer.amount, transfer.accountId, transfer.toAccountId, transfer.categoryId)
+        if (splitGroupOf(pair.expense.id!!) != null || splitGroupOf(pair.income.id!!) != null) {
+            throw FinanceValidationException("A part of a split payment can't be made a transfer. Unsplit it first.")
+        }
         transaction {
             val updated = update(FinanceDatabase.TRANSACTIONS, FinanceRows.transaction(transfer), "id = ?", arrayOf(transfer.id.toString()))
             if (updated == 0) throw FinanceConflictException("This transaction no longer exists.")
+            // A transfer has no tags: the expense's come off it (the income's go with the income).
+            writeTags(transfer.id!!, emptySet())
             if (delete(FinanceDatabase.TRANSACTIONS, "id = ?", arrayOf(pair.income.id.toString())) == 0) {
                 throw FinanceConflictException("This transaction no longer exists.")
             }
@@ -1474,11 +2050,18 @@ class FinanceRepository(
                 "type ASC, archived ASC, sort_order ASC, id ASC",
             ).map(FinanceRows::toCategory),
             transactions = query(FinanceDatabase.TRANSACTIONS, null, null, null, null, null, "occurred_at DESC, id DESC")
-                .map(FinanceRows::toTransaction),
+                .map(FinanceRows::toTransaction)
+                .let { withTags(it) }
+                // A group that doesn't hold together (nothing the app writes makes one) goes into a snapshot - a backup, an Undo - as
+                // plain rows, every amount, account and date as it is: a snapshot is only restorable if its groups hold, and a mark that
+                // means nothing is not worth a backup that can't be put back. Check and recalculate is what finds and ends such a group.
+                .let { withoutBrokenSplits(it) },
             budgets = readBudgets(),
             recurringRules = readRules(),
             banks = readBanks(),
             people = readPeople(),
+            tags = readTags(),
+            goals = readGoals(),
         )
     }
 
@@ -1491,10 +2074,16 @@ class FinanceRepository(
         if (problems.isNotEmpty()) throw FinanceValidationException(problems.first())
         val now = clock().toStorage()
         transaction {
+            // The payees the user said "not this one" to are a choice about this phone, not ledger data: they outlive a restore.
+            val dismissedRepeats = meta(DISMISSED_REPEATS)
             clearAll()
             for (b in snapshot.banks) insertOrThrow(FinanceDatabase.BANKS, null, FinanceRows.bank(b))
             for (a in snapshot.accounts) insertOrThrow(FinanceDatabase.ACCOUNTS, null, FinanceRows.account(a))
+            // The goals refer to the accounts, so they go in after them, with their ids: a file from before goals (format 1 to 5) has none.
+            for (g in snapshot.goals) insertOrThrow(FinanceDatabase.GOALS, null, FinanceRows.goal(g))
             for (p in snapshot.people) insertOrThrow(FinanceDatabase.PEOPLE, null, FinanceRows.person(p))
+            // The tags keep their ids, as everything here does, so the links below name them as the file does.
+            for (tag in snapshot.tags) insertOrThrow(FinanceDatabase.TAGS, null, FinanceRows.tag(tag))
             // Parents first: a sub-category's row refers to its parent's.
             for (c in snapshot.categories.sortedBy { it.parentId != null }) {
                 insertOrThrow(FinanceDatabase.CATEGORIES, null, FinanceRows.category(c))
@@ -1505,7 +2094,11 @@ class FinanceRepository(
             for (r in snapshot.recurringRules) {
                 insertOrThrow(FinanceDatabase.RECURRING_RULES, null, FinanceRows.recurring(r))
             }
-            for (t in snapshot.transactions) insertOrThrow(FinanceDatabase.TRANSACTIONS, null, FinanceRows.transaction(t))
+            for (t in snapshot.transactions) {
+                insertOrThrow(FinanceDatabase.TRANSACTIONS, null, FinanceRows.transaction(t))
+                // A file from before tags (format 1 to 4) has none: nothing is written.
+                if (t.tagIds.isNotEmpty()) writeTags(t.id!!, t.tagIds)
+            }
             for (b in snapshot.budgets) {
                 insertOrThrow(
                     FinanceDatabase.BUDGETS,
@@ -1522,6 +2115,7 @@ class FinanceRepository(
             }
             setMeta("currency", snapshot.currencyCode)
             snapshot.defaultAccountId?.let { setMeta("default_account_id", it.toString()) }
+            dismissedRepeats?.let { setMeta(DISMISSED_REPEATS, it) }
         }
     }
 
@@ -1537,7 +2131,10 @@ class FinanceRepository(
     private fun SupportSQLiteDatabase.clearAll() {
         // Children before parents (foreign keys are enforced).
         for (table in listOf(
+            FinanceDatabase.GOALS,
+            FinanceDatabase.TRANSACTION_TAGS,
             FinanceDatabase.TRANSACTIONS,
+            FinanceDatabase.TAGS,
             FinanceDatabase.PEOPLE,
             FinanceDatabase.BUDGETS,
             FinanceDatabase.RECURRING_RULES,
@@ -1555,6 +2152,12 @@ class FinanceRepository(
 
     companion object {
         private const val MAX_BANK_NAME = 60
+
+        /** Up to this many transactions, their tags are read by their ids; past it (a backup's every one), the whole link table once. */
+        private const val INLINE_IDS = 500
+
+        /** The `meta` key holding the payees not to offer as a repeating payment, one per line. */
+        private const val DISMISSED_REPEATS = "dismissed_repeat_payees"
 
         /**
          * How far apart two entries of the same amount to the same payee can be and still be one payment entered twice

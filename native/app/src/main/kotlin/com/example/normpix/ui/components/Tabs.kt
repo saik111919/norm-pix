@@ -156,7 +156,9 @@ fun AppPrimaryTabs(
  *
  * With large text the icons give way to the words, and from [SECONDARY_SCROLLS_FROM_FONT_SCALE] up the row scrolls sideways, each
  * pill as wide as its word and the one you are in kept in view: three equal pills on a phone cannot hold "Reminders" at twice
- * the text, and were "Budg…", "Recu…" and "Remin…".
+ * the text, and were "Budg…", "Recu…" and "Remin…". The same goes for more than [SECONDARY_FIT_ACROSS] tabs at any size (Plans
+ * has four since Goals, 2026-11-15): four equal pills made "Reminders" "Reminde…" at 411dp, so each is as wide as its word and the
+ * row scrolls where they do not all fit.
  */
 @Composable
 fun AppSecondaryTabs(
@@ -172,7 +174,7 @@ fun AppSecondaryTabs(
         if (index != selectedIndex) haptics.selection()
         onSelect(index)
     }
-    if (fontScale >= SECONDARY_SCROLLS_FROM_FONT_SCALE) {
+    if (fontScale >= SECONDARY_SCROLLS_FROM_FONT_SCALE || tabs.size > SECONDARY_FIT_ACROSS) {
         val inView = remember(tabs.size) { List(tabs.size) { BringIntoViewRequester() } }
         LaunchedEffect(selectedIndex, tabs.size) { inView.getOrNull(selectedIndex)?.bringIntoView() }
         Row(
@@ -305,6 +307,9 @@ private const val SECONDARY_ICONS_BELOW_FONT_SCALE = 1.3f
 
 /** The section you are in is this much wider than each of the others. */
 private const val SECONDARY_SELECTED_WEIGHT = 1.2f
+
+/** More secondary tabs than this are not laid out as equal pills (they do not fit a phone's width): see [AppSecondaryTabs]. */
+private const val SECONDARY_FIT_ACROSS = 3
 
 /** From this font scale up the secondary tabs scroll sideways, each pill as wide as its word (see [AppSecondaryTabs]). */
 internal const val SECONDARY_SCROLLS_FROM_FONT_SCALE = 1.3f

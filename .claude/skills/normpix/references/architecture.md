@@ -57,19 +57,23 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
   expiry), points `NfcCardOutletService.isAllowed` at the availability schedule and NormPix being in front, and starts observers that must work
   without any screen open: `followCardsForExpiry` (card expiry tracker syncs only from a successfully loaded list),
   `followCardsForBanks` (`CardBankLinker` links cards to banks once finance is loaded), `updates.start()`,
-  `followUpdateSettings` (background update job follows Settings), `followLedgerForWidgets` (redraws the Recent widget
-  500 ms after the ledger or how it is shown changes).
+  `followUpdateSettings` (background update job follows Settings), `followAutoBackupSettings` (the automatic backup's job follows
+  `autoBackupPlan()`; first `AutoBackupService.tidy()` deletes a sealed password left behind with the feature off),
+  `followLedgerForWidgets` (redraws the Recent widget 500 ms after the ledger or how it is shown changes).
 - `AppContainer` (`NormPixApplication.kt`) holds: `preferences` (AppPreferences), `finance` (FinanceController),
   `reminders` (RemindersController), `vault` + `cards` (CardVault, CardsController), `lock` (AppLockService), `host`
   (ActivityHost), `nfc`, `registeredTags`, `scanner` (null in tests), `alarms`, `clipboard` (SecureClipboard), `expiry`
   (CardExpiryTracker), `receipts` (ReceiptSharer), `sharedText` (SharedTextInbox), `sharedPictures`
-  (SharedPictureReader), `updates` (AppUpdater?, null in tests), `widgetRequests`, plus the request flows
+  (SharedPictureReader), `updates` (AppUpdater?, null in tests), `widgetRequests`, `autoBackup` (AutoBackupService?, null in
+  tests; `buildContainer` binds its data to the container being built through a `lateinit` local, so it always reads the real
+  data), `isSampleData` (true only for `DummyData`'s container), plus the request flows
   `reminderAlerts`, `walletRequests`, `updateRequests`, `updateInstallRequests`. Every service has an inert default so a
   test builds a container cheaply.
 - **Sample data** is a second container: `DummyData.open(context, real, now)` (`DummyData.kt`) with in-memory
   databases, an in-memory vault and cache-dir pictures, sharing the real container's non-data services. **A service added
   to `AppContainer` must be passed through in `DummyData` too** (`receipts = real.receipts`, ...) or the sample mode
-  silently gets the inert default; `DummyDataTest` asserts it.
+  silently gets the inert default; `DummyDataTest` asserts it. The sample container passes `autoBackup = real.autoBackup` and
+  `isSampleData = true` (`AutoBackupServiceTest` asserts both, and that a backup made from it holds the real data only).
 - `MainActivity` is a `FragmentActivity` (BiometricPrompt needs one). Release sets FLAG_SECURE (no screenshots, blank
   recents thumbnail). It goes edge-to-edge, wires `host.activity` and `lock.authenticator`, and turns launch/new intents
   into container flows: a reminder id (alert screen), card-expiry (open Wallet), update notification (open update page,
@@ -82,7 +86,8 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
   default is enabled, `AppIcons.use` swaps); `ShareTransactionActivity` (NoDisplay share target for text/plain and
   image/*); three widget receivers; `NfcCardOutletService` (host card emulation); reminder, card-expiry, clipboard-clear
   and update receivers/services (`UpdateDownloadService` is a foreground `dataSync` service, `UpdateJobService` the daily
-  JobScheduler check).
+  JobScheduler check, job id 7_601); `backup.AutoBackupJobService` (the automatic backup, JobScheduler job 7_602, not exported,
+  `BIND_JOB_SERVICE`; no network).
 - Permissions: NFC, POST_NOTIFICATIONS, USE_EXACT_ALARM (auto-granted on 13+, the user cannot revoke it) + SCHEDULE_EXACT_ALARM
   (`maxSdkVersion` 32), RECEIVE_BOOT_COMPLETED, VIBRATE, INTERNET +
   ACCESS_NETWORK_STATE (updates only), REQUEST_INSTALL_PACKAGES, UPDATE_PACKAGES_WITHOUT_USER_ACTION,
@@ -98,9 +103,10 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
 
 | Store | Where | Notes |
 |---|---|---|
-| Finance DB | `normpix_finance.encrypted.db` (SQLCipher; was `normpix_finance.db`), `finance/data/FinanceDatabase.kt` | `VERSION` 12. Tables: accounts, people, banks, categories, transactions, budgets, recurring_rules, meta. FKs on. CHECK constraints and triggers enforce positive amounts, transfer shape, "only an expense names a person". |
+| Finance DB | `normpix_finance.encrypted.db` (SQLCipher; was `normpix_finance.db`), `finance/data/FinanceDatabase.kt` | `VERSION` 17 (v17: one empty column on transactions, `split_group TEXT` - the random UUID the parts of one split payment share, null for every other row - and `idx_tx_split` on it; `addSplitGroup`, adds the column only where it is missing and the index `IF NOT EXISTS`, also from `createSchema` and as an `onOpen` safety net; features.md "Split payments". v16: table `goals` - id, name, target above zero, target_date INTEGER ms of the wall-clock day or null, emoji, account_id `REFERENCES accounts ON DELETE SET NULL`, saved never below zero, sort_order, created_at, updated_at; `addGoals`, `CREATE ... IF NOT EXISTS`, also from `createSchema` and as an `onOpen` safety net; features.md "Savings goals". v15: tables `tags` - id, name unique ignoring case, created_at - and `transaction_tags` - transaction_id + tag_id, both foreign keys ON DELETE CASCADE, an index on tag_id; `addTags`, `CREATE ... IF NOT EXISTS`, also from `createSchema` and as an `onOpen` safety net; features.md "Tags and the year by tag". v14: five empty loan columns on accounts: `loan_principal`, `loan_rate_bp`, `loan_tenure_months`, `loan_emi` in minor units / basis points / months, and `loan_start` as every date is kept, INTEGER ms of the wall-clock day; an account is a loan when `loan_principal` is not null; features.md section 2). Tables: accounts, people, banks, categories, transactions, budgets, recurring_rules, tags, transaction_tags, goals, meta (key/value: `currency`, `default_account_id`, and `dismissed_repeat_payees` - the payees the user said "not this one" to; kept across a restore, not in a backup). FKs on. CHECK constraints and triggers enforce positive amounts, transfer shape, "only an expense names a person". |
 | Reminders DB | `normpix_reminders.encrypted.db` (was `normpix_reminders.db`), `RemindersDatabase.kt` | `VERSION` 2 (reminders can link to a card/account/transaction/recurring rule). |
 | Database key | `noBackupFilesDir/database.key` | 32 random bytes sealed by Keystore alias `normpix_database_key_v1` (AES-256-GCM, not auth-bound). Shared by both DBs. Losing it (or the Keystore key) means the encrypted DBs can't open - they are then left untouched and the ledger shows `FinanceStatus.Failed`. |
+| Automatic backup password | `noBackupFilesDir/auto_backup.key`, `backup/SealedSecret.kt` | The password the user set for automatic backups (UTF-8), sealed by Keystore alias `normpix_auto_backup_key_v1` (AES-256-GCM, **not** auth-bound so the job can open it), `[12-byte IV][ct+tag]`, temp file + rename, read back after writing. Only while automatic backups are on: turning them off deletes it; never in preferences or a backup. Losing it (or the Keystore key) = `AutoBackupProblem.PasswordMissing`, put right by Change password. |
 | Preferences | SharedPreferences `normpix_preferences` | One `AppPrefsState` flow; see section 6. Other files: `normpix_nfc_tags` (registered NFC tags, AES-GCM entries), `normpix_card_expiry`. |
 | Card vault | `filesDir/card_vault.bin` | AES-256-GCM, key in Android Keystore, written atomically (`FileCardVault`). Cards are never in the finance DB and never in a normal backup. |
 | Pictures | `TransactionPictures` (kept + drafts folders) | A transaction's attached picture; backed up in the full (.zip) backup. |
@@ -120,14 +126,15 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
 - **Migrations are additive.** `FinanceDatabase.onUpgrade` is a chain of `if (oldVersion < N) { ... }` steps (v2 banks,
   v3 sub-categories, v4 credit limits, v5 people, v6 rule people, v7 brand icons, v8 transaction pictures, v9 billing days,
   v10 account numbers/card link, v11 later default categories, v12 account number start, v13 the money-sent / money-received
-  families: `addDefaultFamilies`). `ALTER TABLE` / new tables only;
+  families: `addDefaultFamilies`, v14 the loan columns: `addLoanColumns`, which adds only the columns that are missing, v15 the tag tables: `addTags`, v16 the goals table: `addGoals`, v17 the split group: `addSplitGroup`). `ALTER TABLE` / new tables only;
   never drop or recreate; existing rows stay exactly as they were. A new migration needs a test that opens a database
   hand-built at the previous version (see `BankMigrationTest`, `PeopleMigrationTest`, `PictureMigrationTest`). `onOpen` also runs
-  `ensureAccountColumns` (adds any account column a database of the current version lacks, empty; `AccountColumnsGuardTest`): a
+  `ensureAccountColumns` (adds any account column - `ACCOUNT_EXTRA_COLUMNS`, the loan ones included - a database of the current version lacks, empty; `AccountColumnsGuardTest`; it would hide a missing migration step, so `LoanMigrationTest` also runs the step alone): a
   safety net so a mis-numbered database never refuses every account write.
 - Backup formats are versioned and **additive**; old files must still restore:
-  full finance backup `FinanceBackupCodec.FORMAT_VERSION = 3` (`.json`, or `.zip` with pictures; 3 = may leave out unused default
-  categories and names the removed ones, see features.md section 6; 1 and 2 still restore exactly); app backup
+  full finance backup `FinanceBackupCodec.FORMAT_VERSION = 7` (`.json`, or `.zip` with pictures; 3 = may leave out unused default
+  categories and names the removed ones, see features.md section 6; 4 = an account may carry a `loan` object and be of the kind `loan`, see
+  features.md section 2; 5 = a top-level `tags` list and a transaction's `tags` (ids), see features.md "Tags"; 6 = a top-level `goals` list, the account by id, see features.md "Savings goals"; 7 = a transaction may carry `"splitGroup": "<id>"`, see features.md "Split payments"; 1 to 6 still restore exactly); app backup
   `AppBackupManifest.VERSION = 1` (zip: finance json, pictures, `app/manifest.json`, `app/settings.json`,
   `app/reminders.json`, `app/profile/`, `app/fonts/`, `app/cards.json`); cards file `CardsTransfer.VERSION = 1`
   (AES-256-GCM, PBKDF2 password, min 8 chars); locked backup `LockedFile.VERSION = 1` (`backup/LockedFile.kt`: any of the
@@ -146,7 +153,7 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
   Indian digit grouping (1,00,000). `MoneyFormatter` honours "amounts hidden".
 - `TransactionType` expense | income | transfer. A transfer has a `to_account_id` different from `account_id` and no
   category; expense/income have a category and no `to_account_id`. Only an expense may name a person.
-- `AccountKind`: cash, bank, card, wallet, savings, other. A fresh install seeds one **Cash** account and a ready-made
+- `AccountKind`: cash, bank, card, wallet, savings, loan, other (stored by key; the keys never change). A fresh install seeds one **Cash** account and a ready-made
   category set (29 top-level families plus sub-categories, `FinanceDatabase.defaultCategories`,
   `CategorySuggestions`). Balance = opening + income - expense + transfers in - out (`finance/domain/Ledger.kt`);
   a credit card's negative balance is what is owed.
@@ -180,12 +187,12 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
   (`LocalShellCovered` into `LocalTabVisible`). Why: a page used to dispose it, so the back gesture had nothing under the page but
   the background until let go, and then waited for the whole shell to be composed again (a 450-550 ms frame backing out of Settings,
   measured on the phone and the emulator). A new thing that must not run under a page checks `LocalShellCovered`/`LocalTabVisible`.
-- Routes (`Routes` object in `NormPixRoot.kt`): `main`, `notifications`, `categories`, `budget-history`, `people`, `person/{id}`,
+- Routes (`Routes` object in `NormPixRoot.kt`): `main`, `notifications`, `categories`, `budget-history`, `repeating-costs`, `forecast`, `bills-calendar`, `people`, `person/{id}`,
   `category/{id}/{month}?from&to`, `account/{id}`, `settings`, `settings/{page}`, `appearance/{section}`, `profile`,
   `search`, `reminder/{id}`, `update`, `changelog`, `about`, `about/{topic}`.
 - **Notifications** (`notifications/`, 2026-11-08): one gathering of what needs the user, provided once above the NavHost
   (`ProvideNotifications` / `LocalNotifications`, in `rememberNotifications()`): the banners made by `screens/HomeBanners.kt`
-  (`internal`: `reminderBanners`, `budgetBanners`, `cardExpiryBanners`, `crashBanners`, `backupBanners`, `updateBanners`), gathered
+  (`internal`: `reminderBanners`, `budgetBanners`, `cardExpiryBanners`, `cardLimitBanners`, `crashBanners`, `backupBanners`, `updateBanners`), gathered
   once by `notificationItems(budgets)` as `AppNotification(kind, banner)` in `Notifications`. Home's `NeedsAttention` reads the same
   `notificationItems`: everything but `NotificationKind.Update` folds into the one `attentionBanner(items, open)` (count, `attentionSummary`,
   worst tone; opens `openNotifications`), the update stays its own `BannerStack` (a deck of one). `Banner.detailLine()` is the page's
@@ -222,7 +229,7 @@ colours are off/unavailable); page animation **Linux window**; back button **Top
 month control **Track**; progress **Wavy**; accounts layout **Stack**, cards layout **Stack** (was Cards until 2026-11-02), Top spending **Stack**;
 category icons **3D** with shape **None**; font **GS Flex, Zenith preset**; sheet blur on; swipe actions on (edit + delete);
 NFC card exchange **Off** (`ScheduledFeature.defaultMode`); wallet lock off (scope Wallet only, timeout immediate);
-Save CVV and Store cards on; clipboard clears after **10 s**; amounts shown; notifications on; update checks on (daily,
+Save CVV and Store cards on; card limit warning **30%** (`CardLimitWarning`: Off / 30 / 50 / 75 / 90, stored by name, in backups); clipboard clears after **10 s**; amounts shown; notifications on; update checks on (daily,
 also at launch), background updates **download then ask**, Wi-Fi only. Read `AppPrefsState` for the full list.
 
 To add a setting, touch these places (the `bottomControls` setting is the worked example):
@@ -237,7 +244,9 @@ To add a setting, touch these places (the `bottomControls` setting is the worked
    `UpdatesSettingsPage`, built from `SettingsRows.kt`.
 6. A `SettingsEntry(title, page, keywords, appearance = ...)` in `settings/ui/SettingsCatalog.kt` so Settings search finds it.
 7. Backup is automatic: `exportAll()` returns every stored key except `BACKUP_EXCLUDED`, so a new key travels with an
-   app backup without anyone listing it. Add to the exclusion list only device-specific or secret keys.
+   app backup without anyone listing it. Add to the exclusion list only device-specific or secret keys. The automatic backup's
+   nine `auto_backup_*` keys (`AUTO_BACKUP_KEYS`: switch, folder URI + name, `AutoBackupEvery`, cards, last time + file, problem +
+   time) are excluded **and** kept by `resetToDefaults` (a reset must not leave the sealed password without its switch).
 8. Tests: a round trip including `exportAll()["key"]` and a UI test (`BottomControlsSettingTest`).
 
 A new default must not change what an existing user already chose: only explicit picks are stored, and a default is
@@ -263,7 +272,9 @@ resolved at read time (`SheetAnimationType.defaultFor`, `ScheduledFeature.defaul
 - `testing/TestEnvironment.kt`: an `AppContainer` on **in-memory databases** with `Dispatchers.Unconfined`, a throwaway
   prefs file, `InMemoryVault`, `RecordingClipboard`, `RecordingReceiptSharer`, `FakeNfcTagReveal`, `RecordingNavigator`,
   `ShellState`, and `Content { }` which wraps a screen in `NormPixTheme` + `ProvideAppEnvironment`. A fresh environment
-  already has the default **Cash** account.
+  already has the default **Cash** account. Its last parameter `autoBackup` (a factory `(preferences, () -> container) ->
+  AutoBackupService`) gives the container an automatic backup service; `backup/FakeBackupFolders.kt` (test) is an in-memory folder
+  with failures to order, and a plain `KeyGenerator` AES key in a `VaultKeyProvider` stands in for the Keystore.
 - `robolectric.properties` sets `conscryptMode=OFF` (Conscrypt can't verify the JDK's JCE certificate on newer JDKs and
   breaks Cipher use after a Robolectric test).
 - `ReadmeScreenshots.kt` renders the README pictures from the real screens with sample data (skipped unless

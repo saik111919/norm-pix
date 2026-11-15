@@ -36,8 +36,15 @@ import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.FinanceConflictException
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.Person
+import com.example.normpix.finance.domain.RecurringRule
+import com.example.normpix.finance.domain.RepeatSuggestion
+import com.example.normpix.finance.domain.SavingsGoal
+import com.example.normpix.finance.domain.SplitPart
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.billingCycleSummary
+import com.example.normpix.finance.domain.firstOccurrenceAfter
+import com.example.normpix.finance.domain.goalSaved
+import com.example.normpix.finance.domain.settledCutoff
 import com.example.normpix.finance.share.NoSharedPictureReader
 import com.example.normpix.finance.share.PaymentAppReceipts
 import com.example.normpix.finance.share.PictureText
@@ -209,6 +216,23 @@ class FinanceActions(
         scope.launch { overlays.sheet<Boolean> { dismiss -> PayBillSheet(card, suggested, onDone = dismiss) } }
     }
 
+    /**
+     * Records one EMI of the loan [loan]: the sheet starts from what the schedule says is next, and from the account the last EMI was
+     * paid from (read first, so the sheet opens already knowing it). Saving makes the two entries in one transaction ([RecordEmiSheet]).
+     */
+    fun recordEmi(loan: Account) {
+        scope.launch {
+            val last = try {
+                finance.repository.lastLoanPayment(loan.id!!, state.asOf ?: settledCutoff(LocalDateTime.now()))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+            overlays.sheet<Boolean> { dismiss -> RecordEmiSheet(loan, last, onDone = dismiss) }
+        }
+    }
+
     fun editTransaction(transaction: FinanceTransaction) {
         scope.launch {
             overlays.sheet<Boolean> { dismiss -> WithReminders { TransactionEditorSheet(transaction.type, existingId = transaction.id, onDone = dismiss) } }
@@ -217,18 +241,74 @@ class FinanceActions(
 
     fun showDetails(transaction: FinanceTransaction) {
         scope.launch {
+            // The tag whose chip was tapped, if one was: the sheet closes, then its transactions open (an object, not a primitive, held
+            // by the sheet's lambda - see below).
+            val tagToOpen = arrayOfNulls<Long>(1)
+            // A part of a split payment shows the whole payment: every part, read before the sheet opens.
+            val parts = splitPartsOf(transaction)
             when (
                 overlays.sheet<DetailAction>(expandable = true) { dismiss ->
                     // Asked in the sheet, not before it: a Boolean held by the sheet's lambda trips the build's Compose stack
                     // trace mapping ("Failed to tokenize ... invokeSuspend").
-                    TransactionDetailsSheet(transaction, canRemind = reminders != null, onAction = dismiss)
+                    TransactionDetailsSheet(
+                        transaction,
+                        canRemind = reminders != null,
+                        onTag = { id ->
+                            tagToOpen[0] = id
+                            dismiss(null)
+                        },
+                        parts = parts,
+                        onAction = dismiss,
+                    )
                 }
             ) {
                 DetailAction.Edit -> editTransaction(transaction)
+                DetailAction.EditSplit -> editSplitNow(parts)
+                DetailAction.Unsplit -> unsplitNow(parts)
                 DetailAction.Delete -> deleteTransactionNow(transaction)
                 DetailAction.Remind -> reminders?.about(transaction)
-                null -> Unit
+                null -> tagToOpen[0]?.let { navigator.openTagHistory(it) }
             }
+        }
+    }
+
+    /**
+     * Every part of the split payment [transaction] is one part of (this one among them), in the order they were entered; empty for a
+     * payment that is not split - or whose group has lost all but one of its parts, which is then just a payment (Check and recalculate
+     * offers to end such a group).
+     */
+    private suspend fun splitPartsOf(transaction: FinanceTransaction): List<FinanceTransaction> {
+        val group = transaction.splitGroup ?: return emptyList()
+        return try {
+            finance.repository.splitParts(group).takeIf { it.size >= 2 }.orEmpty()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /** The split editor over a split payment's own parts ([parts]: all of them, as stored): what the parts share stays as it is. */
+    private suspend fun editSplitNow(parts: List<FinanceTransaction>) {
+        val first = parts.firstOrNull() ?: return
+        val payment = first.copy(amount = parts.sumOf { it.amount }, categoryId = null, note = null)
+        overlays.sheet<Boolean> { dismiss ->
+            SplitEditorSheet(payment, first.splitGroup, parts.map { SplitPart(it.categoryId, it.amount, it.note, it.id) }, onDone = dismiss)
+        }
+    }
+
+    /** Asks which category the whole payment goes under, then makes the split payment one payment again, with Undo. */
+    private suspend fun unsplitNow(parts: List<FinanceTransaction>) {
+        val group = parts.firstOrNull()?.splitGroup ?: return
+        val category = overlays.sheet<Long> { dismiss -> UnsplitSheet(parts, onDone = dismiss) } ?: return
+        try {
+            val undo = finance.unsplitUndoably(group, category)
+            haptics.success()
+            snackbars.offerUndo("Payment unsplit", finance, undo, scope)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            snackbars.show("Couldn't unsplit it. Nothing was changed.", SnackbarKind.Error)
         }
     }
 
@@ -246,11 +326,19 @@ class FinanceActions(
     }
 
     private suspend fun deleteTransactionNow(transaction: FinanceTransaction) {
+        // One part of a split payment is not deleted alone: the whole payment goes, and the question says so.
+        val parts = splitPartsOf(transaction)
         val confirmed = overlays.confirm(
-            title = "Delete this ${transaction.type.label.lowercase()}?",
-            message = "${signedAmount(state.money, transaction.type, transaction.amount)}" +
-                "${if (transaction.picture != null) " and its picture" else ""} will be removed, and balances, " +
-                "totals and budgets will update. You can undo it for a few seconds.",
+            title = if (parts.isNotEmpty()) "Delete this split payment?" else "Delete this ${transaction.type.label.lowercase()}?",
+            message = if (parts.isNotEmpty()) {
+                "The ${state.money.format(parts.sumOf { it.amount })} payment and all its ${parts.size} parts" +
+                    "${if (transaction.picture != null) ", with its picture," else ""} will be removed, and balances, " +
+                    "totals and budgets will update. You can undo it for a few seconds."
+            } else {
+                "${signedAmount(state.money, transaction.type, transaction.amount)}" +
+                    "${if (transaction.picture != null) " and its picture" else ""} will be removed, and balances, " +
+                    "totals and budgets will update. You can undo it for a few seconds."
+            },
             confirmLabel = "Delete",
             destructive = true,
             icon = Icons.Outlined.DeleteOutline,
@@ -260,9 +348,11 @@ class FinanceActions(
     }
 
     private suspend fun removeTransaction(transaction: FinanceTransaction) {
+        val split = splitPartsOf(transaction).isNotEmpty()
+        // The repository deletes every part of a split payment with the one that is named; its picture waits for Undo with them.
         val undo = finance.deleteTransactionUndoably(transaction.id!!)
         haptics.success()
-        snackbars.offerUndo("${transaction.type.label} deleted", finance, undo, scope)
+        snackbars.offerUndo(if (split) "Split payment deleted" else "${transaction.type.label} deleted", finance, undo, scope)
     }
 
     // --------------------------------------------------------------- recurring
@@ -276,6 +366,112 @@ class FinanceActions(
             overlays.sheet<Boolean> { dismiss ->
                 WithReminders {
                     RecurringEditorSheet(existingId = id, onDone = dismiss, onRemind = reminders?.let { launcher -> { rule -> launcher.about(rule) } })
+                }
+            }
+        }
+    }
+
+    /** A new repeating payment that starts from [suggestion] - a payee that looks like it repeats - with what the payments so far say filled in. */
+    fun addSuggestedRecurring(suggestion: RepeatSuggestion) {
+        scope.launch {
+            overlays.sheet<Boolean> { dismiss -> WithReminders { RecurringEditorSheet(existingId = null, onDone = dismiss, suggestion = suggestion) } }
+        }
+    }
+
+    /** "Not this one": [suggestion]'s payee is not offered as a repeating payment again. */
+    fun dismissRepeat(suggestion: RepeatSuggestion) {
+        scope.launch {
+            try {
+                finance.dismissRepeatPayee(suggestion.key)
+                snackbars.show("Won't suggest ${suggestion.payee} again", SnackbarKind.Info)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                snackbars.show("Couldn't save that. Your other data is unchanged.", SnackbarKind.Error)
+            }
+        }
+    }
+
+    /**
+     * Pauses [rule], or resumes it: the rule's own switch, as the editor flips it, and nothing is deleted - what was recorded stays, and
+     * so does the rule. A paused payment isn't recorded and its reminder goes; a resumed one carries on from its next day after today
+     * (what was missed while it was paused is skipped, not back-filled), and gets its reminder back.
+     */
+    fun setRecurringPaused(rule: RecurringRule, paused: Boolean) {
+        scope.launch {
+            try {
+                val resumed = rule.copy(active = true)
+                val changed = if (paused) rule.copy(active = false) else resumed.copy(nextDate = firstOccurrenceAfter(resumed, LocalDateTime.now()))
+                val saved = finance.saveRecurringRule(changed)
+                reminders?.follow(saved, rule)
+                haptics.selection()
+                val name = rule.payee ?: "The payment"
+                snackbars.show(if (paused) "$name paused" else "$name resumed")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                snackbars.show("Couldn't change that. Your other data is unchanged.", SnackbarKind.Error)
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------- goals
+
+    /** The new-goal sheet (Plans > Goals). */
+    fun addGoal() {
+        scope.launch {
+            val saved = overlays.sheet<SavingsGoal> { dismiss -> GoalFormSheet(existing = null, onDone = dismiss) }
+            if (saved != null) snackbars.show("${saved.name} added")
+        }
+    }
+
+    /**
+     * A goal opened: its sheet, then what was chosen in it - Add money or Take out (a goal on its own; no entry is made in the ledger),
+     * Edit, or Delete, which asks first and can be undone for a few seconds. A goal only counts and moves no money, so deleting one
+     * changes no account.
+     */
+    fun openGoal(goal: SavingsGoal) {
+        scope.launch {
+            val id = goal.id ?: return@launch
+            val action = overlays.sheet<String>(expandable = true) { dismiss -> GoalSheet(goal, onPick = dismiss) } ?: return@launch
+            val current = state.goal(id) ?: return@launch
+            when (action) {
+                "add", "take" -> {
+                    val result = overlays.sheet<GoalMoneyResult> { dismiss -> GoalMoneySheet(current, adding = action == "add", onDone = dismiss) }
+                    if (result != null) {
+                        val amount = state.money.format(result.amount, trimZeroFraction = true)
+                        snackbars.show(if (result.adding) "Added $amount to ${result.goal.name}" else "Took $amount out of ${result.goal.name}")
+                    }
+                }
+                "edit" -> {
+                    val edited = overlays.sheet<SavingsGoal> { dismiss -> GoalFormSheet(existing = current, onDone = dismiss) }
+                    if (edited != null) snackbars.show("${edited.name} updated")
+                }
+                "delete" -> {
+                    val counted = goalSaved(current, state.balances)
+                    val confirmed = overlays.confirm(
+                        title = "Delete ${current.name}?",
+                        message = if (current.isLinked || counted == 0L) {
+                            "The goal is removed. No account or balance changes. You can undo it for a few seconds."
+                        } else {
+                            "The goal and the ${state.money.format(counted, trimZeroFraction = true)} counted on it are removed. " +
+                                "That money isn't in any account, so nothing moves. You can undo it for a few seconds."
+                        },
+                        confirmLabel = "Delete",
+                        destructive = true,
+                        icon = Icons.Outlined.DeleteOutline,
+                    )
+                    if (!confirmed) return@launch
+                    try {
+                        val undo = finance.undoable {
+                            deleteGoal(id)
+                            emptyList()
+                        }
+                        haptics.success()
+                        snackbars.offerUndo("${current.name} deleted", finance, undo, scope)
+                    } catch (e: FinanceConflictException) {
+                        overlays.alert("Can't delete", e.message)
+                    }
                 }
             }
         }
@@ -296,6 +492,8 @@ class FinanceActions(
             val isDefault = state.defaultAccountId == account.id
             val owed = (-state.balanceOf(account.id!!)).coerceAtLeast(0)
             val actions = buildList {
+                // A loan is for paying off: its EMI comes first.
+                if (account.isLoan && !account.archived) add(SheetAction("emi", Icons.Outlined.Payments, "Record EMI"))
                 // A credit card is for spending on and paying off: those two come first.
                 if (account.kind == AccountKind.Card && !account.archived) {
                     add(SheetAction("pay", Icons.Outlined.Payments, if (owed > 0) "Pay bill · ${state.money.format(owed)} owed" else "Pay bill"))
@@ -327,6 +525,7 @@ class FinanceActions(
             } ?: return@launch
             when (action) {
                 "pay" -> payBill(account)
+                "emi" -> recordEmi(account)
                 "spend" -> addTransaction(TransactionType.Expense, accountId = account.id)
                 "edit" -> {
                     val edited = overlays.sheet<Account> { dismiss -> AccountFormSheet(existing = account, onDone = dismiss) }
@@ -351,10 +550,18 @@ class FinanceActions(
                     )
                 }
                 "delete" -> {
+                    // A goal that counts this account's balance would have nothing to count: say what becomes of it, where it is decided.
+                    val counting = state.goals.count { it.accountId == account.id }
                     val confirmed = overlays.confirm(
                         title = "Delete ${account.name}?",
                         message = "Only accounts without any transactions can be deleted. " +
-                            "Archive it instead to hide it and keep its history.",
+                            "Archive it instead to hide it and keep its history." +
+                            if (counting == 0) {
+                                ""
+                            } else {
+                                " ${if (counting == 1) "A savings goal counts" else "$counting savings goals count"} this account's balance: " +
+                                    "${if (counting == 1) "it stays" else "they stay"}, on ${if (counting == 1) "its" else "their"} own, with nothing saved."
+                            },
                         confirmLabel = "Delete",
                         destructive = true,
                     )

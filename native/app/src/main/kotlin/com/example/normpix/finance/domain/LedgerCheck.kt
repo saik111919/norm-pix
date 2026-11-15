@@ -49,13 +49,16 @@ data class LedgerIssues(
     val selfTransfers: List<SelfTransferPair> = emptyList(),
     val archivedBalances: List<ArchivedBalance> = emptyList(),
     val wrongCategory: List<FinanceTransaction> = emptyList(),
+    /** Split payments that no longer hold together (a part left alone, parts on different accounts, dates or kinds): offered "Unsplit". */
+    val brokenSplits: List<BrokenSplit> = emptyList(),
 ) {
     /** How many things the check puts right by itself. */
     val repairCount: Int get() = looseSubCategories.size + incomeBudgets.size + ruleCatchUps.size + (if (staleDefaultAccount) 1 else 0)
 
     /** How many things are left for the user to look at. */
     val findingCount: Int
-        get() = upcoming.size + duplicates.size + cardBills.size + selfTransfers.size + archivedBalances.size + wrongCategory.size
+        get() = upcoming.size + duplicates.size + cardBills.size + selfTransfers.size + archivedBalances.size + wrongCategory.size +
+            brokenSplits.size
 }
 
 /** How far apart two halves of one transfer may be dated and still be taken for one: a day, as a bank posts the other side. */
@@ -118,6 +121,9 @@ fun checkLedger(
     }
 
     val cardBills = transactions.mapNotNull { t ->
+        // A part of a split payment is one of several rows of a bill that has been shared out: turning it into a transfer would leave the
+        // rest of the payment wrong, so it is never offered.
+        if (t.splitGroup != null) return@mapNotNull null
         if (t.type != TransactionType.Expense) return@mapNotNull null
         val text = listOfNotNull(t.payee, t.note, byId[t.categoryId]?.name).joinToString(" ")
         cardBillTarget(text, accounts, paidFrom = t.accountId, bankKeyIn = bankKeyIn)?.let { CardBillExpense(t, it) }
@@ -128,7 +134,13 @@ fun checkLedger(
         .groupBy { t ->
             val payee = t.payee?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
             // Without a payee to tell two apart, only entries at the very same minute are taken for one entered twice.
-            DuplicateKey(t.type, t.amount, t.accountId, t.toAccountId, t.occurredAt.toLocalDate(), payee, if (payee == null) t.occurredAt.withSecond(0).withNano(0) else null)
+            // The parts of a split payment share an account, a day and a payee by design (and two may be the same amount): each is its own
+            // key, so no part is ever taken for a repeat of another - or of anything else.
+            DuplicateKey(
+                t.type, t.amount, t.accountId, t.toAccountId, t.occurredAt.toLocalDate(), payee,
+                if (payee == null) t.occurredAt.withSecond(0).withNano(0) else null,
+                part = if (t.splitGroup != null) t.id else null,
+            )
         }
         .values
         .filter { it.size > 1 }
@@ -136,6 +148,8 @@ fun checkLedger(
         .sortedByDescending { group -> group.first().occurredAt }
 
     val selfTransfers = pairSelfTransfers(transactions.filter { it.id !in inCardBills }, accountsById)
+
+    val brokenSplits = brokenSplitGroups(transactions)
 
     val archived = accounts.mapNotNull { a ->
         val id = a.id ?: return@mapNotNull null
@@ -154,6 +168,7 @@ fun checkLedger(
         selfTransfers = selfTransfers,
         archivedBalances = archived,
         wrongCategory = wrongCategory,
+        brokenSplits = brokenSplits,
     )
 }
 
@@ -168,6 +183,8 @@ private data class DuplicateKey(
     val day: LocalDate,
     val payee: String?,
     val minute: LocalDateTime?,
+    /** The id of a part of a split payment, which is never the same as another row's; null for every other row. */
+    val part: Long? = null,
 )
 
 /**
@@ -178,8 +195,10 @@ private data class DuplicateKey(
  */
 private fun pairSelfTransfers(transactions: List<FinanceTransaction>, accounts: Map<Long?, Account>): List<SelfTransferPair> {
     // A repeating payment's entry is what it says it is (a salary in, the rent out), however its amount matches another's.
+    // (And a part of a split payment is one of several rows of a bill: making it a transfer would leave the payment wrong.)
     fun eligible(t: FinanceTransaction) =
-        accounts[t.accountId]?.let { it.kind != AccountKind.Cash } == true && t.personId == null && t.recurringId == null
+        accounts[t.accountId]?.let { it.kind != AccountKind.Cash } == true && t.personId == null && t.recurringId == null &&
+            t.splitGroup == null
     val incomes = transactions.filter { it.type == TransactionType.Income && eligible(it) }.groupBy { it.amount }
     val used = mutableSetOf<Long?>()
     val pairs = mutableListOf<SelfTransferPair>()
@@ -207,8 +226,11 @@ fun SelfTransferPair.asTransfer(now: LocalDateTime): FinanceTransaction = expens
     categoryId = null,
     personId = null,
     payee = null,
+    splitGroup = null,
     note = listOfNotNull("Self transfer", expense.note?.takeIf { it.isNotBlank() } ?: expense.payee?.takeIf { it.isNotBlank() }).joinToString(" · "),
     updatedAt = now,
+    // A transfer has no tags: it is neither spending nor income.
+    tagIds = emptySet(),
 )
 
 /** The transfer onto [CardBillExpense.card] its expense stands for (see [cardBillTarget]). */
@@ -218,6 +240,9 @@ fun CardBillExpense.asTransfer(now: LocalDateTime): FinanceTransaction = expense
     categoryId = null,
     personId = null,
     payee = null,
+    splitGroup = null,
     note = listOfNotNull("Card bill payment", expense.note?.takeIf { it.isNotBlank() } ?: expense.payee?.takeIf { it.isNotBlank() }).joinToString(" · "),
     updatedAt = now,
+    // A transfer has no tags: it is neither spending nor income.
+    tagIds = emptySet(),
 )

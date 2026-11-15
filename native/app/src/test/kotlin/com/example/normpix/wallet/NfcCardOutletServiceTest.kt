@@ -8,13 +8,16 @@ import com.example.normpix.R
 import com.example.normpix.availability.AvailabilityMode
 import com.example.normpix.availability.AvailabilityRule
 import com.example.normpix.availability.ScheduledFeature
+import android.nfc.cardemulation.HostApduService
 import com.example.normpix.wallet.nfc.NfcCardOutletService
+import com.example.normpix.wallet.nfc.NfcPairing
+import com.example.normpix.wallet.nfc.NfcShareInitiator
+import com.example.normpix.wallet.nfc.NfcShareResponder
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,8 +26,9 @@ import org.robolectric.annotation.Config
 import org.xmlpull.v1.XmlPullParser
 
 /**
- * What the card-sharing service hands a reader is a card's number, expiry and CVV. So it answers one reader, once, and only while
- * the user is sharing: with NormPix in front, inside their schedule, on a phone that is unlocked.
+ * What the card-sharing service hands a reader is a card's number, expiry and CVV, sealed for the phone whose code the user
+ * matched (exchange version 2; the exchange itself is `NfcShareExchangeTest`). It answers one reader, once, and only while the
+ * user is sharing: with NormPix in front, inside their schedule, on a phone that is unlocked.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -34,6 +38,28 @@ class NfcCardOutletServiceTest {
     private val select = NfcCardOutletService.SELECT_AID_COMMAND
     private val nothing = byteArrayOf(0x6F, 0x00)
     private val allowedByTheApp = NfcCardOutletService.isAllowed
+    private val payload = """{"type":"normpix_card","cardNumber":"4111111111111111","expiryMonth":"09","expiryYear":"29"}"""
+
+    /** What the sheet is told; Match is tapped as soon as a code arrives when [matchAtOnce]. */
+    private inner class Sheet(val matchAtOnce: Boolean = true) : NfcShareResponder.Events {
+        var transfers = 0
+        var withdrawn = 0
+        val codes = mutableListOf<NfcShareResponder.Pairing>()
+        override fun onCode(pairing: NfcShareResponder.Pairing) {
+            codes += pairing
+            if (matchAtOnce) NfcCardOutletService.responder.confirm(pairing.id)
+        }
+        override fun onCodeWithdrawn() {
+            withdrawn++
+        }
+        override fun onTransferred() {
+            transfers++
+        }
+    }
+
+    /** A reader running the whole exchange against the service, as Android delivers it. */
+    private fun readThroughTheService(): NfcShareInitiator.Result =
+        NfcShareInitiator.run({ service.processCommandApdu(it, null) }, onCode = {}, sleep = {}, clock = { 0L })
 
     @BeforeTest
     fun setUp() {
@@ -49,37 +75,64 @@ class NfcCardOutletServiceTest {
     @Test
     fun `a card is handed to one reader, once`() {
         NfcCardOutletService.isAllowed = { true }
-        var transfers = 0
-        NfcCardOutletService.setOutletCard("card") { transfers++ }
+        val sheet = Sheet()
+        NfcCardOutletService.setOutletCard(payload, sheet)
 
-        assertContentEquals("card".toByteArray() + byteArrayOf(0x90.toByte(), 0x00), service.processCommandApdu(select, null))
-        assertEquals(1, transfers)
-        // The sheet still says "Card Transferred!": a second reader held to the phone meanwhile gets nothing.
-        assertNull(NfcCardOutletService.activePayload)
+        assertEquals(NfcShareInitiator.Result.Card(payload), readThroughTheService())
+        assertEquals(1, sheet.transfers)
+        // The sheet still says "Card shared": a second reader held to the phone meanwhile gets nothing.
+        assertFalse(NfcCardOutletService.isArmed)
         assertContentEquals(nothing, service.processCommandApdu(select, null))
-        assertEquals(1, transfers)
+        assertEquals(NfcShareInitiator.Result.NotSharing, readThroughTheService())
+        assertEquals(1, sheet.transfers)
     }
 
     @Test
     fun `nothing is handed over when sharing is not allowed, and the card stays ready`() {
         NfcCardOutletService.isAllowed = { false }
-        var transfers = 0
-        NfcCardOutletService.setOutletCard("card") { transfers++ }
+        val sheet = Sheet()
+        NfcCardOutletService.setOutletCard(payload, sheet)
 
         assertContentEquals(nothing, service.processCommandApdu(select, null))
-        assertEquals(0, transfers)
-        assertEquals("card", NfcCardOutletService.activePayload)
+        assertEquals(NfcShareInitiator.Result.NotSharing, readThroughTheService())
+        assertEquals(0, sheet.transfers)
+        assertTrue(NfcCardOutletService.isArmed)
     }
 
     @Test
-    fun `only NormPix's own select command is answered`() {
+    fun `only NormPix's own select command starts a share`() {
         NfcCardOutletService.isAllowed = { true }
-        NfcCardOutletService.setOutletCard("card")
+        NfcCardOutletService.setOutletCard(payload, Sheet())
 
         assertContentEquals(nothing, service.processCommandApdu(null, null))
-        assertContentEquals(nothing, service.processCommandApdu(byteArrayOf(0x00, 0xA4.toByte(), 0x04, 0x00), null))
-        assertContentEquals(nothing, service.processCommandApdu(select.copyOf().also { it[5] = 0xA0.toByte() }, null))
-        assertEquals("card", NfcCardOutletService.activePayload)
+        for (other in listOf(byteArrayOf(0x00, 0xA4.toByte(), 0x04, 0x00), select.copyOf().also { it[5] = 0xA0.toByte() })) {
+            val answer = service.processCommandApdu(other, null)
+            assertFalse(answer.size >= 2 && answer[answer.size - 2] == 0x90.toByte(), "no share starts from ${other.size} bytes")
+        }
+        // Nothing was started, so a key sent now is out of order.
+        val key = byteArrayOf(0x80.toByte(), 0x10, 0x00, 0x00, 0x41) + NfcPairing.newKey().point + byteArrayOf(0x00)
+        assertContentEquals(byteArrayOf(0x69, 0x85.toByte()), service.processCommandApdu(key, null))
+        assertTrue(NfcCardOutletService.isArmed)
+    }
+
+    @Test
+    fun `the reader going away ends the session, and the card stays ready for the next one`() {
+        NfcCardOutletService.isAllowed = { true }
+        val sheet = Sheet(matchAtOnce = false)
+        NfcCardOutletService.setOutletCard(payload, sheet)
+        assertContentEquals(NfcShareResponder.VERSION_MARKER + byteArrayOf(0x90.toByte(), 0x00), service.processCommandApdu(select, null))
+        val key = byteArrayOf(0x80.toByte(), 0x10, 0x00, 0x00, 0x41) + NfcPairing.newKey().point + byteArrayOf(0x00)
+        service.processCommandApdu(key, null)
+        val nonce = byteArrayOf(0x80.toByte(), 0x12, 0x00, 0x00, 0x10) + NfcPairing.newNonce() + byteArrayOf(0x00)
+        service.processCommandApdu(nonce, null)
+        assertEquals(1, sheet.codes.size)
+
+        service.onDeactivated(HostApduService.DEACTIVATION_LINK_LOSS)
+
+        assertEquals(1, sheet.withdrawn)
+        assertFalse(NfcCardOutletService.responder.confirm(sheet.codes.single().id), "Match on a code whose reader is gone sends nothing")
+        assertContentEquals(byteArrayOf(0x69, 0x85.toByte()), service.processCommandApdu(byteArrayOf(0x80.toByte(), 0x14, 0, 0, 0), null))
+        assertTrue(NfcCardOutletService.isArmed)
     }
 
     @Test

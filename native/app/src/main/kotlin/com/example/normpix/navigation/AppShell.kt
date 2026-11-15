@@ -42,6 +42,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.PeopleOutline
 import androidx.compose.material.icons.outlined.PieChart
+import androidx.compose.material.icons.outlined.Savings
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Home
@@ -377,6 +378,18 @@ fun AppShell(
                         PlansAndTransactionsTab.Plans -> {
                             // On Recurring the thing to add is a recurring payment, whenever the list has some: a reminder stays one tap behind it.
                             val onRecurring = shell.section == PlanSection.Recurring
+                            // And on Goals, a goal.
+                            val onGoals = shell.section == PlanSection.Goals
+                            if (onGoals) {
+                                add(
+                                    FooterAction(
+                                        label = "Add goal",
+                                        icon = Icons.Outlined.Savings,
+                                        isPrimary = true,
+                                        onClick = { expenseFlows.addGoal() },
+                                    ),
+                                )
+                            }
                             if (onRecurring) {
                                 add(
                                     FooterAction(
@@ -391,7 +404,7 @@ fun AppShell(
                                 FooterAction(
                                     label = "Add reminder",
                                     icon = Icons.Outlined.AddAlert,
-                                    isPrimary = !onRecurring,
+                                    isPrimary = !onRecurring && !onGoals,
                                     onClick = { reminderFlows.add() },
                                 ),
                             )

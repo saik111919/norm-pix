@@ -18,7 +18,7 @@ import java.util.Locale
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import kotlin.test.assertNull
+import kotlin.test.assertFalse
 import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -80,7 +80,7 @@ class AvailabilityFlowTest {
         compose.onNodeWithText("Open schedule settings").assertIsDisplayed()
         compose.onNodeWithText("Receive").assertDoesNotExist()
         compose.onNodeWithText("Share").assertDoesNotExist()
-        assertNull(NfcCardOutletService.activePayload, "nothing may be armed for sharing")
+        assertFalse(NfcCardOutletService.isArmed, "nothing may be armed for sharing")
     }
 
     @Test

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.ReportProblem
 import androidx.compose.runtime.Composable
@@ -18,11 +19,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.example.normpix.about.ui.CrashLogSheet
+import com.example.normpix.backup.AutoBackupProblem
 import com.example.normpix.backup.BackupFreshness
+import com.example.normpix.settings.AppPrefsState
 import com.example.normpix.diagnostics.CrashLog
 import com.example.normpix.finance.domain.BudgetHealth
 import com.example.normpix.finance.domain.BudgetOverview
 import com.example.normpix.finance.domain.BudgetStatus
+import com.example.normpix.finance.domain.CardLimitAlert
+import com.example.normpix.finance.domain.MoneyFormatter
+import com.example.normpix.finance.domain.cardLimitAlerts
 import com.example.normpix.finance.ui.FinanceStatus
 import com.example.normpix.finance.ui.budgetIcon
 import com.example.normpix.finance.ui.budgetTone
@@ -138,12 +144,11 @@ internal fun budgetBanners(budgets: BudgetOverview): List<Banner> {
                 eyebrow = if (over) "Over budget" else "Nearly used",
                 title = name,
                 message = "${finance.money.format(status.allocated, trimZeroFraction = true)} for $month",
-                // How much of it is used, as the pill; what is over or left, as the figure.
+                // How much of it is used, as the ring ("120%" past the budget, the ring then full); what is over or left, as the figure.
                 bar = BannerBar(
                     fraction = status.utilization.toFloat().coerceIn(0f, 1f),
                     label = "${status.usedPercent}% used",
-                    from = finance.money.format(0L),
-                    to = finance.money.format(status.allocated, trimZeroFraction = true),
+                    short = "${status.usedPercent}%",
                 ),
                 figure = BannerFigure(
                     title = if (over) "Over by" else "Left",
@@ -153,6 +158,52 @@ internal fun budgetBanners(budgets: BudgetOverview): List<Banner> {
                 onOpen = open,
             )
         }
+}
+
+/**
+ * Every credit card that has used the share of its limit the user chose to hear about (Settings > Wallet & Cards > Card limit
+ * warning, 30% unless changed; none at all when it is Off), the most used first. They are the account's own balance against its own
+ * limit, so they are there with Store cards off too, and a card paid down under the level is not listed at the next look: nothing
+ * about it is stored. The button opens the card's account page.
+ */
+@Composable
+internal fun cardLimitBanners(): List<Banner> {
+    val container = LocalAppContainer.current
+    val prefs by container.preferences.state.collectAsState()
+    val finance = rememberFinanceState()
+    val navigator = LocalNavigator.current
+    return cardLimitAlerts(finance.accounts, finance::balanceOf, prefs.cardLimitWarning.percent).map { alert ->
+        cardLimitBanner(alert, finance.money, open = { navigator.openAccountHistory(alert.account.id!!) })
+    }
+}
+
+/**
+ * One card's limit warning, made as a budget's is: a warning, or an error once the card is over its limit; the share used as the
+ * ring; what is owed against the limit as the message; and what is left (or by how much it is over) as the figure. Every amount
+ * goes through [money], so it is hidden when amounts are.
+ */
+internal fun cardLimitBanner(alert: CardLimitAlert, money: MoneyFormatter, open: () -> Unit): Banner {
+    val room = alert.room
+    val over = alert.over
+    val percent = alert.usedPercent
+    return Banner(
+        key = "card-limit-${alert.account.id}",
+        tone = if (over) StatusTone.Error else StatusTone.Warning,
+        icon = Icons.Outlined.CreditCard,
+        // Short, because the panel beside the figure is narrow: the ring says the share, so the words need not ("63% of the limit
+        // used" and "...of ₹1,00,000 used" were cut with an ellipsis at 360 dp, seen in a render).
+        eyebrow = if (over) "Over the limit" else "Limit used",
+        title = alert.account.name,
+        message = "${money.format(room.owed, trimZeroFraction = true)} of ${money.format(room.limit, trimZeroFraction = true)}",
+        // The ring is full past the limit and says the real figure ("120%"); a screen reader hears "120% used".
+        bar = BannerBar(fraction = room.used.toFloat(), label = "$percent% used", short = "$percent%"),
+        figure = BannerFigure(
+            title = if (over) "Over by" else "Available",
+            figure = money.format(if (over) -room.available else room.available),
+        ),
+        primary = StatusAction("View card", onClick = open),
+        onOpen = open,
+    )
 }
 
 /**
@@ -272,6 +323,9 @@ internal fun backupBanners(): List<Banner> {
     val installedAt = remember(context) {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).firstInstallTime }.getOrDefault(0L)
     }
+    // What went wrong with the last automatic backup comes first, and alone: it says more than "back up your data", and opens the
+    // same page. It is about the user's own data, so it is shown whichever set the screens show.
+    autoBackupProblemBanner(prefs, System.currentTimeMillis(), open = { navigator.openSettings(SettingsPage.Data) })?.let { return listOf(it) }
     if (prefs.dummyDataEnabled || finance.status != FinanceStatus.Ready) return emptyList()
     // Worth keeping: the starting Cash account alone, with nothing in it, is not.
     val hasData = finance.accounts.size > 1 || finance.people.isNotEmpty() || finance.balances.values.any { it != 0L }
@@ -300,6 +354,31 @@ internal fun backupBanners(): List<Banner> {
             secondary = StatusAction("Later", onClick = { container.preferences.snoozeBackupNudge(BackupFreshness.snoozeUntil(System.currentTimeMillis())) }),
             onOpen = open,
         ),
+    )
+}
+
+/**
+ * What went wrong with the last automatic backup (see `backup/AutoBackup.kt`), as a banner under Backup, while automatic backups are
+ * on and until one goes well; null when there is nothing to say. Its button opens Settings > Data & backup ([open]), where the
+ * folder or the password is set again. Keyed on the problem and when it happened, so a new one is new to the bell.
+ */
+internal fun autoBackupProblemBanner(prefs: AppPrefsState, now: Long, open: () -> Unit): Banner? {
+    if (!prefs.autoBackupEnabled) return null
+    val problem = prefs.autoBackupProblem ?: return null
+    return Banner(
+        key = "auto-backup-${problem.name}-${prefs.autoBackupProblemAt}",
+        tone = if (problem == AutoBackupProblem.CardsLeftOut) StatusTone.Info else StatusTone.Warning,
+        icon = Icons.Outlined.Backup,
+        eyebrow = "Automatic backup",
+        title = problem.title,
+        message = problem.short,
+        figure = BannerFigure(
+            title = "Last backup",
+            figure = if (prefs.autoBackupLastAt > 0) BackupFreshness.ago(prefs.autoBackupLastAt, now).replaceFirstChar(Char::uppercase) else "None yet",
+            note = prefs.autoBackupEvery.label,
+        ),
+        primary = StatusAction("Open settings", onClick = open),
+        onOpen = open,
     )
 }
 

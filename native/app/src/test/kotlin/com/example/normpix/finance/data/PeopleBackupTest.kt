@@ -148,9 +148,10 @@ class PeopleBackupTest {
         spend(4_550, mom.id, payee = "Apollo")
         spend(1_000, null, payee = "Chai")
         val csv = FinanceBackupCodec.encodeCsv(repo.snapshot()) { it.toString() }.trim().lines()
-        assertTrue(csv.first().endsWith(",Person"), csv.first())
-        assertTrue(csv.any { it.contains("Apollo") && it.endsWith("\"Mom, \"\"Mum\"\"\"") }, csv.toString())
-        // An expense for no one has an empty last cell.
-        assertTrue(csv.any { it.contains("Chai") && it.endsWith(",") }, csv.toString())
+        // The Person column, with the Tags column (format 5, 2026-11-15) after it: added at the end, so every column before keeps its place.
+        assertTrue(csv.first().endsWith(",Person,Tags"), csv.first())
+        assertTrue(csv.any { it.contains("Apollo") && it.endsWith("\"Mom, \"\"Mum\"\"\",") }, csv.toString())
+        // An expense for no one has an empty person cell (and no tags).
+        assertTrue(csv.any { it.contains("Chai") && it.endsWith(",,") }, csv.toString())
     }
 }

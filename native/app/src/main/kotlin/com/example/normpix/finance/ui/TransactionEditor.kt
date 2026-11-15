@@ -60,6 +60,7 @@ import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.FinanceValidationException
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.RepeatPlan
+import com.example.normpix.finance.domain.SplitPart
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.domain.cardBillTarget
 import com.example.normpix.finance.domain.creditRoom
@@ -211,6 +212,20 @@ private fun TransactionEditor(
     // How it repeats, if it does: saving then records it as the first of a repeating payment. Not offered to one that already belongs to one.
     // Never set from a shared receipt or picture: a bill says what was paid, not that it repeats or when that stops.
     var repeat by remember { mutableStateOf<RepeatPlan?>(null) }
+    // Its tags (an expense's or income's: a transfer has none, so they are kept here while it is one, and not saved).
+    var tagIds by remember { mutableStateOf(existing?.tagIds.orEmpty()) }
+    // One part of a split payment: every part, as stored, so the Split field can say how many there are and open them. Such a part is
+    // saved on its own (what the parts share changes in every part with it), can't change kind and can't repeat.
+    val isSplitPart = existing?.splitGroup != null
+    val splitRows by produceState(emptyList<FinanceTransaction>(), existing?.splitGroup, finance.revision) {
+        value = try {
+            existing?.splitGroup?.let { controller.repository.splitParts(it) }.orEmpty()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
     var showDetails by remember {
         mutableStateOf(existing?.payee != null || existing?.note != null || prefill?.payee != null || prefill?.note != null)
     }
@@ -259,6 +274,7 @@ private fun TransactionEditor(
 
     fun snapshot() = listOf(
         type, amount, payee, note, categoryId, accountId, toAccountId, occurredAt, personId, repeat, keptPicture, draftPicture?.path,
+        tagIds.sorted(),
     ).joinToString("|")
     val initialSnapshot = remember { snapshot() }
     // A draft filled in from shared text is the user's to keep or throw away, so leaving it asks first, edited or not.
@@ -367,6 +383,8 @@ private fun TransactionEditor(
             updatedAt = now,
             personId = if (type == TransactionType.Expense) personId else null,
             picture = existing?.picture,
+            // A transfer has no tags; a tag deleted while the form was open is not one to save.
+            tagIds = if (isTransfer) emptySet() else tagIds.filterTo(LinkedHashSet()) { finance.tag(it) != null },
         )
         val pictureEdit = draftPicture?.let { PictureEdit.Attach(it) }
             ?: if (keptPicture != existing?.picture) PictureEdit.Remove else PictureEdit.Unchanged
@@ -374,7 +392,7 @@ private fun TransactionEditor(
             try {
                 if (!notADuplicate(draft)) return@launch
                 // The end is worked out from the date as it is now, so "after 12 payments" is 12 from the date that is saved.
-                val schedule = repeat?.takeIf { existing?.recurringId == null }?.schedule(draft.occurredAt)
+                val schedule = repeat?.takeIf { existing?.recurringId == null && !isSplitPart }?.schedule(draft.occurredAt)
                 val saved = if (schedule != null) {
                     controller.saveTransactionAndRepeat(draft, schedule, pictureEdit)
                 } else {
@@ -402,6 +420,61 @@ private fun TransactionEditor(
             } finally {
                 saving = false
             }
+        }
+    }
+
+    /**
+     * Opens the split editor over this form: what the parts share (account, date and time, payee, who it was for, tags, the picture) is
+     * what the form says now. A new split starts with this payment's category and amount as its first part and an empty second;
+     * a part of a split already starts from all its parts, this one as the form has it. Saved there, the form closes with it.
+     */
+    fun openSplit() {
+        if (saving) return
+        formError = null
+        val decimals = finance.currency.decimals
+        val parsed = parseMinorUnits(amount, decimals)?.takeIf { it > 0 }
+        val storedParts = splitRows.takeIf { isSplitPart && it.size >= 2 }
+        // What the parts share has to be settled first, as a save needs it: an account, a date and, for a new split, an amount to share.
+        accountError = if (accountId == null) "Choose an account" else null
+        dateError = if (dateUnset) "Choose the date" else null
+        amountError = if (storedParts == null && parsed == null) "Enter the amount to split" else null
+        if (amountError != null) runCatching { amountFocus.requestFocus() }
+        if (accountError != null || dateError != null || amountError != null) return
+        if (repeat != null) {
+            formError = "A split payment can't repeat. Turn the repeat off first."
+            return
+        }
+        val now = LocalDateTime.now()
+        val parts = if (storedParts != null) {
+            storedParts.map { row ->
+                // This part as the form has it now; the others as they are stored.
+                if (row.id == existing?.id) SplitPart(categoryId ?: row.categoryId, parsed ?: row.amount, note.trim().ifEmpty { null }, row.id)
+                else SplitPart(row.categoryId, row.amount, row.note, row.id)
+            }
+        } else {
+            listOf(SplitPart(categoryId, parsed ?: 0L, note.trim().ifEmpty { null }, existing?.id), SplitPart(null, 0L))
+        }
+        val payment = FinanceTransaction(
+            id = existing?.id,
+            type = type,
+            amount = parts.sumOf { it.amount },
+            accountId = accountId!!,
+            categoryId = categoryId,
+            occurredAt = occurredAt,
+            payee = payee,
+            recurringId = existing?.recurringId,
+            createdAt = existing?.createdAt ?: now,
+            updatedAt = now,
+            personId = if (type == TransactionType.Expense) personId else null,
+            picture = existing?.picture,
+            tagIds = tagIds.filterTo(LinkedHashSet()) { finance.tag(it) != null },
+        )
+        val group = storedParts?.firstOrNull()?.splitGroup
+        val pictureEdit = draftPicture?.let { PictureEdit.Attach(it) }
+            ?: if (keptPicture != existing?.picture) PictureEdit.Remove else PictureEdit.Unchanged
+        scope.launch {
+            val done = overlays.sheet<Boolean> { dismiss -> SplitEditorSheet(payment, group, parts, onDone = dismiss, picture = pictureEdit) }
+            if (done == true) onDone(true)
         }
     }
 
@@ -802,7 +875,22 @@ private fun TransactionEditor(
         )
         FieldError(dateError)
         Spacer(Modifier.height(AppSpacing.lg))
-        RepeatField(repeat = repeat, onChange = { repeat = it }, from = occurredAt, ruleId = existing?.recurringId)
+        // A part of a split payment is not a payment of its own, so it can't be made to repeat.
+        if (!isSplitPart) RepeatField(repeat = repeat, onChange = { repeat = it }, from = occurredAt, ruleId = existing?.recurringId)
+        // Tags label expenses and income; a transfer only moves money between the user's own accounts, so it has no field for them.
+        RevealVisibility(visible = !isTransfer) {
+            Column {
+                Spacer(Modifier.height(AppSpacing.lg))
+                TagsField(tagIds = tagIds, onChange = { tagIds = it })
+            }
+        }
+        // Splitting shares one expense or income between categories; a transfer has no category to share, so it isn't offered.
+        RevealVisibility(visible = !isTransfer && typeChosen) {
+            Column {
+                Spacer(Modifier.height(AppSpacing.lg))
+                SplitField(parts = splitRows.size.takeIf { isSplitPart && it >= 2 }, onClick = ::openSplit)
+            }
+        }
         Spacer(Modifier.height(AppSpacing.md))
         if (!showDetails) {
             TextButton(onClick = { showDetails = true }) {

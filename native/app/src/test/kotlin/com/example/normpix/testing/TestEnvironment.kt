@@ -9,11 +9,13 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.normpix.finance.ui.ReceiptSharer
 import com.example.normpix.AppContainer
 import com.example.normpix.about.GuideTopic
+import com.example.normpix.backup.AutoBackupService
 import com.example.normpix.finance.data.FinanceDatabase
 import com.example.normpix.finance.data.FinanceRepository
 import com.example.normpix.finance.data.TransactionPictures
 import com.example.normpix.finance.share.NoSharedPictureReader
 import com.example.normpix.finance.share.SharedPictureReader
+import com.example.normpix.finance.domain.DateRange
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.ui.FinanceController
 import com.example.normpix.navigation.AppDestination
@@ -61,6 +63,18 @@ class RecordingNavigator : AppNavigator {
     }
     override fun openCategories() {}
     override fun openBudgetHistory() {}
+    var repeatingCostsOpened = 0
+    override fun openRepeatingCosts() {
+        repeatingCostsOpened++
+    }
+    var forecastOpened = 0
+    override fun openForecast() {
+        forecastOpened++
+    }
+    var billsCalendarOpened = 0
+    override fun openBillsCalendar() {
+        billsCalendarOpened++
+    }
     override fun openPeople() {
         peopleOpened++
     }
@@ -76,6 +90,15 @@ class RecordingNavigator : AppNavigator {
     }
     override fun openAccountHistory(accountId: Long) {
         accountHistories += accountId
+    }
+    /** Each tag history asked for: the tag and the days (null: all time). */
+    val tagHistories = mutableListOf<Pair<Long, DateRange?>>()
+    override fun openTagHistory(tagId: Long, range: DateRange?) {
+        tagHistories += tagId to range
+    }
+    var yearByTagOpened = 0
+    override fun openYearByTag() {
+        yearByTagOpened++
     }
     override fun openSettings(page: SettingsPage?) {
         settingsPages += page
@@ -201,6 +224,11 @@ class TestEnvironment(
     val pictures: SharedPictureReader = NoSharedPictureReader,
     /** Checks for and installs updates; none unless a test brings one. */
     val updates: AppUpdater? = null,
+    /**
+     * Makes the automatic backup service for this environment, from its preferences and its container (read only once a backup is
+     * made); none unless a test brings one.
+     */
+    autoBackup: ((preferences: AppPreferences, container: () -> AppContainer) -> AutoBackupService)? = null,
 ) {
     val context: Context = ApplicationProvider.getApplicationContext()
     private val financeDb = FinanceDatabase(context, name = null)
@@ -218,8 +246,9 @@ class TestEnvironment(
     val container: AppContainer
 
     init {
+        val preferences = AppPreferences(prefsStore)
         container = AppContainer(
-            preferences = AppPreferences(prefsStore),
+            preferences = preferences,
             finance = FinanceController(
                 FinanceRepository(financeDb, dispatcher = inPlace),
                 TransactionPictures(context),
@@ -237,6 +266,7 @@ class TestEnvironment(
             receipts = receipts,
             sharedPictures = pictures,
             updates = updates,
+            autoBackup = autoBackup?.invoke(preferences) { this.container },
         )
         runBlocking {
             container.finance.load()

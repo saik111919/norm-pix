@@ -434,6 +434,13 @@
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
 
+        <!-- Automatic backups: a locked app backup into the folder the user picked, run by Android's JobScheduler (only it can bind
+             the service). No network: nothing is sent anywhere. -->
+        <service
+            android:name=".backup.AutoBackupJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
         <!-- ML Kit's telemetry transport (TransportBackendDiscovery) is left without its backend by app/build.gradle.kts, in
              the merged manifest of every build: it would upload usage logs to Google once the app may use the network. -->
 

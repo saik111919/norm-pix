@@ -46,6 +46,12 @@ enum class AccountKind(val key: String) {
     Card("card"),
     Wallet("wallet"),
     Savings("savings"),
+
+    /**
+     * Money borrowed and paid back in EMIs (2026-11-15). Always owed, and always carries [Account.loan]. Stored by [key] "loan"; the
+     * keys of the other kinds never change. Listed before Other, which stays the last, catch-all choice.
+     */
+    Loan("loan"),
     Other("other");
 
     companion object {
@@ -102,7 +108,16 @@ data class Account(
      * the account's number is. May point at a card since deleted, which then counts for nothing.
      */
     val cardId: String? = null,
-)
+    /**
+     * What was borrowed, at what rate and paid back how, when this account is a loan - a [AccountKind.Loan] account, or another kind
+     * (never a card) with "This is a loan" on - else null. A loan is always owed: its balance is what is still to pay, below zero.
+     * See `Loans.kt`.
+     */
+    val loan: LoanTerms? = null,
+) {
+    /** Whether this account is a loan, by its kind or by carrying loan details. */
+    val isLoan: Boolean get() = loan != null || kind == AccountKind.Loan
+}
 
 /** How many digits of an account's number are kept (see [Account.numberEnding]): the last four, which is what apps show. */
 const val NUMBER_ENDING_LENGTH = 4
@@ -168,6 +183,18 @@ data class FinanceTransaction(
      * app's own storage ([isPictureName]); null for none.
      */
     val picture: String? = null,
+    /**
+     * The tags on it ([Tag] ids), any number; none on a transfer (it moves money between the user's own accounts). Kept in their own
+     * table (`transaction_tags`), read with the transaction and saved with it, in the same step: what is saved is exactly this set.
+     */
+    val tagIds: Set<Long> = emptySet(),
+    /**
+     * The split payment this row is a part of, or null for one that is not (2026-11-15, version 17): one payment shown as two to ten
+     * rows - each with its own category, amount and note - that share a random id here and everything else (account, date and time,
+     * payee, person, tags, picture). The payment's total is the parts' sum; each part is an ordinary row in every total, so nothing that
+     * adds up by category changes. See `Splits.kt`; only the repository's split functions ever set or clear it.
+     */
+    val splitGroup: String? = null,
 )
 
 /** Whether [name] is the name of an attached picture as the app files them: never a path, so it can only name its own files. */

@@ -13,6 +13,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.FactCheck
 import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.ContentCut
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -24,9 +25,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.normpix.finance.data.LedgerCheckResult
+import com.example.normpix.finance.domain.BrokenSplit
 import com.example.normpix.finance.domain.CardBillExpense
 import com.example.normpix.finance.domain.FinanceTransaction
+import com.example.normpix.finance.domain.MAX_SPLIT_PARTS
 import com.example.normpix.finance.domain.SelfTransferPair
+import com.example.normpix.finance.domain.SplitFault
 import com.example.normpix.finance.ui.FinanceActions
 import com.example.normpix.finance.ui.FinanceController
 import com.example.normpix.finance.ui.TransactionTile
@@ -59,6 +63,8 @@ private sealed interface CheckChoice {
     data class Combine(val pair: SelfTransferPair) : CheckChoice
 
     data class CardBill(val bill: CardBillExpense) : CheckChoice
+
+    data class Unsplit(val split: BrokenSplit) : CheckChoice
 
     data object Again : CheckChoice
 }
@@ -122,6 +128,22 @@ internal suspend fun runLedgerCheck(
                 if (!confirmed) return
                 val done = runCatching { finance.recordCardBill(choice.bill) }.getOrNull()
                 if (done == null) snackbars.show("Couldn't change it. Nothing was changed.", SnackbarKind.Error) else snackbars.offerUndo("Recorded as a card payment", finance, done, scope)
+                return
+            }
+            is CheckChoice.Unsplit -> {
+                val rows = choice.split.rows
+                val confirmed = overlays.confirm(
+                    title = "Unsplit this payment?",
+                    message = "The mark that ties ${if (rows.size == 1) "this payment" else "these ${rows.size} payments"} together as one split " +
+                        "payment is taken off. Every amount, account, date and category stays exactly as it is, so no balance or total changes.",
+                    confirmLabel = "Unsplit",
+                    icon = Icons.Outlined.ContentCut,
+                )
+                if (!confirmed) return
+                // Nothing is merged: the parts of a group that doesn't hold together are on other accounts, dates or kinds, so each stays a
+                // payment of its own. (Nothing moves, so there is nothing to undo.)
+                val done = runCatching { finance.releaseSplit(choice.split.group) }.getOrNull()
+                if (done == null) snackbars.show("Couldn't change it. Nothing was changed.", SnackbarKind.Error) else snackbars.show("Unsplit")
                 return
             }
         }
@@ -228,6 +250,29 @@ private fun LedgerCheckSheet(result: LedgerCheckResult, onChoice: (CheckChoice?)
                 more(issues.cardBills.size)
             }
         }
+        if (issues.brokenSplits.isNotEmpty()) {
+            ListSection(
+                title = "Split payments that don't add up",
+                footer = "A payment shared between categories keeps its parts together: one account, one date and one payee. These no longer do. " +
+                    "Unsplit takes the mark off; every amount and category stays, so nothing in your totals changes.",
+            ) {
+                for (split in issues.brokenSplits.take(SHOWN_PER_FINDING)) {
+                    item { TransactionTile(split.rows.first(), onClick = { onChoice(CheckChoice.Open(split.rows.first())) }, showDate = true) }
+                    item {
+                        ListRow(
+                            headline = splitProblemLine(split),
+                            leading = { SettingsLeadingBadge(Icons.Outlined.ContentCut, SettingsRowEmoji.STACK) },
+                        )
+                    }
+                    item {
+                        TextButton(onClick = { onChoice(CheckChoice.Unsplit(split)) }, modifier = Modifier.padding(start = AppSpacing.sm)) {
+                            Text("Unsplit")
+                        }
+                    }
+                }
+                more(issues.brokenSplits.size)
+            }
+        }
         if (issues.duplicates.isNotEmpty()) {
             ListSection(
                 title = "Entered twice?",
@@ -303,6 +348,18 @@ private fun LedgerCheckSheet(result: LedgerCheckResult, onChoice: (CheckChoice?)
             Text("Check again")
         }
     }
+}
+
+/** What is wrong with a split payment, in a line: "Only 1 part is left" / "The parts are on more than one account". */
+private fun splitProblemLine(split: BrokenSplit): String = when (split.fault) {
+    SplitFault.TooFew -> "Only 1 part of this split payment is left"
+    SplitFault.TooMany -> "This split payment has ${split.rows.size} parts: the most is $MAX_SPLIT_PARTS"
+    SplitFault.Transfer -> "A transfer is among this split payment's parts"
+    SplitFault.MixedType -> "This split payment's parts are a mix of spending and income"
+    SplitFault.MixedAccount -> "This split payment's ${split.rows.size} parts are on different accounts"
+    SplitFault.MixedMoment -> "This split payment's ${split.rows.size} parts are dated at different times"
+    SplitFault.MixedPayee -> "This split payment's ${split.rows.size} parts name different payees"
+    SplitFault.MixedPerson -> "This split payment's ${split.rows.size} parts are for different people"
 }
 
 /** "… and 3 more", under a finding listing only its first few. */

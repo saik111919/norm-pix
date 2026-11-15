@@ -22,12 +22,16 @@ import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.CurrencySpec
 import com.example.normpix.finance.domain.CustomBank
 import com.example.normpix.finance.domain.FinanceTransaction
+import com.example.normpix.finance.domain.LoanEmi
 import com.example.normpix.finance.domain.MoneyFormatter
 import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.RepeatSchedule
+import com.example.normpix.finance.domain.SavingsGoal
 import com.example.normpix.finance.domain.SelfTransferPair
+import com.example.normpix.finance.domain.SplitPart
+import com.example.normpix.finance.domain.Tag
 import com.example.normpix.finance.domain.asTransfer
 import com.example.normpix.navigation.LocalAppPreferences
 import java.io.File
@@ -72,6 +76,10 @@ data class FinanceState(
     val asOf: LocalDateTime? = null,
     /** How many transactions are dated after [asOf]'s day: entered ahead, they count from their own day. */
     val upcomingCount: Int = 0,
+    /** The tags the user named, by name (what is on each transaction is read with it). */
+    val tags: List<Tag> = emptyList(),
+    /** The savings goals, in the order the user keeps them (what each has saved is worked out from [balances] and the goal: `goalSaved`). */
+    val goals: List<SavingsGoal> = emptyList(),
 ) {
     val money: MoneyFormatter = MoneyFormatter(currency, hidden = amountsHidden)
 
@@ -85,6 +93,13 @@ data class FinanceState(
     fun category(id: Long?): Category? = id?.let { wanted -> categories.firstOrNull { it.id == wanted } }
 
     fun person(id: Long?): Person? = id?.let { wanted -> people.firstOrNull { it.id == wanted } }
+
+    fun tag(id: Long?): Tag? = id?.let { wanted -> tags.firstOrNull { it.id == wanted } }
+
+    fun goal(id: Long?): SavingsGoal? = id?.let { wanted -> goals.firstOrNull { it.id == wanted } }
+
+    /** The tags of [ids] that exist, by name: what a transaction's chips show. */
+    fun tagsOf(ids: Set<Long>): List<Tag> = if (ids.isEmpty()) emptyList() else tags.filter { it.id in ids }
 
     /** The people a new expense can be spent on. */
     val activePeople: List<Person> get() = people.filter { !it.archived }
@@ -179,6 +194,8 @@ class FinanceController(
         val code = repository.currencyCode()
         val customBanks = repository.customBanks()
         val people = repository.people()
+        val tags = repository.tags()
+        val goals = repository.goals()
         val previous = _state.value
         _state.value = previous.copy(
             status = status,
@@ -192,6 +209,8 @@ class FinanceController(
             currency = if (code != previous.currency.code) CurrencySpec.byCode(code) else previous.currency,
             asOf = asOf,
             upcomingCount = upcoming,
+            tags = tags,
+            goals = goals,
         )
     }
 
@@ -232,7 +251,48 @@ class FinanceController(
         }
     }
 
-    /** Deletes the transaction, and the picture attached to it. */
+    /**
+     * Saves one payment as a split into [parts] (see [FinanceRepository.saveSplit]: all of it or none), doing to the picture every part
+     * names what [picture] says ([payment]'s own `picture` is what the parts have now). A new picture is kept first, so the rows can
+     * name it, and deleted again if the split isn't saved; the picture it replaces or loses is deleted only once the rows are saved.
+     * Every part names the same file, and [TransactionPictures.sweep] keeps a file while any row does.
+     */
+    suspend fun saveSplit(
+        payment: FinanceTransaction,
+        parts: List<SplitPart>,
+        group: String? = null,
+        picture: PictureEdit = PictureEdit.Unchanged,
+    ): List<FinanceTransaction> {
+        val store = pictures
+        if (store == null || picture == PictureEdit.Unchanged) return mutate { it.saveSplit(payment, parts, group) }
+        return pictureLock.withLock {
+            val rows = group?.let { repository.splitParts(it) } ?: parts.mapNotNull { it.id }.mapNotNull { repository.transactionById(it) }
+            val before = rows.mapNotNull { it.picture }.toSet()
+            val name = (picture as? PictureEdit.Attach)?.let { store.keep(it.draft) }
+            val saved = try {
+                mutate { it.saveSplit(payment.copy(picture = name), parts, group) }
+            } catch (e: Throwable) {
+                withContext(NonCancellable) { store.delete(name) }
+                throw e
+            }
+            for (old in before) if (old != name) store.delete(old)
+            saved
+        }
+    }
+
+    /** Makes the split payment [group] one payment again (see [FinanceRepository.unsplit]). */
+    suspend fun unsplit(group: String, categoryId: Long? = null): FinanceTransaction = mutate { it.unsplit(group, categoryId) }
+
+    /** [unsplit], so that it can be taken back for a few moments (see [undoable]). */
+    suspend fun unsplitUndoably(group: String, categoryId: Long? = null): FinanceUndo = undoable {
+        mutate { it.unsplit(group, categoryId) }
+        emptyList()
+    }
+
+    /** Takes the split mark off the rows of [group] (see [FinanceRepository.releaseSplit]): what Check and recalculate's "Unsplit" does. */
+    suspend fun releaseSplit(group: String): Int = mutate { it.releaseSplit(group) }
+
+    /** Deletes the transaction - the whole payment, every part, when it is one part of a split - and the picture attached to it. */
     suspend fun deleteTransaction(id: Long): Int {
         val picture = if (pictures != null) repository.transactionById(id)?.picture else null
         val deleted = mutate { it.deleteTransaction(id) }
@@ -261,6 +321,21 @@ class FinanceController(
     suspend fun deletePerson(id: Long): Int = mutate { it.deletePerson(id) }
 
     suspend fun saveCategory(c: Category): Category = mutate { it.saveCategory(c) }
+
+    /** Saves a tag, new or renamed (see [FinanceRepository.saveTag]). */
+    suspend fun saveTag(tag: Tag): Tag = mutate { it.saveTag(tag) }
+
+    /** Deletes a tag: it comes off every transaction, which stay as they are. Returns how many transactions it was on. */
+    suspend fun deleteTag(id: Long): Int = mutate { it.deleteTag(id) }
+
+    /** Saves a savings goal, new or edited (see [FinanceRepository.saveGoal]). */
+    suspend fun saveGoal(goal: SavingsGoal): SavingsGoal = mutate { it.saveGoal(goal) }
+
+    /** Deletes a goal: only a target, so no account or balance changes. */
+    suspend fun deleteGoal(id: Long) = mutate { it.deleteGoal(id) }
+
+    /** Adds to (a positive [delta]) or takes from (a negative one) what a goal on its own has saved; no ledger entry is made. */
+    suspend fun adjustGoalSaved(id: Long, delta: Long): SavingsGoal = mutate { it.adjustGoalSaved(id, delta) }
 
     /** Adds the ready-made sub-categories that are missing; returns how many. */
     suspend fun addSuggestedSubCategories(): Int = mutate { it.addSuggestedSubCategories() }
@@ -296,6 +371,9 @@ class FinanceController(
     }
 
     suspend fun deleteRecurringRule(id: Long) = mutate { it.deleteRecurringRule(id) }
+
+    /** "Not this one": the payee [key] (a `payeeKey`) is not offered as a repeating payment again. */
+    suspend fun dismissRepeatPayee(key: String) = mutate { it.dismissRepeatPayee(key) }
 
     suspend fun setCurrency(code: String) = mutate { it.setCurrency(code) }
 
@@ -341,6 +419,21 @@ class FinanceController(
     /** Records [pair] as the one transfer between the user's accounts it is (see [FinanceRepository.combineSelfTransfer]). */
     suspend fun combineSelfTransfer(pair: SelfTransferPair): FinanceUndo = undoable {
         mutate { it.combineSelfTransfer(pair) }
+        emptyList()
+    }
+
+    /**
+     * Records one EMI on a loan: the principal as a transfer onto it and the interest as an expense, in one transaction - both are in
+     * the ledger or neither (see [FinanceRepository.recordLoanEmi]).
+     */
+    suspend fun recordLoanEmi(emi: LoanEmi): List<FinanceTransaction> = mutate { it.recordLoanEmi(emi) }
+
+    /**
+     * Saves [transactions] together - a bank statement's rows - all of them or none, each checked as a single save is (see
+     * [FinanceRepository.saveTransactions]). What it saved can be taken back for a few moments (see [undoable]).
+     */
+    suspend fun saveTransactionsUndoably(transactions: List<FinanceTransaction>): FinanceUndo = undoable {
+        mutate { it.saveTransactions(transactions) }
         emptyList()
     }
 

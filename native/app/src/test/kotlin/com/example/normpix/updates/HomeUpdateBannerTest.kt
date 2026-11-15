@@ -275,12 +275,11 @@ class UpdateBannerTest {
     fun `a download says how far it is, offers Cancel, and is shown even after Later`() {
         val banner = assertNotNull(bannerFor(UpdateState.Downloading(release, release.size / 4, release.size), offered = false))
         assertEquals("Downloading 1.0.3", banner.title)
-        // How far it is, as the banner's pill: the percent inside, and how much of how much under it.
+        // How far it is, as the banner's ring (since 2026-11-15) with the percent inside; how much of how much, as its message.
         val bar = assertNotNull(banner.bar)
         assertEquals(0.25f, bar.fraction, 0.001f)
         assertEquals("25%", bar.label)
-        assertEquals("3 MB", bar.from)
-        assertEquals("12 MB", bar.to)
+        assertEquals("3 MB of 12 MB", banner.message)
         assertEquals("Cancel", banner.secondary?.label)
         assertEquals("Details", banner.primary.label)
         banner.secondary?.onClick?.invoke()

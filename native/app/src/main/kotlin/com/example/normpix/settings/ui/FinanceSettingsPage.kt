@@ -9,6 +9,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Groups
@@ -28,7 +30,10 @@ import com.example.normpix.finance.domain.CurrencySpec
 import com.example.normpix.finance.domain.FinanceConflictException
 import com.example.normpix.finance.domain.FinanceValidationException
 import com.example.normpix.finance.ui.LocalFinance
+import com.example.normpix.finance.ui.TagManagerSheet
+import com.example.normpix.finance.ui.YEAR_START_TITLE
 import com.example.normpix.finance.ui.icon
+import com.example.normpix.finance.ui.pickYearStart
 import com.example.normpix.finance.ui.label
 import com.example.normpix.finance.ui.rememberFinanceState
 import com.example.normpix.navigation.LocalAppContainer
@@ -49,6 +54,9 @@ import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppSpacing
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+
+/** The title of the Tags row on Settings > Finance and of its search entry. */
+const val TAGS_TITLE = "Tags"
 
 /** Settings > Finance: currency, the default account for new entries, and categories. */
 @Composable
@@ -205,6 +213,36 @@ fun FinanceSettingsPage() {
                             },
                             leading = { SettingsLeadingIcon(Icons.Outlined.Groups, SettingsRowEmoji.HANDSHAKE) },
                             onClick = navigator::openPeople,
+                        )
+                    }
+                    item {
+                        ListRow(
+                            headline = TAGS_TITLE,
+                            supporting = when (finance.tags.size) {
+                                0 -> "Label expenses and income, such as Tax-deductible"
+                                1 -> "1 tag · rename or delete it"
+                                else -> "${finance.tags.size} tags · rename or delete them"
+                            },
+                            leading = { SettingsLeadingIcon(Icons.AutoMirrored.Outlined.Label, SettingsRowEmoji.LABEL) },
+                            onClick = { scope.launch { overlays.sheet<Unit>(expandable = true) { dismiss -> TagManagerSheet(onDone = dismiss) } } },
+                        )
+                    }
+                }
+                // Where a year of Insights > Year by tag starts: India's financial year (April) unless the user picks the calendar year.
+                ListSection(
+                    title = "Year by tag",
+                    footer = "Insights > Year by tag adds up each tag over this year.",
+                ) {
+                    item {
+                        ListRow(
+                            headline = YEAR_START_TITLE,
+                            supporting = "${prefs.yearStart.label} · ${prefs.yearStart.description}",
+                            leading = { SettingsLeadingIcon(Icons.Outlined.CalendarMonth, SettingsRowEmoji.CALENDAR) },
+                            onClick = {
+                                scope.launch {
+                                    if (pickYearStart(overlays, preferences)) haptics.selection()
+                                }
+                            },
                         )
                     }
                 }

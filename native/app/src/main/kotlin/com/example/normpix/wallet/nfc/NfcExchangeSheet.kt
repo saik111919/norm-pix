@@ -14,11 +14,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Download
@@ -44,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
@@ -68,6 +71,7 @@ import com.example.normpix.availability.rememberAvailability
 import com.example.normpix.availability.ui.FeatureUnavailablePanel
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalPageAnimation
+import com.example.normpix.ui.components.AppLinearProgress
 import com.example.normpix.ui.components.AppPrimaryTabs
 import com.example.normpix.ui.components.AppTab
 import com.example.normpix.ui.components.SheetHeader
@@ -244,6 +248,9 @@ private fun NfcExchangeContent(
                             haptics.selection()
                             currentTab = ExchangeTab.Inlet
                         },
+                        onMatch = exchange::confirmShare,
+                        onNotMatch = exchange::declineShare,
+                        onShareAgain = exchange::startOutlet,
                         onDone = onDismiss,
                     )
                 }
@@ -396,6 +403,9 @@ private fun OutletContent(
     onSelectCard: (StoredCard) -> Unit,
     outletState: NfcOutletState?,
     onSwitchToInlet: () -> Unit,
+    onMatch: (NfcShareResponder.Pairing) -> Unit,
+    onNotMatch: (NfcShareResponder.Pairing) -> Unit,
+    onShareAgain: (StoredCard) -> Unit,
     onDone: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -439,8 +449,8 @@ private fun OutletContent(
     ) {
         val currentCard = selectedCard ?: cards.first()
 
-        // Card picker if user has multiple cards
-        if (cards.size > 1) {
+        // Card picker if user has multiple cards; only while waiting, so the card can't change under a code being compared.
+        if (cards.size > 1 && (outletState == null || outletState is NfcOutletState.Active)) {
             Text(
                 text = "Select card to share:",
                 style = MaterialTheme.typography.labelMedium,
@@ -469,49 +479,133 @@ private fun OutletContent(
             Spacer(Modifier.height(AppSpacing.md))
         }
 
-        // Active Outlet beaming animation
         val isTransferred = outletState is NfcOutletState.Transferred
-        if (isTransferred) {
-            Icon(
-                Icons.Outlined.CheckCircle,
-                contentDescription = null,
+        when (outletState) {
+            is NfcOutletState.Comparing -> OutletCompare(outletState, onMatch = onMatch, onNotMatch = onNotMatch)
+            is NfcOutletState.Transferred -> OutletOutcome(
+                icon = Icons.Outlined.CheckCircle,
                 tint = scheme.primary,
-                modifier = Modifier.size(72.dp),
+                title = "Card shared",
+                message = "It went encrypted to the phone whose code matched.",
             )
-            Spacer(Modifier.height(AppSpacing.sm))
-            Text(
-                text = "Card Transferred!",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = scheme.primary,
-            )
-        } else {
-            PulsingNfcIcon(
-                icon = Icons.Outlined.Sensors,
-                tint = scheme.primary,
-                bgColor = scheme.primaryContainer,
-            )
-            Spacer(Modifier.height(AppSpacing.sm))
-            ModeStatus(ExchangeTab.Outlet, "This device is ready to share NFC data.")
-            Spacer(Modifier.height(AppSpacing.sm))
-            Text(
-                text = "Waiting for another phone. Hold the back of this one against it while it is on Receive.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = scheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
+            is NfcOutletState.NotShared -> {
+                OutletOutcome(
+                    icon = Icons.Outlined.Block,
+                    tint = scheme.onSurfaceVariant,
+                    title = "Not shared",
+                    message = "You said the codes didn't match, so the card stayed on this phone.",
+                )
+                Spacer(Modifier.height(AppSpacing.sm))
+                FilledTonalButton(onClick = { onShareAgain(outletState.card) }) { Text("Share again") }
+            }
+            is NfcOutletState.Active, null -> {
+                // Active Outlet beaming animation
+                PulsingNfcIcon(
+                    icon = Icons.Outlined.Sensors,
+                    tint = scheme.primary,
+                    bgColor = scheme.primaryContainer,
+                )
+                Spacer(Modifier.height(AppSpacing.sm))
+                ModeStatus(ExchangeTab.Outlet, "This device is ready to share NFC data.")
+                Spacer(Modifier.height(AppSpacing.sm))
+                Text(
+                    text = "Waiting for another phone. Hold the back of this one against it while it is on Receive.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
 
         Spacer(Modifier.height(AppSpacing.md))
         ReceivedCardPreview(card = currentCard)
 
-        Spacer(Modifier.height(AppSpacing.lg))
-
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = onDone) {
-                Text(if (isTransferred) "Done" else "Close")
+        // While a code is up, its two buttons are the choice; Close would be a third way to say no.
+        if (outletState !is NfcOutletState.Comparing) {
+            Spacer(Modifier.height(AppSpacing.lg))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = onDone) {
+                    Text(if (isTransferred) "Done" else "Close")
+                }
             }
         }
+    }
+}
+
+/**
+ * A phone on Receive got as far as the code: it is shown large, with "Match - share the card" and "Doesn't match". Only Match
+ * lets the card go, sealed for that phone. After Match the buttons give way to "Sending" until the last byte is out.
+ */
+@Composable
+private fun OutletCompare(
+    state: NfcOutletState.Comparing,
+    onMatch: (NfcShareResponder.Pairing) -> Unit,
+    onNotMatch: (NfcShareResponder.Pairing) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Text(
+        text = "Does the other phone show this code?",
+        style = MaterialTheme.typography.titleLarge,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.semantics {
+            heading()
+            liveRegion = LiveRegionMode.Polite
+        },
+    )
+    Spacer(Modifier.height(AppSpacing.md))
+    ShareCode(state.pairing.code)
+    Spacer(Modifier.height(AppSpacing.lg))
+    if (state.confirmed) {
+        Text(
+            text = "Sending the card. Keep the phones together.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = scheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        )
+        Spacer(Modifier.height(AppSpacing.md))
+        AppLinearProgress(Modifier.width(160.dp))
+    } else {
+        Button(onClick = { onMatch(state.pairing) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+            Text("Match - share the card")
+        }
+        Spacer(Modifier.height(AppSpacing.sm))
+        OutlinedButton(onClick = { onNotMatch(state.pairing) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+            Text("Doesn't match")
+        }
+        Spacer(Modifier.height(AppSpacing.md))
+        Text(
+            text = "Only tap Match for a phone you can see.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = scheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/** How a share ended on this phone: a large icon and a title, with a line under it. Announced when it appears. */
+@Composable
+private fun OutletOutcome(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, title: String, message: String) {
+    Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(72.dp))
+    Spacer(Modifier.height(AppSpacing.sm))
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = tint,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = AppSpacing.md),
+        )
     }
 }
 
