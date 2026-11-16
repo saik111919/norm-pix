@@ -106,7 +106,9 @@ private fun amountsAgree(amounts: List<Long>): Boolean {
  *   out, so a price change or a missed month long ago does not hide a pattern that is plain now;
  * - those payments' amounts are all within 20% of their median (the run is cut back from its oldest end until they are);
  * - the newest payment is no more than one and a half periods ago, so a payment that stopped is not suggested;
- * - no active repeating payment in [rules] is for that payee, and the user has not said "not this one" ([dismissed], [payeeKey]s).
+ * - no active repeating payment in [rules] is for that payee, and the user has not said "not this one" ([dismissed], [payeeKey]s);
+ * - the payee is not a loan ([loanPayees], the loans' names as [payeeKey]s): an EMI's interest is an expense paid to the loan's name
+ *   every month, but its EMIs are recorded from the loan's page, so a repeating payment for it would count the interest twice.
  *
  * The suggestion carries the newest payment's amount, account and category, and the day one period after it.
  */
@@ -115,6 +117,7 @@ fun suggestRepeats(
     rules: List<RecurringRule>,
     dismissed: Set<String>,
     today: LocalDate,
+    loanPayees: Set<String> = emptySet(),
 ): List<RepeatSuggestion> {
     val ruled = rules.filter { it.active && !it.isFinished }.mapNotNull { payeeKey(it.payee) }.toSet()
     val groups = transactions
@@ -122,7 +125,7 @@ fun suggestRepeats(
         .groupBy { payeeKey(it.payee) }
     val found = mutableListOf<RepeatSuggestion>()
     for ((key, group) in groups) {
-        if (key == null || key in dismissed || key in ruled) continue
+        if (key == null || key in dismissed || key in ruled || key in loanPayees) continue
         suggestionFor(key, group.sortedWith(compareBy({ it.occurredAt }, { it.id ?: 0L })), today)?.let { found += it }
     }
     return found

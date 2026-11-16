@@ -401,6 +401,12 @@ fun AccountFormSheet(
     // A loan is an account of the Loan kind, or another kind (never a card) with "This is a loan" on. Both have the same details.
     var loanSwitch by remember { mutableStateOf(existing?.loan != null && existing.kind != AccountKind.Loan) }
     val loanForm = remember { LoanFormState(existing?.loan, finance.currency.decimals) }
+    // A new loan's EMIs are recorded each month from the default account (any other that can pay, when that isn't one), unless turned off.
+    var autoEmi by remember { mutableStateOf(true) }
+    val emiSource = remember(finance.accounts, finance.defaultAccountId) {
+        val payers = finance.activeAccounts.filter { !it.isLoan && it.id != null }
+        payers.firstOrNull { it.id == finance.defaultAccountId } ?: payers.firstOrNull()
+    }
     // A new loan's starting balance follows the amount borrowed until the balance is typed by hand.
     var amountTouched by remember { mutableStateOf(existing != null) }
     var limit by remember {
@@ -583,6 +589,14 @@ fun AccountFormSheet(
                     if (makeDefault != wasDefault) {
                         controller.setDefaultAccountId(if (makeDefault) saved.id else null)
                     }
+                    // The loan is saved whatever happens here; its page offers the switch again if this could not be done.
+                    if (existing == null && saved.isLoan && autoEmi && emiSource?.id != null && saved.id != null) {
+                        try {
+                            controller.startLoanEmis(saved.id, emiSource.id)
+                        } catch (_: FinanceValidationException) {
+                            // Nothing owed on it, say: nothing to record.
+                        }
+                    }
                     haptics.success()
                     onDone(saved)
                 } catch (e: FinanceValidationException) {
@@ -674,6 +688,24 @@ fun AccountFormSheet(
                     }
                 },
             )
+            // A new loan records its EMIs each month from the start (owner, 2026-11-16: "If I entered EMI amount it can be given on
+            // monthly based amount"), paid from the default account; the loan's page changes the account or turns it off.
+            if (existing == null && emiSource != null) {
+                Spacer(Modifier.height(AppSpacing.sm))
+                SwitchRow(
+                    title = "Record each EMI automatically",
+                    checked = autoEmi,
+                    onChange = {
+                        haptics.selection()
+                        autoEmi = it
+                    },
+                    subtitle = if (autoEmi) {
+                        "From ${emiSource.name} on each EMI's day, split into principal and interest. Change it on the loan's page."
+                    } else {
+                        "Record each EMI yourself on the loan's page."
+                    },
+                )
+            }
         }
 
         if (kind != AccountKind.Cash) {

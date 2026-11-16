@@ -224,7 +224,12 @@ class DummyDataTest {
 
             // Fixed payments come from the recurring engine: salary on the 1st of May, Jun, Jul, Aug, Sep and Oct,
             // rent on the 5th of May, Jun, Jul, Aug and Sep (October's is still to come).
-            assertEquals(8, repo.recurringRules().size)
+            // And a ninth: the home loan's EMI, recorded each month from the next one on (none of it recorded yet).
+            assertEquals(9, repo.recurringRules().size)
+            val emiRule = assertNotNull(repo.emiRuleOf(homeLoan.id!!))
+            assertEquals(terms.emi, emiRule.amount)
+            assertEquals(state.accounts.single { it.name == "HDFC Savings" }.id, emiRule.accountId)
+            assertTrue(emiRule.nextDate.isAfter(now), "the next EMI is still to come")
             val salary = all.filter { it.payee == "Acme Technologies Pvt Ltd" }
             assertEquals(listOf(5, 6, 7, 8, 9, 10), salary.map { it.occurredAt.monthValue }.sorted())
             assertTrue(salary.all { it.recurringId != null && it.type == TransactionType.Income })

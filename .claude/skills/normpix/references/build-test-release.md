@@ -136,8 +136,9 @@ commit the tree mid-session and it would be swept in). Don't write PNGs with Pow
   CI fails a tag that doesn't match `versionName`, a release not signed with the release key, and a `versionCode` not above the
   latest.
 - History: v1.0.x up to v1.0.22; v1.1.0 (tablet layouts, 2026-10-23); v1.2.0 (as of today, Check and recalculate, Activity by
-  day); v1.2.1 (Wallet headings, Settings grouped); v1.3.0 (widgets); v1.4.0 (NFC off by default, Colors previews, Pure, About).
-  Minor bumps went with each feature PR the owner asked to ship.
+  day); v1.2.1 (Wallet headings, Settings grouped); v1.3.0 (widgets); v1.4.0 (NFC off by default, Colors previews, Pure, About);
+  v1.5.x (1.5.0 2026-10-27 ... v1.5.13 2026-11-16, the eleven round-2 features); v1.6.0 (2026-11-16, owner: "Yes bump the version
+  and merge the changes": EMIs recorded each month, What's new in the guide). Minor bumps went with each feature PR the owner asked to ship.
 
 ## 8. Signing
 

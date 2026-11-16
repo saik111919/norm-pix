@@ -349,7 +349,11 @@ Use these before writing anything new:
   custom font never touches the tile's edge.
 - **Back button styles** (`BackButtonStyle`): *Top floating circle* (default; no app bar - a glass circle and an actions pill
   float over a page that scrolls on under them, a large heading scrolls away; the status bar keeps the page's colour), *Bottom
-  dock*, *Standard top bar*. The account/profile pill and page title share one floating row on tab pages.
+  dock*, *Standard top bar*. The account/profile pill and page title share one floating row on tab pages. The large heading
+  (`PageTitle` in `Pages.kt`) is a **`BasicText` with no layer**, faded by its colour (`ColorProducer`, read as it is drawn)
+  (2026-11-16): in a `graphicsLayer` it was missing on the emulator, until the page was scrolled, on every pushed page whose content
+  arrives after its first frame (Notifications, Forecast, Bills calendar, a loan) - the layer kept a picture from before the text
+  was drawn; an always-off-screen layer did not help. **Don't fade a page's first-frame text with a `graphicsLayer` alpha.**
 - **Bottom controls** (opt-in, phone-only toggle, modelled on komi-store's Classic layout): back, page actions and
   search/filters move to the bottom. `rememberBottomControls()` = setting on **and** compact window. A page with its own
   search takes `bottomSearch` and leaves the field out of its list in that mode; a pushed page built on bare

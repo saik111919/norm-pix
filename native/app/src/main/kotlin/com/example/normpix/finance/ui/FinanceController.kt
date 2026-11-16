@@ -429,6 +429,19 @@ class FinanceController(
     suspend fun recordLoanEmi(emi: LoanEmi): List<FinanceTransaction> = mutate { it.recordLoanEmi(emi) }
 
     /**
+     * Starts recording the loan [loanId]'s EMIs each month, paid from [fromAccountId] (see [FinanceRepository.startLoanEmis]), and
+     * records one that is already due today.
+     */
+    suspend fun startLoanEmis(loanId: Long, fromAccountId: Long): RecurringRule = mutate {
+        val rule = it.startLoanEmis(loanId, fromAccountId)
+        it.processRecurring()
+        rule
+    }
+
+    /** Stops recording the loan [loanId]'s EMIs each month; gives back the repeating payment that did it (what Undo starts again from). */
+    suspend fun stopLoanEmis(loanId: Long): RecurringRule? = mutate { it.stopLoanEmis(loanId) }
+
+    /**
      * Saves [transactions] together - a bank statement's rows - all of them or none, each checked as a single save is (see
      * [FinanceRepository.saveTransactions]). What it saved can be taken back for a few moments (see [undoable]).
      */

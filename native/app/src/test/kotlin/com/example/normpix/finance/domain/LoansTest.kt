@@ -354,4 +354,96 @@ class LoansTest {
         assertNull(emiInterestCategory(listOf(income, sub)), "not an income category or a sub-category")
         assertNull(emiInterestCategory(emptyList()))
     }
+
+    // ------------------------------------------------------------------------------------------- EMIs recorded each month
+
+    @Test
+    fun aPaymentSplitsIntoAMonthsInterestAndTheRestPrincipal() {
+        // Ten lakh at 9%: Rs 7,500 interest, the rest of Rs 8,997.26 principal - the schedule's first month.
+        assertEquals(EmiSplit(149_726L, 750_000L), emiSplit(tenLakh, 900, 899_726L))
+        assertEquals(899_726L, emiSplit(tenLakh, 900, 899_726L)!!.total)
+        // The month that pays it off pays exactly what is left and its interest, a little over the EMI or under it.
+        assertEquals(EmiSplit(893_000L, 6_698L), emiSplit(893_000L, 900, 899_726L))
+        assertEquals(EmiSplit(10_000L, 75L), emiSplit(10_000L, 900, 899_726L))
+        // No interest: all of it is principal.
+        assertEquals(EmiSplit(500_000L, 0L), emiSplit(tenLakh, 0, 500_000L))
+        // A payment that doesn't cover the month's interest is all interest.
+        assertEquals(EmiSplit(0L, 700_000L), emiSplit(tenLakh, 900, 700_000L))
+        // Nothing owed, or no payment: nothing to split.
+        assertNull(emiSplit(0L, 900, 899_726L))
+        assertNull(emiSplit(tenLakh, 900, 0L))
+    }
+
+    @Test
+    fun theSplitsOfEachMonthAreTheSchedulesMonths() {
+        val t = terms()
+        val schedule = loanSchedule(tenLakh, t.rateBp, t.emi) { t.dateOf(it) }!!
+        var owed = tenLakh
+        for (month in schedule) {
+            val split = emiSplit(owed, t.rateBp, t.emi)!!
+            assertEquals(month.principal to month.interest, split.principal to split.interest, "month ${month.number}")
+            owed -= split.principal
+        }
+        assertEquals(0L, owed)
+        assertNull(emiSplit(owed, t.rateBp, t.emi))
+    }
+
+    @Test
+    fun anEmiPaidByHandWithinHalfAMonthOfItsDayIsThatEmi() {
+        val due = LocalDate.of(2026, 12, 5)
+        assertTrue(emiCovered(due, due))
+        assertTrue(emiCovered(due, due.minusDays(14)), "paid two weeks early")
+        assertTrue(emiCovered(due, due.plusDays(15)), "paid half a month late")
+        // Exactly between two EMI days a payment is the earlier one's, as nextEmiIndex reads it; further off it is another month's.
+        assertTrue(!emiCovered(due, due.minusDays(15)))
+        assertTrue(!emiCovered(due, due.plusDays(16)))
+        assertTrue(!emiCovered(due, due.minusMonths(1)))
+    }
+
+    @Test
+    fun theFirstEmiRecordedEachMonthIsTheNextOneNotAMissedOne() {
+        val t = terms(start = LocalDate.of(2026, 9, 5))
+        // Paid up to November: December's is next.
+        assertEquals(3, firstAutoEmiIndex(t, LocalDate.of(2026, 11, 5), LocalDate.of(2026, 11, 16)))
+        // Nothing recorded since September: October's and November's were missed, and are not recorded all at once.
+        assertEquals(3, firstAutoEmiIndex(t, LocalDate.of(2026, 9, 5), LocalDate.of(2026, 11, 16)))
+        // Today is an EMI's day that isn't paid yet: that one.
+        assertEquals(2, firstAutoEmiIndex(t, LocalDate.of(2026, 10, 5), LocalDate.of(2026, 11, 5)))
+        // A loan whose first EMI is still ahead starts with it.
+        assertEquals(0, firstAutoEmiIndex(terms(start = LocalDate.of(2027, 1, 10)), null, LocalDate.of(2026, 11, 16)))
+    }
+
+    @Test
+    fun theRepeatingPaymentIsAMonthlyTransferOfTheEmiOntoTheLoan() {
+        val t = terms()
+        val loan = Account(id = 9, name = "Home loan", kind = AccountKind.Loan, openingBalance = -tenLakh, createdAt = at, updatedAt = at, loan = t)
+        val rule = emiRule(loan, fromAccountId = 2, firstIndex = 1, lastDay = LocalDate.of(2046, 11, 5), now = at)
+        assertEquals(TransactionType.Transfer, rule.type)
+        assertEquals(t.emi, rule.amount)
+        assertEquals(2L, rule.accountId)
+        assertEquals(9L, rule.toAccountId)
+        assertNull(rule.categoryId)
+        assertEquals("Home loan", rule.payee)
+        assertEquals(RecurrenceFrequency.Monthly, rule.frequency)
+        assertEquals(1, rule.interval)
+        assertEquals(LocalDateTime.of(2027, 1, 5, 9, 0), rule.startDate)
+        assertEquals(rule.startDate, rule.nextDate)
+        assertEquals(LocalDateTime.of(2046, 11, 5, 23, 59, 59), rule.endDate, "it ends on the last EMI's day")
+        assertNull(emiRule(loan, 2, 1, lastDay = null, now = at).endDate, "an EMI that never pays it off ends when nothing is owed")
+        assertTrue(rule.recordsEmiOf(setOf(9L)))
+        assertTrue(!rule.recordsEmiOf(setOf(8L)))
+        assertTrue(!rule.copy(type = TransactionType.Expense, toAccountId = null).recordsEmiOf(setOf(9L)))
+    }
+
+    @Test
+    fun theInterestOfAnEmiRecordedEachMonthAlwaysHasACategory() {
+        val loans = Category(id = 5, name = "Loans & EMI", type = CategoryType.Expense, icon = "loan", createdAt = at, updatedAt = at)
+        val other = loans.copy(id = 6, name = "Other")
+        val food = loans.copy(id = 7, name = "Food")
+        val salary = loans.copy(id = 8, name = "Salary", type = CategoryType.Income)
+        assertEquals(5L, emiInterestCategoryOrFallback(listOf(food, other, loans))?.id)
+        assertEquals(6L, emiInterestCategoryOrFallback(listOf(salary, food, other))?.id, "Other when Loans & EMI is gone")
+        assertEquals(7L, emiInterestCategoryOrFallback(listOf(salary, food))?.id, "else the first expense category")
+        assertNull(emiInterestCategoryOrFallback(listOf(salary)), "never an income category")
+    }
 }

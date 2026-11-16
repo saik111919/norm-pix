@@ -10,6 +10,7 @@ import com.example.normpix.finance.domain.RepeatSuggestion
 import com.example.normpix.finance.domain.calendarLastMonth
 import com.example.normpix.finance.domain.cardBill
 import com.example.normpix.finance.domain.forecastLimit
+import com.example.normpix.finance.domain.payeeKey
 import com.example.normpix.finance.domain.suggestRepeats
 import java.time.LocalDate
 
@@ -64,5 +65,6 @@ suspend fun FinanceRepository.repeatSuggestions(today: LocalDate): List<RepeatSu
         rules = recurringRules(),
         dismissed = dismissedRepeatPayees(),
         today = today,
+        loanPayees = accounts().filter { it.isLoan }.mapNotNull { payeeKey(it.name) }.toSet(),
     )
 }
