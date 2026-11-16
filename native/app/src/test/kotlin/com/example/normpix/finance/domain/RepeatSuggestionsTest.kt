@@ -215,6 +215,15 @@ class RepeatSuggestionsTest {
     }
 
     @Test
+    fun `a loan's EMI interest is not offered, since the loan's page records its EMIs`() {
+        // An EMI's interest is an expense paid to the loan's name, a little less each month.
+        val interest = (0 until 5).map { i -> payment("HDFC Home Loan", 7_400_00L - i * 4_000L, today.minusDays(9 + 30L * (4 - i))) }
+        assertEquals(1, suggestRepeats(interest, emptyList(), emptySet(), today).size)
+        assertTrue(suggestRepeats(interest, emptyList(), emptySet(), today, loanPayees = setOf("hdfc home loan")).isEmpty())
+        assertEquals(1, suggestRepeats(interest, emptyList(), emptySet(), today, loanPayees = setOf("car loan")).size)
+    }
+
+    @Test
     fun `no payee, no suggestion`() {
         val blank = rhythm("x", 64_900, 30, 4, 10).map { payment(null, it.amount, it.occurredAt.toLocalDate()) }
         assertTrue(suggest(blank).isEmpty())

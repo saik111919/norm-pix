@@ -464,6 +464,9 @@ class DummyData private constructor(
                     .map { if (it.type == TransactionType.Expense) it.copy(tagIds = setOf(taxDeductible)) else it }
             }
             repo.saveTransactions(transactions)
+            // From the next one on, the loan's EMIs are recorded each month from HDFC Savings, so its page shows the switch on and
+            // Plans > Recurring, the Forecast and the Bills calendar have the EMI in them.
+            repo.startLoanEmis(homeLoan, bank)
             // One supermarket bill shared out between two categories, so Activity shows a split payment: a row for each part, marked
             // Split, and the details of either showing the whole bill (in memory only, like the rest). Two days ago, from HDFC Savings.
             repo.saveSplit(

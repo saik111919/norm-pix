@@ -233,6 +233,53 @@ class FinanceActions(
         }
     }
 
+    /**
+     * Turns on recording the loan [loan]'s EMIs each month ([AutoEmiSheet]: which account pays them, and when the first is), starting
+     * from the account the last EMI came from, as Record EMI does.
+     */
+    fun startLoanEmis(loan: Account) {
+        scope.launch {
+            val last = try {
+                finance.repository.lastLoanPayment(loan.id!!, state.asOf ?: settledCutoff(LocalDateTime.now()))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+            val started = overlays.sheet<Boolean> { dismiss -> AutoEmiSheet(loan, last, onDone = dismiss) }
+            if (started == true) snackbars.show("${loan.name}'s EMIs are recorded each month")
+        }
+    }
+
+    /**
+     * Turns recording the loan [loan]'s EMIs each month off: the repeating payment that did it is deleted - what it recorded stays - with
+     * Undo for a few seconds. Its reminders go once the Undo is let go.
+     */
+    fun stopLoanEmis(loan: Account) {
+        scope.launch {
+            try {
+                var stopped: RecurringRule? = null
+                val undo = finance.undoable {
+                    stopped = stopLoanEmis(loan.id!!)
+                    emptyList()
+                }
+                haptics.selection()
+                val ruleId = stopped?.id
+                snackbars.offerUndo(
+                    "${loan.name}'s EMIs are no longer recorded each month",
+                    finance,
+                    undo,
+                    scope,
+                    onSettled = { if (ruleId != null) reminders?.forget(ruleId) },
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                snackbars.show("Couldn't change that. Your other data is unchanged.", SnackbarKind.Error)
+            }
+        }
+    }
+
     fun editTransaction(transaction: FinanceTransaction) {
         scope.launch {
             overlays.sheet<Boolean> { dismiss -> WithReminders { TransactionEditorSheet(transaction.type, existingId = transaction.id, onDone = dismiss) } }

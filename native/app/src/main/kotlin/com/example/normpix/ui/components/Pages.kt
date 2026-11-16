@@ -42,10 +42,12 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -467,15 +469,20 @@ private const val TITLE_HOLD = 0.35f
  */
 @Composable
 private fun PageTitle(title: String, gone: Boolean, display: Boolean, collapse: () -> Float) {
-    Text(
+    val ink = LocalContentColor.current
+    // The fade is the text's own colour, read as it is drawn - no layer of its own (2026-11-16). In a graphicsLayer, on a pushed page
+    // whose content arrives after its first frame (Notifications, Forecast, the Bills calendar, a loan's page), the title was missing
+    // on the emulator until the page was scrolled: the layer kept a picture of it from before it was drawn. Drawn straight into the
+    // page, as every other heading is, it is there from the first frame.
+    BasicText(
         title,
-        style = if (display) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium,
-        fontWeight = FontWeight.SemiBold,
+        style = (if (display) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium)
+            .copy(fontWeight = FontWeight.SemiBold),
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
+        color = { ink.copy(alpha = ink.alpha * (1f - collapse() * 1.8f).coerceIn(0f, 1f)) },
         modifier = Modifier
             .fillMaxWidth()
-            .graphicsLayer { alpha = (1f - collapse() * 1.8f).coerceAtLeast(0f) }
             .padding(horizontal = AppSpacing.xl, vertical = AppSpacing.sm)
             // Spoken once: by this while it is on the page, by the one in the controls' row once it is gone.
             .then(if (gone) Modifier.clearAndSetSemantics {} else Modifier.semantics { heading() }),

@@ -87,7 +87,8 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
   grouped by `payeeKey` (trimmed, lower case, spaces collapsed); a group qualifies when going back from the newest payment the gaps fit one frequency
   (weekly 6-8 days, monthly 26-35, yearly 350-380) for at least 3 payments in the last 13 months (the run is cut back from its oldest end while
   the amounts are not all within 20% of the median, or a gap breaks it), the newest is at most 1.5 periods old (10 / 45 / 547 days), no *active*
-  rule has that payee and the user has not dismissed it. **Deviation from the brief: a yearly pattern needs only 2 payments** (looked for over
+  rule has that payee, the user has not dismissed it, and **the payee is not a loan's name** (`loanPayees`, 2026-11-16: an EMI's interest is an expense paid
+  to the loan every month and was offered, so adding it would have counted the interest twice; `repeatSuggestions` passes every `isLoan` account's name). **Deviation from the brief: a yearly pattern needs only 2 payments** (looked for over
   36 months) - three would take two years and a 13-month window can hold two at most, so it could never be offered. The dearest a year first,
   at most 3 shown. Cards under the banner: **Add** opens `RecurringEditorSheet(suggestion = ...)` filled in (payee, amount, frequency, account and
   category of the newest payment, first payment on the day expected, or the next one after it when that has gone by - never a past day, which
@@ -230,10 +231,32 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
   months with no interest is 12 x Rs 83.33 and 4 paise short); an EMI below the first month's interest, or one that takes over 600 months, is refused.
   **The loan's page** (the account's own page, `AccountHistoryPage`, `LoanPanel` above its history): the two-panel banner **Still to pay** (what the
   balance says, as of today, turned round) / **Months left** with the payoff month, rows EMI, Interest a year, Interest still to pay and **Next EMI** (principal +
-  interest, its day), **Record EMI**, the line "Record each EMI here when it's paid." and the **Schedule** (six months, "Show all" on its heading). The next EMI's
-  day (`nextEmiIndex`): with none recorded the first on or after today; once one is, the one after the day it is *nearest to* (paid up to half a month early or
-  late covers that day), counted from the latest transfer onto the loan (`lastLoanPayment`). **No automatic EMI**: a repeating payment makes one entry and an EMI
-  is two, so nothing is recorded by itself and no recurring rule is made. **Record EMI** (`RecordEmiSheet`, also in the account's actions sheet): paid from the
+  interest, its day), the **Record EMIs automatically** switch, **Record EMI** with a line under it, and the **Schedule** (six months, "Show all" on its
+  heading). The next EMI's day (`nextEmiIndex`): with none recorded the first on or after today; once one is, the one after the day it is *nearest to* (paid up
+  to half a month early or late covers that day), counted from the latest transfer onto the loan (`lastLoanPayment`). **EMIs recorded each month** (2026-11-16,
+  Phase 74; owner: "If I entered EMI amount it can be given on monthly based amount right think about this"; no database or backup change): a **repeating
+  payment** - a monthly **Transfer of the EMI** from the paying account onto the loan at 09:00, payee the loan's name, note "EMI" (`emiRule`), from the next EMI
+  on or after today (`firstAutoEmiIndex`: EMIs missed before today are never back-filled) to the schedule's payoff day (`endDate`) - so Plans > Recurring lists
+  it, and the Forecast and the Bills calendar count it as money out with no change of theirs. **`processRecurring` treats a due Transfer rule onto a loan
+  (`recordsEmiOf`) as an EMI** (`FinanceRepository.recordDueEmis`): each due date is **split by what is owed just before it** (`emiSplit`: a month's interest on
+  it, the rest principal; the month that pays it off pays exactly what is left and its interest; a payment below the interest is all interest) into the same two
+  entries Record EMI makes (`loanEmiEntries`), both carrying the rule's `recurring_id`; the interest's category is `emiInterestCategoryOrFallback` (Loans & EMI,
+  else Other, else the first expense category; with none at all the EMI waits, the rule left due on it). **One recorded by hand is not recorded again**: a transfer
+  onto the loan whose note starts "EMI " (Record EMI's) not made by the rule, within half a month of the day (`emiCovered`: -14..+15 days, a tie going to the
+  earlier EMI as `nextEmiIndex` reads it), consumes that occurrence; a plain transfer onto the loan (a part payment) does not. **Once nothing is owed** the rule's
+  `end_date` is set to just before that occurrence (so `isFinished`) and nothing more is recorded. A `FinanceValidationException` from one EMI is caught and that
+  date passed over, so one bad EMI can never stop every other repeating payment. **Turning it on**: the page's switch opens `AutoEmiSheet` (Paid from = the last
+  EMI's account, else the default; "The first is recorded on ..."; **Turn on** -> `FinanceController.startLoanEmis` = `startLoanEmis` + `processRecurring`); it
+  is refused for an account that isn't a loan, nothing owed and paying from the loan, and a second turn-on gives back the rule there is. **A new loan** made in
+  the account form has **"Record each EMI automatically"** (on by default, paid from the default account or the first other active account; hidden when there is
+  none) and the form starts the rule after saving (a refusal is swallowed: the page offers the switch). **Turning it off** (`stopLoanEmis`) deletes the rule
+  (what it recorded stays, as with any rule) with Undo (`undoable` + `offerUndo`); reminders follow once settled. **A new EMI** saved on the loan
+  (`saveAccount` -> `followNewEmi`) changes the rule's amount when it was the old EMI (an amount set by hand on the rule stays) and takes its end off (it ends when
+  nothing is owed). `emiRuleOf(loanId)` = the active, unfinished transfer rule onto it (a paused one counts as off). On, the switch says
+  "₹X from <account> each month, next on <day>. Each is split into principal and interest." and the line under Record EMI says it is for one paid another way
+  or a payment on top; off, "Record each EMI here when it's paid, or turn on Record EMIs automatically." The sample data's home loan has it on from HDFC
+  Savings (`DummyData`: `repo.startLoanEmis` after its EMIs so far). Tests: `LoanAutoEmiTest` (repository), `LoansTest` (the pure parts), `LoanUiTest` (page,
+  sheet, form). **Record EMI** (`RecordEmiSheet`, also in the account's actions sheet): paid from the
   account the last EMI came from, else the default account; the day (today); the principal and the interest, filled from the schedule, both editable (a line
   says how the total stands against the EMI); the interest's category, **Loans & EMI** when the user still has it (no "interest" sub-category exists in
   `CategorySuggestions`; asked only while the interest is above zero). "The principal lowers what you owe; the interest is spending." **Two entries in ONE SQL
@@ -872,7 +895,9 @@ opens `https://github.com/<BuildConfig.UPDATE_REPOSITORY>` in the browser with `
 the row; the same constant the updater reads, pinned by `AboutPageTest`; Android opens the page, NormPix connects to nothing new; found by
 searching "github", "source code", "repository" or "releases"), credits. The
 pill opens `GuideIndexPage` (route `guide`, `SettingsDetail.GuideIndex` in the tablet panes, `openGuideIndex()`): a card per topic (`GuideTopic`:
-AddTransaction, ShareReceipt, Home, Activity, Plans, Insights, Wallet, CardExchange, Widgets, LookAndFeel, Backup, Privacy), each opening its
+**WhatsNew** first (2026-11-16, owner: "update the user guide and How user can access new features": the newest features, each tip naming the path to it -
+keep it current when a feature ships; drawn art, no screenshot), AddTransaction, ShareReceipt, Home, Notifications, Activity, Plans, Insights, Wallet,
+CardExchange, Widgets, LookAndFeel, Backup, Privacy), each opening its
 page; a topic's Back goes to the guide, the guide's to About. Topics are data (checked by `GuideTopicTest`). Pictures (`GuideArt`) are **real
 screenshots of the app** (`GuideShots`, `assets/guide/<topic>-<light|dark>.webp`, 480 x 527, ~16 kB each, ~340 kB in all, the dark one in
 a dark theme) shown as a phone's screen rising out of the topic's colour; made from the real screens on the sample data in the Volt accent by

@@ -5,6 +5,7 @@ import java.math.MathContext
 import java.math.RoundingMode
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
@@ -306,3 +307,100 @@ fun emiInterestCategory(categories: List<Category>): Category? =
     categories.firstOrNull {
         it.type == CategoryType.Expense && it.parentId == null && !it.archived && it.name.trim().equals(LOANS_CATEGORY, ignoreCase = true)
     }
+
+// ------------------------------------------------------------------------------------------------ EMIs recorded each month
+
+/*
+ * EMIs recorded each month (owner, 2026-11-16: "If I entered EMI amount it can be given on monthly based amount right"): a loan's
+ * EMI can be recorded on its own day without Record EMI. It is a repeating payment - a monthly transfer of the EMI from the paying
+ * account onto the loan ([emiRule]) - so Plans > Recurring lists it, the Forecast and the Bills calendar count it as money going out,
+ * and it can be paused like any other. When one falls due it is not recorded as one transfer: it is split as Record EMI splits it
+ * ([emiSplit], from what is owed that day), the principal a transfer onto the loan and the interest an expense, both marked as the
+ * repeating payment's. An EMI already recorded by hand is not recorded again ([emiCovered]), and once nothing is owed it ends.
+ */
+
+/** How one payment onto a loan splits: [principal] lowers what is owed, [interest] is spending. */
+data class EmiSplit(val principal: Long, val interest: Long) {
+    val total: Long get() = principal + interest
+}
+
+/**
+ * How a payment of [payment] splits when [owed] is still owed at [rateBp] a year: a month's interest on what is owed ([interestOn]) and
+ * the rest principal - or, in the month that pays the loan off (what is owed and its interest come to no more than the payment and 5%
+ * over, as in [loanSchedule]), exactly what is left and its interest. A payment that does not cover the month's interest is all interest.
+ * Null once nothing is owed, or for no payment.
+ */
+fun emiSplit(owed: Long, rateBp: Int, payment: Long): EmiSplit? {
+    if (owed <= 0 || payment <= 0) return null
+    val interest = interestOn(owed, rateBp)
+    if (owed + interest <= payment + slack(payment)) return EmiSplit(owed, interest)
+    if (payment <= interest) return EmiSplit(0, payment)
+    return EmiSplit(payment - interest, interest)
+}
+
+/** What a note of an EMI's entries starts with ([loanEmiNote]): how a payment onto a loan made with Record EMI is known as an EMI. */
+const val EMI_NOTE_PREFIX = "EMI "
+
+/** The time of day an EMI recorded each month is dated at. */
+val EMI_TIME: LocalTime = LocalTime.of(9, 0)
+
+/** Whether this repeating payment records the EMIs of one of [loanIds]: a transfer onto it. */
+fun RecurringRule.recordsEmiOf(loanIds: Set<Long>): Boolean =
+    type == TransactionType.Transfer && toAccountId != null && toAccountId in loanIds
+
+/**
+ * Whether an EMI paid by hand on [paid] already covers the EMI due on [due]: [due] is the EMI day nearest to it - within half a month,
+ * the earlier of two equally near ([nextEmiIndex] reads a payment the same way), so paying a few days early or late is that month's EMI.
+ */
+fun emiCovered(due: LocalDate, paid: LocalDate): Boolean = ChronoUnit.DAYS.between(due, paid) in (1 - HALF_MONTH_DAYS)..HALF_MONTH_DAYS
+
+/**
+ * Which EMI (counting from 0 at [LoanTerms.start]) the first one recorded each month would be when it is turned on [today]: the next to
+ * pay ([nextEmiIndex] after the [lastPaid] day), or - when EMIs before today were never recorded - the first on or after today. Ones
+ * already missed are not recorded all at once; Record EMI is there for them.
+ */
+fun firstAutoEmiIndex(terms: LoanTerms, lastPaid: LocalDate?, today: LocalDate): Int {
+    var index = nextEmiIndex(terms, lastPaid, today)
+    while (terms.dateOf(index).isBefore(today)) index++
+    return index
+}
+
+/**
+ * The repeating payment that records [loan]'s EMIs from [fromAccountId]: a monthly transfer of the EMI onto the loan at [EMI_TIME], the
+ * first on the day of EMI number [firstIndex] ([firstAutoEmiIndex]) and the last on [lastDay] - the day the schedule pays it off, or
+ * none when the EMI can never pay it off (it then ends when nothing is owed). Its payee is the loan's name and its note "EMI".
+ */
+fun emiRule(loan: Account, fromAccountId: Long, firstIndex: Int, lastDay: LocalDate?, now: LocalDateTime): RecurringRule {
+    val terms = requireNotNull(loan.loan) { "Only a loan has EMIs." }
+    val loanId = requireNotNull(loan.id) { "The loan is saved first." }
+    val first = terms.dateOf(firstIndex).atTime(EMI_TIME)
+    return RecurringRule(
+        type = TransactionType.Transfer,
+        amount = terms.emi,
+        accountId = fromAccountId,
+        toAccountId = loanId,
+        payee = loan.name,
+        note = "EMI",
+        frequency = RecurrenceFrequency.Monthly,
+        interval = 1,
+        startDate = first,
+        endDate = lastDay?.let { day -> maxOf(day, first.toLocalDate()).atTime(LocalTime.MAX.withNano(0)) },
+        nextDate = first,
+        active = true,
+        createdAt = now,
+        updatedAt = now,
+    )
+}
+
+/**
+ * The expense category an EMI recorded each month files its interest under: [emiInterestCategory], else an expense category called
+ * Other, else the first expense category there is - an EMI's interest is never left unrecorded because Loans & EMI was deleted. Null
+ * only when there is no expense category at all.
+ */
+fun emiInterestCategoryOrFallback(categories: List<Category>): Category? {
+    val expenses = categories.filter { it.type == CategoryType.Expense && !it.archived }
+    return emiInterestCategory(categories)
+        ?: expenses.firstOrNull { it.parentId == null && it.name.trim().equals("Other", ignoreCase = true) }
+        ?: expenses.firstOrNull { it.parentId == null }
+        ?: expenses.firstOrNull()
+}

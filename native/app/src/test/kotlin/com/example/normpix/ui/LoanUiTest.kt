@@ -6,6 +6,8 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -13,6 +15,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
@@ -28,6 +31,7 @@ import com.example.normpix.finance.domain.loanOutlook
 import com.example.normpix.finance.domain.nextEmiIndex
 import com.example.normpix.finance.ui.AccountFormSheet
 import com.example.normpix.finance.ui.AccountHistoryPage
+import com.example.normpix.finance.ui.AutoEmiSheet
 import com.example.normpix.finance.ui.RecordEmiSheet
 import com.example.normpix.finance.ui.SCHEDULE_PREVIEW
 import com.example.normpix.finance.ui.monthYear
@@ -426,7 +430,117 @@ class LoanUiTest {
         val loan = homeLoan()
         showPage(loan.id!!)
         compose.onNodeWithText("Record EMI").assertIsDisplayed()
-        compose.onNodeWithText("Record each EMI here when it's paid.").assertIsDisplayed()
+        compose.onNodeWithText("Record each EMI here when it's paid, or turn on Record EMIs automatically.").assertIsDisplayed()
+        compose.onNodeWithText("Record EMIs automatically").assertIsOff()
+    }
+
+    // ================================================================================== EMIs recorded each month
+
+    @Test
+    fun `with EMIs recorded each month the page says from where and when the next is, and Record EMI is for the others`() {
+        val loan = homeLoan()
+        val from = bank()
+        val rule = runBlocking { finance.startLoanEmis(loan.id!!, from.id!!) }
+        showPage(loan.id!!)
+
+        compose.onNodeWithText("Record EMIs automatically").assertIsOn()
+        compose.onNodeWithText("₹8,997.26 from HDFC Savings each month, next on", substring = true).assertExists()
+        assertEquals(terms.start.atTime(9, 0), rule.nextDate, "the first EMI's day")
+        compose.onNodeWithText(
+            "Record EMI is for one paid another way, or a payment on top. An EMI you record here isn't recorded again.",
+        ).assertExists()
+    }
+
+    @Test
+    fun `turning the switch off stops recording the EMIs each month`() {
+        val loan = homeLoan()
+        val from = bank()
+        runBlocking { finance.startLoanEmis(loan.id!!, from.id!!) }
+        showPage(loan.id!!)
+
+        compose.onNodeWithText("Record EMIs automatically").performScrollTo().performClick()
+        compose.waitUntil(10_000) {
+            compose.waitForIdle()
+            runBlocking { finance.repository.emiRuleOf(loan.id!!) } == null
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText("Record EMIs automatically").assertIsOff()
+        assertTrue(runBlocking { finance.repository.recurringRules() }.isEmpty())
+    }
+
+    private fun showAutoSheet(loan: Account, last: FinanceTransaction? = null, onDone: (Boolean?) -> Unit = {}) {
+        compose.setContent { env.Content { AutoEmiSheet(loan, last, onDone) } }
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun `turning it on asks which account pays, says when the first is, and makes the repeating payment`() {
+        val loan = homeLoan()
+        bank()
+        val other = saveAccount("SBI Savings", AccountKind.Bank, opening = 1_000_000L)
+        runBlocking { finance.setDefaultAccountId(other.id) }
+        var done: Boolean? = null
+        showAutoSheet(loan) { done = it }
+
+        compose.onNodeWithText("Record EMIs automatically").assertIsDisplayed()
+        compose.onNodeWithText("Paid from").assertExists()
+        compose.onNodeWithText("SBI Savings").assertIsDisplayed()
+        compose.onNodeWithText("The first is recorded on", substring = true).assertExists()
+        compose.onNodeWithText("Turn on").performClick()
+        compose.waitUntil(10_000) { done != null }
+
+        assertEquals(true, done)
+        val rule = assertNotNull(runBlocking { finance.repository.emiRuleOf(loan.id!!) })
+        assertEquals(other.id, rule.accountId, "paid from the default account")
+        assertEquals(TransactionType.Transfer, rule.type)
+        assertEquals(loan.id, rule.toAccountId)
+        assertEquals(899_726L, rule.amount)
+    }
+
+    @Test
+    fun `a new loan records its EMIs each month from the default account`() {
+        var saved: Account? = null
+        showForm(null) { saved = it }
+        compose.onNodeWithText("Name").performTextInput("Home loan")
+        chooseType("Loan")
+        compose.onNodeWithText("Amount borrowed").performTextInput("1000000")
+        compose.onNodeWithText("Interest a year").performTextInput("9")
+        compose.onNodeWithText("EMI a month").performTextInput("8997.26")
+        compose.waitForIdle()
+        compose.onNodeWithText("Record each EMI automatically").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("From Cash on each EMI's day", substring = true).assertExists()
+
+        slideToSaveNewAccount()
+        compose.waitUntil(10_000) { saved != null }
+        compose.waitUntil(10_000) {
+            compose.waitForIdle()
+            runBlocking { finance.repository.emiRuleOf(saved!!.id!!) } != null
+        }
+        val rule = runBlocking { finance.repository.emiRuleOf(saved!!.id!!) }!!
+        assertEquals(accounts().first { it.name == "Cash" }.id, rule.accountId)
+        assertEquals(899_726L, rule.amount)
+        assertEquals(LocalDate.now().plusMonths(1).atTime(9, 0), rule.nextDate, "from the first EMI")
+    }
+
+    @Test
+    fun `a new loan with the switch turned off records nothing by itself`() {
+        var saved: Account? = null
+        showForm(null) { saved = it }
+        compose.onNodeWithText("Name").performTextInput("Home loan")
+        chooseType("Loan")
+        compose.onNodeWithText("Amount borrowed").performTextInput("1000000")
+        compose.onNodeWithText("Interest a year").performTextInput("9")
+        compose.onNodeWithText("EMI a month").performTextInput("8997.26")
+        compose.waitForIdle()
+        compose.onNodeWithText("Record each EMI automatically").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Record each EMI yourself on the loan's page.").assertExists()
+
+        slideToSaveNewAccount()
+        compose.waitUntil(10_000) { saved != null }
+        compose.waitForIdle()
+        assertNull(runBlocking { finance.repository.emiRuleOf(saved!!.id!!) })
+        assertTrue(runBlocking { finance.repository.recurringRules() }.isEmpty())
     }
 
     @Test

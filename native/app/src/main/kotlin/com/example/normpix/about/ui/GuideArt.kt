@@ -25,7 +25,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.CallReceived
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.RequestQuote
+import androidx.compose.material.icons.outlined.Savings
+import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FolderZip
 import androidx.compose.material.icons.outlined.Lock
@@ -176,6 +181,7 @@ internal fun GuideArt(topic: GuideTopic, modifier: Modifier = Modifier, shape: S
                     .graphicsLayer(scaleX = scale, scaleY = scale),
             ) {
                 when (topic) {
+                    GuideTopic.WhatsNew -> WhatsNewArt()
                     GuideTopic.AddTransaction -> AddTransactionArt()
                     GuideTopic.ShareReceipt -> ShareReceiptArt()
                     GuideTopic.Home -> HomeArt()
@@ -458,6 +464,44 @@ private fun BoxScope.ActivityArt() {
             RoundIcon(Icons.Outlined.DeleteOutline, scheme.errorContainer, scheme.onErrorContainer)
         }
         TxnRow(hue = 5, amount = 36.dp)
+    }
+}
+
+@Composable
+private fun BoxScope.WhatsNewArt() {
+    val scheme = MaterialTheme.colorScheme
+    MockScreen {
+        // A heading with a sparkle, then four of the new things as tiles: the calendar, goals, a loan and tags.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+            RoundIcon(Icons.Outlined.AutoAwesome, paletteColor(2).accent, paletteColor(2).onContainer, size = 24.dp)
+            Bar(64.dp, 11.dp, strong = true)
+        }
+        // Icons with a Lucide twin each (LucideIconsTest), so the picture follows the Interface icons choice.
+        val tiles = listOf(
+            Icons.Outlined.CalendarMonth to 4,
+            Icons.Outlined.Savings to 6,
+            Icons.Outlined.RequestQuote to 1,
+            Icons.AutoMirrored.Outlined.Label to 3,
+        )
+        for (row in tiles.chunked(2)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+                for ((icon, hue) in row) {
+                    val tone = paletteColor(hue)
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .background(tone.container.copy(alpha = 0.6f), AppRadius.rMd)
+                            .padding(9.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        RoundIcon(icon, tone.accent, tone.onContainer, size = 20.dp)
+                        Bar(44.dp, 7.dp, strong = true)
+                        Bar(30.dp, 5.dp)
+                    }
+                }
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(8.dp).background(scheme.onSurface.copy(alpha = 0.08f), CircleShape))
     }
 }
 

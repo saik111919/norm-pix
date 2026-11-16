@@ -21,9 +21,9 @@ When a fact drifts: fix the prose that mentions it **first**, then change the va
 nothing needed changing.
 
 <!-- facts:begin -->
-verified_commit=0a0dded6
+verified_commit=73dd8cf2
 verified_date=2026-11-16
-versionName=1.5.0
+versionName=1.6.0
 finance_db_version=17
 reminders_db_version=2
 finance_backup_format=7
@@ -38,7 +38,7 @@ compose_bom=2026.09.00
 gradle=9.3.1
 robolectric=4.17
 launcher_icon_aliases=10
-guide_topics=13
+guide_topics=14
 <!-- facts:end -->
 
 Identifiers the skill names (each must still exist somewhere under `native/app`):

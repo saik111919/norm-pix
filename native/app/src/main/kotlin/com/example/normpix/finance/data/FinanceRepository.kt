@@ -65,6 +65,14 @@ import com.example.normpix.finance.domain.fault
 import com.example.normpix.finance.domain.joinedSplitNotes
 import com.example.normpix.finance.domain.largestPartCategory
 import com.example.normpix.finance.domain.loanEmiEntries
+import com.example.normpix.finance.domain.EMI_NOTE_PREFIX
+import com.example.normpix.finance.domain.emiCovered
+import com.example.normpix.finance.domain.emiInterestCategoryOrFallback
+import com.example.normpix.finance.domain.emiRule
+import com.example.normpix.finance.domain.emiSplit
+import com.example.normpix.finance.domain.firstAutoEmiIndex
+import com.example.normpix.finance.domain.loanOutlook
+import com.example.normpix.finance.domain.recordsEmiOf
 import com.example.normpix.finance.domain.nextRecurrence
 import com.example.normpix.finance.domain.resolveBudgets
 import com.example.normpix.finance.domain.settledBy
@@ -145,6 +153,9 @@ class BudgetHistoryEntry(val overview: BudgetOverview) {
     val month: MonthKey get() = overview.month
     val status: BudgetStatus get() = overview.headline!!
 }
+
+/** How far either side of an EMI's day a payment made by hand is looked for: wide enough for [emiCovered]'s half a month. */
+private const val HAND_PAID_WINDOW_DAYS = 16L
 
 /**
  * The single gateway to finance data. Every write is validated here (with the
@@ -292,9 +303,33 @@ class FinanceRepository(
             val id = insertOrThrow(FinanceDatabase.ACCOUNTS, null, FinanceRows.account(toSave))
             toSave.copy(id = id)
         } else {
+            val before = readAccount(account.id)
             update(FinanceDatabase.ACCOUNTS, FinanceRows.account(toSave), "id = ?", arrayOf(account.id.toString()))
+            followNewEmi(before?.loan?.emi, toSave)
             toSave
         }
+    }
+
+    /**
+     * A loan whose EMI was [oldEmi] and is now [loan]'s: the repeating payment recording its EMIs each month pays the new one from now on
+     * - when it was paying the old one (an amount the user set by hand on the repeating payment is theirs and stays). Its end is taken off,
+     * as the new EMI pays the loan off on another day; it ends when nothing is owed ([recordDueEmis]).
+     */
+    private fun SupportSQLiteDatabase.followNewEmi(oldEmi: Long?, loan: Account) {
+        val newEmi = loan.loan?.emi ?: return
+        if (oldEmi == null || oldEmi == newEmi) return
+        val rule = activeEmiRule(loan.id ?: return) ?: return
+        if (rule.amount != oldEmi) return
+        update(
+            FinanceDatabase.RECURRING_RULES,
+            ContentValues().apply {
+                put("amount", newEmi)
+                putNull("end_date")
+                put("updated_at", clock().toStorage())
+            },
+            "id = ?",
+            arrayOf(rule.id.toString()),
+        )
     }
 
     suspend fun setAccountArchived(id: Long, archived: Boolean) = io {
@@ -1903,7 +1938,14 @@ class FinanceRepository(
                 null,
                 null,
             ).map(FinanceRows::toRecurring)
+            // A repeating transfer onto a loan records EMIs: each is split into principal and interest (see recordDueEmis).
+            val loans = if (due.any { it.type == TransactionType.Transfer && it.toAccountId != null }) readLoans() else emptyMap()
             for (rule in due) {
+                val loan = rule.toAccountId?.let { loans[it] }
+                if (loan != null && rule.recordsEmiOf(loans.keys)) {
+                    created += recordDueEmis(rule, loan, now)
+                    continue
+                }
                 val result = dueOccurrences(rule, now)
                 for (date in result.dates) {
                     insertOrThrow(
@@ -1941,6 +1983,167 @@ class FinanceRepository(
         }
         created
     }
+
+    // ---------------------------------------------------------------- EMIs recorded each month
+
+    /** Every account that is a loan (has terms), by id. */
+    private fun SupportSQLiteDatabase.readLoans(): Map<Long, Account> =
+        query(FinanceDatabase.ACCOUNTS, null, "loan_principal IS NOT NULL", null, null, null, null)
+            .map(FinanceRows::toAccount)
+            .filter { it.id != null && it.loan != null }
+            .associateBy { it.id!! }
+
+    /** [account]'s balance from its starting balance and everything dated before [before]. */
+    private fun SupportSQLiteDatabase.balanceBefore(account: Account, before: LocalDateTime): Long {
+        val id = account.id ?: return account.openingBalance
+        val at = before.toStorage()
+        var income = 0L
+        var expense = 0L
+        var transferOut = 0L
+        rawQuery(
+            "SELECT type, SUM(amount) AS total FROM ${FinanceDatabase.TRANSACTIONS} WHERE account_id = $id AND occurred_at < $at GROUP BY type",
+            null,
+        ).map { it.string("type") to it.long("total") }.forEach { (type, total) ->
+            when (type) {
+                "income" -> income = total
+                "expense" -> expense = total
+                "transfer" -> transferOut = total
+            }
+        }
+        val transferIn = rawQuery(
+            "SELECT COALESCE(SUM(amount), 0) AS total FROM ${FinanceDatabase.TRANSACTIONS} " +
+                "WHERE type = 'transfer' AND to_account_id = $id AND occurred_at < $at",
+            null,
+        ).map { it.long("total") }.firstOrNull() ?: 0L
+        return accountBalance(account.openingBalance, AccountFlows(income = income, expense = expense, transferIn = transferIn, transferOut = transferOut))
+    }
+
+    /**
+     * The days EMIs were paid onto [loanId] by hand - with Record EMI, whose notes start "EMI " - from [from] up to (not including) [to],
+     * leaving out what [ruleId] recorded itself.
+     */
+    private fun SupportSQLiteDatabase.handPaidEmiDays(loanId: Long, ruleId: Long?, from: LocalDateTime, to: LocalDateTime): List<LocalDate> =
+        rawQuery(
+            "SELECT occurred_at FROM ${FinanceDatabase.TRANSACTIONS} WHERE type = 'transfer' AND to_account_id = $loanId " +
+                "AND note LIKE ? AND (recurring_id IS NULL OR recurring_id != ${ruleId ?: -1L}) " +
+                "AND occurred_at >= ${from.toStorage()} AND occurred_at < ${to.toStorage()}",
+            arrayOf("$EMI_NOTE_PREFIX%"),
+        ).map { it.long("occurred_at").toLocalDateTime().toLocalDate() }
+
+    /**
+     * Records every due EMI of the repeating payment [rule] onto [loan], inside [processRecurring]'s transaction, and moves the rule on.
+     * Each EMI is split by what is owed just before it ([emiSplit]): the principal a transfer onto the loan, the interest an expense in
+     * [emiInterestCategoryOrFallback] paid to the loan, both marked as the rule's and noted as Record EMI notes them. An EMI that one
+     * paid by hand already covers ([emiCovered]) is passed over. Once nothing is owed the rule ends there: its end is set just before
+     * that day, so it is finished, and nothing more is recorded. With no expense category at all, an EMI with interest waits (the rule
+     * stays due on it) rather than be recorded wrong. Gives back how many entries it made.
+     */
+    private fun SupportSQLiteDatabase.recordDueEmis(rule: RecurringRule, loan: Account, now: LocalDateTime): Int {
+        val terms = loan.loan ?: return 0
+        val loanId = loan.id ?: return 0
+        val result = dueOccurrences(rule, now)
+        var created = 0
+        var next = result.nextDate
+        var endAt: LocalDateTime? = null
+        val category by lazy {
+            emiInterestCategoryOrFallback(query(FinanceDatabase.CATEGORIES, null, null, null, null, null, "id ASC").map(FinanceRows::toCategory))
+        }
+        for (date in result.dates) {
+            val owed = (-balanceBefore(loan, date)).coerceAtLeast(0L)
+            val split = emiSplit(owed, terms.rateBp, rule.amount)
+            if (split == null) {
+                // Paid off: the rule ends before this day, and this and the later ones are never recorded.
+                next = date
+                endAt = date.minusMinutes(1)
+                break
+            }
+            val day = date.toLocalDate()
+            val window = handPaidEmiDays(loanId, rule.id, day.minusDays(HAND_PAID_WINDOW_DAYS).atStartOfDay(), day.plusDays(HAND_PAID_WINDOW_DAYS + 1).atStartOfDay())
+            if (window.any { emiCovered(day, it) }) continue
+            val interestCategoryId = if (split.interest > 0) category?.id else null
+            if (split.interest > 0 && interestCategoryId == null) {
+                next = date
+                break
+            }
+            // Nothing here can be refused (the rule is a transfer between two accounts and the parts are worked out above), but one
+            // EMI that somehow is must not stop every other repeating payment from being recorded: it is passed over.
+            val entries = try {
+                loanEmiEntries(LoanEmi(loanId, rule.accountId, date, split.principal, split.interest, interestCategoryId, loan.name), now)
+            } catch (_: FinanceValidationException) {
+                continue
+            }
+            for (entry in entries) {
+                insertOrThrow(FinanceDatabase.TRANSACTIONS, null, FinanceRows.transaction(entry.copy(recurringId = rule.id, updatedAt = now)))
+                created++
+            }
+        }
+        update(
+            FinanceDatabase.RECURRING_RULES,
+            ContentValues().apply {
+                put("next_date", next.toStorage())
+                endAt?.let { put("end_date", it.toStorage()) }
+                put("updated_at", now.toStorage())
+            },
+            "id = ?",
+            arrayOf(rule.id.toString()),
+        )
+        return created
+    }
+
+    /**
+     * The repeating payment that records [loanId]'s EMIs each month (an active transfer onto it that has not ended), or null when they
+     * are recorded by hand.
+     */
+    suspend fun emiRuleOf(loanId: Long): RecurringRule? = io { activeEmiRule(loanId) }
+
+    private fun SupportSQLiteDatabase.activeEmiRule(loanId: Long): RecurringRule? =
+        readRules().firstOrNull { it.type == TransactionType.Transfer && it.toAccountId == loanId && it.active && !it.isFinished }
+
+    /**
+     * Starts recording the EMIs of the loan [loanId] each month, paid from [fromAccountId] (see [emiRule]): from the next EMI on or after
+     * today ([firstAutoEmiIndex]) to the day the schedule pays the loan off, as of what is owed today. When they already are, the rule
+     * that does it is given back as it is. Refused for an account that isn't a loan, one with nothing owed, and paying from the loan.
+     */
+    suspend fun startLoanEmis(loanId: Long, fromAccountId: Long): RecurringRule = io {
+        val loan = readAccount(loanId) ?: throw FinanceConflictException("This loan no longer exists.")
+        val terms = loan.loan ?: throw FinanceValidationException("This account isn't a loan.")
+        activeEmiRule(loanId)?.let { return@io it }
+        if (fromAccountId == loanId) throw FinanceValidationException("Pay the EMI from another account.")
+        val now = clock()
+        val today = now.toLocalDate()
+        val cutoff = com.example.normpix.finance.domain.settledCutoff(now)
+        val owed = (-balanceBefore(loan, cutoff)).coerceAtLeast(0L)
+        if (owed <= 0) throw FinanceValidationException("Nothing is owed on this loan.")
+        val lastPaid = query(
+            FinanceDatabase.TRANSACTIONS,
+            arrayOf("occurred_at"),
+            "type = 'transfer' AND to_account_id = ? AND occurred_at < ${cutoff.toStorage()}",
+            arrayOf(loanId.toString()),
+            null,
+            null,
+            "occurred_at DESC",
+            "1",
+        ).map { it.long("occurred_at").toLocalDateTime().toLocalDate() }.firstOrNull()
+        val first = firstAutoEmiIndex(terms, lastPaid, today)
+        val lastDay = loanOutlook(terms, owed, first)?.payoff
+        val rule = emiRule(loan, fromAccountId, first, lastDay, now)
+        validateShape(rule.type, rule.amount, rule.accountId, rule.toAccountId, rule.categoryId)
+        rule.copy(id = insertOrThrow(FinanceDatabase.RECURRING_RULES, null, FinanceRows.recurring(rule)))
+    }
+
+    /**
+     * Stops recording [loanId]'s EMIs each month: the repeating payment that did it is deleted (what it recorded stays, as any repeating
+     * payment's does). Gives back the rule that was deleted, or null when there was none.
+     */
+    suspend fun stopLoanEmis(loanId: Long): RecurringRule? = io {
+        val rule = activeEmiRule(loanId) ?: return@io null
+        delete(FinanceDatabase.RECURRING_RULES, "id = ?", arrayOf(rule.id.toString()))
+        rule
+    }
+
+    private fun SupportSQLiteDatabase.readAccount(id: Long): Account? =
+        query(FinanceDatabase.ACCOUNTS, null, "id = ?", arrayOf(id.toString()), null, null, null)
+            .use { if (it.moveToFirst()) FinanceRows.toAccount(it) else null }
 
     // ---------------------------------------------------------------- check
 
