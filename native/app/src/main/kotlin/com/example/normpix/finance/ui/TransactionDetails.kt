@@ -1,9 +1,12 @@
 package com.example.normpix.finance.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -11,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.ContentCut
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
@@ -18,6 +22,8 @@ import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.NotificationAdd
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.ui.text.style.TextAlign
 import com.example.normpix.ui.components.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -48,7 +54,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class DetailAction { Edit, Remind, Delete, EditSplit, Unsplit }
+enum class DetailAction { Edit, Remind, Delete, EditSplit, Unsplit, AddAgain }
 
 /**
  * One transaction as a receipt - the badge, who it was with and the amount above a torn line, the details below it - with
@@ -118,18 +124,32 @@ fun TransactionDetailsSheet(
             TagChips(tags, onOpen = { tag -> tag.id?.let { id -> onTag?.invoke(id) } })
         }
         Spacer(Modifier.height(AppSpacing.lg))
-        Button(
-            // The options sheet opens over this one, so the receipt stays where it is behind it.
-            onClick = {
-                scope.launch {
-                    overlays.sheet<Boolean> { dismiss -> ShareReceiptSheet(onImage = picture, onShared = { dismiss(true) }) }
+        Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+            // "Add again" (2026-11-18): a new transaction like this one, dated now. Not for a split payment: its parts are one payment,
+            // which a copy as one entry would not be.
+            if (!isSplit) {
+                FilledTonalButton(
+                    onClick = { onAction(DetailAction.AddAgain) },
+                    modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                ) {
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(ButtonIconSize))
+                    Spacer(Modifier.width(AppSpacing.sm))
+                    Text("Add again", textAlign = TextAlign.Center, maxLines = 2)
                 }
-            },
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) {
-            Icon(Icons.Rounded.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(AppSpacing.sm))
-            Text("Share receipt")
+            }
+            Button(
+                // The options sheet opens over this one, so the receipt stays where it is behind it.
+                onClick = {
+                    scope.launch {
+                        overlays.sheet<Boolean> { dismiss -> ShareReceiptSheet(onImage = picture, onShared = { dismiss(true) }) }
+                    }
+                },
+                modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+            ) {
+                Icon(Icons.Rounded.Share, contentDescription = null, modifier = Modifier.size(ButtonIconSize))
+                Spacer(Modifier.width(AppSpacing.sm))
+                Text("Share receipt", textAlign = TextAlign.Center, maxLines = 2)
+            }
         }
         Spacer(Modifier.height(AppSpacing.sm))
         ConnectedButtonGroup(
@@ -155,6 +175,9 @@ fun TransactionDetailsSheet(
 
 /** The room round the receipt in the picture that is shared. */
 private val PICTURE_MARGIN = 24.dp
+
+/** The icon in the buttons under the receipt (Add again, Share receipt). */
+private val ButtonIconSize = 18.dp
 
 /** The signed amount at display size in the type's own color; shrinks rather than wraps for very large sums. */
 @Composable

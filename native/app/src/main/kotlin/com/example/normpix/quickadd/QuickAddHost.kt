@@ -1,19 +1,27 @@
 package com.example.normpix.quickadd
 
+import android.os.Build
+import android.view.Window
+import android.view.WindowManager
+import androidx.activity.compose.LocalActivity
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.normpix.AppContainer
 import com.example.normpix.finance.ui.FinanceActions
@@ -30,7 +38,11 @@ import com.example.normpix.ui.components.LocalOverlays
 import com.example.normpix.ui.components.LocalPageBehindToBlur
 import com.example.normpix.ui.components.LocalSnackbars
 import com.example.normpix.ui.components.SnackbarKind
+import com.example.normpix.ui.components.backdropBlurRadius
+import com.example.normpix.ui.components.rememberEasedBlur
+import com.example.normpix.ui.components.rememberWindowBlurAvailable
 import com.example.normpix.ui.theme.AppFont
+import com.example.normpix.ui.theme.AppFrostedTokens
 import com.example.normpix.ui.theme.Appearance
 import com.example.normpix.ui.theme.NormPixTheme
 import com.example.normpix.ui.theme.rememberCustomFontFiles
@@ -38,7 +50,9 @@ import com.example.normpix.wallet.CardsState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -97,13 +111,19 @@ fun QuickAddHost(container: AppContainer, requests: QuickAddRequests, onFinished
 
 @Composable
 private fun QuickAddFlow(container: AppContainer, requests: QuickAddRequests, onFinished: () -> Unit) {
-    // Over another app there is no NormPix page to blur: the sheets are solid (as with blur off), the other app dimmed behind them.
-    CompositionLocalProvider(LocalPageBehindToBlur provides false) { QuickAddEnvironment(container, requests, onFinished) }
+    // The app behind is blurred as a NormPix page is under a sheet (owner, 2026-11-18: "the same blur effect as sheet background"), by
+    // the system, behind this window (BlurAppBehind) - wherever the page in the app would be: Background blur on, Android 12+, and
+    // the phone blurring at all. Then the sheets are glass, as in the app; glass over the other app left sharp was unreadable
+    // (2026-11-16), which is why without the blur they stay solid and the other app is dimmed by Material's usual scrim.
+    val prefs by container.preferences.state.collectAsStateWithLifecycle()
+    val blurOn = prefs.sheetBlurEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && rememberWindowBlurAvailable()
+    CompositionLocalProvider(LocalPageBehindToBlur provides blurOn) { QuickAddEnvironment(container, requests, onFinished, blurOn) }
 }
 
 @Composable
-private fun QuickAddEnvironment(container: AppContainer, requests: QuickAddRequests, onFinished: () -> Unit) {
+private fun QuickAddEnvironment(container: AppContainer, requests: QuickAddRequests, onFinished: () -> Unit, blurOn: Boolean) {
     ProvideAppEnvironment(container) {
+        BlurAppBehind(enabled = blurOn)
         val context = LocalContext.current
         val finish by rememberUpdatedState(onFinished)
         val navigator = remember(context) { QuickAddNavigator(context) { finish() } }
@@ -182,6 +202,40 @@ private suspend fun openLedger(container: AppContainer, overlays: AppOverlays): 
     }
     withTimeoutOrNull(CARDS_WAIT_MS) { container.cards.state.first { it !is CardsState.Loading } }
     return true
+}
+
+/**
+ * Has the system blur whatever is behind the overlay's window - the app the user is in - by as much as a NormPix page is blurred under
+ * the same sheet: the sheets' share on screen ([AppOverlays.backdropBlur], eased as the page's is) on the page's curve
+ * ([backdropBlurRadius]) out of the page's radius. It is the window's blur-behind (`FLAG_BLUR_BEHIND` + `blurBehindRadius`, Android
+ * 12+), set again each frame the radius changes, so it rises with the sheet, follows a drag and is gone once the sheet has closed (the
+ * snackbar after a save is over the app as it is). The window manager draws it a frame or so after the sheet moves - the reason the
+ * app blurs its own page itself - which over another app is the only way there is. Off when [enabled] is false, and on leaving.
+ */
+@Composable
+private fun BlurAppBehind(enabled: Boolean) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+    val window = LocalActivity.current?.window ?: return
+    val overlays = LocalOverlays.current
+    val share = rememberEasedBlur { if (enabled) overlays.backdropBlur else 0f }
+    val fullPx = with(LocalDensity.current) { AppFrostedTokens.blurRadius.toPx() }
+    LaunchedEffect(window, fullPx) {
+        snapshotFlow { backdropBlurRadius(share(), fullPx).roundToInt() }
+            .distinctUntilChanged()
+            .collect { window.blurBehind(it) }
+    }
+    DisposableEffect(window) { onDispose { window.blurBehind(0) } }
+}
+
+/** Blurs what is behind this window by [radius] px (none at 0), changing the window only when that changes it. */
+@RequiresApi(Build.VERSION_CODES.S)
+internal fun Window.blurBehind(radius: Int) {
+    val attrs = attributes
+    val flags = if (radius > 0) attrs.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND else attrs.flags and WindowManager.LayoutParams.FLAG_BLUR_BEHIND.inv()
+    if (attrs.flags == flags && attrs.blurBehindRadius == radius) return
+    attrs.flags = flags
+    attrs.blurBehindRadius = radius
+    attributes = attrs
 }
 
 /** Whether the app's flows still have anything to do: a sheet, a snackbar waiting or showing, an Undo being done. */

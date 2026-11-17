@@ -38,6 +38,7 @@ import com.example.normpix.finance.ui.label
 import com.example.normpix.finance.ui.rememberFinanceState
 import com.example.normpix.navigation.LocalAppContainer
 import com.example.normpix.navigation.LocalNavigator
+import com.example.normpix.settings.AmountKeypad
 import com.example.normpix.settings.TransactionSwipeActions
 import com.example.normpix.ui.components.AppSubPage
 import com.example.normpix.ui.components.ListRow
@@ -57,6 +58,9 @@ import kotlinx.coroutines.launch
 
 /** The title of the Tags row on Settings > Finance and of its search entry. */
 const val TAGS_TITLE = "Tags"
+
+/** The title of the amount keypad choice on Settings > Finance and of its search entry. */
+const val AMOUNT_KEYPAD_TITLE = "Typing an amount"
 
 /** Settings > Finance: currency, the default account for new entries, and categories. */
 @Composable
@@ -133,6 +137,26 @@ fun FinanceSettingsPage() {
                             enabled = finance.activeAccounts.isNotEmpty(),
                             onClick = ::pickDefaultAccount,
                         )
+                    }
+                }
+                ListSection(
+                    title = AMOUNT_KEYPAD_TITLE,
+                    footer = "The NormPix keypad has + − × ÷, so an amount can be typed as a sum and is saved as its total. " +
+                        "Payee and notes always use your phone's keyboard.",
+                    modifier = Modifier.selectableGroup(),
+                ) {
+                    for (choice in AmountKeypad.entries) {
+                        item {
+                            RadioRow(
+                                headline = choice.label,
+                                supporting = choice.description,
+                                selected = prefs.amountKeypad == choice,
+                                onClick = {
+                                    haptics.selection()
+                                    preferences.setAmountKeypad(choice)
+                                },
+                            )
+                        }
                     }
                 }
                 ListSection(

@@ -248,6 +248,39 @@ Format: `claim - applies to - source - status/date`.
 - P-256 ECDH is in the platform from long before minSdk 26 (X25519 only from API 33); there is no HKDF in the platform (built from
   HMAC-SHA256 per RFC 5869; test case 1 in `NfcPairingTest`) - `NfcPairing.kt` header - 2026-11-14.
 
+## Locking the phone from the app (2026-11-17: Haiku 5.5 xhigh + Gemini 3.8 Flash High, checked against the SDK and AOSP; the owner declined a lock-screen widget the same day: "We are not going with this" - don't propose it again)
+
+- `DevicePolicyManager.lockNow()` (device admin with `<force-lock/>`) leaves the phone needing **PIN, pattern or password** on the next
+  unlock - fingerprint and face refused - API 26-37 - `Sdk/sources/android-37.0/android/app/admin/DevicePolicyManager.java` lockNow(int)
+  Javadoc; AOSP `LockPatternUtils.STRONG_AUTH_REQUIRED_AFTER_DPM_LOCK_NOW` - 2026-11-17.
+- `AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN` (= 8) is **API 28+** (the SDK platform android-37.0 data/api-versions.xml: since="28"); AOSP
+  `SystemActionPerformer.lockScreen()` = `PowerManager.goToSleep(.., GO_TO_SLEEP_REASON_ACCESSIBILITY, 0)` + `WindowManagerService.lockNow()`,
+  no strong-auth flag, so it should lock like the power button (biometrics allowed) - not yet seen on a phone - 2026-11-17.
+- **Restricted settings**: an APK installed from a browser download is restricted from binding an accessibility service until the user
+  tries once, then Settings > Apps > the app > ⋮ > *Allow restricted settings* - `Sdk/sources/android-37.0/android/app/ecm/EnhancedConfirmationManager.java`
+  class Javadoc; its public `PROTECTED_SETTINGS` lists only `OPSTR_BIND_ACCESSIBILITY_SERVICE` (Gemini's "Android 15 added device admin" is
+  UNVERIFIED) - 2026-11-17. NormPix updates through a browser tab since v1.6.1, so it counts.
+- The accessibility consent dialog is **fixed text**: "Allow <app> to have full control of your device?", "View and control screen - It can
+  read all content on the screen ...", "View and perform actions", whatever the service declares - AOSP `AccessibilityServiceWarning.java`
+  (only the Uninstall button's visibility changes) + AOSP frameworks/base core/res/res/values/strings.xml - 2026-11-17. Gemini said `canRetrieveWindowContent="false"`
+  removes the screen line; **wrong** (labelled SOURCE-CHECKED).
+- Pixel's own **Accessibility Menu** (Google's Accessibility Suite) has "Lock your screen", opened from the floating accessibility button or a
+  two-finger swipe up - support.google.com/accessibility/android/answer/9078941 - 2026-11-17.
+
+## The amount keypad and the overlay's blur (2026-11-18, checked against the pinned sources; built in Phase 77)
+
+- `androidx.compose.ui.platform.InterceptPlatformTextInput(interceptor, content)` + `fun interface PlatformTextInputInterceptor {
+  suspend fun interceptStartInputMethod(request, nextHandler): Nothing }` are **stable** in compose-ui 1.12.1; the official sample
+  `disableSoftKeyboardSample` blocks the soft keyboard with `awaitCancellation()` and forwards with `nextHandler.startInputMethod(request)`;
+  a new interceptor instance restarts the session - ui-android-1.12.1 sources jar, PlatformTextInputModifierNode, and its samples jar - 2026-11-18.
+  `performTextInput` in tests still types into an intercepted field (QuickAddOverlayTest passes).
+- `HapticFeedbackType.KeyboardTap` and `.Reject` exist in compose-ui 1.12.1 (its HapticFeedbackType source) - 2026-11-18.
+- `androidx.activity.compose.LocalActivity` is in activity-compose 1.13.0 (the overlay's window is `LocalActivity.current?.window`) - compiled 2026-11-18.
+- `FocusManager.clearFocus()` in a Robolectric test hands focus straight back to the first focusable field (1 focused node after it) -
+  don't tie anything that must stay closed to focus loss alone - 2026-11-18. Not checked on a phone.
+- Window blur-behind: `WindowManager.LayoutParams.FLAG_BLUR_BEHIND` + `blurBehindRadius` (API 31), set through `window.attributes`; Robolectric
+  keeps the values (QuickAddBlurTest reads them) but draws no blur - 2026-11-18.
+
 ## How to add an entry
 
 `claim - applies to (library/API level/version) - source (URL or path:line) - status/date`. If a fact is later disproved, delete it

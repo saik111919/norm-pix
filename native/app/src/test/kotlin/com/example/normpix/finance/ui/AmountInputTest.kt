@@ -103,6 +103,32 @@ class AmountInputTest {
     }
 
     @Test
+    fun `a sum is drawn with each number grouped, spaced signs in the symbol's colour, and no faint digits`() {
+        val raw = "1234567+45.5×2"
+        val result = hinted(raw)
+        val shown = result.text.text
+        assertEquals("₹ 12,34,567 + 45.5 × 2", shown)
+        val plus = shown.indexOf('+')
+        assertTrue(result.text.spanStyles.any { it.start <= plus && plus < it.end && it.item.color == Color.Red }, "the sign is in the accent")
+        assertEquals("₹ 120 + ", hinted("120+").text.text, "a sign at the end waits for its number")
+
+        // The cursor: forward only, inside the text, outside a sign's spaces and never in front of a comma.
+        val mapping = result.offsetMapping
+        var last = -1
+        for (original in 0..raw.length) {
+            val inShown = mapping.originalToTransformed(original)
+            assertTrue(inShown in 0..shown.length, "offset $original -> $inShown is inside the drawn text")
+            assertTrue(inShown > last, "offsets only move forward")
+            if (inShown < shown.length) assertTrue(shown[inShown] != ',', "never in front of a comma at $original")
+            assertEquals(original, mapping.transformedToOriginal(inShown), "round trip at $original")
+            last = inShown
+        }
+        assertEquals(shown.indexOf('+') - 1, mapping.originalToTransformed(raw.indexOf('+')), "in front of a sign: before its space")
+        assertEquals(shown.indexOf('+') + 2, mapping.originalToTransformed(raw.indexOf('+') + 1), "after a sign: after its space")
+        for (inShown in 0..shown.length) assertTrue(mapping.transformedToOriginal(inShown) in 0..raw.length)
+    }
+
+    @Test
     fun `the symbol can be drawn smaller than the figures`() {
         val prefix = hinted("480").text.spanStyles.single { it.start == 0 }
         assertEquals(2, prefix.end, "the symbol and its space")
