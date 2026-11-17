@@ -15,6 +15,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
+import com.example.normpix.finance.domain.AmountExpression
 import com.example.normpix.finance.domain.groupingCommaIndices
 
 /*
@@ -64,6 +65,7 @@ internal class AmountTransformation(
                 },
             )
         }
+        if (AmountExpression.isSum(raw)) return sum(raw)
         val point = raw.indexOf('.')
         val wholeLength = if (point < 0) raw.length else point
         val commas = groupingCommaIndices(wholeLength, indianGrouping)
@@ -95,7 +97,56 @@ internal class AmountTransformation(
         }
         return TransformedText(shown, mapping)
     }
+
+    /**
+     * A sum ("120+45" from the calculator) drawn as "₹ 120 + 45": each number grouped as a plain amount is, each sign in the
+     * symbol's colour with a thin space either side. A cursor next to a sign stays outside its spaces - before them after a number,
+     * after them before the next - and never lands before a comma, so editing anywhere in the sum works as it does in an amount.
+     * No faint digits are drawn: what the sum comes to is said under it.
+     */
+    private fun sum(raw: String): TransformedText {
+        // Where a cursor in front of each typed character goes in what is drawn (and, last, the one after them all).
+        val cursorAt = IntArray(raw.length + 1)
+        val shown = buildAnnotatedString {
+            appendPrefix()
+            var numberStart = 0
+            while (numberStart <= raw.length) {
+                val signAt = (numberStart until raw.length).firstOrNull { AmountExpression.isOperator(raw[it]) } ?: raw.length
+                val number = raw.substring(numberStart, signAt)
+                val point = number.indexOf('.')
+                val commas = groupingCommaIndices(if (point < 0) number.length else point, indianGrouping)
+                for (j in number.indices) {
+                    if (j in commas) append(',')
+                    cursorAt[numberStart + j] = length
+                    append(number[j])
+                }
+                if (signAt == raw.length) break
+                cursorAt[signAt] = length
+                withStyle(SpanStyle(color = prefixColor)) {
+                    append(THIN_SPACE)
+                    append(raw[signAt])
+                    append(THIN_SPACE)
+                }
+                numberStart = signAt + 1
+            }
+            cursorAt[raw.length] = length
+        }
+        val mapping = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int = cursorAt[offset.coerceIn(0, raw.length)]
+
+            override fun transformedToOriginal(offset: Int): Int {
+                if (offset <= prefix.length) return 0
+                // The first character whose cursor is at or past the place; past every one, the end.
+                for (k in 0..raw.length) if (cursorAt[k] >= offset) return k
+                return raw.length
+            }
+        }
+        return TransformedText(shown, mapping)
+    }
 }
+
+/** The narrow space either side of a sign in a sum: the sign reads apart from the numbers without pushing them far. */
+private const val THIN_SPACE = ' '
 
 /**
  * [base] shrunk, if it must be, until [shown] fits in [availablePx] on one line. The glyphs' advances do not scale perfectly

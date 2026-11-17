@@ -246,10 +246,19 @@ fun rememberEasedBlur(share: () -> Float): () -> Float {
  * floating on a sheet.
  */
 fun Modifier.blurredBy(share: () -> Float, edges: TileMode = TileMode.Clamp): Modifier = graphicsLayer {
-    val s = share()
-    val strength = 1f - (1f - s) * (1f - s)
-    val radius = strength * AppFrostedTokens.blurRadius.toPx()
+    val radius = backdropBlurRadius(share(), AppFrostedTokens.blurRadius.toPx())
     renderEffect = if (radius >= 1f) BlurEffect(radius, radius, edges) else null
+}
+
+/**
+ * The blur behind a sheet for [share] (0..1) of it on screen, out of [fullPx]: front-loaded, so what shows through the first strip of
+ * a rising see-through sheet is already soft. One curve for the page the app blurs itself ([blurredBy]) and for another app the quick
+ * add overlay has the system blur behind its window, so both rise and fall alike.
+ */
+fun backdropBlurRadius(share: Float, fullPx: Float): Float {
+    val s = share.coerceIn(0f, 1f)
+    val strength = 1f - (1f - s) * (1f - s)
+    return strength * fullPx
 }
 
 /**

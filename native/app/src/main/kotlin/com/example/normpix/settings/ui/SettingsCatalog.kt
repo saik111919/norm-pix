@@ -123,6 +123,7 @@ object SettingsCatalog {
         SettingsEntry("People", null, listOf("people", "person", "split", "spending by person", "family", "friends", "who"), special = SettingsSpecial.People),
         SettingsEntry("Currency", SettingsPage.Finance, listOf("currency", "rupee", "inr", "indian", "money", "symbol", "dollar", "euro")),
         SettingsEntry("Default account", SettingsPage.Finance, listOf("default account", "preferred account")),
+        SettingsEntry(AMOUNT_KEYPAD_TITLE, SettingsPage.Finance, listOf("keypad", "keyboard", "number pad", "amount", "calculator", "sum", "add up", "plus", "minus", "multiply", "divide", "typing")),
         SettingsEntry("Swipe actions", SettingsPage.Finance, listOf("swipe", "edit", "delete", "gesture", "list")),
         SettingsEntry("Ask before a swipe deletes", SettingsPage.Finance, listOf("swipe", "delete", "confirm", "confirmation", "ask", "undo", "remove")),
         SettingsEntry(

@@ -1,6 +1,7 @@
 package com.example.normpix.testing
 
 import android.net.Uri
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -10,6 +11,7 @@ import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.quickadd.QuickAddHost
 import com.example.normpix.quickadd.QuickAddRequest
 import com.example.normpix.quickadd.QuickAddRequests
+import com.example.normpix.ui.components.LocalWindowBlurOverride
 import com.example.normpix.wallet.Authenticator
 
 /** A prompt that answers as the test says and remembers how often it was asked. */
@@ -30,7 +32,12 @@ class RecordingAuthenticator(var succeed: Boolean = true) : Authenticator {
  * it does it and ends ([finished]). A test that asks again after it ended starts it again (a Compose rule takes one `setContent`,
  * so the host is rebuilt inside it) - which is what a second launch of the overlay is.
  */
-class OverlayHarness(private val compose: ComposeContentTestRule, private val env: TestEnvironment) {
+class OverlayHarness(
+    private val compose: ComposeContentTestRule,
+    private val env: TestEnvironment,
+    /** Whether the system blurs windows (Robolectric never does): null leaves it to Robolectric. */
+    private val windowBlur: Boolean? = null,
+) {
     val requests = QuickAddRequests()
 
     /** True once the overlay has ended (the activity would have finished); false again when it is asked for something more. */
@@ -54,9 +61,11 @@ class OverlayHarness(private val compose: ComposeContentTestRule, private val en
             started = true
             compose.setContent {
                 key(generation) {
-                    QuickAddHost(env.container, requests) {
-                        finished = true
-                        finishes++
+                    CompositionLocalProvider(LocalWindowBlurOverride provides windowBlur) {
+                        QuickAddHost(env.container, requests) {
+                            finished = true
+                            finishes++
+                        }
                     }
                 }
             }

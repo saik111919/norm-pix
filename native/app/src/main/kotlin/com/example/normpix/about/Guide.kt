@@ -47,7 +47,9 @@ enum class GuideTopic(
             "Each one is told in full under its own topic below.",
         ),
         tips = listOf(
-            "Adding without opening NormPix: a receipt shared with NormPix, the icon's shortcuts (press and hold the icon), the Add expense Quick Settings tile and the Add widget open the add form as a sheet over the app you are in. Save or close it and you are back where you were.",
+            "Adding without opening NormPix: a receipt shared with NormPix, the icon's shortcuts (press and hold the icon), the Add expense Quick Settings tile and the Add widget open the add form as a sheet over the app you are in, with that app blurred behind it as the app is behind its own sheets. Save or close it and you are back where you were.",
+            "A keypad of NormPix's own for amounts, with + − × ÷: type a sum and the total is saved. Settings > Finance > Typing an amount switches back to your phone's keyboard.",
+            "Frequent and Add again: a new expense or income offers what you enter most, and Add again in a transaction's details starts a copy dated now.",
             "Automatic backup: Settings > Data & Backup > Automatic backup. Off until you turn it on; daily, weekly or monthly, into a folder you pick, locked with a password of its own. The newest 5 are kept.",
             "Repeating costs: the banner at the top of Plans > Recurring adds up what your repeating payments cost a month and a year. Payments that look like they repeat are offered under it.",
             "Forecast: Plans > Recurring > Forecast. The money you can spend day by day, to 30, 60 or 90 days, your payday or a date you pick, up to 12 months ahead.",
@@ -69,12 +71,15 @@ enum class GuideTopic(
         hue = 1,
         steps = listOf(
             "Tap the + button in the bar at the bottom. Its menu has Expense, Income and every other add. Tap Edit in it to put the tiles in your own order, and drag a tile's handle to make it wide or small.",
-            "Type the amount, then choose a category and the account the money moved through. Money you send to someone has Money sent (to friends, lent, repaid, a split bill), and money that comes from someone has Money received.",
+            "Type the amount on the keypad under it, then choose a category and the account the money moved through. Money you send to someone has Money sent (to friends, lent, repaid, a split bill), and money that comes from someone has Money received.",
             "Add a payee, a note, the person it was for, or a picture of the bill if you like.",
             "Switch the type to Transfer to move money between two of your accounts, or to pay a credit card's bill.",
             "Save. Home, Insights and your budgets update straight away.",
         ),
         tips = listOf(
+            "The amount adds up for you: type 120 + 45 + 30, or 1500 ÷ 3, and the total shows under it and is what is saved. Prefer your own keyboard? Settings > Finance > Typing an amount > Phone keyboard.",
+            "Frequent, at the top of a new expense or income, holds what you enter again and again. Tap one to fill in its category, payee and account, and its amount if you haven't typed one.",
+            "Add again, in a transaction's details, starts a new one just like it, dated now.",
             "Deleted one by mistake? Undo stays on screen for a few seconds.",
             "A picture you attach can be read again to fill the form in.",
             "One bill for food and soap? Tap Split in the form to share it between two to ten categories; the parts have to add up to the total. Each part is its own row, so budgets and Insights count every category's share.",

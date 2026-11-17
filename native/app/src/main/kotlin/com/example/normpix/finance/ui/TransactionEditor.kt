@@ -58,6 +58,9 @@ import com.example.normpix.finance.domain.CategoryType
 import com.example.normpix.finance.domain.FinanceConflictException
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.FinanceValidationException
+import com.example.normpix.finance.domain.FREQUENT_DAYS
+import com.example.normpix.finance.domain.FrequentEntry
+import com.example.normpix.finance.domain.frequentEntries
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.RepeatPlan
 import com.example.normpix.finance.domain.SplitPart
@@ -111,6 +114,12 @@ fun TransactionEditorSheet(
     initialPersonId: Long? = null,
     /** What a new transaction starts with when it comes from text shared by another app (see `SharedTransactionImport`). */
     prefill: SharedTransactionPrefill? = null,
+    /**
+     * "Add again" (a transaction's details; 2026-11-18): a new transaction that starts as a copy of this one - its type, amount,
+     * category, account, payee, note, person and tags - dated now, with no picture and not repeating. What has been archived or
+     * deleted since is left for the user to pick.
+     */
+    copyOf: FinanceTransaction? = null,
 ) {
     if (existingId == null) {
         TransactionEditor(
@@ -120,6 +129,7 @@ fun TransactionEditorSheet(
             initialAccountId = initialAccountId,
             initialPersonId = initialPersonId,
             prefill = prefill,
+            copyOf = copyOf,
         )
         return
     }
@@ -154,6 +164,7 @@ private fun TransactionEditor(
     initialAccountId: Long? = null,
     initialPersonId: Long? = null,
     prefill: SharedTransactionPrefill? = null,
+    copyOf: FinanceTransaction? = null,
 ) {
     val controller = LocalFinance.current
     val finance = rememberFinanceState()
@@ -168,25 +179,28 @@ private fun TransactionEditor(
     var typeChosen by remember { mutableStateOf(prefill == null || prefill.type != null) }
     var amount by remember {
         mutableStateOf(
-            (existing?.amount ?: prefill?.amount)?.let { minorToInputText(it, finance.currency.decimals) }.orEmpty(),
+            (existing?.amount ?: copyOf?.amount ?: prefill?.amount)?.let { minorToInputText(it, finance.currency.decimals) }.orEmpty(),
         )
     }
-    var payee by remember { mutableStateOf((existing?.payee ?: prefill?.payee).orEmpty()) }
-    var note by remember { mutableStateOf((existing?.note ?: prefill?.note).orEmpty()) }
+    var payee by remember { mutableStateOf((existing?.payee ?: copyOf?.payee ?: prefill?.payee).orEmpty()) }
+    var note by remember { mutableStateOf((existing?.note ?: copyOf?.note ?: prefill?.note).orEmpty()) }
     var categoryId by remember {
-        mutableStateOf(existing?.categoryId ?: prefill?.categoryId?.takeIf { id -> finance.category(id)?.archived == false })
+        mutableStateOf(
+            existing?.categoryId
+                ?: (copyOf?.categoryId ?: prefill?.categoryId)?.takeIf { id -> finance.category(id)?.archived == false },
+        )
     }
     // Who an expense was spent on; an archived person stays on an expense that already has them, but is not offered to a new one.
     var personId by remember {
         mutableStateOf(
             existing?.personId
-                ?: initialPersonId?.takeIf { id -> initialType == TransactionType.Expense && finance.activePeople.any { it.id == id } },
+                ?: (copyOf?.personId ?: initialPersonId)?.takeIf { id -> initialType == TransactionType.Expense && finance.activePeople.any { it.id == id } },
         )
     }
     // A shared receipt that shows an account's number, which none of the user's accounts is known by, starts with no account
     // chosen: the default one would be a guess about which account the money moved through.
     val startAccountId = existing?.accountId
-        ?: (prefill?.accountId ?: initialAccountId)?.takeIf { id -> finance.activeAccounts.any { it.id == id } }
+        ?: (copyOf?.accountId ?: prefill?.accountId ?: initialAccountId)?.takeIf { id -> finance.activeAccounts.any { it.id == id } }
         ?: finance.defaultAccount?.id?.takeIf { prefill?.accountNeedsChoice != true }
     var accountId by remember { mutableStateOf(startAccountId) }
     val walletCards = LocalWalletCards.current
@@ -194,6 +208,7 @@ private fun TransactionEditor(
     var toAccountId by remember {
         mutableStateOf(
             existing?.toAccountId
+                ?: copyOf?.toAccountId?.takeIf { id -> id != startAccountId && finance.activeAccounts.any { it.id == id } }
                 // A shared payment to the user's own credit card arrives as that card's bill: a transfer onto it; one to another of
                 // their accounts, as a transfer to that account. Where that account couldn't be told, none is picked for them.
                 ?: prefill?.toAccountId?.takeIf { id -> finance.activeAccounts.any { it.id == id } }
@@ -213,7 +228,7 @@ private fun TransactionEditor(
     // Never set from a shared receipt or picture: a bill says what was paid, not that it repeats or when that stops.
     var repeat by remember { mutableStateOf<RepeatPlan?>(null) }
     // Its tags (an expense's or income's: a transfer has none, so they are kept here while it is one, and not saved).
-    var tagIds by remember { mutableStateOf(existing?.tagIds.orEmpty()) }
+    var tagIds by remember { mutableStateOf(existing?.tagIds ?: copyOf?.tagIds?.filterTo(LinkedHashSet()) { finance.tag(it) != null }.orEmpty()) }
     // One part of a split payment: every part, as stored, so the Split field can say how many there are and open them. Such a part is
     // saved on its own (what the parts share changes in every part with it), can't change kind and can't repeat.
     val isSplitPart = existing?.splitGroup != null
@@ -227,7 +242,10 @@ private fun TransactionEditor(
         }
     }
     var showDetails by remember {
-        mutableStateOf(existing?.payee != null || existing?.note != null || prefill?.payee != null || prefill?.note != null)
+        mutableStateOf(
+            existing?.payee != null || existing?.note != null || prefill?.payee != null || prefill?.note != null ||
+                !copyOf?.payee.isNullOrEmpty() || !copyOf?.note.isNullOrEmpty(),
+        )
     }
     var saving by remember { mutableStateOf(false) }
     var pickingDate by remember { mutableStateOf(false) }
@@ -706,7 +724,50 @@ private fun TransactionEditor(
     }
 
     // A shared draft that already has its amount opens for reading, without the keyboard covering it.
-    LaunchedEffect(Unit) { if (!isEditing && prefill?.amount == null) runCatching { amountFocus.requestFocus() } }
+    // So does a copy ("Add again"), which is often saved as it is.
+    LaunchedEffect(Unit) { if (!isEditing && prefill?.amount == null && copyOf == null) runCatching { amountFocus.requestFocus() } }
+
+    // "Frequent": in a new expense or income started from nothing (not an edit, a share or a copy), what is entered again and again,
+    // read from the last few months whenever the type or the ledger changes.
+    val offersFrequent = !isEditing && prefill == null && copyOf == null
+    val frequent by produceState(emptyList<FrequentEntry>(), offersFrequent, type, finance.revision) {
+        value = if (!offersFrequent || type == TransactionType.Transfer) {
+            emptyList()
+        } else {
+            try {
+                val now = LocalDateTime.now()
+                frequentEntries(controller.repository.transactionsBetween(now.minusDays(FREQUENT_DAYS), now.plusMinutes(1)), type, now)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+    }
+    // Only picks whose category can still be chosen for this type.
+    val frequentShown = frequent.filter { entry ->
+        finance.category(entry.categoryId)?.let { !it.archived && it.type == CategoryType.forTransaction(type) } == true
+    }
+
+    fun useFrequent(entry: FrequentEntry) {
+        haptics.selection()
+        categoryId = entry.categoryId
+        categoryError = null
+        if (entry.payee != null) {
+            payee = entry.payee
+            showDetails = true
+        }
+        if (finance.activeAccounts.any { it.id == entry.accountId }) {
+            accountId = entry.accountId
+            accountTouched = true
+            accountError = null
+        }
+        // The amount it had last time, only while none is typed: one typed already is the user's.
+        if (amount.isBlank()) {
+            amount = minorToInputText(entry.amount, finance.currency.decimals)
+            amountError = null
+        }
+    }
     val topOfForm = remember { BringIntoViewRequester() }
     LaunchedEffect(picturesRead) { if (picturesRead > 0) topOfForm.bringIntoView() }
     val reduced = rememberReducedMotion()
@@ -754,6 +815,12 @@ private fun TransactionEditor(
                 },
             )
             FieldError(typeError)
+        }
+        RevealVisibility(visible = typeChosen && !isTransfer && frequentShown.isNotEmpty()) {
+            Column {
+                Spacer(Modifier.height(AppSpacing.lg))
+                FrequentEntriesRow(frequentShown, onPick = ::useFrequent)
+            }
         }
         Spacer(Modifier.height(AppSpacing.xxl))
         HeroAmountField(

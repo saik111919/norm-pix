@@ -235,6 +235,7 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
 colours are off/unavailable); page animation **Linux window**; back button **Top floating circle**; bottom controls off;
 month control **Track**; progress **Wavy**; accounts layout **Stack**, cards layout **Stack** (was Cards until 2026-11-02), Top spending **Stack**;
 category icons **3D** with shape **None**; font **GS Flex, Zenith preset**; sheet blur on; swipe actions on (edit + delete);
+amounts typed on the **NormPix keypad** (`AmountKeypad.App`, Settings > Finance > Typing an amount; since 2026-11-18);
 NFC card exchange **Off** (`ScheduledFeature.defaultMode`); wallet lock off (scope Wallet only, timeout immediate);
 Save CVV and Store cards on; card limit warning **30%** (`CardLimitWarning`: Off / 30 / 50 / 75 / 90, stored by name, in backups); clipboard clears after **10 s**; amounts shown; notifications on; update checks on (daily,
 also at launch), background updates **download then ask**, Wi-Fi only. Read `AppPrefsState` for the full list.

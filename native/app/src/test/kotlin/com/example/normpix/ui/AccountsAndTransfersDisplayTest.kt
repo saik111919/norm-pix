@@ -254,7 +254,8 @@ class AccountsAndTransfersDisplayTest {
         compose.onAllNodesWithText(offText).assertCountEquals(0)
 
         compose.onNodeWithContentDescription("Starting balance in INR").performTextInput("5000")
-        compose.onNodeWithText("Counts as ${money.format(-5_000_00)} in your total balance").assertIsDisplayed()
+        // Under the amount's keypad while it is typed (2026-11-18): scrolled to in this short window.
+        compose.onNodeWithText("Counts as ${money.format(-5_000_00)} in your total balance").performScrollTo().assertIsDisplayed()
 
         compose.onNodeWithContentDescription("Slide to save account").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(10_000) { finance.state.value.accounts.any { it.name == "Test Card" } }

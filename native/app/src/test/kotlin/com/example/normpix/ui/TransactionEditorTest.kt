@@ -16,6 +16,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -38,6 +39,7 @@ import com.example.normpix.finance.domain.nthOccurrence
 import com.example.normpix.finance.domain.recurrenceStep
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.ui.CATEGORY_PICKER_TAG
+import com.example.normpix.finance.ui.amountKeyTag
 import com.example.normpix.finance.ui.FinanceController
 import com.example.normpix.navigation.NormPixRoot
 import com.example.normpix.reminders.NoOpReminderScheduler
@@ -48,6 +50,7 @@ import com.example.normpix.settings.AppPreferences
 import com.example.normpix.wallet.CardVault
 import com.example.normpix.wallet.StoredCard
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -138,6 +141,8 @@ class TransactionEditorTest {
         }
         compose.waitForIdle()
     }
+
+    private fun keypadShown(): Boolean = compose.onAllNodes(hasTestTag(amountKeyTag("done"))).fetchSemanticsNodes().isNotEmpty()
 
     private fun typeAmount(text: String) {
         compose.onNodeWithContentDescription("Amount in INR").performTextInput(text)
@@ -273,7 +278,8 @@ class TransactionEditorTest {
             container.finance.saveTransaction(spend("Transport"))
         }
         openEditor()
-        compose.onNodeWithText("Category").performClick()
+        // Under the amount's keypad (2026-11-18) in this short window: scrolled to first.
+        compose.onNodeWithText("Category").performScrollTo().performClick()
         compose.waitUntil(timeoutMillis = 10_000) { compose.onAllNodesWithText("Frequently used").fetchSemanticsNodes().isNotEmpty() }
         // On screen, not just in the list: the section arrives after the sheet opens and must not scroll out of sight.
         compose.onNodeWithText("Frequently used").assertIsDisplayed()
@@ -367,6 +373,11 @@ class TransactionEditorTest {
         openEditor()
         typeAmount("42")
 
+        // The first Back puts the amount's keypad away, as it does the phone's keyboard (2026-11-18); the next is the form's.
+        pressBack()
+        assertFalse(keypadShown(), "Back put the keypad away")
+        compose.onNodeWithText("New expense").assertIsDisplayed()
+        assertEquals(0, compose.onAllNodesWithText("Discard this entry?").fetchSemanticsNodes().size)
         pressBack()
         compose.waitUntil(timeoutMillis = 5_000) { compose.onAllNodesWithText("Discard this entry?").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Keep editing").performClick()
@@ -383,6 +394,11 @@ class TransactionEditorTest {
     @Test
     fun back_onACleanEditor_justCloses() {
         openEditor()
+        // A new form opens on the amount, its keypad up: the first Back puts that away, the second closes the clean form.
+        assertTrue(keypadShown(), "the keypad is up on a new form")
+        pressBack()
+        assertFalse(keypadShown())
+        compose.onNodeWithText("New expense").assertIsDisplayed()
         pressBack()
         compose.waitUntil(timeoutMillis = 5_000) { compose.onAllNodesWithText("New expense").fetchSemanticsNodes().isEmpty() }
         assertEquals(0, compose.onAllNodesWithText("Discard this entry?").fetchSemanticsNodes().size)

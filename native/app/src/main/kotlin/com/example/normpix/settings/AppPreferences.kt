@@ -214,6 +214,17 @@ enum class TransactionSwipeActions(val label: String, val edit: Boolean, val del
     DeleteOnly("Delete only", edit = false, delete = true),
 }
 
+/**
+ * What comes up to type an amount (Settings > Finance > Typing an amount; owner, 2026-11-18: "APP's own keyboard system instead of
+ * external, user can able to change which one appears"): the app's own keypad under the amount, with the calculator's signs on it,
+ * or the phone's keyboard app. Only the amount: payee and notes always use the phone's keyboard. The names are stored, so they never
+ * change.
+ */
+enum class AmountKeypad(val label: String, val description: String) {
+    App("NormPix keypad", "Digits and + − × ÷ under the amount, in the app's own style"),
+    Phone("Phone keyboard", "Your keyboard app's number pad, as in other apps"),
+}
+
 /** Which artwork represents a bank on the wallet card face: the full wordmark, or a compact square symbol. */
 enum class BankIconStyle(val label: String, val description: String) {
     Full("Full logo", "The bank's full wordmark on each card"),
@@ -438,6 +449,8 @@ data class AppPrefsState(
     /** Swipe a transaction row to reveal its actions. Every action stays reachable from the row's details either way. */
     val swipeActionsEnabled: Boolean = true,
     val transactionSwipeActions: TransactionSwipeActions = TransactionSwipeActions.EditAndDelete,
+    /** What comes up to type an amount: the app's own keypad (asked for as the way in, 2026-11-18) or the phone's keyboard. */
+    val amountKeypad: AmountKeypad = AmountKeypad.App,
     /**
      * A swipe to delete asks first, as Delete does everywhere else (owner, 2026-11-11: "when I swipe delete it's not asking for
      * confirmation"). Off is the way it was: gone at once, with Undo for a few seconds.
@@ -687,6 +700,7 @@ class AppPreferences(private val prefs: SharedPreferences) {
             dummyDataEnabled = prefs.getBoolean(K_DUMMY_DATA, defaults.dummyDataEnabled),
             swipeActionsEnabled = prefs.getBoolean(K_SWIPE_ENABLED, defaults.swipeActionsEnabled),
             transactionSwipeActions = prefs.enum(K_TRANSACTION_SWIPE, defaults.transactionSwipeActions),
+            amountKeypad = prefs.enum(K_AMOUNT_KEYPAD, defaults.amountKeypad),
             swipeDeleteAsks = prefs.getBoolean(K_SWIPE_DELETE_ASKS, defaults.swipeDeleteAsks),
             yearStart = prefs.enum(K_YEAR_START, defaults.yearStart),
             clipboardTimeout = prefs.enum(K_CLIPBOARD_TIMEOUT, defaults.clipboardTimeout),
@@ -845,6 +859,9 @@ class AppPreferences(private val prefs: SharedPreferences) {
 
     fun setTransactionSwipeActions(actions: TransactionSwipeActions) =
         change({ copy(transactionSwipeActions = actions) }) { putString(K_TRANSACTION_SWIPE, actions.name) }
+
+    fun setAmountKeypad(keypad: AmountKeypad) =
+        change({ copy(amountKeypad = keypad) }) { putString(K_AMOUNT_KEYPAD, keypad.name) }
 
     fun setSwipeDeleteAsks(asks: Boolean) =
         change({ copy(swipeDeleteAsks = asks) }) { putBoolean(K_SWIPE_DELETE_ASKS, asks) }
@@ -1319,6 +1336,8 @@ class AppPreferences(private val prefs: SharedPreferences) {
         const val K_DUMMY_DATA = "dummy_data_enabled"
         const val K_SWIPE_ENABLED = "swipe_actions_enabled"
         const val K_TRANSACTION_SWIPE = "transaction_swipe_actions"
+        /** What comes up to type an amount ([AmountKeypad] by name). Persisted: never rename it. */
+        const val K_AMOUNT_KEYPAD = "amount_keypad"
         const val K_SWIPE_DELETE_ASKS = "swipe_delete_asks"
         /** Where a year of the review by tag starts ([YearStart] by name). Persisted: never rename it. */
         const val K_YEAR_START = "year_start"

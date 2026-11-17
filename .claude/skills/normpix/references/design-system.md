@@ -277,8 +277,11 @@ Use these before writing anything new:
 - Gate for all of it: Settings > Appearance > Effects > Background blur, Android 12+, **and** the system's window blur
   (`rememberWindowBlurAvailable()` follows `WindowManager.isCrossWindowBlurEnabled` and its listener: battery saver, the
   developer option, or "Reduce blur effects" turn it off; there is no public API for the last), **and** a NormPix page behind
-  (`LocalPageBehindToBlur`, `SheetSurface.kt`; false in the quick-add overlay over another app, whose sheets are therefore solid -
-  glass over another app's icons was unreadable, seen on the emulator 2026-11-16). A see-through window also needs
+  (`LocalPageBehindToBlur`, `SheetSurface.kt`). In the quick-add overlay over another app it is the same gate (since 2026-11-18,
+  owner: "the same blur effect as sheet background"): there the **system** blurs the other app behind the overlay's window
+  (`FLAG_BLUR_BEHIND` + `blurBehindRadius`, `BlurAppBehind` in `QuickAddHost.kt`), set as the sheet moves on the page's own curve
+  (`backdropBlurRadius`, shared with `blurredBy`) and radius, so the sheets are glass as in the app. Without that blur they are solid
+  with Material's dim: glass over another app left sharp was unreadable (emulator, 2026-11-16). A see-through window also needs
   `NormPixTheme(paintWindow = false)`: the theme paints every activity's window in the surface colour.
 - **Footer blur** (`ui/components/FooterBlur.kt`, Settings > Appearance > Effects > Footer blur, follows Background blur): behind the dock / back row
   the page is blurred (`AppFrostedTokens.footerBlurRadius`) and washed with the page colour, fading in from nothing over `footerFade` above the bars

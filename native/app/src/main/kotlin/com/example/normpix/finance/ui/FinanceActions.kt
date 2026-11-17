@@ -289,6 +289,14 @@ class FinanceActions(
         }
     }
 
+    /** "Add again": the new-transaction sheet started as a copy of [transaction], dated now (see `TransactionEditorSheet`'s `copyOf`). */
+    fun addAgain(transaction: FinanceTransaction): Job =
+        scope.launch {
+            overlays.sheet<Boolean> { dismiss ->
+                WithReminders { TransactionEditorSheet(transaction.type, existingId = null, onDone = dismiss, copyOf = transaction) }
+            }
+        }
+
     fun showDetails(transaction: FinanceTransaction) {
         scope.launch {
             // The tag whose chip was tapped, if one was: the sheet closes, then its transactions open (an object, not a primitive, held
@@ -313,6 +321,7 @@ class FinanceActions(
                 }
             ) {
                 DetailAction.Edit -> editTransaction(transaction)
+                DetailAction.AddAgain -> addAgain(transaction)
                 DetailAction.EditSplit -> editSplitNow(parts)
                 DetailAction.Unsplit -> unsplitNow(parts)
                 DetailAction.Delete -> deleteTransactionNow(transaction)

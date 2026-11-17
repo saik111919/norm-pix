@@ -24,6 +24,7 @@ AutoAwesome=sparkles
 Autorenew=refresh-cw
 BabyChangingStation=baby
 Backpack=backpack
+Backspace=delete
 Backup=cloud-upload
 Badge=id-card
 BakeryDining=croissant
