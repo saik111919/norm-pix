@@ -225,6 +225,11 @@ class TestEnvironment(
     /** Checks for and installs updates; none unless a test brings one. */
     val updates: AppUpdater? = null,
     /**
+     * Whether the ledger, the reminders and the cards are loaded already, as once the main screen has run. False is a process where it
+     * never did (the quick add overlay is the first screen): the ledger is still `Loading`, and it is the screen's to load.
+     */
+    preload: Boolean = true,
+    /**
      * Makes the automatic backup service for this environment, from its preferences and its container (read only once a backup is
      * made); none unless a test brings one.
      */
@@ -268,10 +273,12 @@ class TestEnvironment(
             updates = updates,
             autoBackup = autoBackup?.invoke(preferences) { this.container },
         )
-        runBlocking {
-            container.finance.load()
-            container.reminders.load()
-            container.cards.load()
+        if (preload) {
+            runBlocking {
+                container.finance.load()
+                container.reminders.load()
+                container.cards.load()
+            }
         }
     }
 

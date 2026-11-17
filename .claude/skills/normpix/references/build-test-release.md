@@ -159,8 +159,13 @@ commit the tree mid-session and it would be swept in). Don't write PNGs with Pow
   with it and any of the others, blocked - taking away the overlay alone (or with the full-screen alert), the silent-update
   permission, boot, NFC or the card-emulation service each still left it blocked. So **the overlay is not the cause**, and neither is
   the key (the release key under the qa id was blocked too; debug-key variants without the installer were `SAFE`) nor the
-  `com.example` id. The only change that clears it is installing updates through another app (the browser) instead of in-app -
-  the owner's decision, not built. Appeal: `support.google.com/googleplay/android-developer/contact/protectappeals` wants the APK's
+  `com.example` id. The only change that cleared it in the bisect was installing updates through another app (the browser) instead of
+  in-app, **which the owner chose and which was built on 2026-11-16: the permission is gone** (`REQUEST_INSTALL_PACKAGES`,
+  `UPDATE_PACKAGES_WITHOUT_USER_ACTION`, `FOREGROUND_SERVICE*`, the download service and installer receivers; `UpdateManifestTest` fails if
+  any returns; features section 7). Download update opens the APK link in a Chrome Custom Tab and the browser downloads it. **Still to
+  confirm on the phone**: that a build without the permission now installs without the "Harmful app blocked" dialog (the bisect's
+  `SAFE` verdicts were for variants of the same APK), and that Play Protect does not treat a browser-downloaded APK differently - never
+  test with the real app id (below). If it still blocks, the cause is something else; do not put the permission back to "fix" it. Appeal: `support.google.com/googleplay/android-developer/contact/protectappeals` wants the APK's
   SHA-256 **on VirusTotal** and says "you will not receive a response"; it would be per APK, so per release.
   - **Testing what a user sees**: `adb install` is never cloud-scanned (Play Protect logs `Installer app: com.android.shell` and allows
     it). Push the APK to `/sdcard/Download`, open it in Files (DocumentsUI) > select > More options > Open with > **Package

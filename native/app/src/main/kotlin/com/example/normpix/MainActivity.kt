@@ -69,7 +69,8 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Add expense, Add income and Transfer on the app's icon (press and hold); each opens the app on that sheet, once unlocked.
+        // Add expense, Add income and Transfer on the app's icon (press and hold); each opens that sheet over the app in front
+        // (QuickAddActivity), once unlocked. Published when this opens, so the first opening after an update moves them there.
         if (savedInstanceState == null) QuickAddShortcuts.publish(applicationContext)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             splashScreen.setOnExitAnimationListener { view -> onLaunchScreen(view, coldStart = savedInstanceState == null) }
@@ -163,8 +164,7 @@ class MainActivity : FragmentActivity() {
 
     /**
      * A tapped reminder notification asks for that reminder's alert screen; a tapped card-expiry one for Wallet; a tapped
-     * update one for the update page (and its Install button for the update to be installed); a widget's tap for what it
-     * offers (a new transaction, one transaction, Activity).
+     * update one for the update page; a widget's tap for what it offers (a new transaction, one transaction, Activity).
      */
     private fun handleIntent(intent: Intent?) {
         val id = intent?.getLongExtra(ReminderNotifications.EXTRA_REMINDER_ID, -1) ?: -1
@@ -177,11 +177,8 @@ class MainActivity : FragmentActivity() {
             intent.removeExtra(CardExpiryNotifications.EXTRA_OPEN_WALLET)
         }
         if (intent?.getBooleanExtra(SystemUpdateNotifier.EXTRA_OPEN_UPDATE, false) == true) {
-            // Install first, so the page that opens for the request knows to install.
-            if (intent.getBooleanExtra(SystemUpdateNotifier.EXTRA_INSTALL_UPDATE, false)) container.updateInstallRequests.value = true
             container.updateRequests.value = true
             intent.removeExtra(SystemUpdateNotifier.EXTRA_OPEN_UPDATE)
-            intent.removeExtra(SystemUpdateNotifier.EXTRA_INSTALL_UPDATE)
         }
         // A home-screen widget's button or row: the UI does it once the app is unlocked.
         WidgetIntents.requestOf(intent)?.let { request ->
@@ -199,20 +196,6 @@ class MainActivity : FragmentActivity() {
         // Back in front: expiry reminders are re-checked against today's date (a day may have passed, or the clock changed).
         container.expiry.rearmAll()
         container.lock.onAppResumed(container.preferences.state.value)
-    }
-
-    /**
-     * Back from Android's installer or its "Install unknown apps" setting (both cover this activity without always
-     * stopping it): an update waiting on the user carries on.
-     */
-    override fun onResume() {
-        super.onResume()
-        container.updates?.onForeground()
-    }
-
-    override fun onPause() {
-        container.updates?.onBackground()
-        super.onPause()
     }
 
     /**

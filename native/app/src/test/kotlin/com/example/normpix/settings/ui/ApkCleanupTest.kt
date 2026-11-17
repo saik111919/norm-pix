@@ -126,10 +126,10 @@ class ApkCleanupTest {
         show(FakeStore(emptyList()), FakePicker(emptyList()))
         compose.onNodeWithText("Update files").assertIsDisplayed()
         compose.onNodeWithText("Delete downloaded APK files").assertIsDisplayed()
-        compose.onNodeWithText("Pick NormPix files left in Downloads after an update").assertIsDisplayed()
+        compose.onNodeWithText("Pick NormPix files your browser left in Downloads after an update").assertIsDisplayed()
         compose.onNodeWithText(
-            "Updates NormPix downloads itself are deleted once they're installed. A file your browser saved stays in Downloads " +
-                "until it's deleted; NormPix only touches the files you pick.",
+            "Your browser saves an update in Downloads, and it stays there after NormPix is updated until it's deleted. " +
+                "NormPix only touches the files you pick.",
         ).assertIsDisplayed()
     }
 

@@ -8,4 +8,20 @@
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">true</item>
     </style>
+
+    <!--
+      The quick add overlay (QuickAddActivity): a see-through window over the app the user is in, holding only the app's own sheet,
+      whose scrim does the dimming. It is the app's window theme (Theme.NormPix, which the light and dark, Android 12 and 14
+      variants all define, so the bars' icons and the rest follow them) made transparent: no background, no title, no dimming of its
+      own, no enter or exit animation to flash, and no starting window to draw before the first frame.
+    -->
+    <style name="Theme.NormPix.Overlay">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowDisablePreview">true</item>
+    </style>
 </resources>

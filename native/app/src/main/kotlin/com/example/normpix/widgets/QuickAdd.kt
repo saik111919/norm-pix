@@ -16,8 +16,10 @@ import com.example.normpix.finance.domain.TransactionType
 /*
  * Adding a transaction without opening the app first (2026-11-07, suggested after the owner asked what to build next): press and
  * hold the app's icon for Add expense, Add income and Transfer, or add the "Add expense" tile to the Quick Settings. Both open the
- * app the way the Add widget's buttons do - an intent carrying a plain word (`WidgetRequest.Add`) that the app acts on once it is
- * unlocked (`ReceiveWidgetRequests`) - so a locked app stays locked and no ledger data is on the intent or the shortcut.
+ * new-transaction sheet the way the Add widget's buttons do - an intent carrying a plain word (`WidgetRequest.Add`) - over the app
+ * the user is in, in a see-through screen of its own (`QuickAddActivity`, 2026-11-16: before that they opened NormPix itself and
+ * `ReceiveWidgetRequests` did it). The overlay asks for the app's lock first, so a locked app stays locked, and no ledger data is on
+ * the intent or the shortcut.
  */
 
 /** The shortcuts on the app's icon. */
@@ -53,7 +55,7 @@ object QuickAddShortcuts {
 
 /**
  * The "Add expense" Quick Settings tile: the user adds it from the tile editor; a tap closes the panel and opens the new-expense sheet
- * (after the lock screen and the app's own lock, if either is up).
+ * over the app in front (after the lock screen and the app's own lock, if either is up).
  */
 class QuickAddTileService : TileService() {
     override fun onStartListening() {

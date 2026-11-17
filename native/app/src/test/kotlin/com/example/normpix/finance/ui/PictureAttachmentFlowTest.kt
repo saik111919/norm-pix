@@ -25,8 +25,8 @@ import com.example.normpix.finance.data.TransactionQuery
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.TransactionType
 import com.example.normpix.finance.share.PictureText
-import com.example.normpix.finance.share.ReceiveSharedTransactions
 import com.example.normpix.finance.share.SharedPictureReader
+import com.example.normpix.testing.OverlayHarness
 import com.example.normpix.testing.TestEnvironment
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -71,6 +71,9 @@ class PictureAttachmentFlowTest {
     // Illustrative: Google Pay's paid screen, as the recognizer might read it.
     private val reader = FakeReader("To SWIGGY\n₹250\nCompleted\n10 Oct 2026, 12:34 pm\nUPI transaction ID\n428312345678")
     private val env = TestEnvironment(prefsName = "picture_flow_test", pictures = reader)
+
+    /** The overlay a share opens its form in (it reads with [reader], the environment's recognizer). */
+    private val overlay = OverlayHarness(compose, env)
     private val finance = env.container.finance
     private val store = finance.pictures!!
     private val kept = File(env.context.filesDir, "pictures")
@@ -314,11 +317,7 @@ class PictureAttachmentFlowTest {
 
     @Test
     fun `a shared picture comes attached, and is kept when saved`() {
-        compose.setContent {
-            env.Content { ReceiveSharedTransactions(env.container.sharedText, reader, appLocked = false, sampleData = false) }
-        }
-        compose.waitForIdle()
-        compose.runOnUiThread { env.container.sharedText.offer(text = null, picture = galleryPicture()) }
+        overlay.share(null, galleryPicture())
         waitFor("Filled in from a shared picture")
         compose.onNodeWithText("Attached").performScrollTo().assertExists()
         compose.onNodeWithText("Save expense").performClick()
@@ -332,11 +331,7 @@ class PictureAttachmentFlowTest {
 
     @Test
     fun `a shared picture the user doesn't add leaves nothing behind`() {
-        compose.setContent {
-            env.Content { ReceiveSharedTransactions(env.container.sharedText, reader, appLocked = false, sampleData = false) }
-        }
-        compose.waitForIdle()
-        compose.runOnUiThread { env.container.sharedText.offer(text = null, picture = galleryPicture()) }
+        overlay.share(null, galleryPicture())
         waitFor("Filled in from a shared picture")
         compose.onNodeWithContentDescription("Drag handle").performSemanticsAction(SemanticsActions.Dismiss)
         // Leaving a filled-in draft asks first.
@@ -352,11 +347,7 @@ class PictureAttachmentFlowTest {
 
     @Test
     fun `a shared picture can be replaced from the menu, and what the new one says takes the notice's place`() {
-        compose.setContent {
-            env.Content { ReceiveSharedTransactions(env.container.sharedText, reader, appLocked = false, sampleData = false) }
-        }
-        compose.waitForIdle()
-        compose.runOnUiThread { env.container.sharedText.offer(text = null, picture = galleryPicture()) }
+        overlay.share(null, galleryPicture())
         waitFor("Filled in from a shared picture")
         val shared = File(env.context.cacheDir, "picture-drafts").listFiles().orEmpty().map { it.name }.toSet()
 
@@ -398,13 +389,6 @@ class PictureAttachmentFlowTest {
     private fun until(condition: () -> Boolean) = compose.waitUntil(timeoutMillis = 10_000) {
         compose.waitForIdle()
         condition()
-    }
-
-    private fun receiveShares() {
-        compose.setContent {
-            env.Content { ReceiveSharedTransactions(env.container.sharedText, reader, appLocked = false, sampleData = false) }
-        }
-        compose.waitForIdle()
     }
 
     @Test
@@ -453,8 +437,7 @@ class PictureAttachmentFlowTest {
     @Test
     fun `a shared picture is read under a loading sheet before the form opens`() {
         val gate = CompletableDeferred<Unit>().also { reader.gate = it }
-        receiveShares()
-        compose.runOnUiThread { env.container.sharedText.offer(text = null, picture = galleryPicture()) }
+        overlay.share(null, galleryPicture())
         waitFor(READING_PICTURE)
         assertTrue(compose.onAllNodesWithText("New expense").fetchSemanticsNodes().isEmpty())
 
@@ -467,8 +450,7 @@ class PictureAttachmentFlowTest {
     @Test
     fun `cancelling the reading of a shared picture opens nothing and leaves nothing behind`() {
         reader.gate = CompletableDeferred()
-        receiveShares()
-        compose.runOnUiThread { env.container.sharedText.offer(text = null, picture = galleryPicture()) }
+        overlay.share(null, galleryPicture())
         waitFor(READING_PICTURE)
         until { drafts().isNotEmpty() }
 

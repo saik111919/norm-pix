@@ -429,8 +429,7 @@ class DummyDataTest {
         // A receipt in the sample set goes out through the real share sheet; left out, the container fell back to a sharer that
         // shares nothing and "Share as image" reported a failure.
         assertSame(sharer, dummy.container.receipts)
-        // Text shared while the sample set shows is the user's own: the sample screens must see it, to offer switching back.
-        assertSame(real.sharedText, dummy.container.sharedText)
+        // The recognizer for a shared receipt is the app's, not the data's.
         assertSame(real.sharedPictures, dummy.container.sharedPictures)
     }
 }

@@ -475,7 +475,7 @@ fun TransactionHistory(
                 if (upcoming.isNotEmpty()) upcomingGroup()
                 if (items.isEmpty()) {
                 item(key = "empty") {
-                    val addExpense = { financeActions.addTransaction(TransactionType.Expense, personId = lockedPersonId) }
+                    val addExpense: () -> Unit = { financeActions.addTransaction(TransactionType.Expense, personId = lockedPersonId) }
                     val personName = finance.person(lockedPersonId)?.name
                     when {
                         !hasAnyData && personName != null -> AppEmptyState(

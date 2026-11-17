@@ -123,9 +123,13 @@ class ReminderFlows(
     override fun linkAutomatically(rule: RecurringRule) = follow(rule, null)
 
     // The repeating payments with a reminder that is still to come: a finished one no longer says the payment is looked after.
-    override val remindedRules: StateFlow<Set<Long>> = container.reminders.state
-        .map { remindedRuleIds(it.reminders) }
-        .stateIn(scope, SharingStarted.WhileSubscribed(5_000), remindedRuleIds(container.reminders.state.value.reminders))
+    // Made when first read (Plans > Recurring): the sharing job it starts in [scope] never ends, so a screen that has no use for it - the
+    // quick add overlay - must not have it, or its scope would never be idle (it ends when the app scope has nothing left to do).
+    override val remindedRules: StateFlow<Set<Long>> by lazy {
+        container.reminders.state
+            .map { remindedRuleIds(it.reminders) }
+            .stateIn(scope, SharingStarted.WhileSubscribed(5_000), remindedRuleIds(container.reminders.state.value.reminders))
+    }
 
     override fun follow(rule: RecurringRule, before: RecurringRule?) {
         val id = rule.id ?: return

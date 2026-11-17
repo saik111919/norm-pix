@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
@@ -84,6 +85,13 @@ class SheetSurface(
      */
     val content: Color = Color.Unspecified,
 )
+
+/**
+ * Whether there is a NormPix page behind the sheets to blur. False in the quick-add overlay (`quickadd/`), which opens over another
+ * app: there is nothing of NormPix's to blur, and a see-through sheet over another app's icons is unreadable, so its sheets and
+ * bars are solid - as they are everywhere with blur off - and the other app is dimmed by Material's usual scrim.
+ */
+val LocalPageBehindToBlur = staticCompositionLocalOf { true }
 
 /**
  * The page behind is blurred when the user has blur on ([enabled]) and the system is blurring at all ([blurAvailable]:

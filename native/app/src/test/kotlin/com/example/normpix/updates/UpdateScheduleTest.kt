@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.os.PersistableBundle
 import androidx.test.core.app.ApplicationProvider
+import com.example.normpix.settings.AppPrefsState
 import com.example.normpix.settings.BackgroundUpdates
 import com.example.normpix.settings.UpdateCheckEvery
 import com.example.normpix.settings.UpdateCheckWhen
@@ -26,7 +27,7 @@ import org.robolectric.annotation.Config
 
 /**
  * The check in the background: there while automatic checks are on, as often as the user chose, either whenever Android
- * finds fit or placed at the user's time, on the network the user's choices allow.
+ * finds fit or placed at the user's time, on any network (it only asks GitHub a small question).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -50,38 +51,47 @@ class UpdateScheduleTest {
 
     private val ninePm = 21 * 60
 
-    private fun atSetTime(every: UpdateCheckEvery = UpdateCheckEvery.OnceADay, minuteOfDay: Int = ninePm, mobileData: Boolean = false) =
-        UpdateCheckPlan(every = every, timing = UpdateCheckWhen.AtSetTime, minuteOfDay = minuteOfDay, mobileData = mobileData)
+    private fun atSetTime(every: UpdateCheckEvery = UpdateCheckEvery.OnceADay, minuteOfDay: Int = ninePm) =
+        UpdateCheckPlan(every = every, timing = UpdateCheckWhen.AtSetTime, minuteOfDay = minuteOfDay)
 
     @Test
-    fun `once a day, kept over a restart, waiting for Wi-Fi to download`() {
-        UpdateSchedule.sync(context, UpdateCheckPlan(mode = BackgroundUpdates.Download, mobileData = false))
+    fun `once a day, kept over a restart, on any network`() {
+        UpdateSchedule.sync(context, UpdateCheckPlan())
         val job = assertNotNull(scheduled())
         assertTrue(job.isPeriodic)
         assertEquals(UpdateSchedule.INTERVAL_MS, job.intervalMillis)
         assertEquals(6 * hour, job.flexMillis, "the last quarter of the day, as it has always been")
         assertTrue(job.isPersisted)
         assertTrue(job.isRequireBatteryNotLow)
-        assertEquals(JobInfo.NETWORK_TYPE_UNMETERED, networkTypeOf(job))
-        assertEquals(JobInfo.NETWORK_TYPE_UNMETERED, UpdateSchedule.networkFor(BackgroundUpdates.Download, mobileData = false))
-        assertEquals(JobInfo.NETWORK_TYPE_UNMETERED, UpdateSchedule.networkFor(BackgroundUpdates.Install, mobileData = false))
+        assertEquals(JobInfo.NETWORK_TYPE_ANY, networkTypeOf(job), "nothing is downloaded, so no Wi-Fi is waited for")
+        assertEquals(JobInfo.NETWORK_TYPE_ANY, UpdateSchedule.NETWORK)
     }
 
     @Test
-    fun `any network will do with mobile data allowed, or when nothing is downloaded`() {
-        assertEquals(JobInfo.NETWORK_TYPE_ANY, UpdateSchedule.networkFor(BackgroundUpdates.Download, mobileData = true))
-        assertEquals(JobInfo.NETWORK_TYPE_ANY, UpdateSchedule.networkFor(BackgroundUpdates.Notify, mobileData = false))
-    }
-
-    @Test
-    fun `the same choices leave the scheduled run alone, and a new one replaces it`() {
-        UpdateSchedule.sync(context, UpdateCheckPlan(mode = BackgroundUpdates.Download, mobileData = false))
+    fun `what an earlier version stored about downloading is read as Tell me, and changes nothing`() {
+        val plain = AppPrefsState().updateCheckPlan()
+        for (mode in BackgroundUpdates.entries) {
+            for (mobileData in listOf(false, true)) {
+                val prefs = AppPrefsState(backgroundUpdates = mode, updateOnMobileData = mobileData)
+                assertEquals(plain, prefs.updateCheckPlan(), "$mode, mobile data $mobileData")
+            }
+        }
+        UpdateSchedule.sync(context, plain)
         val first = assertNotNull(scheduled())
-        UpdateSchedule.sync(context, UpdateCheckPlan(mode = BackgroundUpdates.Install, mobileData = false))
-        assertSame(first, scheduled(), "same network: its day isn't started again")
-        UpdateSchedule.sync(context, UpdateCheckPlan(mode = BackgroundUpdates.Download, mobileData = true))
-        val second = assertNotNull(scheduled())
-        assertTrue(second !== first)
+        UpdateSchedule.sync(context, AppPrefsState(backgroundUpdates = BackgroundUpdates.Install, updateOnMobileData = true).updateCheckPlan())
+        assertSame(first, scheduled(), "the same run: its day isn't started again")
+        assertEquals(JobInfo.NETWORK_TYPE_ANY, networkTypeOf(first))
+    }
+
+    @Test
+    fun `the plan follows the switch, how often and when - and nothing else`() {
+        val prefs = AppPrefsState(
+            updateChecksEnabled = false,
+            updateCheckEvery = UpdateCheckEvery.OnceAWeek,
+            updateCheckWhen = UpdateCheckWhen.AtSetTime,
+            updateCheckMinuteOfDay = 7 * 60,
+        )
+        assertEquals(UpdateCheckPlan(false, UpdateCheckEvery.OnceAWeek, UpdateCheckWhen.AtSetTime, 7 * 60), prefs.updateCheckPlan())
     }
 
     @Test
@@ -120,8 +130,8 @@ class UpdateScheduleTest {
     }
 
     @Test
-    fun `a run scheduled before the user could choose is the daily one, and is left alone`() {
-        // As the last version scheduled it: a day, six hours of flex, the network in the extras and nothing else.
+    fun `a run an earlier version scheduled to wait for Wi-Fi is set again once, onto any network, then left alone`() {
+        // As the last version scheduled it: a day, six hours of flex, an unmetered network in the extras and nothing else.
         val old = JobInfo.Builder(UpdateSchedule.JOB_ID, ComponentName(context, UpdateJobService::class.java))
             .setPeriodic(UpdateSchedule.INTERVAL_MS, 6 * hour)
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED)
@@ -131,23 +141,47 @@ class UpdateScheduleTest {
             .build()
         jobs.schedule(old)
         val pending = assertNotNull(scheduled())
-        UpdateSchedule.sync(context, UpdateCheckPlan(mode = BackgroundUpdates.Download, mobileData = false))
-        assertSame(pending, scheduled(), "its day isn't started again by the update")
+        UpdateSchedule.sync(context, UpdateCheckPlan())
+        val now = assertNotNull(scheduled())
+        assertTrue(now !== pending, "nothing is downloaded now, so it no longer waits for an unmetered network")
+        assertEquals(JobInfo.NETWORK_TYPE_ANY, networkTypeOf(now))
+        UpdateSchedule.sync(context, UpdateCheckPlan())
+        assertSame(now, scheduled(), "once is enough")
+    }
+
+    @Test
+    fun `a run at a set time that an earlier version scheduled to wait for Wi-Fi is set again onto any network`() {
+        val old = JobInfo.Builder(UpdateSchedule.JOB_ID, ComponentName(context, UpdateJobService::class.java))
+            .setMinimumLatency(5 * hour)
+            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED)
+            .setRequiresBatteryNotLow(true)
+            .setPersisted(true)
+            .setExtras(
+                PersistableBundle().apply {
+                    putInt("network", JobInfo.NETWORK_TYPE_UNMETERED)
+                    putString("config", listOf("OnceADay", ninePm, JobInfo.NETWORK_TYPE_UNMETERED, "UTC").joinToString("|"))
+                },
+            )
+            .build()
+        jobs.schedule(old)
+        val pending = assertNotNull(scheduled())
+        UpdateSchedule.sync(context, atSetTime(), lastCheckAt = 0, now = morning, zone = ZoneOffset.UTC)
+        val now = assertNotNull(scheduled())
+        assertTrue(now !== pending)
+        assertEquals(JobInfo.NETWORK_TYPE_ANY, networkTypeOf(now))
     }
 
     // ------------------------------------------------------------ at a set time
 
     @Test
-    fun `at a set time it is one job that waits for the next time, on the same network and battery terms`() {
+    fun `at a set time it is one job that waits for the next time, on any network and the same battery terms`() {
         UpdateSchedule.sync(context, atSetTime(), lastCheckAt = 0, now = morning, zone = ZoneOffset.UTC)
         val job = assertNotNull(scheduled())
         assertFalse(job.isPeriodic)
         assertEquals(11 * hour, job.minLatencyMillis, "from 10:00 to 9:00 PM")
         assertTrue(job.isPersisted)
         assertTrue(job.isRequireBatteryNotLow)
-        assertEquals(JobInfo.NETWORK_TYPE_UNMETERED, networkTypeOf(job))
-        UpdateSchedule.sync(context, atSetTime(mobileData = true), lastCheckAt = 0, now = morning, zone = ZoneOffset.UTC)
-        assertEquals(JobInfo.NETWORK_TYPE_ANY, networkTypeOf(assertNotNull(scheduled())))
+        assertEquals(JobInfo.NETWORK_TYPE_ANY, networkTypeOf(job))
     }
 
     @Test
@@ -176,14 +210,13 @@ class UpdateScheduleTest {
     }
 
     @Test
-    fun `another time, wait, network or time zone sets the run again`() {
+    fun `another time, wait or time zone sets the run again`() {
         UpdateSchedule.sync(context, atSetTime(), now = morning, zone = ZoneOffset.UTC)
         val first = assertNotNull(scheduled())
         val changes = listOf(
             atSetTime(minuteOfDay = 7 * 60) to ZoneOffset.UTC,
             atSetTime(every = UpdateCheckEvery.OnceAWeek, minuteOfDay = 7 * 60) to ZoneOffset.UTC,
-            atSetTime(every = UpdateCheckEvery.OnceAWeek, minuteOfDay = 7 * 60, mobileData = true) to ZoneOffset.UTC,
-            atSetTime(every = UpdateCheckEvery.OnceAWeek, minuteOfDay = 7 * 60, mobileData = true) to ZoneId.of("Asia/Kolkata"),
+            atSetTime(every = UpdateCheckEvery.OnceAWeek, minuteOfDay = 7 * 60) to ZoneId.of("Asia/Kolkata"),
         )
         var before: JobInfo = first
         for ((plan, zone) in changes) {

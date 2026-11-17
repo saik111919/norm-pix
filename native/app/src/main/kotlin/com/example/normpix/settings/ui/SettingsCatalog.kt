@@ -176,11 +176,11 @@ object SettingsCatalog {
         SettingsEntry("Reset all settings", null, listOf("defaults", "reset", "clear preferences"), special = SettingsSpecial.Reset),
         SettingsEntry("Check for updates", null, listOf("update", "upgrade", "new version", "latest", "download", "install", "apk", "release", "github", "automatic"), special = SettingsSpecial.Updates),
         SettingsEntry("What's new & changelog", null, listOf("what's new", "whats new", "changelog", "change log", "release notes", "version history", "latest changes", "new features", "version"), special = SettingsSpecial.Updates),
-        SettingsEntry("Automatic updates", SettingsPage.Updates, listOf("automatic updates", "auto update", "background", "install automatically", "download automatically", "wi-fi", "wifi", "mobile data", "cellular", "metered", "hotspot", "network")),
+        SettingsEntry("Automatic updates", SettingsPage.Updates, listOf("automatic updates", "auto update", "automatic checks", "background", "check automatically")),
         SettingsEntry("How often to check for updates", SettingsPage.Updates, listOf("how often", "frequency", "interval", "update schedule", "daily", "weekly", "twice a day", "once a day", "every 3 days", "once a week")),
         SettingsEntry("Update check time", SettingsPage.Updates, listOf("check time", "set time", "at a set time", "time of day", "when to check", "any time", "update time")),
         SettingsEntry("Check when NormPix opens", SettingsPage.Updates, listOf("check when opened", "check on open", "check at launch", "when i open", "open the app", "launch", "startup")),
-        SettingsEntry("Delete downloaded APK files", SettingsPage.Updates, listOf("apk", "delete apk", "leftover", "installer file", "downloads", "clean up", "storage", "update file")),
+        SettingsEntry("Delete downloaded APK files", SettingsPage.Updates, listOf("apk", "delete apk", "leftover", "installer file", "downloads", "browser", "clean up", "storage", "update file")),
         SettingsEntry(
             "Welcome tour",
             null,
@@ -295,8 +295,8 @@ fun rememberSettingsSystemActions(): SettingsSystemActions {
     }
 
     /**
-     * The update page: it asks GitHub (unless an update is already found, downloading or waiting) and shows where updating
-     * stands - an update to download, its progress, ready to install, or up to date - with the changelog under it.
+     * The update page: it asks GitHub (unless an update is already found) and shows where updating stands - an update to
+     * download in the browser, or up to date - with the changelog under it.
      */
     fun checkForUpdates() {
         if (container.updates == null) return

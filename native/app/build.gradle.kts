@@ -228,6 +228,8 @@ dependencies {
     // Reads the way up a shared picture is turned: the platform's own ExifInterface has had flaws in what it parses.
     implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.activity.compose)
+    // Opens an update's download link in a Chrome Custom Tab (the browser downloads it; Android's installer updates the app).
+    implementation(libs.androidx.browser)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)

@@ -1,7 +1,10 @@
 package com.example.normpix.updates
 
+import android.app.Application
 import android.content.Context
+import android.content.Intent
 import androidx.activity.ComponentActivity
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
@@ -29,6 +32,8 @@ import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
 import androidx.test.core.app.ApplicationProvider
 import com.example.normpix.navigation.SettingsPage
+import com.example.normpix.settings.AppLockScope
+import com.example.normpix.settings.AppLockTimeout
 import com.example.normpix.settings.AppPreferences
 import com.example.normpix.settings.AppPrefsState
 import com.example.normpix.settings.BackgroundUpdates
@@ -42,22 +47,24 @@ import com.example.normpix.settings.ui.automaticUpdatesSummary
 import com.example.normpix.settings.ui.updateBadgeLabel
 import com.example.normpix.testing.TestEnvironment
 import com.example.normpix.ui.theme.NormPixTheme
+import com.example.normpix.updates.ui.ChangelogPage
+import com.example.normpix.updates.ui.DOWNLOAD_STEPS
 import com.example.normpix.updates.ui.OfferAppUpdates
 import com.example.normpix.updates.ui.UpdateBody
-import com.example.normpix.updates.ui.ChangelogPage
 import com.example.normpix.updates.ui.UpdatePage
 import com.example.normpix.updates.ui.UpdateSheetActions
 import com.example.normpix.updates.ui.UpdateSheetContent
-import java.io.File
+import com.example.normpix.wallet.ActivityHost
+import com.example.normpix.wallet.AppLockService
 import java.time.Instant
 import java.time.LocalTime
-import kotlin.io.path.createTempDirectory
 import kotlin.math.abs
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
@@ -69,6 +76,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /** The update sheet in each state (the update page shows the same), the update page, the Settings rows, and the offer at launch. */
@@ -84,22 +92,18 @@ class UpdateUiTest {
         apkUrl = "https://github.com/owner/normpix/releases/download/v1.0.3/NormPix-1.0.3.apk", size = 12_582_912,
         sha256 = "0".repeat(64), mandatory = false,
     )
-    private val apk = File("NormPix-10003.apk")
     private val taps = mutableListOf<String>()
     private val actions = UpdateSheetActions(
-        update = { taps += "update" },
+        download = { taps += "download" },
         later = { taps += "later" },
-        cancelDownload = { taps += "cancel" },
-        install = { taps += "install" },
-        allow = { taps += "allow" },
         retry = { taps += "retry" },
         close = { taps += "close" },
         checkAgain = { taps += "check" },
     )
 
     private val network = FakeNetwork()
-    private val dir: File = createTempDirectory("updates").toFile()
     private val records = MemoryUpdateRecords()
+    private val opener = FakeOpener()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var env: TestEnvironment? = null
 
@@ -107,7 +111,6 @@ class UpdateUiTest {
     fun tearDown() {
         scope.cancel()
         env?.close()
-        dir.deleteRecursively()
     }
 
     private var shown by mutableStateOf<UpdateState?>(null)
@@ -143,14 +146,12 @@ class UpdateUiTest {
     /** An updater on the fake network that does everything on the main thread, as the screen's own work does under test. */
     private fun updater(
         enabled: Boolean = true,
-        installer: FakeInstaller = FakeInstaller(),
+        opener: UpdateDownloadOpener = this.opener,
         changelogs: ChangelogStore = MemoryChangelogStore(),
     ) = AppUpdater(
         installed = Releases.installed,
         checker = UpdateChecker(GitHubAccess(network, "NormPix/test"), Releases.REPO, Releases.installed),
-        downloads = UpdateDownloader(GitHubAccess(network, "NormPix/test"), dir),
-        inspector = FakeInspector(),
-        installer = installer,
+        opener = opener,
         records = records,
         scope = scope,
         io = Dispatchers.Main.immediate,
@@ -163,7 +164,7 @@ class UpdateUiTest {
     // ------------------------------------------------------------ the sheet
 
     @Test
-    fun `an update shows both versions, when it came out, what's new, and Update now or Later`() {
+    fun `an update shows both versions, when it came out, what's new, and Download update or Later`() {
         show(UpdateState.Available(release))
         compose.onNodeWithText("Update available").assertIsDisplayed()
         compose.onNodeWithText("1.0.2").assertIsDisplayed()
@@ -173,43 +174,58 @@ class UpdateUiTest {
         // Each change on a bullet of its own: the dash of the commit line is not shown as text.
         compose.onNodeWithText("Faster receipts").assertIsDisplayed()
         absent("- Faster receipts")
-        tap("Update now")
+        absent("Update now")
+        tap("Download update")
         tap("Later")
-        assertEquals(listOf("update", "later"), taps)
+        assertEquals(listOf("download", "later"), taps)
     }
 
     @Test
-    fun `Later is a text button on the left, Update now a filled button on the right`() {
+    fun `under the buttons, short steps say what happens after Download update`() {
+        assertEquals(
+            "Your browser downloads it. Open the download and tap Update. The first time, Android asks you to let your browser " +
+                "install apps. Your data stays.",
+            DOWNLOAD_STEPS,
+        )
+        show(UpdateState.Available(release))
+        compose.onNodeWithText(DOWNLOAD_STEPS).assertIsDisplayed()
+        val button = boundsOf("Download update")
+        val later = boundsOf("Later")
+        val steps = boundsOf(DOWNLOAD_STEPS)
+        assertTrue(steps.top >= button.bottom && steps.top >= later.bottom, "the steps $steps are under the buttons $later $button")
+        // Said for an update waiting to be downloaded, and for nothing else.
+        show(UpdateState.UpToDate("1.0.2"))
+        absent(DOWNLOAD_STEPS)
+        show(UpdateState.Failed(UpdateProblem.NoBrowser, release))
+        absent(DOWNLOAD_STEPS)
+        show(UpdateState.Checking)
+        absent(DOWNLOAD_STEPS)
+    }
+
+    @Test
+    fun `Later is a text button on the left, Download update a filled button on the right`() {
         show(UpdateState.Available(release))
         val later = boundsOf("Later")
-        val update = boundsOf("Update now")
+        val update = boundsOf("Download update")
         val screen = compose.onRoot().getBoundsInRoot()
-        assertTrue(later.right <= update.left, "Later $later is left of Update now $update")
+        assertTrue(later.right <= update.left, "Later $later is left of Download update $update")
         assertTrue(later.left < screen.left + screen.width / 2, "Later is in the left half")
-        assertTrue(update.right > screen.left + screen.width / 2, "Update now is in the right half")
-        assertTrue(screen.right - update.right <= 32.dp, "Update now sits at the right edge: $update in $screen")
+        assertTrue(update.right > screen.left + screen.width / 2, "Download update is in the right half")
+        assertTrue(screen.right - update.right <= 32.dp, "Download update sits at the right edge: $update in $screen")
         assertEquals(0f, abs((later.top + later.bottom).value - (update.top + update.bottom).value), 2f, "on one line")
-        // The same pair for an update that is ready: Later, then Install.
-        show(UpdateState.Ready(release, apk))
-        assertTrue(boundsOf("Later").right <= boundsOf("Install").left)
-        // And Not now, then Open settings, when Android's leave is needed.
-        show(UpdateState.NeedsPermission(release, apk))
-        assertTrue(boundsOf("Not now").right <= boundsOf("Open settings").left)
     }
 
     @Test
     fun `a single action sits on the right`() {
         val screen = { compose.onRoot().getBoundsInRoot() }
-        show(UpdateState.Downloading(release, release.size / 2, release.size))
-        assertTrue(screen().right - boundsOf("Cancel download").right <= 32.dp, "Cancel download is on the right")
         // Up to date has Done on the left and Check for update, the one thing to do next, on the right.
         show(UpdateState.UpToDate("1.0.2"))
         assertTrue(boundsOf("Done").right <= boundsOf("Check for update").left)
         assertTrue(screen().right - boundsOf("Check for update").right <= 32.dp, "Check for update is on the right")
-        show(UpdateState.Installing(release, apk))
+        show(UpdateState.Checking)
         assertTrue(screen().right - boundsOf("Close").right <= 32.dp, "Close is on the right")
         // A failure that can't be tried again has Close alone; one that can has Close on the left and Try again on the right.
-        show(UpdateState.Failed(UpdateProblem.SignatureMismatch, release))
+        show(UpdateState.Failed(UpdateProblem.BadLink, release))
         assertTrue(screen().right - boundsOf("Close").right <= 32.dp)
         show(UpdateState.Failed(UpdateProblem.Offline))
         assertTrue(boundsOf("Close").right <= boundsOf("Try again").left)
@@ -225,35 +241,10 @@ class UpdateUiTest {
     }
 
     @Test
-    fun `a download shows how far it got and can be stopped`() {
-        show(UpdateState.Downloading(release, release.size / 2, release.size))
-        compose.onNodeWithText("Downloading update").assertIsDisplayed()
-        compose.onNodeWithText("50%", substring = true).assertIsDisplayed()
-        absent("Update now")
-        tap("Cancel download")
-        assertEquals(listOf("cancel"), taps)
-    }
-
-    @Test
-    fun `ready, waiting for leave, and installing`() {
-        show(UpdateState.Ready(release, apk))
-        tap("Install")
-        show(UpdateState.NeedsPermission(release, apk))
-        compose.onNodeWithText("Allow NormPix to install updates").assertIsDisplayed()
-        tap("Open settings")
-        show(UpdateState.Installing(release, apk))
-        compose.onNodeWithText("Confirm on the screen Android shows", substring = true).assertIsDisplayed()
-        tap("Close")
-        assertEquals(listOf("install", "allow", "close"), taps)
-    }
-
-    @Test
-    fun `stopped and turned down updates can be taken up again`() {
-        show(UpdateState.Cancelled(release, null))
-        tap("Download again")
-        show(UpdateState.Cancelled(release, apk))
-        tap("Install")
-        assertEquals(listOf("retry", "install"), taps)
+    fun `nothing is shown of a download or an install, for NormPix does neither`() {
+        show(UpdateState.Available(release))
+        for (gone in listOf("Install", "Cancel download", "Download again", "Open settings", "Downloading update", "Ready to install")) absent(gone)
+        assertTrue(compose.onAllNodesWithText("%", substring = true).fetchSemanticsNodes().isEmpty(), "no progress")
     }
 
     @Test
@@ -262,11 +253,17 @@ class UpdateUiTest {
         compose.onNodeWithText("Couldn't check for updates").assertIsDisplayed()
         compose.onNodeWithText("Couldn't reach GitHub", substring = true).assertIsDisplayed()
         tap("Try again")
-        show(UpdateState.Failed(UpdateProblem.SignatureMismatch, release))
-        compose.onNodeWithText("Couldn't update").assertIsDisplayed()
-        compose.onNodeWithText("signed with a different key", substring = true).assertIsDisplayed()
+        // No browser: said in the sheet, and trying again can help.
+        show(UpdateState.Failed(UpdateProblem.NoBrowser, release))
+        compose.onNodeWithText("Couldn't open the download").assertIsDisplayed()
+        compose.onNodeWithText("couldn't open a browser", substring = true).assertIsDisplayed()
+        tap("Try again")
+        // A link that isn't GitHub's for this app: said, and trying again can't help.
+        show(UpdateState.Failed(UpdateProblem.BadLink, release))
+        compose.onNodeWithText("Couldn't open the download").assertIsDisplayed()
+        compose.onNodeWithText("isn't a file on NormPix's own GitHub releases", substring = true).assertIsDisplayed()
         absent("Try again")
-        assertEquals(listOf("retry"), taps)
+        assertEquals(listOf("retry", "retry"), taps)
     }
 
     @Test
@@ -314,7 +311,7 @@ class UpdateUiTest {
     }
 
     @Test
-    fun `an update waiting is a pill at the end of the row, and what it says is Update or Install`() {
+    fun `an update waiting is a pill at the end of the row, saying Update`() {
         Releases.publish(network)
         val updater = updater()
         val environment = environment(updater)
@@ -325,8 +322,7 @@ class UpdateUiTest {
         compose.onNodeWithText("Version 1.0.3 is available").assertIsDisplayed()
         compose.onNodeWithText("Update").assertIsDisplayed()
         assertEquals("Update", updateBadgeLabel(UpdateState.Available(release)))
-        assertEquals("Install", updateBadgeLabel(UpdateState.Ready(release, apk)))
-        for (quiet in listOf(UpdateState.Idle, UpdateState.UpToDate("1.0.2"), UpdateState.Downloading(release, 1, 2))) {
+        for (quiet in listOf(UpdateState.Idle, UpdateState.UpToDate("1.0.2"), UpdateState.Failed(UpdateProblem.NoBrowser, release))) {
             assertNull(updateBadgeLabel(quiet), "$quiet")
         }
     }
@@ -357,8 +353,9 @@ class UpdateUiTest {
         compose.onNodeWithText("Installed version: 1.0.2").assertIsDisplayed()
         compose.onNodeWithText("New version: 1.0.3").assertIsDisplayed()
         compose.onNodeWithText("Update size", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("Update now").assertIsDisplayed()
+        compose.onNodeWithText("Download update").assertIsDisplayed()
         compose.onNodeWithText("Later").assertIsDisplayed()
+        compose.onNodeWithText(DOWNLOAD_STEPS).assertIsDisplayed()
     }
 
     @Test
@@ -377,20 +374,22 @@ class UpdateUiTest {
     }
 
     @Test
-    fun `the update page's buttons are two pills stacked across the foot of the screen, Update now over Later`() {
+    fun `the update page's buttons are two pills stacked across the foot of the screen, Download update over Later`() {
         Releases.publish(network)
         val environment = environment(updater())
         compose.setContent { environment.Content { UpdatePage() } }
         waitFor("Update available")
         val screen = compose.onRoot().getBoundsInRoot()
-        val update = boundsOf("Update now")
+        val update = boundsOf("Download update")
         val later = boundsOf("Later")
-        assertTrue(update.bottom <= later.top, "Update now $update is over Later $later")
+        assertTrue(update.bottom <= later.top, "Download update $update is over Later $later")
         assertEquals(update.left.value, later.left.value, 1f, "the same width, one under the other")
         assertEquals(update.right.value, later.right.value, 1f)
         assertTrue(update.left - screen.left <= 32.dp && screen.right - update.right <= 32.dp, "across the page: $update in $screen")
         assertTrue(update.width > screen.width * 0.8f, "full width: ${update.width} of ${screen.width}")
         assertTrue(later.top > screen.top + screen.height / 2, "at the foot of the screen: $later")
+        // The steps are under them, at the very foot.
+        assertTrue(boundsOf(DOWNLOAD_STEPS).top >= later.bottom, "the steps are under the buttons")
     }
 
     @Test
@@ -406,6 +405,7 @@ class UpdateUiTest {
         assertTrue(check.top > screen.top + screen.height / 2, "at the foot of the screen")
         assertTrue(done.top >= check.bottom, "Done is under it: $done under $check")
         absent("Later")
+        absent(DOWNLOAD_STEPS)
     }
 
     @Test
@@ -418,7 +418,7 @@ class UpdateUiTest {
         Releases.publish(network, "1.0.3", 10003)
         tap("Check for update")
         waitFor("Update available")
-        compose.onNodeWithText("Update now").assertIsDisplayed()
+        compose.onNodeWithText("Download update").assertIsDisplayed()
         absent("Check for update")
     }
 
@@ -430,10 +430,11 @@ class UpdateUiTest {
         compose.setContent { environment.Content { UpdatePage() } }
         waitFor("Update available")
         val screen = compose.onRoot().getBoundsInRoot()
-        val pinned = boundsOf("Update now")
+        val pinned = boundsOf("Download update")
         val later = boundsOf("Later")
+        val steps = boundsOf(DOWNLOAD_STEPS)
         assertTrue(pinned.top > screen.top + screen.height / 2, "the buttons are in the lower half, without scrolling: $pinned")
-        assertTrue(pinned.bottom <= later.top, "Update now over Later")
+        assertTrue(pinned.bottom <= later.top, "Download update over Later")
         assertTrue(screen.right - pinned.right <= 32.dp, "the buttons run across the page")
 
         // The page scrolls all the way to its last line while the buttons stay where they are. (Its last line is a list item of
@@ -441,14 +442,12 @@ class UpdateUiTest {
         compose.onNode(hasScrollToNodeAction())
             .performScrollToNode(hasText("Only GitHub is contacted", substring = true))
         compose.onNodeWithText("Only GitHub is contacted", substring = true).assertIsDisplayed()
-        assertEquals(pinned, boundsOf("Update now"), "the bar doesn't move with the page")
+        assertEquals(pinned, boundsOf("Download update"), "the bar doesn't move with the page")
         assertEquals(later, boundsOf("Later"))
-        tap("Update now")
-        compose.waitUntil(10_000) {
-            compose.waitForIdle()
-            compose.onAllNodesWithText("Ready to install").fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.onNodeWithText("Install").assertIsDisplayed()
+        assertEquals(steps, boundsOf(DOWNLOAD_STEPS), "nor do the steps under it")
+        tap("Download update")
+        assertEquals(1, opener.opened.size)
+        assertIs<UpdateState.Available>(environment.container.updates?.state?.value, "still an update waiting")
     }
 
     @Test
@@ -473,7 +472,7 @@ class UpdateUiTest {
     }
 
     @Test
-    fun `the update page doesn't ask again for an update already found, and no sheet comes up over it`() {
+    fun `Download update on the update page hands the link to the browser, asks GitHub nothing more, and no sheet comes up`() {
         Releases.publish(network)
         val updater = updater()
         val environment = environment(updater)
@@ -486,34 +485,96 @@ class UpdateUiTest {
         }
         waitFor("Update available")
         val asked = network.asked.size
-        tap("Update now")
-        compose.waitUntil(10_000) {
-            compose.waitForIdle()
-            updater.state.value is UpdateState.Ready
-        }
-        compose.waitForIdle()
-        assertEquals(1, compose.onAllNodesWithText("Ready to install").fetchSemanticsNodes().size, "the page says so, with no sheet over it")
-        assertTrue(network.asked.drop(asked).none { "releases/latest" in it }, "not asked again: ${network.asked.drop(asked)}")
+        tap("Download update")
+        assertEquals(1, opener.opened.size)
+        assertEquals(Releases.download("v1.0.3", Releases.apkName("1.0.3")), opener.opened.single().apkUrl)
+        assertEquals(1, compose.onAllNodesWithText("Update available").fetchSemanticsNodes().size, "the page says so, with no sheet over it")
+        assertEquals(emptyList(), network.asked.drop(asked), "nothing more was asked of GitHub: the browser downloads it")
+        // The tab's look follows the app's theme: its toolbar is the surface colour.
+        assertTrue(opener.looks.single().toolbarColor != 0)
     }
 
     @Test
-    fun `the update page leads to Automatic updates, saying what they do`() {
+    fun `Download update opens a Custom Tab on the release's APK, and the app lock is told`() {
+        Releases.publish(network)
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val lock = AppLockService()
+        // No screen of the app to launch from here, so the tab starts in a task of its own.
+        val real = BrowserDownloadOpener(context, ActivityHost(), lock, Releases.REPO)
+        val environment = environment(updater(opener = real))
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("Update available")
+        lock.unlockAll()
+        tap("Download update")
+
+        val launched = assertNotNull(shadowOf(context).nextStartedActivity)
+        assertEquals(Intent.ACTION_VIEW, launched.action)
+        assertEquals(Releases.download("v1.0.3", Releases.apkName("1.0.3")), launched.dataString)
+        assertTrue(launched.hasExtra(CustomTabsIntent.EXTRA_SESSION), "a Custom Tab")
+        // The app's own surface colour, light or dark with the app: the sheet's theme here is the default (light).
+        assertTrue(launched.getIntExtra(CustomTabsIntent.EXTRA_TOOLBAR_COLOR, 0) != 0)
+        // Still the update, on its page.
+        compose.onNodeWithText("Update available").assertIsDisplayed()
+        // The trip to the browser was allowed for: leaving NormPix now doesn't lock it.
+        val strict = AppPrefsState(walletLockEnabled = true, appLockScope = AppLockScope.EntireApp, appLockTimeout = AppLockTimeout.Immediate)
+        lock.onAppPaused(strict)
+        assertFalse(lock.isAppLocked(strict))
+    }
+
+    @Test
+    fun `a download link that is not this app's on GitHub is refused, said on the page, and not opened`() {
+        Releases.publish(network)
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        // The release came from owner/normpix, but this opener only trusts another repository's links.
+        val picky = BrowserDownloadOpener(context, ActivityHost(), AppLockService(), "someone/else")
+        val environment = environment(updater(opener = picky))
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("Update available")
+        tap("Download update")
+        waitFor("Couldn't open the download")
+        compose.onNodeWithText("isn't a file on NormPix's own GitHub releases", substring = true).assertIsDisplayed()
+        absent("Try again")
+        assertNull(shadowOf(context).nextStartedActivity, "nothing was opened")
+        compose.onNodeWithText("Close").assertIsDisplayed()
+    }
+
+    @Test
+    fun `with no browser it is said on the page, and Try again opens the download once there is one`() {
+        Releases.publish(network)
+        opener.failWith = UpdateProblem.NoBrowser
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatePage() } }
+        waitFor("Update available")
+        tap("Download update")
+        waitFor("Couldn't open the download")
+        compose.onNodeWithText("couldn't open a browser", substring = true).assertIsDisplayed()
+        assertEquals(emptyList(), opener.opened)
+
+        opener.failWith = null
+        tap("Try again")
+        waitFor("Update available")
+        assertEquals(1, opener.opened.size)
+        absent("Couldn't open the download")
+    }
+
+    @Test
+    fun `the update page leads to Automatic updates, saying how often`() {
         val environment = environment(updater())
         compose.setContent { environment.Content { UpdatePage() } }
         compose.onNodeWithText("Automatic updates").performScrollTo()
-        compose.onNodeWithText("Daily · Download, then ask · Wi-Fi only").assertIsDisplayed()
+        compose.onNodeWithText("Daily").assertIsDisplayed()
         tap("Automatic updates")
         assertEquals(listOf<SettingsPage?>(SettingsPage.Updates), environment.navigator.settingsPages)
     }
 
     @Test
-    fun `the summary says how often, at what time, what is done and on which network`() {
-        assertEquals("Daily · Download, then ask · Wi-Fi only", automaticUpdatesSummary(AppPrefsState()))
+    fun `the summary says how often and at what time, and nothing of what an earlier version did`() {
+        assertEquals("Daily", automaticUpdatesSummary(AppPrefsState()))
         val weekly = AppPrefsState(updateCheckEvery = UpdateCheckEvery.OnceAWeek, updateCheckWhen = UpdateCheckWhen.AtSetTime)
-        assertEquals("Weekly at 9:00 PM · Download, then ask · Wi-Fi only", automaticUpdatesSummary(weekly))
-        assertEquals("Weekly at 21:00 · Download, then ask · Wi-Fi only", automaticUpdatesSummary(weekly, is24Hour = true))
+        assertEquals("Weekly at 9:00 PM", automaticUpdatesSummary(weekly))
+        assertEquals("Weekly at 21:00", automaticUpdatesSummary(weekly, is24Hour = true))
         assertEquals(
-            "Every 3 days at 7:30 AM · Install automatically · any network",
+            "Every 3 days at 7:30 AM",
             automaticUpdatesSummary(
                 weekly.copy(
                     updateCheckEvery = UpdateCheckEvery.EveryThreeDays,
@@ -524,12 +585,10 @@ class UpdateUiTest {
             ),
         )
         assertEquals(
-            "Twice daily at 9:00 AM and 9:00 PM · Tell me",
-            automaticUpdatesSummary(
-                weekly.copy(updateCheckEvery = UpdateCheckEvery.TwiceADay, backgroundUpdates = BackgroundUpdates.Notify, updateCheckMinuteOfDay = 9 * 60),
-            ),
+            "Twice daily at 9:00 AM and 9:00 PM",
+            automaticUpdatesSummary(weekly.copy(updateCheckEvery = UpdateCheckEvery.TwiceADay, updateCheckMinuteOfDay = 9 * 60)),
         )
-        assertEquals("Twice daily · Tell me", automaticUpdatesSummary(AppPrefsState(updateCheckEvery = UpdateCheckEvery.TwiceADay, backgroundUpdates = BackgroundUpdates.Notify)))
+        assertEquals("Twice daily", automaticUpdatesSummary(AppPrefsState(updateCheckEvery = UpdateCheckEvery.TwiceADay)))
         assertEquals("Off · only when you check", automaticUpdatesSummary(AppPrefsState(updateChecksEnabled = false)))
     }
 
@@ -540,7 +599,7 @@ class UpdateUiTest {
         environment.preferences.setUpdateCheckWhen(UpdateCheckWhen.AtSetTime)
         compose.setContent { environment.Content { UpdatePage() } }
         compose.onNodeWithText("Automatic updates").performScrollTo()
-        compose.onNodeWithText("Weekly at 9:00 PM · Download, then ask · Wi-Fi only").assertIsDisplayed()
+        compose.onNodeWithText("Weekly at 9:00 PM").assertIsDisplayed()
     }
 
     @Test
@@ -548,28 +607,41 @@ class UpdateUiTest {
         val environment = environment(updater())
         compose.setContent { environment.Content { UpdatesSettingsPage() } }
         assertTrue(environment.preferences.state.value.updateChecksEnabled)
-        compose.onNodeWithText("Download it, then ask").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("How often").performScrollTo().assertIsDisplayed()
         scrollTap("Check for updates automatically")
         assertFalse(environment.preferences.state.value.updateChecksEnabled)
-        absent("When an update is found")
-        absent("Download it, then ask")
         absent("How often")
         absent("Check when you open NormPix")
     }
 
     @Test
-    fun `the update files row ends the page, and stays when checking is off and in a build that never updates itself`() {
+    fun `what to do with an update found, downloading on mobile data and Android's leave are gone from Automatic updates`() {
+        val environment = environment(updater())
+        compose.setContent { environment.Content { UpdatesSettingsPage() } }
+        compose.onNodeWithText("Check when you open NormPix").performScrollTo().assertIsDisplayed()
+        for (gone in listOf(
+            "When an update is found", "Tell me", "Download it, then ask", "Install it automatically", "Network", "Download on mobile data",
+            "Android's leave", "Allow NormPix to install updates",
+        )) {
+            absent(gone)
+        }
+        assertTrue(compose.onAllNodesWithText("mobile data", substring = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodesWithText("Wi-Fi", substring = true).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun `the update files row ends the page and says the browser leaves the files, and stays when checking is off`() {
         val environment = environment(updater())
         compose.setContent { environment.Content { UpdatesSettingsPage() } }
         compose.onNodeWithText("Update files").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Delete downloaded APK files").performScrollTo().assertIsDisplayed()
-        // After "Network" and the rest, not before them.
-        assertTrue(boundsOf("Update files").top > boundsOf("Network").top, "the last group of the page")
+        compose.onNodeWithText("Pick NormPix files your browser left in Downloads after an update").assertIsDisplayed()
+        compose.onNodeWithText("Your browser saves an update in Downloads", substring = true).performScrollTo().assertIsDisplayed()
+        // After the groups that choose how NormPix checks, not before them.
+        assertTrue(boundsOf("Update files").top > boundsOf("Check when you open NormPix").top, "the last group of the page")
 
         scrollTap("Check for updates automatically")
         assertFalse(environment.preferences.state.value.updateChecksEnabled)
-        absent("Network")
         compose.onNodeWithText("Delete downloaded APK files").performScrollTo().assertIsDisplayed()
     }
 
@@ -584,7 +656,7 @@ class UpdateUiTest {
 
     @Test
     fun `settings search finds the update files row on the Automatic updates page`() {
-        for (query in listOf("apk", "delete apk", "leftover", "installer file", "clean up", "update file")) {
+        for (query in listOf("apk", "delete apk", "leftover", "installer file", "clean up", "update file", "browser")) {
             val found = SettingsCatalog.search(query).filter { it.title == "Delete downloaded APK files" }
             assertEquals(listOf<SettingsPage?>(SettingsPage.Updates), found.map { it.page }, "\"$query\" finds it")
         }
@@ -616,6 +688,7 @@ class UpdateUiTest {
         assertEquals(UpdateCheckWhen.AtSetTime, environment.preferences.state.value.updateCheckWhen)
         compose.onNodeWithText("Check time").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("9:00 PM").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("once the phone has a network and its battery isn't low", substring = true).performScrollTo().assertIsDisplayed()
 
         environment.preferences.setUpdateCheckTime(7, 30)
         compose.waitForIdle()
@@ -643,39 +716,6 @@ class UpdateUiTest {
         assertTrue(environment.preferences.state.value.updateChecksEnabled, "the check in the background is not affected")
         compose.onNodeWithText("Once a day, in the background", substring = true).performScrollTo().assertIsDisplayed()
         absent("Once a day, in the background and when you open NormPix")
-    }
-
-    @Test
-    fun `the mobile data switch has a title of its own, and says what it covers`() {
-        val environment = environment(updater())
-        compose.setContent { environment.Content { UpdatesSettingsPage() } }
-        compose.onNodeWithText("Network").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Background downloads wait for Wi-Fi").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("A metered Wi-Fi, such as a hotspot, counts as mobile data.", substring = true).performScrollTo().assertIsDisplayed()
-        scrollTap("Download on mobile data")
-        compose.onNodeWithText("Background downloads may use mobile data").performScrollTo().assertIsDisplayed()
-        // The switch's group begins clear of the one above it (its title's own space), not tight against it.
-        val above = boundsOf("Install it automatically")
-        val title = boundsOf("Network")
-        assertTrue(title.top - above.bottom >= 12.dp, "Network starts clear of the group above: $above, $title")
-    }
-
-    @Test
-    fun `what happens to an update found in the background is the user's to choose`() {
-        val environment = environment(updater())
-        compose.setContent { environment.Content { UpdatesSettingsPage() } }
-        assertEquals(BackgroundUpdates.Download, environment.preferences.state.value.backgroundUpdates)
-        compose.onNodeWithText("Download on mobile data").performScrollTo().assertIsDisplayed()
-        scrollTap("Download on mobile data")
-        assertTrue(environment.preferences.state.value.updateOnMobileData)
-
-        scrollTap("Install it automatically")
-        assertEquals(BackgroundUpdates.Install, environment.preferences.state.value.backgroundUpdates)
-        compose.onNodeWithText("never while you're using it", substring = true).performScrollTo().assertIsDisplayed()
-
-        scrollTap("Tell me")
-        assertEquals(BackgroundUpdates.Notify, environment.preferences.state.value.backgroundUpdates)
-        absent("Download on mobile data")
     }
 
     @Test
@@ -802,6 +842,7 @@ class UpdateUiTest {
         waitFor("Version 1.0.2")
         compose.onNodeWithText("No notes were written for this version.").performScrollTo().assertIsDisplayed()
     }
+
     @Test
     fun `settings search finds the changelog`() {
         for (query in listOf("changelog", "what's new", "release notes", "version history")) {
@@ -832,38 +873,6 @@ class UpdateUiTest {
     }
 
     @Test
-    fun `Install on the ready notification opens the update page and installs what's ready`() {
-        Releases.publish(network)
-        val installer = FakeInstaller()
-        val updater = updater(installer = installer)
-        val environment = environment(updater)
-        environment.preferences.setUpdateChecksEnabled(false)
-        scope.launch { updater.check() }
-        compose.waitForIdle()
-        updater.download()
-        compose.waitForIdle()
-        assertIs<UpdateState.Ready>(updater.state.value)
-        compose.setContent {
-            environment.Content {
-                OfferAppUpdates(
-                    updater,
-                    appLocked = false,
-                    requests = environment.container.updateRequests,
-                    installRequests = environment.container.updateInstallRequests,
-                )
-            }
-        }
-        environment.container.updateInstallRequests.value = true
-        environment.container.updateRequests.value = true
-        compose.waitUntil(10_000) {
-            compose.waitForIdle()
-            installer.installs.isNotEmpty()
-        }
-        assertEquals(1, environment.navigator.updatesOpened)
-        assertFalse(environment.container.updateInstallRequests.value)
-    }
-
-    @Test
     fun `settings search finds it`() {
         for (query in listOf("update", "upgrade", "new version", "apk")) {
             assertEquals(SettingsSpecial.Updates, SettingsCatalog.search(query).single { it.title == "Check for updates" }.special, query)
@@ -877,13 +886,21 @@ class UpdateUiTest {
             "How often to check for updates" to listOf("how often", "frequency", "twice a day", "once a week", "every 3 days"),
             "Update check time" to listOf("check time", "at a set time", "time of day", "any time"),
             "Check when NormPix opens" to listOf("check when opened", "check on open", "when i open", "launch"),
-            "Automatic updates" to listOf("mobile data", "metered", "hotspot", "wi-fi"),
+            "Automatic updates" to listOf("automatic updates", "auto update", "automatic checks", "check automatically"),
         )
         for ((title, queries) in searches) {
             for (query in queries) {
                 val found = SettingsCatalog.search(query).filter { it.title == title }
                 assertEquals(listOf<SettingsPage?>(SettingsPage.Updates), found.map { it.page }, "\"$query\" finds \"$title\"")
             }
+        }
+    }
+
+    @Test
+    fun `settings search no longer offers what is gone from the Automatic updates page`() {
+        for (query in listOf("mobile data", "metered", "hotspot", "install automatically", "download automatically", "wi-fi", "wifi", "cellular")) {
+            val onThePage = SettingsCatalog.search(query).filter { it.page == SettingsPage.Updates }
+            assertEquals(emptyList(), onThePage.map { it.title }, "\"$query\" finds nothing on Automatic updates")
         }
     }
 
@@ -908,26 +925,6 @@ class UpdateUiTest {
         compose.waitForIdle()
         absent("Update available")
         absent("Later")
-    }
-
-    @Test
-    fun `a download finished while the user is elsewhere waits for them, with no sheet, and nothing is installed`() {
-        Releases.publish(network)
-        val installer = FakeInstaller()
-        val updater = updater(installer = installer)
-        val environment = environment(updater)
-        environment.preferences.setUpdateChecksEnabled(false)
-        compose.setContent { environment.Content { OfferAppUpdates(updater, appLocked = false) } }
-        compose.waitForIdle()
-        scope.launch { updater.check() }
-        compose.waitForIdle()
-        assertIs<UpdateState.Available>(updater.state.value)
-
-        updater.download()
-        compose.waitForIdle()
-        assertIs<UpdateState.Ready>(updater.state.value)
-        absent("Ready to install")
-        assertEquals(emptyList(), installer.installs, "nothing is installed until the user says so")
     }
 
     @Test
@@ -1003,18 +1000,16 @@ class UpdatePreferenceTest {
 
     @Test
     fun `resetting settings turns them back on`() {
-        val preferences = AppPreferences(store())
+        val store = store()
+        val preferences = AppPreferences(store)
         preferences.setUpdateChecksEnabled(false)
-        preferences.setBackgroundUpdates(BackgroundUpdates.Install)
-        preferences.setUpdateOnMobileData(true)
+        store.edit().putString("background_updates", "Install").putBoolean("update_on_mobile_data", true).commit()
         preferences.setUpdateCheckEvery(UpdateCheckEvery.OnceAWeek)
         preferences.setUpdateCheckWhen(UpdateCheckWhen.AtSetTime)
         preferences.setUpdateCheckTime(6, 45)
         preferences.setUpdateCheckOnOpen(false)
         preferences.resetToDefaults()
         assertTrue(preferences.state.value.updateChecksEnabled)
-        assertEquals(BackgroundUpdates.Download, preferences.state.value.backgroundUpdates)
-        assertFalse(preferences.state.value.updateOnMobileData)
         assertEquals(UpdateCheckEvery.OnceADay, preferences.state.value.updateCheckEvery)
         assertEquals(UpdateCheckWhen.AnyTime, preferences.state.value.updateCheckWhen)
         assertEquals(21 * 60, preferences.state.value.updateCheckMinuteOfDay)
@@ -1071,15 +1066,19 @@ class UpdatePreferenceTest {
     }
 
     @Test
-    fun `in the background an update is downloaded on Wi-Fi and then asked about, until the user chooses otherwise`() {
+    fun `what an earlier version stored about downloading is still read, and nothing acts on it`() {
         val store = store()
         val defaults = AppPreferences(store).state.value
         assertEquals(BackgroundUpdates.Download, defaults.backgroundUpdates)
         assertFalse(defaults.updateOnMobileData)
-        AppPreferences(store).setBackgroundUpdates(BackgroundUpdates.Install)
-        AppPreferences(store).setUpdateOnMobileData(true)
+        // As an earlier version wrote them (the keys are never renamed).
+        store.edit().putString("background_updates", "Install").putBoolean("update_on_mobile_data", true).commit()
         val read = AppPreferences(store).state.value
-        assertEquals(BackgroundUpdates.Install, read.backgroundUpdates, "read back by the next launch")
+        assertEquals(BackgroundUpdates.Install, read.backgroundUpdates, "read back as stored")
         assertTrue(read.updateOnMobileData)
+        assertEquals(AppPrefsState().updateCheckPlan(), read.updateCheckPlan(), "and ignored by the check in the background")
+        // A value from a version that is no more reads as the default rather than failing.
+        store.edit().putString("background_updates", "Teleport").commit()
+        assertEquals(BackgroundUpdates.Download, AppPreferences(store).state.value.backgroundUpdates)
     }
 }

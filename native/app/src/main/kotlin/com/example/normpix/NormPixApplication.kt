@@ -45,7 +45,6 @@ import com.example.normpix.finance.ui.ReceiptSharer
 import com.example.normpix.finance.share.MlKitSharedPictureReader
 import com.example.normpix.finance.share.NoSharedPictureReader
 import com.example.normpix.finance.share.SharedPictureReader
-import com.example.normpix.finance.share.SharedTextInbox
 import com.example.normpix.updates.AppUpdater
 import com.example.normpix.updates.UpdateSchedule
 import com.example.normpix.updates.updateCheckPlan
@@ -96,13 +95,11 @@ class AppContainer(
     val expiry: CardExpiryTracker = CardExpiryTracker.inert(),
     /** Hands a rendered receipt to the system share sheet; shares nothing where there is none (tests). */
     val receipts: ReceiptSharer = NoReceiptSharer,
-    /** Text other apps shared with NormPix, waiting to be opened as a transaction draft (memory only). */
-    val sharedText: SharedTextInbox = SharedTextInbox(),
     /** Reads the text of a shared picture on the device; reads nothing where there is no recognizer (tests). */
     val sharedPictures: SharedPictureReader = NoSharedPictureReader,
     /**
-     * Checks GitHub for a newer release and installs it with the user's say-so (or, in the background, as far as they chose);
-     * null where nothing is updated (tests).
+     * Checks GitHub for a newer release and opens its download in the user's browser when they say so (nothing is downloaded or
+     * installed by the app itself); null where nothing is updated (tests).
      */
     val updates: AppUpdater? = null,
     /**
@@ -126,9 +123,6 @@ class AppContainer(
 
     /** Set when an update notification was tapped: the UI opens the update page (once unlocked), then clears it. */
     val updateRequests = MutableStateFlow(false)
-
-    /** Set with [updateRequests] by Install on the "ready to install" notification: the update page installs it, too. */
-    val updateInstallRequests = MutableStateFlow(false)
 
     init {
         // What the vault may keep is the user's say (Store cards, Save CVV): every way a card gets in is held to it.
@@ -214,7 +208,7 @@ class NormPixApplication : Application() {
     }
 
     /**
-     * The check in the background follows Settings > Automatic updates (whether, how often, at what time, and on what network):
+     * The check in the background follows Settings > Automatic updates (whether, how often, and at what time):
      * scheduled, changed or cancelled with it, and set again at every start - which a run at a set time relies on, as it
      * waits for one time only.
      */

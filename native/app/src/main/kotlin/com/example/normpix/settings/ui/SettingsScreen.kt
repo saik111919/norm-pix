@@ -273,7 +273,7 @@ internal fun SettingsListContent(
                             icon = Icons.Outlined.SystemUpdate,
                             hue = SettingsPageUpdatesHue,
                             emoji = SettingsRowEmoji.UPDATES,
-                            alert = update is UpdateState.Available || update is UpdateState.Ready,
+                            alert = update is UpdateState.Available,
                             onClick = { system.checkForUpdates() },
                             trailing = updateBadgeLabel(update)?.let { label -> { UpdateBadge(label) } },
                             selected = selected?.isUpdates,
@@ -320,10 +320,9 @@ internal fun SettingsListContent(
 /** What the Updates row is called: the check, what is new and the changelog are all behind it. */
 internal const val UPDATES_ROW_TITLE = "Updates & changelog"
 
-/** What the small pill at the end of the Updates row says when there is something to do: Update, or Install. Null when there isn't. */
+/** What the small pill at the end of the Updates row says when there is something to do: Update. Null when there isn't. */
 internal fun updateBadgeLabel(state: UpdateState): String? = when (state) {
     is UpdateState.Available -> "Update"
-    is UpdateState.Ready -> "Install"
     else -> null
 }
 

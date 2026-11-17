@@ -84,7 +84,6 @@ import com.example.normpix.finance.ui.PeoplePage
 import com.example.normpix.finance.ui.PersonDetailPage
 import com.example.normpix.finance.ui.RepeatingCostsPage
 import com.example.normpix.finance.ui.rememberFinanceState
-import com.example.normpix.finance.share.ReceiveSharedTransactions
 import com.example.normpix.updates.ui.OfferAppUpdates
 import com.example.normpix.settings.PageAnimationType
 import com.example.normpix.settings.ui.BanksAndCategoriesPage
@@ -558,8 +557,8 @@ private fun AppNavigation(
      // Reminders are one tap from what they are about (an expense's receipt, a repeating payment, an account), so those
      // screens can start one; the flows need the navigator, so they are made here, once it is provided.
      CompositionLocalProvider(LocalReminderLauncher provides rememberReminderFlows()) {
-      // Text shared from another app (ShareTransactionActivity) opens as a new-transaction draft, once unlocked.
-      ReceiveSharedTransactions(container.sharedText, container.sharedPictures, appLocked = held, sampleData = sampleData)
+      // (A share is no longer opened here: ShareTransactionActivity hands it to QuickAddActivity, which opens the form over the
+      // sharing app.)
       // A home-screen widget's tap: a new transaction, one transaction's details or Activity, once unlocked.
       ReceiveWidgetRequests(container.widgetRequests, held = held, sampleData = sampleData)
       // Once a day at launch, once unlocked: a newer release on GitHub is offered (Settings > Check for updates).
@@ -567,7 +566,6 @@ private fun AppNavigation(
           container.updates,
           appLocked = held,
           requests = container.updateRequests,
-          installRequests = container.updateInstallRequests,
       )
       // The app's own background behind every page: while one page leaves and another arrives (or a tab is still
       // composing for the first time) it is what shows between them, never the window's - which follows the

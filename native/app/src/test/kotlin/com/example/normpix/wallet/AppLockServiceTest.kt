@@ -145,6 +145,17 @@ class AppLockServiceTest {
     }
 
     @Test
+    fun aTripThatDidNotHappenLeavesTheLockAsStrictAsBefore() {
+        val p = prefs(scope = AppLockScope.EntireApp)
+        unlock()
+        // Told of a trip, but nothing could open (a link with no browser to take it): the next real trip away locks at once.
+        lock.expectExternalActivity()
+        lock.cancelExternalActivity()
+        lock.onAppPaused(p)
+        assertTrue(lock.isAppLocked(p))
+    }
+
+    @Test
     fun aLongTripToTheCameraStillLocks() {
         val p = prefs(scope = AppLockScope.EntireApp)
         unlock()
