@@ -64,7 +64,16 @@ Format: `claim - applies to - source - status/date`.
   same signing key + higher `versionCode` keeps data. A SQLite downgrade throws unless `onDowngrade` is overridden - Android 8+ -
   NOTES (design analysis for the preview channel, 2026-10-25).
 - `UPDATE_PACKAGES_WITHOUT_USER_ACTION` lets an app update itself without a confirmation on Android 12+; otherwise the installer asks.
-  The app never silently uninstalls - Android 12+ - manifest comment + README, NOTES.
+  The app never silently uninstalls - Android 12+ - manifest comment + README, NOTES. **NormPix no longer declares it** (nor
+  `REQUEST_INSTALL_PACKAGES`), since updates go through the browser (2026-11-16): Android's installer asks every time.
+- **Chrome Custom Tabs** (`androidx.browser:browser` 1.10.0, released 2026-03-25, minSdk 23; used since 2026-11-16): `CustomTabsIntent.Builder`
+  has `setColorScheme(COLOR_SCHEME_LIGHT|DARK|SYSTEM)`, `setDefaultColorSchemeParams(CustomTabColorSchemeParams)` and `setShowTitle`;
+  `CustomTabColorSchemeParams.Builder` has `setToolbarColor` and `setNavigationBarColor` - `javap` on the AAR and a compile (2026-11-16).
+  `launchUrl(context, uri)` is `intent.setData(uri)` then `ContextCompat.startActivity(context, intent, bundle)` (bytecode), so it needs
+  **no `<queries>` entry** (only `CustomTabsClient.getPackageName`, which NormPix does not call, resolves the browser) and throws
+  `ActivityNotFoundException` when no browser takes the link; from a non-activity context the intent needs `FLAG_ACTIVITY_NEW_TASK`. The
+  library's own manifest declares only `<uses-sdk>`: no permission, no `<queries>`. In Robolectric the tab's intent carries
+  `CustomTabsIntent.EXTRA_SESSION`, `EXTRA_COLOR_SCHEME`, `EXTRA_TOOLBAR_COLOR` and `EXTRA_NAVIGATION_BAR_COLOR`, which the opener tests read.
 - A tag or phone that shows a new random 4-byte ID each tap (ID starting `0x08`) cannot be recognised again, so NFC tag registration
   refuses it - NfcA/NfcTagRegistration - NOTES (Phase 20).
 - Reading a bank card over NFC: NormPix AID, then the public PPSE directory, then NDEF; never GPO / READ RECORD (those would read
@@ -192,6 +201,7 @@ Format: `claim - applies to - source - status/date`.
 - A sideloaded APK that declares `REQUEST_INSTALL_PACKAGES` together with NormPix's other powers is answered `POTENTIALLY_UNWANTED` /
   `generic_malware` by Play Protect's cloud scan; without that permission, `SAFE` - Play Protect on Android 16, Nov 2026 - owner's
   phone, eleven variants (`build-test-release.md` section 8) - verified 2026-11-13. Google publishes no criteria for this verdict.
+  NormPix dropped the permission on 2026-11-16; whether the new build is `SAFE` on the phone is **not yet verified**.
 - `adb install` is not cloud-scanned (installer `com.android.shell` is allowed) - same phone - logcat `Finsky VerifyApps` - verified 2026-11-13.
 - The appeal form is `support.google.com/googleplay/android-developer/contact/protectappeals`: email, package name, the APK's SHA-256
   **as uploaded to VirusTotal**, and a justification (all required); "All appeal decisions are final and you will not receive a

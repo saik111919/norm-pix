@@ -15,16 +15,13 @@ import com.example.normpix.testing.TestEnvironment
 import com.example.normpix.ui.theme.StatusTone
 import com.example.normpix.updates.ui.UpdateSheetActions
 import com.example.normpix.updates.ui.updateBannerFor
-import java.io.File
 import java.time.Instant
-import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,7 +33,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Home's "Needs attention" shows an update that is out, and follows it through downloading to Install. */
+/** Home's "Needs attention" shows an update that is out, with Download update (which opens the browser) and Later. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
 class HomeUpdateBannerTest {
@@ -44,8 +41,8 @@ class HomeUpdateBannerTest {
     val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val network = FakeNetwork()
-    private val dir: File = createTempDirectory("home_updates").toFile()
     private val records = MemoryUpdateRecords()
+    private val opener = FakeOpener()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var env: TestEnvironment? = null
 
@@ -53,16 +50,13 @@ class HomeUpdateBannerTest {
     fun tearDown() {
         scope.cancel()
         env?.close()
-        dir.deleteRecursively()
     }
 
     /** An updater on the fake network that does everything on the main thread, as the screens' own work does under test. */
     private fun updater(enabled: Boolean = true) = AppUpdater(
         installed = Releases.installed,
         checker = UpdateChecker(GitHubAccess(network, "NormPix/test"), Releases.REPO, Releases.installed),
-        downloads = UpdateDownloader(GitHubAccess(network, "NormPix/test"), dir),
-        inspector = FakeInspector(),
-        installer = FakeInstaller(),
+        opener = opener,
         records = records,
         scope = scope,
         io = Dispatchers.Main.immediate,
@@ -117,7 +111,7 @@ class HomeUpdateBannerTest {
     }
 
     @Test
-    fun `an update that is out is under Needs attention, with Update and Later`() {
+    fun `an update that is out is under Needs attention, with Download update and Later`() {
         Releases.publish(network)
         val updater = updater()
         home(updater)
@@ -126,23 +120,49 @@ class HomeUpdateBannerTest {
         waitForBanner("NormPix 1.0.3 is available")
         compose.onNodeWithText("Needs attention").assertIsDisplayed()
         compose.onNodeWithContentDescription("App update", substring = true).assertIsDisplayed()
-        assertEquals(listOf("Later", "Update"), actionsOf("NormPix 1.0.3 is available"))
+        assertEquals(listOf("Later", "Download update"), actionsOf("NormPix 1.0.3 is available"))
     }
 
     @Test
-    fun `Update starts the download as the sheet's Update now does, and the banner follows it to Install`() {
+    fun `Download update opens the browser, and the banner stays for the update that is still waiting`() {
         Releases.publish(network)
         val updater = updater()
         home(updater)
         find(updater)
         waitForBanner("NormPix 1.0.3 is available")
 
-        press("NormPix 1.0.3 is available", "Update")
-        waitForBanner("Ready to install")
-        assertIs<UpdateState.Ready>(updater.state.value)
-        assertTrue(network.asked.any { "NormPix-1.0.3.apk" in it }, "the APK was fetched: ${network.asked}")
-        assertEquals(listOf("Later", "Install"), actionsOf("Ready to install"))
+        press("NormPix 1.0.3 is available", "Download update")
+        assertEquals(listOf("1.0.3"), opener.opened.map { it.versionName })
+        assertEquals(Releases.download("v1.0.3", Releases.apkName("1.0.3")), opener.opened.single().apkUrl)
+        assertIs<UpdateState.Available>(updater.state.value)
+        assertEquals(1, banners("NormPix 1.0.3 is available").size)
+        assertEquals(emptyList(), network.asked.filter { ".apk" in it }, "NormPix fetched nothing itself")
         assertEquals(0L, records.dismissedVersionCode)
+    }
+
+    @Test
+    fun `with no browser the banner stays, Download update tries again, and the page that opens says why`() {
+        Releases.publish(network)
+        val updater = updater()
+        val environment = home(updater)
+        find(updater)
+        waitForBanner("NormPix 1.0.3 is available")
+
+        opener.failWith = UpdateProblem.NoBrowser
+        press("NormPix 1.0.3 is available", "Download update")
+        assertIs<UpdateState.Failed>(updater.state.value)
+        assertEquals(emptyList(), opener.opened)
+        waitForBanner("NormPix 1.0.3 is available")
+        assertEquals(listOf("Later", "Download update"), actionsOf("NormPix 1.0.3 is available"))
+
+        opener.failWith = null
+        press("NormPix 1.0.3 is available", "Download update")
+        assertEquals(1, opener.opened.size)
+        assertIs<UpdateState.Available>(updater.state.value)
+
+        compose.onNodeWithContentDescription("NormPix 1.0.3 is available", substring = true).performClick()
+        compose.waitForIdle()
+        assertEquals(1, environment.navigator.updatesOpened)
     }
 
     @Test
@@ -192,7 +212,7 @@ class HomeUpdateBannerTest {
         home(updater)
         find(updater)
         waitForBanner("NormPix 1.0.3 is available")
-        assertEquals(listOf("Update"), actionsOf("NormPix 1.0.3 is available"))
+        assertEquals(listOf("Download update"), actionsOf("NormPix 1.0.3 is available"))
     }
 
     @Test
@@ -208,7 +228,7 @@ class HomeUpdateBannerTest {
     }
 }
 
-/** The update banner for each step of an update, without a screen. */
+/** The update banner for each state of an update, without a screen. */
 class UpdateBannerTest {
     private val release = UpdateRelease(
         versionCode = 10003, versionName = "1.0.3", tag = "v1.0.3", publishedAt = Instant.parse("2026-10-15T09:00:00Z"),
@@ -216,14 +236,10 @@ class UpdateBannerTest {
         apkUrl = "https://github.com/owner/normpix/releases/download/v1.0.3/NormPix-1.0.3.apk", size = 12L * 1024 * 1024,
         sha256 = "0".repeat(64), mandatory = false,
     )
-    private val apk = File("NormPix-10003.apk")
     private val taps = mutableListOf<String>()
     private val actions = UpdateSheetActions(
-        update = { taps += "update" },
+        download = { taps += "download" },
         later = { taps += "later" },
-        cancelDownload = { taps += "cancel" },
-        install = { taps += "install" },
-        allow = { taps += "allow" },
         retry = { taps += "retry" },
         close = { taps += "close" },
         checkAgain = { taps += "check" },
@@ -239,7 +255,7 @@ class UpdateBannerTest {
     )
 
     @Test
-    fun `an update that is out says so, with Update on the right and Later before it`() {
+    fun `an update that is out says so, with Download update on the right and Later before it`() {
         val banner = assertNotNull(bannerFor(UpdateState.Available(release)))
         assertEquals("App update", banner.eyebrow)
         assertEquals("NormPix 1.0.3 is available", banner.title)
@@ -249,89 +265,50 @@ class UpdateBannerTest {
         assertEquals("12 MB", banner.figure?.figure)
         assertEquals("Update to 1.0.3", banner.figure?.note)
         assertEquals(StatusTone.Info, banner.tone)
-        assertEquals("Update", banner.primary.label)
+        assertEquals("Download update", banner.primary.label)
         assertEquals("Later", banner.secondary?.label)
+        assertNull(banner.bar, "nothing is downloaded by the app, so there is no progress")
         banner.primary.onClick()
         banner.secondary?.onClick?.invoke()
         banner.onOpen()
-        assertEquals(listOf("update", "later", "open"), taps)
+        assertEquals(listOf("download", "later", "open"), taps)
     }
 
     @Test
     fun `one put off, or one that is not an update, has no banner`() {
         assertNull(bannerFor(UpdateState.Available(release), offered = false))
-        assertNull(bannerFor(UpdateState.Ready(release, apk), offered = false))
-        assertNull(bannerFor(UpdateState.NeedsPermission(release, apk), offered = false))
-        assertNull(bannerFor(UpdateState.Cancelled(release, apk), offered = false))
-        assertNull(bannerFor(UpdateState.Cancelled(release, null), offered = false))
-        for (state in listOf(UpdateState.Idle, UpdateState.Checking, UpdateState.UpToDate("1.0.2"), UpdateState.Installing(release, apk))) {
+        assertNull(bannerFor(UpdateState.Failed(UpdateProblem.NoBrowser, release), offered = false))
+        for (state in listOf(UpdateState.Idle, UpdateState.Checking, UpdateState.UpToDate("1.0.2"))) {
             assertNull(bannerFor(state), state.toString())
         }
+        // A check that failed has no release to offer.
         assertNull(bannerFor(UpdateState.Failed(UpdateProblem.Offline)))
-        assertNull(bannerFor(UpdateState.Failed(UpdateProblem.Storage, release)))
     }
 
     @Test
-    fun `a download says how far it is, offers Cancel, and is shown even after Later`() {
-        val banner = assertNotNull(bannerFor(UpdateState.Downloading(release, release.size / 4, release.size), offered = false))
-        assertEquals("Downloading 1.0.3", banner.title)
-        // How far it is, as the banner's ring (since 2026-11-15) with the percent inside; how much of how much, as its message.
-        val bar = assertNotNull(banner.bar)
-        assertEquals(0.25f, bar.fraction, 0.001f)
-        assertEquals("25%", bar.label)
-        assertEquals("3 MB of 12 MB", banner.message)
-        assertEquals("Cancel", banner.secondary?.label)
-        assertEquals("Details", banner.primary.label)
-        banner.secondary?.onClick?.invoke()
-        banner.primary.onClick()
-        assertEquals(listOf("cancel", "open"), taps)
-    }
-
-    @Test
-    fun `a downloaded update, or one turned down, waits for Install`() {
-        for (state in listOf(UpdateState.Ready(release, apk), UpdateState.Cancelled(release, apk))) {
-            taps.clear()
-            val banner = assertNotNull(bannerFor(state), state.toString())
-            assertEquals("Ready to install", banner.title)
-            assertEquals("NormPix 1.0.3 is downloaded and checked", banner.message)
-            assertEquals("Install", banner.primary.label)
-            assertEquals("Later", banner.secondary?.label)
-            banner.primary.onClick()
-            assertEquals(listOf("install"), taps)
-        }
-    }
-
-    @Test
-    fun `a download the user stopped can be started again`() {
-        val banner = assertNotNull(bannerFor(UpdateState.Cancelled(release, null)))
+    fun `an update whose download could not be opened keeps its banner while trying again can help`() {
+        val banner = assertNotNull(bannerFor(UpdateState.Failed(UpdateProblem.NoBrowser, release)))
         assertEquals("NormPix 1.0.3 is available", banner.title)
-        assertEquals("Update", banner.primary.label)
-    }
-
-    @Test
-    fun `an update waiting for Android's leave offers Allow installs`() {
-        val banner = assertNotNull(bannerFor(UpdateState.NeedsPermission(release, apk)))
-        assertEquals("Allow installs", banner.primary.label)
-        assertEquals("Later", banner.secondary?.label)
+        assertEquals("Download update", banner.primary.label)
         banner.primary.onClick()
-        assertEquals(listOf("allow"), taps)
+        assertEquals(listOf("download"), taps)
+        // A refused link can't be helped by trying again: no banner offers it.
+        assertNull(bannerFor(UpdateState.Failed(UpdateProblem.BadLink, release)))
     }
 
     @Test
-    fun `an update marked as needed has no Later at any step`() {
+    fun `an update marked as needed has no Later`() {
         val needed = release.copy(mandatory = true)
-        for (state in listOf(UpdateState.Available(needed), UpdateState.Ready(needed, apk), UpdateState.NeedsPermission(needed, apk))) {
+        for (state in listOf(UpdateState.Available(needed), UpdateState.Failed(UpdateProblem.NoBrowser, needed))) {
             assertNull(assertNotNull(bannerFor(state), state.toString()).secondary, state.toString())
         }
     }
 
     @Test
-    fun `every step is the one banner, so it keeps its place in its stack`() {
+    fun `it is the one banner whatever the update is doing, so it keeps its place in its stack`() {
         val keys = listOf(
             UpdateState.Available(release),
-            UpdateState.Downloading(release, 1, 2),
-            UpdateState.Ready(release, apk),
-            UpdateState.NeedsPermission(release, apk),
+            UpdateState.Failed(UpdateProblem.NoBrowser, release),
         ).map { assertNotNull(bannerFor(it)).key }
         assertEquals(1, keys.toSet().size)
     }

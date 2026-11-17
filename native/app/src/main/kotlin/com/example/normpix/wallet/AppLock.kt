@@ -144,6 +144,11 @@ class AppLockService(private val now: () -> Long = System::currentTimeMillis) {
         externalSince = now()
     }
 
+    /** The trip [expectExternalActivity] was told of didn't happen (nothing could open): the lock is as strict as before. */
+    fun cancelExternalActivity() {
+        externalSince = null
+    }
+
     /** Called when the app is paused / backgrounded. */
     fun onAppPaused(prefs: AppPrefsState) {
         if (isAuthenticating) return

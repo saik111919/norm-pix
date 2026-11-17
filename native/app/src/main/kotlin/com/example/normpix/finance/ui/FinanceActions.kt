@@ -70,6 +70,7 @@ import java.io.File
 import java.time.LocalDateTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
@@ -102,22 +103,25 @@ class FinanceActions(
         CompositionLocalProvider(LocalReminderLauncher provides reminders, content = content)
     }
 
-    /** The new-transaction sheet; [accountId], when given, is the account it starts on (a card's "Add expense"). */
-    fun addTransaction(type: TransactionType = TransactionType.Expense, accountId: Long? = null, personId: Long? = null) {
+    /**
+     * The new-transaction sheet; [accountId], when given, is the account it starts on (a card's "Add expense"). The job it returns is
+     * over once the sheet has closed (saved, discarded or dismissed): the quick add overlay waits for it before it goes.
+     */
+    fun addTransaction(type: TransactionType = TransactionType.Expense, accountId: Long? = null, personId: Long? = null): Job =
         scope.launch {
             overlays.sheet<Boolean> { dismiss ->
                 WithReminders { TransactionEditorSheet(type, existingId = null, onDone = dismiss, initialAccountId = accountId, initialPersonId = personId) }
             }
         }
-    }
 
     /**
      * A transaction from what another app shared - a payment confirmation, a bank SMS, or a receipt [picture] whose text
      * [reader] reads on this device: read into a draft, then the new-transaction sheet opens with what could be read, says
      * what couldn't, and has the picture attached. Nothing is saved until the user saves. A share with nothing to read
-     * says so; a payment the message says failed, or a request, asks first.
+     * says so; a payment the message says failed, or a request, asks first. The job it returns is over once all of that is - the
+     * reading, the questions and the form - and the staged copy of the picture has been dealt with.
      */
-    fun addFromShare(text: String, picture: Uri? = null, reader: SharedPictureReader = NoSharedPictureReader) {
+    fun addFromShare(text: String, picture: Uri? = null, reader: SharedPictureReader = NoSharedPictureReader): Job =
         scope.launch {
             val fromPicture = picture != null
             // A copy made straight away, while the sharing app still lets NormPix read the picture: the form attaches it.
@@ -200,7 +204,6 @@ class FinanceActions(
                 finance.pictures?.discard(staged)
             }
         }
-    }
 
     private suspend fun openSharedDraft(prefill: SharedTransactionPrefill) {
         overlays.sheet<Boolean> { dismiss ->

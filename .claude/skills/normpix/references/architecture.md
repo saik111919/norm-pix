@@ -63,11 +63,11 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
 - `AppContainer` (`NormPixApplication.kt`) holds: `preferences` (AppPreferences), `finance` (FinanceController),
   `reminders` (RemindersController), `vault` + `cards` (CardVault, CardsController), `lock` (AppLockService), `host`
   (ActivityHost), `nfc`, `registeredTags`, `scanner` (null in tests), `alarms`, `clipboard` (SecureClipboard), `expiry`
-  (CardExpiryTracker), `receipts` (ReceiptSharer), `sharedText` (SharedTextInbox), `sharedPictures`
+  (CardExpiryTracker), `receipts` (ReceiptSharer), `sharedPictures`
   (SharedPictureReader), `updates` (AppUpdater?, null in tests), `widgetRequests`, `autoBackup` (AutoBackupService?, null in
   tests; `buildContainer` binds its data to the container being built through a `lateinit` local, so it always reads the real
   data), `isSampleData` (true only for `DummyData`'s container), plus the request flows
-  `reminderAlerts`, `walletRequests`, `updateRequests`, `updateInstallRequests`. Every service has an inert default so a
+  `reminderAlerts`, `walletRequests`, `updateRequests`. Every service has an inert default so a
   test builds a container cheaply.
 - **Sample data** is a second container: `DummyData.open(context, real, now)` (`DummyData.kt`) with in-memory
   databases, an in-memory vault and cache-dir pictures, sharing the real container's non-data services. **A service added
@@ -76,23 +76,30 @@ Contents: 1 Stack and build · 2 Process wiring · 3 Data and storage · 4 Money
   `isSampleData = true` (`AutoBackupServiceTest` asserts both, and that a backup made from it holds the real data only).
 - `MainActivity` is a `FragmentActivity` (BiometricPrompt needs one). Release sets FLAG_SECURE (no screenshots, blank
   recents thumbnail). It goes edge-to-edge, wires `host.activity` and `lock.authenticator`, and turns launch/new intents
-  into container flows: a reminder id (alert screen), card-expiry (open Wallet), update notification (open update page,
-  optionally install), a widget's request. Lifecycle: `onStart` re-arms expiry alarms and tells the lock the app resumed;
-  `onResume/onPause` tell the updater; `onWindowFocusChanged` reconciles the clipboard; `onStop` tells the lock.
+  into container flows: a reminder id (alert screen), card-expiry (open Wallet), update notification (open update page), a
+  widget's request. Lifecycle: `onStart` re-arms expiry alarms and tells the lock the app resumed; `onWindowFocusChanged`
+  reconciles the clipboard; `onStop` tells the lock. (The updater is told nothing of the lifecycle any more: it installs nothing.)
 - Entry points in `AndroidManifest.xml`: `MainActivity` (**not exported** since 2026-11-13: the exported aliases are how the
-  launcher reaches it, and notifications, widgets, shortcuts, the tile and a share start it as NormPix itself; from `adb` start
+  launcher reaches it, and notifications and the widgets' rows start it as NormPix itself; from `adb` start
   an alias, `am start -n <id>/com.example.normpix.IconDefault`, not `MainActivity`); ten launcher `activity-alias`es (`.IconDefault`, `.IconGlossy`,
   `.IconComic`, `.IconMinimal`, `.IconFlat`, `.IconGlass`, `.IconClay`, `.IconPixel`, `.IconPaper`, `.IconNeon`; only the
   default is enabled, `AppIcons.use` swaps); `ShareTransactionActivity` (NoDisplay share target for text/plain and
-  image/*); three widget receivers; `NfcCardOutletService` (host card emulation); reminder, card-expiry, clipboard-clear
-  and update receivers/services (`UpdateDownloadService` is a foreground `dataSync` service, `UpdateJobService` the daily
-  JobScheduler check, job id 7_601); `backup.AutoBackupJobService` (the automatic backup, JobScheduler job 7_602, not exported,
+  image/*; it only hands the share on); `quickadd.QuickAddActivity` (2026-11-16: the see-through overlay a share, the icon's
+  shortcuts, the Quick Settings tile and the Add widget open; **not exported**, `singleTask`, `taskAffinity`
+  `${applicationId}.quickadd` (its own: the empty affinity is the reminder alert's and the widget settings'), `excludeFromRecents`,
+  `Theme.NormPix.Overlay`; second `FragmentActivity` besides MainActivity, so **`host.activity` and `lock.authenticator` have two
+  owners**: it takes both in `onCreate` and gives the main screen's back in `onDestroy` - only while they are still its own and the
+  main screen is alive. **It never sets `host.visible`**: that flag means the MAIN screen is in front, and the NFC card outlet hands a
+  card readied in the main screen's sheet only while it is (2026-11-16 review); see features section 8); three widget receivers; `NfcCardOutletService` (host card emulation); reminder, card-expiry, clipboard-clear
+  receivers/services and the update one (`UpdateJobService`, the daily JobScheduler check, job id 7_601 - the update
+  download/install service and receivers are gone, see features section 7); `backup.AutoBackupJobService` (the automatic backup, JobScheduler job 7_602, not exported,
   `BIND_JOB_SERVICE`; no network).
 - Permissions: NFC, POST_NOTIFICATIONS, USE_EXACT_ALARM (auto-granted on 13+, the user cannot revoke it) + SCHEDULE_EXACT_ALARM
   (`maxSdkVersion` 32), RECEIVE_BOOT_COMPLETED, VIBRATE, INTERNET +
-  ACCESS_NETWORK_STATE (updates only), REQUEST_INSTALL_PACKAGES, UPDATE_PACKAGES_WITHOUT_USER_ACTION,
-  FOREGROUND_SERVICE(+_DATA_SYNC), and for the optional reminder delivery USE_FULL_SCREEN_INTENT and SYSTEM_ALERT_WINDOW ("Display over
-  other apps", granted by the user in Android's own settings). No SMS, no notification-listener, no contacts, **no Usage access
+  ACCESS_NETWORK_STATE (updates only), and for the optional reminder delivery USE_FULL_SCREEN_INTENT and SYSTEM_ALERT_WINDOW ("Display over
+  other apps", granted by the user in Android's own settings). **No `REQUEST_INSTALL_PACKAGES`, `UPDATE_PACKAGES_WITHOUT_USER_ACTION` or
+  `FOREGROUND_SERVICE*`** since 2026-11-16 (updates open in the browser; Play Protect blocked the app with the first; `UpdateManifestTest`
+  guards them). No SMS, no notification-listener, no contacts, **no Usage access
   (`PACKAGE_USAGE_STATS`) and no query for every app on the phone** (removed 2026-11-05; `NoUsageAccessTest` guards both). `allowBackup=false` and
   `data_extraction_rules.xml` excludes everything from cloud backup and device transfer.
 - Network: `network_security_config.xml` trusts nothing by default and allows only `api.github.com`, `github.com`,
@@ -274,7 +281,10 @@ resolved at read time (`SheetAnimationType.defaultFor`, `ScheduledFeature.defaul
   `ShellState`, and `Content { }` which wraps a screen in `NormPixTheme` + `ProvideAppEnvironment`. A fresh environment
   already has the default **Cash** account. Its last parameter `autoBackup` (a factory `(preferences, () -> container) ->
   AutoBackupService`) gives the container an automatic backup service; `backup/FakeBackupFolders.kt` (test) is an in-memory folder
-  with failures to order, and a plain `KeyGenerator` AES key in a `VaultKeyProvider` stands in for the Keystore.
+  with failures to order, and a plain `KeyGenerator` AES key in a `VaultKeyProvider` stands in for the Keystore. `preload = false`
+  leaves the ledger `Loading`, as in a process where the main screen never ran. `testing/OverlayHarness.kt` runs the quick add
+  overlay's `QuickAddHost` on an environment (`share(...)`, `add(type)`, `finished`; a Compose rule takes one `setContent`, so it
+  rebuilds the host inside it when asked again after the overlay ended) and has `RecordingAuthenticator`, a prompt that answers as told.
 - `robolectric.properties` sets `conscryptMode=OFF` (Conscrypt can't verify the JDK's JCE certificate on newer JDKs and
   breaks Cipher use after a Robolectric test).
 - `ReadmeScreenshots.kt` renders the README pictures from the real screens with sample data (skipped unless

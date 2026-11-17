@@ -9,7 +9,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import com.example.normpix.finance.data.TransactionQuery
-import com.example.normpix.navigation.NormPixRoot
+import com.example.normpix.testing.OverlayHarness
 import com.example.normpix.testing.TestEnvironment
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -41,10 +41,7 @@ class RepeatNotPrefilledTest {
     fun tearDown() = env.close()
 
     private fun shared(text: String) {
-        compose.setContent { NormPixRoot(container = env.container) }
-        compose.waitForIdle()
-        compose.runOnUiThread { env.container.sharedText.offer(text) }
-        compose.waitForIdle()
+        OverlayHarness(compose, env).share(text)
         compose.waitUntil(timeoutMillis = 10_000) {
             compose.onAllNodesWithText("Filled in from shared text").fetchSemanticsNodes().isNotEmpty()
         }

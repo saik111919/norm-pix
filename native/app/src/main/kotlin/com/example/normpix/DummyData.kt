@@ -104,8 +104,7 @@ class DummyData private constructor(
         clipboard = real.clipboard,
         // Sharing a receipt takes nothing from the sample set but its picture, so it goes through the real share sheet too.
         receipts = real.receipts,
-        // A share that arrives while the sample set is showing is the user's own: the UI offers to switch back for it.
-        sharedText = real.sharedText,
+        // The recognizer for a shared receipt is the app's, not the data's (a share itself opens in the quick add overlay).
         sharedPictures = real.sharedPictures,
         // Updates are the app's, not the data's: the same updater whichever set is showing.
         updates = real.updates,

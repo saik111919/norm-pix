@@ -15,6 +15,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
  * Does what a home-screen widget asked for, once the app is unlocked ([held] false): the new-transaction sheet, one
  * transaction's details over Activity, or Activity. The request is taken once.
  *
+ * The new-transaction sheet is no longer opened here by the shortcuts, the tile and the widget: they open it over the app in front,
+ * without opening this one (`QuickAddActivity`). The add branch stays for the ones from before that - an Add widget on a home screen
+ * or a shortcut on the icon that an earlier version made, whose intents still name MainActivity until the widget is drawn again and
+ * the shortcuts published again (the next time the app opens) - so they keep working.
+ *
  * The widgets show the user's own ledger, never the sample set. So while [sampleData] is on, a transaction from the widget is
  * not looked up in the sample set (Activity opens instead), and adding asks first to switch back - the request waits for the
  * switch, so the sheet then opens on the user's own data.

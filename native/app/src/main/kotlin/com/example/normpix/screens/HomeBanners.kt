@@ -62,6 +62,7 @@ import com.example.normpix.ui.components.rememberDeckStackState
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.ui.theme.StatusTone
 import com.example.normpix.updates.release
+import com.example.normpix.updates.ui.rememberDownloadTabLook
 import com.example.normpix.updates.ui.updateActionsFor
 import com.example.normpix.updates.ui.updateBannerFor
 import com.example.normpix.wallet.CardsState
@@ -383,9 +384,9 @@ internal fun autoBackupProblemBanner(prefs: AppPrefsState, now: Long, open: () -
 }
 
 /**
- * A new version of NormPix, while there is one to act on, as one banner that follows the update through its steps (see
- * [updateBannerFor]). Its buttons do what the update sheet's do, and pressing the banner opens the App update page. Nothing in a
- * build that doesn't update itself, and nothing for a release the user said Later to (as at launch).
+ * A new version of NormPix, while there is one to act on, as one banner (see [updateBannerFor]). Its Download update button
+ * opens the file in the user's browser, as the update sheet's does, and pressing the banner opens the App update page. Nothing in
+ * a build that doesn't update itself, and nothing for a release the user said Later to (as at launch).
  */
 @Composable
 internal fun updateBanners(): List<Banner> {
@@ -402,7 +403,7 @@ internal fun updateBanners(): List<Banner> {
         offered = offered,
         installedVersion = updater.installed.versionName,
         bytes = { Formatter.formatShortFileSize(context, it) },
-        actions = updateActionsFor(updater, onClose = {}),
+        actions = updateActionsFor(updater, onClose = {}, look = rememberDownloadTabLook()),
         open = { navigator.openUpdates() },
     )
     return listOfNotNull(banner)

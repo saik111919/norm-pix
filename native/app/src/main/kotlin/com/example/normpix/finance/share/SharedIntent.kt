@@ -4,56 +4,12 @@ import android.content.ContentResolver
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.IntentCompat
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 
-/**
- * Something another app shared with NormPix, waiting for the UI: its [text] (empty when it had none) and, for a shared
- * image, the [picture] to read the text from. [id] tells two shares of the same thing apart.
+/*
+ * What an `ACTION_SEND` share carries, read straight from its intent. The quick add overlay (`QuickAddActivity`) is what opens it as
+ * a new-transaction draft; before 2026-11-16 the text waited in an inbox in memory for the main screen, and this file was its
+ * `SharedTextInbox`.
  */
-class SharedText(val id: Long, val text: String, val picture: Uri? = null)
-
-/**
- * Hands text shared with NormPix ([ShareTransactionActivity]) to the UI, which reads it into a draft for the user to check
- * and save. Memory only: shared text is never written to disk or logged, and goes with the process.
- *
- * Each share is taken once ([take]), so a recreated activity, a recomposition or the screen being rebuilt can't open the
- * same share twice. Shares that arrive while one is waiting (the app is locked, say) queue behind it, a few at most.
- */
-class SharedTextInbox {
-    private var lastId = 0L
-    private val queue = MutableStateFlow<List<SharedText>>(emptyList())
-
-    /** The shares not yet taken, oldest first. */
-    val waiting: StateFlow<List<SharedText>> = queue.asStateFlow()
-
-    /**
-     * Keeps [text] (and a shared [picture]) for the UI. A text far longer than any transaction message is cut to just past
-     * [SharedTransactionParser.MAX_LENGTH] - enough for the parser to tell it is too long, without holding all of it.
-     */
-    @Synchronized
-    fun offer(text: String?, picture: Uri? = null): SharedText {
-        val share = SharedText(++lastId, text.orEmpty().take(SharedTransactionParser.MAX_LENGTH + 1), picture)
-        queue.update { (it + share).takeLast(MAX_WAITING) }
-        return share
-    }
-
-    /** True when [share] was still waiting and is now the caller's; false when someone already took it. */
-    fun take(share: SharedText): Boolean {
-        while (true) {
-            val current = queue.value
-            if (current.none { it === share }) return false
-            if (queue.compareAndSet(current, current.filterNot { it === share })) return true
-        }
-    }
-
-    companion object {
-        /** Older shares beyond this are dropped: nobody shares more than a handful of payments in one go. */
-        const val MAX_WAITING = 5
-    }
-}
 
 /**
  * The text an [Intent.ACTION_SEND] share carries (its subject first, when the text doesn't already contain it), or null
@@ -81,6 +37,25 @@ fun sharedPictureOf(intent: Intent?, ownPackage: String): Uri? {
         val uri = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
             ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
         uri?.takeIf { it.scheme == ContentResolver.SCHEME_CONTENT && !isOwnAuthority(it.authority, ownPackage) }
+    } catch (_: RuntimeException) {
+        null
+    }
+}
+
+/**
+ * Where [ShareTransactionActivity] puts a shared picture it was not allowed to pass the right to read on with (the sharing app gave
+ * none to pass on). Not `EXTRA_STREAM`: Android adds the read grant to every `ACTION_SEND` that carries one, and would refuse it
+ * again. The overlay is still told which picture it was, tries it, and says it couldn't read it.
+ */
+const val EXTRA_PICTURE_WITHOUT_GRANT = "com.example.normpix.share.PICTURE_WITHOUT_GRANT"
+
+/** The picture a share handed over to the overlay carries - with the right to read it, or without ([EXTRA_PICTURE_WITHOUT_GRANT]) - on [sharedPictureOf]'s terms. */
+fun handedOverPictureOf(intent: Intent?, ownPackage: String): Uri? {
+    sharedPictureOf(intent, ownPackage)?.let { return it }
+    if (intent?.action != Intent.ACTION_SEND || intent.type?.startsWith("image/") != true) return null
+    return try {
+        IntentCompat.getParcelableExtra(intent, EXTRA_PICTURE_WITHOUT_GRANT, Uri::class.java)
+            ?.takeIf { it.scheme == ContentResolver.SCHEME_CONTENT && !isOwnAuthority(it.authority, ownPackage) }
     } catch (_: RuntimeException) {
         null
     }

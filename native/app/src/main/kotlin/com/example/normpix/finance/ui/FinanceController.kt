@@ -148,6 +148,19 @@ class FinanceController(
     // otherwise find the file before its row and delete it.
     private val pictureLock = Mutex()
 
+    // One [ensureLoaded] at a time, so two screens asking at once (the overlay and the app) load once, not twice.
+    private val loadLock = Mutex()
+
+    /**
+     * Loads the ledger unless it is loaded already: for a screen that may be the first in the process (the quick add overlay, where
+     * the main screen never ran). A ledger that failed to load is tried again. [load] itself always loads - it also catches repeating
+     * payments up - so the main screen keeps calling that.
+     */
+    suspend fun ensureLoaded() {
+        if (_state.value.status == FinanceStatus.Ready) return
+        loadLock.withLock { if (_state.value.status != FinanceStatus.Ready) load() }
+    }
+
     /** Records due recurring transactions, then loads reference data. */
     suspend fun load() {
         try {

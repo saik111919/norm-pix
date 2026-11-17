@@ -340,27 +340,12 @@ enum class AccountButtonTarget(val label: String, val description: String) {
 }
 
 /**
- * What NormPix does with an update its automatic check finds on its own (Settings > Automatic updates). Every update is
- * still checked against its release and has to be signed with the same key as the app on the phone.
+ * What an earlier version did with an update its automatic check found on its own: say so ([Notify]), download it ([Download]) or
+ * install it ([Install]). Updates now go through the user's browser (Download update), so the automatic check only ever says an
+ * update is out: every value is read as [Notify]. The choice stays stored under its key (a stored key is never renamed or
+ * dropped) and is read back, but no screen offers it and nothing acts on it.
  */
-enum class BackgroundUpdates(val label: String, val description: String, val short: String) {
-    Notify("Tell me", "A notification says a new version is out. Downloading and installing wait for you.", "Tell me"),
-    Download(
-        "Download it, then ask",
-        "It downloads in the background, and a notification says it's ready. You install it when it suits you.",
-        "Download, then ask",
-    ),
-    Install(
-        "Install it automatically",
-        "It downloads and installs while NormPix is closed, and a notification says what was installed. Android 12 and " +
-            "later; before that, Android asks you first.",
-        "Install automatically",
-    ),
-    ;
-
-    /** Whether this downloads the update, so the network it may use matters. */
-    val downloads: Boolean get() = this != Notify
-}
+enum class BackgroundUpdates { Notify, Download, Install }
 
 /**
  * How often NormPix looks for an update by itself (Settings > Automatic updates > How often): in the background, and when it
@@ -601,12 +586,9 @@ data class AppPrefsState(
      * (Settings > Automatic updates). Off, NormPix only checks when asked.
      */
     val updateChecksEnabled: Boolean = true,
-    /** What happens to an update found in the background: downloaded, and then the user installs it, unless they choose otherwise. */
+    /** What an earlier version did with an update found in the background. Stored and read, never acted on (see [BackgroundUpdates]). */
     val backgroundUpdates: BackgroundUpdates = BackgroundUpdates.Download,
-    /**
-     * Background downloads may use mobile data; off, they wait for Wi-Fi (or another network that isn't metered, so a metered
-     * Wi-Fi such as a hotspot counts as mobile data). A download the user starts in the app uses any network.
-     */
+    /** Whether an earlier version's background downloads may use mobile data. Stored and read, never acted on: nothing is downloaded now. */
     val updateOnMobileData: Boolean = false,
     /** How often the automatic check is made, in the background and at launch: once a day, as it always was, unless the user chooses. */
     val updateCheckEvery: UpdateCheckEvery = UpdateCheckEvery.OnceADay,
@@ -1107,12 +1089,6 @@ class AppPreferences(private val prefs: SharedPreferences) {
 
     fun setUpdateChecksEnabled(enabled: Boolean) =
         change({ copy(updateChecksEnabled = enabled) }) { putBoolean(K_UPDATE_CHECKS, enabled) }
-
-    fun setBackgroundUpdates(mode: BackgroundUpdates) =
-        change({ copy(backgroundUpdates = mode) }) { putString(K_BACKGROUND_UPDATES, mode.name) }
-
-    fun setUpdateOnMobileData(allowed: Boolean) =
-        change({ copy(updateOnMobileData = allowed) }) { putBoolean(K_UPDATE_MOBILE_DATA, allowed) }
 
     fun setUpdateCheckEvery(every: UpdateCheckEvery) =
         change({ copy(updateCheckEvery = every) }) { putString(K_UPDATE_CHECK_EVERY, every.name) }

@@ -4,8 +4,13 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import com.example.normpix.MainActivity
+import com.example.normpix.quickadd.QuickAddActivity
 
-/** How a widget's tap reaches the app: an intent that opens MainActivity with a [WidgetRequest] on it. */
+/**
+ * How a widget's tap, a shortcut or the Quick Settings tile reaches the app: an intent with a [WidgetRequest] on it. An add request
+ * opens the new-transaction sheet over the app in front ([QuickAddActivity]); a row of the Recent widget and Activity open the app
+ * ([MainActivity]), where the transaction and Activity are.
+ */
 object WidgetIntents {
     const val EXTRA_REQUEST = "com.example.normpix.widget.REQUEST"
     const val EXTRA_TRANSACTION_ID = "com.example.normpix.widget.TRANSACTION_ID"
@@ -21,12 +26,14 @@ object WidgetIntents {
     }
 
     /**
-     * The intent that opens NormPix to do [request]: explicit (it names MainActivity), carrying only the request's plain words. The
+     * The intent that opens NormPix to do [request]: explicit (it names [QuickAddActivity] for an add, MainActivity for the rest, both
+     * not exported, so only NormPix's own shortcuts, tile and widgets reach them), carrying only the request's plain words. The
      * home-screen shortcuts and the Quick Settings tile launch it directly; a widget wraps it ([open]).
      */
     fun intent(context: Context, request: WidgetRequest): Intent {
         val shown = (request as? WidgetRequest.Show)?.transactionId
-        val intent = Intent(context, MainActivity::class.java)
+        val target = if (request is WidgetRequest.Add) QuickAddActivity::class.java else MainActivity::class.java
+        val intent = Intent(context, target)
             .setAction("com.example.normpix.widget." + request.key)
             .putExtra(EXTRA_REQUEST, request.key)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)

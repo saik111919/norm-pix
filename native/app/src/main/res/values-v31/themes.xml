@@ -27,4 +27,21 @@
     <style name="Theme.NormPix.LaunchBlank">
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon_empty</item>
     </style>
+
+    <!--
+      The quick add overlay on Android 12 and later (see values/themes.xml): the same see-through window, and no launch screen of its
+      own - a cold start from a shortcut or a share must not play the cookie over the other app, only open the sheet.
+    -->
+    <style name="Theme.NormPix.Overlay">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon_empty</item>
+        <item name="android:windowSplashScreenBackground">@android:color/transparent</item>
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
+    </style>
 </resources>

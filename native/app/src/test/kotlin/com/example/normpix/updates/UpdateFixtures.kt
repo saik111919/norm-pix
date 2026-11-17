@@ -2,7 +2,6 @@ package com.example.normpix.updates
 
 import java.io.ByteArrayInputStream
 import java.io.IOException
-import java.io.InputStream
 import java.net.URL
 import java.security.MessageDigest
 import kotlinx.serialization.json.JsonElement
@@ -24,10 +23,6 @@ class FakeNetwork : UpdateNetwork {
 
     fun answer(url: String, body: String) = answer(url, body = body.toByteArray())
 
-    fun stream(url: String, length: Long, body: () -> InputStream) {
-        answers[url] = { NetworkResponse(200, emptyMap(), length, body()) }
-    }
-
     fun redirect(url: String, to: String, code: Int = 302) = answer(url, code = code, headers = mapOf("Location" to to))
 
     fun fail(url: String, error: IOException) {
@@ -41,18 +36,38 @@ class FakeNetwork : UpdateNetwork {
     }
 }
 
-/** A body that hands out [bytes] and then fails, as a connection dropped half way does. */
-class DroppingStream(private val bytes: ByteArray) : InputStream() {
-    private var at = 0
+/**
+ * Stands for the browser: remembers each release it was asked to open (and the look of the tab), or - with [failWith] set -
+ * fails as a phone with no browser does.
+ */
+class FakeOpener : UpdateDownloadOpener {
+    val opened = mutableListOf<UpdateRelease>()
+    val looks = mutableListOf<DownloadTabLook>()
+    var failWith: UpdateProblem? = null
 
-    override fun read(): Int = if (at < bytes.size) bytes[at++].toInt() and 0xFF else throw IOException("connection reset")
+    override fun open(release: UpdateRelease, look: DownloadTabLook) {
+        failWith?.let { throw UpdateException(it) }
+        opened += release
+        looks += look
+    }
+}
 
-    override fun read(b: ByteArray, off: Int, len: Int): Int {
-        if (at >= bytes.size) throw IOException("connection reset")
-        val n = minOf(len, bytes.size - at)
-        System.arraycopy(bytes, at, b, off, n)
-        at += n
-        return n
+/** Remembers what it was asked to post; [shows] false is notifications being off. */
+class FakeNotifier(var shows: Boolean = true) : UpdateNotifier {
+    val posted = mutableListOf<String>()
+    var withdrawn = 0
+
+    override fun available(release: UpdateRelease) = post("available ${release.versionName}")
+
+    override fun installed(versionName: String) = post("installed $versionName")
+
+    override fun withdraw() {
+        withdrawn++
+    }
+
+    private fun post(what: String): Boolean {
+        if (shows) posted += what
+        return shows
     }
 }
 
@@ -76,7 +91,7 @@ object Releases {
 
     fun apk(size: Int = 300_000): ByteArray = ByteArray(size) { (it * 31 % 251).toByte() }
 
-    fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).toHex()
+    fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
     fun apkName(versionName: String) = "NormPix-$versionName.apk"
 

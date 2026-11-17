@@ -364,9 +364,15 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
 
 ## 3. Reading receipts shared into the app
 
-Flow: another app shares text or a picture to NormPix (`ShareTransactionActivity`, exported, no UI) -> `SharedTextInbox`
-(memory only) -> MainActivity -> the transaction editor opens with a **draft the user checks and saves**; nothing is saved
-unseen. Pictures are read on the device by ML Kit (`MlKitSharedPictureReader`); the same picture can be attached to the
+Flow: another app shares text or a picture to NormPix (`ShareTransactionActivity`, exported, no UI - the component other apps
+know; it only forwards what `sharedTextOf` / `sharedPictureOf` took, with the right to read the picture, and finishes) ->
+`QuickAddActivity`, the see-through overlay (section 8) -> `FinanceActions.addFromShare` -> the transaction editor sheet opens
+over the sharing app with a **draft the user checks and saves**; nothing is saved unseen, and **NormPix itself is not opened**
+(since 2026-11-16; before that the text waited in `SharedTextInbox` for MainActivity - the inbox, `ReceiveSharedTransactions`
+and `AppContainer.sharedText` are gone). The text now travels in the forwarded intent (cut at `MAX_LENGTH + 1`), which the
+overlay is not a task root of and never restores; the picture is staged at once, while the activity holds its read grant. A
+second share while the overlay is open queues behind the first (`QuickAddRequests`). A locked app asks for the prompt first and
+sample data on asks "Turn off sample data" first, both in the overlay. Pictures are read on the device by ML Kit (`MlKitSharedPictureReader`); the same picture can be attached to the
 transaction and read again to fill the form. Only another app's `content://` picture is taken (`sharedPictureOf`): never a file
 path, never NormPix's own providers - judged by the authority **after the last `@`** (`isOwnAuthority`), as Android reads
 `user@name` and `0@<own provider>` is the app's own files (2026-11-13).
@@ -710,21 +716,45 @@ path, never NormPix's own providers - judged by the authority **after the last `
   release"): the universal APK, no per-CPU APKs and no `.sha256` files - GitHub shows each file's SHA-256 itself. `update.json` must stay (every
   installed copy reads it) and has no `apks` now; `ReleaseMetadata` still reads `apks` from older releases and takes the universal APK without it. A release is accepted only if tag, version, attached asset size and checksum all
   agree (`ReleaseMetadata`). Prereleases/drafts are never offered.
-- Behaviour: check once a day in the background (JobScheduler `UpdateJobService`, not on low battery, Wi-Fi unless "Download
-  on mobile data") and at launch, or on demand. What happens to an update found in the background: **Tell me** | **Download it,
-  then ask** (default) | **Install it automatically** (Android 12+, after the app has been closed a while). **Nothing pops over
-  the screen**: an update is Home's banner, which opens the update page; notifications also open it.
-- **Update now** downloads the APK (foreground `UpdateDownloadService` so it continues with the app closed; notification with
-  Cancel/Install), verifies size, SHA-256, package name, version and **signing key**, and only then hands it to Android's
-  installer, which asks the user. The app never uninstalls itself. Only release builds update themselves.
-- **Leftover APKs** (2026-11-14, owner: "if an apk is left can we give an option to delete it"): the app's own downloads are deleted once installed
-  (`UpdateDownloader.clearInstalled`); one a browser or the GitHub app saved in Downloads is not NormPix's to list. Settings > Automatic updates >
+- **NormPix downloads and installs nothing itself** (owner, 2026-11-16, built the same day; phase 75 in `TASKS.md`). Play Protect blocked the app as
+  "harmful" because of `REQUEST_INSTALL_PACKAGES` (`build-test-release.md` section 8), so updates go **through the user's browser**: NormPix
+  checks GitHub, notifies, and shows the banner, page and changelog; the **Download update** button opens the release's APK link in a
+  **Chrome Custom Tab**, the browser downloads it, the user opens the download, and Android's own installer asks before updating NormPix over
+  itself (same signing key, data kept; Android asks once to let the browser install apps). The manifest has no `REQUEST_INSTALL_PACKAGES`,
+  `UPDATE_PACKAGES_WITHOUT_USER_ACTION`, `FOREGROUND_SERVICE*`, download service or installer receiver (`UpdateManifestTest` guards the source
+  manifest and the merged one). `androidx.browser:browser` 1.10.0; no `<queries>` entry (`launchUrl` is `setData` + `startActivity`).
+- Behaviour: check once a day in the background (JobScheduler `UpdateJobService`, not on low battery, **any network** - it only asks GitHub) and at
+  launch, or on demand. **The background run only checks and posts the "Update available" notification** (once per release; a tap opens the update
+  page). The stored `BackgroundUpdates` (Notify / Download / Install, key `background_updates`) and `update_on_mobile_data` are still read but
+  **ignored** - Download and Install read as Notify, no screen offers them. **Nothing pops over the screen**: an update is Home's banner, which
+  opens the update page; notifications also open it.
+- **Download update** (sheet, page and Home banner; `AppUpdater.openDownload(look)` -> `BrowserDownloadOpener`, `updates/UpdateDownload.kt`):
+  opens `release.apkUrl` in a Custom Tab (toolbar and navigation bar in the app's surface colour, light or dark by that colour's luminance -
+  `rememberDownloadTabLook()`), falls back to a plain `ACTION_VIEW`, and reports `UpdateProblem.NoBrowser` when neither resolves. **Only
+  `https://github.com/<BuildConfig.UPDATE_REPOSITORY>/releases/download/<tag>/<file>` opens** (`DownloadLink.trusted`: https, host `github.com`,
+  no port/credentials/query/fragment, this repository exactly, plain tag and file names); anything else is `UpdateProblem.BadLink` and nothing
+  launches. `lock.expectExternalActivity()` is called first, as for the file pickers, and `cancelExternalActivity()` undoes it when nothing
+  opened. The state stays `Available` after a successful open (the update is still waiting until the app is replaced); a failure is
+  `Failed(problem, release)`, said **in the sheet or page** ("Couldn't open the download"; no browser has Try again, a refused link only Close),
+  never as a snackbar, and Home's banner stays while Try again can help. Under the buttons, `DOWNLOAD_STEPS` / `DownloadSteps`: "Your browser
+  downloads it. Open the download and tap Update. The first time, Android asks you to let your browser install apps. Your data stays." Later
+  (Not now for a mandatory release) is unchanged. `UpdateState` is Idle, Checking, UpToDate, Available, Failed.
+- At `AppUpdater.start()` the old in-app download folder `cacheDir/updates` is deleted whole (`oldDownloads`), stale notifications are taken
+  down and the one-time "NormPix updated itself" note is said for a version an earlier release installed quietly (the records keys
+  `announced_version_code`, `ready_announced_version_code`, `quiet_install_version_code` are kept; never rename a stored key).
+- **Leftover APKs** (2026-11-14, owner: "if an apk is left can we give an option to delete it"; since 2026-11-16 these are what **the browser leaves in Downloads**
+  when Download update is used - NormPix saves nothing itself): not NormPix's to list. Settings > Automatic updates >
   "Update files" > **Delete downloaded APK files** (`UpdateFilesSection`, on the page in every state; `settings/ui/ApkCleanup.kt`, logic in
   `updates/ApkFiles.kt`) opens the system picker for APKs (`OpenMultipleDocuments`, after `lock.expectExternalActivity()`), then a confirm sheet lists the files
   (name, size, "Not named like a NormPix update" - `isNormPixApkName` - still deletable; "Can't be deleted from here" when the provider's
   `FLAG_SUPPORTS_DELETE` is off, then not counted or tried), deletes with `DocumentsContract.deleteDocument` and says the result in a snackbar after the sheet
   closes. **It uses the picker on purpose: listing Downloads would need `MANAGE_EXTERNAL_STORAGE`, a new permission and a Play Protect risk.** Never log
   a file's name. Tests: `ApkFilesTest`, `ApkCleanupTest` (a fake registry answers the picker, a fake `ApkFileStore` stands for the files), `UpdateUiTest`.
+- Settings > Automatic updates keeps the check settings (switch, how often, when, check when opened), the notifications-off note and Update
+  files; "When an update is found", "Network" (Download on mobile data) and "Android's leave" are gone, and so are their search words.
+  Tests: `AppUpdaterTest` (the check, Download update through a `FakeOpener`, no browser, a refused link, the background run, `start()`),
+  `DownloadLinkTest` and `BrowserDownloadOpenerTest` (a `RecordingActivity` that looks at the lock as each launch starts), `UpdateUiTest`,
+  `HomeUpdateBannerTest`, `UpdateScheduleTest`, `UpdateManifestTest`. **Not tried on a phone** (Custom Tab, the browser's download, the installer).
 - **Changelog**: the update page holds a **Changelog pill** opening `ChangelogPage` (all published versions, newest first,
   from the releases' own notes, cached for offline reading). The changelog loads only there.
 - **Preview update channel** (opt-in builds from `features`): designed, **not built** - no code exists. See the owner notes:
@@ -758,7 +788,8 @@ Expressive's four-sided cookie, drawn with the hands and numerals by `design/coo
 `widget_clock_*` tokens, light and night; no update period, a tap opens the clock app), **Recent transactions** (Home's Recent as of today; amounts stay hidden
 while hidden in the app; shows only "locked" while NormPix is locked; redrawn on ledger change, resize, day turn), **Add
 transaction** (one cell = one add button; larger = Expense / Income / Transfer). Taps reach the app as a `WidgetRequest`
-(`WidgetIntents`), done once the app is unlocked and only once. Widget rules followed: picker previews, resizable, Android 12
+(`WidgetIntents`): an add opens the sheet over the app in front (`QuickAddActivity`, section 8), a Recent row or its heading opens
+MainActivity (`ReceiveWidgetRequests`, done once the app is unlocked and only once). Widget rules followed: picker previews, resizable, Android 12
 size maps, `@android:id/background` with the launcher's radius, M3 colour roles from the wallpaper, 48 dp targets, TalkBack
 descriptions, immutable PendingIntents, **no update period**.
 
@@ -884,7 +915,8 @@ waits for the data **and** `CalmFrames`: 4 frames in a row, none later than 40 m
 the pace: a slow build draws at ~23 ms a frame, and a first version that wanted 22 ms never saw calm and always waited out the cap (+1 s on every start). Measured after:
 the exit is 19 distinct frames over ~440 ms, 22 ms apart, one 66 ms gap. The qa build is unoptimised: its cold start shows the system icon for ~1.5-2 s first.
 
-- **Quick add** (2026-11-07, `widgets/QuickAdd.kt`): Add expense, Add income and Transfer on the app icon's long-press menu (`QuickAddShortcuts`: three *dynamic* shortcuts, published in `MainActivity.onCreate` on a fresh start; dynamic and not static because the launcher entry is one of ten `activity-alias`es, and a static shortcut list (an XML resource) would have to be named on each) and an "Add expense" Quick Settings tile (`QuickAddTileService`, in the manifest with `BIND_QUICK_SETTINGS_TILE`, so only the system can bind it; the user adds it in the tile editor). Both open the app on the new-transaction sheet through `WidgetIntents.intent`, the same plain-word `WidgetRequest.Add` the Add widget sends, acted on once the app is unlocked - nothing of the ledger is on a shortcut or the intent. The tile launches with a `PendingIntent` from Android 14 on; the `Intent` form it needs before that is deprecated there and lint (`StartActivityAndCollapseDeprecated`) makes it an error unless it sits behind `SDK_INT < UPSIDE_DOWN_CAKE`. Tests: `QuickAddTest`.
+- **Quick add** (2026-11-07, `widgets/QuickAdd.kt`): Add expense, Add income and Transfer on the app icon's long-press menu (`QuickAddShortcuts`: three *dynamic* shortcuts, published in `MainActivity.onCreate` on a fresh start; dynamic and not static because the launcher entry is one of ten `activity-alias`es, and a static shortcut list (an XML resource) would have to be named on each) and an "Add expense" Quick Settings tile (`QuickAddTileService`, in the manifest with `BIND_QUICK_SETTINGS_TILE`, so only the system can bind it; the user adds it in the tile editor). Both open the new-transaction sheet **over the app the user is in** (2026-11-16, Phase 76; before that they opened MainActivity) through `WidgetIntents.intent`, the same plain-word `WidgetRequest.Add` the Add widget's buttons send (`PendingIntent` through `WidgetIntents.open`) - nothing of the ledger is on a shortcut or the intent. The target is `QuickAddActivity` (below); `Show` / `Activity` (the Recent widget's rows and heading) still open MainActivity. `ReceiveWidgetRequests`' add branch stays only for widgets and shortcuts an earlier version made, which name MainActivity until redrawn / republished (`QuickAddShortcuts.publish` runs when MainActivity first opens). The tile launches with a `PendingIntent` from Android 14 on; the `Intent` form it needs before that is deprecated there and lint (`StartActivityAndCollapseDeprecated`) makes it an error unless it sits behind `SDK_INT < UPSIDE_DOWN_CAKE`. Tests: `QuickAddTest`.
+  **The overlay** (`quickadd/`, Phase 76): `QuickAddActivity` is a `FragmentActivity`, not exported, `singleTask` with its own `taskAffinity` (`${applicationId}.quickadd`; the empty one is the reminder alert's) and `excludeFromRecents` (its own task: it never brings MainActivity's forward, and a second request reaches the one instance through `onNewIntent`), `Theme.NormPix.Overlay` (translucent, no dimming - the sheet's own scrim does it - no animation, no launch screen), MainActivity's `configChanges`, `FLAG_SECURE` when `BuildConfig.SECURE_WINDOW`. It composes `QuickAddHost`: the user's theme + `ProvideAppEnvironment` + a `QuickAddNavigator` (every page request opens MainActivity and closes the overlay; nothing in the add flow makes one) + `LocalReminderLauncher`, and runs `QuickAddRequests` one after the other: `Add(type)` -> `FinanceActions.addTransaction(type)`, `Share(text, picture)` -> `addFromShare(text, picture, container.sharedPictures)`; both return their `Job`, which is joined. It ends when the requests are done and the app scope has no active child (the saved snackbar, an Undo in flight - polled), or at once on Back or a touch on the empty screen after the sheet has gone. **Lock**: whole-app scope only (wallet-only never locks it); while `isAppLocked` nothing is composed and `authenticate` runs at once, a refusal finishes it; a lock that engages while it is open closes it. **Its window and sheets** (fixed on the emulator, 2026-11-16): `NormPixTheme(paintWindow = false)` (the theme otherwise paints every activity's window in the surface colour, which hid the app underneath), and `LocalPageBehindToBlur provides false` so the sheets and bars are solid (the blur-off look; glass over another app's icons was unreadable) with Material's scrim dimming the other app. **Hand-over**: `ShareTransactionActivity` marks the share `EXTRA_HANDED_OVER` (a SEND without it - the emptied intent Android restarts an old overlay task with after the process went, as an update does - is no request), passes the picture as `EXTRA_STREAM` with a ClipData grant, or - when the sharing app gave no right to pass on - as `EXTRA_PICTURE_WITHOUT_GRANT` (never `EXTRA_STREAM` there: Android adds the grant to any SEND carrying one and refuses it again, which crashed the share target); the overlay reads it with `handedOverPictureOf`. "Nothing to do" is decided in `onResume`, after a request that brought an old task back has arrived through `onNewIntent`. `onStart` / `onStop` call the lock's `onAppResumed` / `onAppPaused` as MainActivity's do, but **never set `host.visible`** (the main screen's flag: the NFC card outlet hands a card readied in the main screen only while it is in front, so not while the overlay is - 2026-11-16 review). It takes `host.activity` and `lock.authenticator` and gives the main screen's back when it goes (only if still its own and the main screen is alive). The ledger is loaded by `FinanceController.ensureLoaded()` (once; `load()` stays the main screen's), the reminders and the cards (up to 3 s) are waited for. A recreated activity (process death) and one reopened from Recents finish at once. Tests: `QuickAddRequestsTest`, `QuickAddOverlayTest`, `QuickAddActivityTest` (`OverlayHarness` runs the host on a `TestEnvironment`; `TestEnvironment(preload = false)` is a process where the main screen never ran).
 
 ## 9. About guide (`about/`)
 

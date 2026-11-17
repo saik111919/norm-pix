@@ -69,7 +69,7 @@ fun rememberFrostedChrome(
     backdrop: FrostedBackdrop? = LocalFrostedBackdrop.current,
     blurAvailable: Boolean = rememberWindowBlurAvailable(),
 ): Boolean {
-    val enabled = LocalAppPreferences.current?.state?.collectAsState()?.value?.sheetBlurEnabled ?: true
+    val enabled = (LocalAppPreferences.current?.state?.collectAsState()?.value?.sheetBlurEnabled ?: true) && LocalPageBehindToBlur.current
     return enabled && backdrop != null && blurAvailable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 }
 

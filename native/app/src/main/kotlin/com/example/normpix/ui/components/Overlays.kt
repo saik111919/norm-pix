@@ -342,7 +342,8 @@ val LocalAppScope = compositionLocalOf<CoroutineScope> { error("No app Coroutine
 fun OverlayHost(overlays: AppOverlays) {
     val preferences = LocalAppPreferences.current
     val prefsState = preferences?.state?.collectAsState()
-    val sheetBlurEnabled = prefsState?.value?.sheetBlurEnabled ?: true
+    // Glass only over a NormPix page: over another app (the quick-add overlay) the sheets are solid.
+    val sheetBlurEnabled = (prefsState?.value?.sheetBlurEnabled ?: true) && LocalPageBehindToBlur.current
     // Sheets and decisions open and close in the style chosen for them (Settings > Appearance > Transitions; see
     // sheetMotion) - apart from the pages' style - and with no motion of their own when the system asks for reduced motion.
     val sheetStyle = prefsState?.value?.sheetAnimation ?: SheetAnimationType.Window

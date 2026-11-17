@@ -3,7 +3,7 @@ package com.example.normpix.widgets
 import android.content.Context
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.test.core.app.ApplicationProvider
-import com.example.normpix.MainActivity
+import com.example.normpix.quickadd.QuickAddActivity
 import com.example.normpix.finance.domain.TransactionType
 import java.io.File
 import kotlin.test.Test
@@ -27,7 +27,7 @@ class QuickAddTest {
         for (type in TransactionType.entries) {
             val request = WidgetRequest.Add(type)
             val intent = WidgetIntents.intent(context, request)
-            assertEquals(MainActivity::class.java.name, intent.component?.className, "explicit: no other app can catch it")
+            assertEquals(QuickAddActivity::class.java.name, intent.component?.className, "explicit: no other app can catch it")
             assertEquals(request, WidgetIntents.requestOf(intent), type.name)
             assertEquals(setOf(WidgetIntents.EXTRA_REQUEST), intent.extras?.keySet().orEmpty(), "nothing but the word: $type")
             assertEquals(null, intent.data, "no data")

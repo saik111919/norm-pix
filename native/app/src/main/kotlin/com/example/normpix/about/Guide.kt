@@ -47,6 +47,7 @@ enum class GuideTopic(
             "Each one is told in full under its own topic below.",
         ),
         tips = listOf(
+            "Adding without opening NormPix: a receipt shared with NormPix, the icon's shortcuts (press and hold the icon), the Add expense Quick Settings tile and the Add widget open the add form as a sheet over the app you are in. Save or close it and you are back where you were.",
             "Automatic backup: Settings > Data & Backup > Automatic backup. Off until you turn it on; daily, weekly or monthly, into a folder you pick, locked with a password of its own. The newest 5 are kept.",
             "Repeating costs: the banner at the top of Plans > Recurring adds up what your repeating payments cost a month and a year. Payments that look like they repeat are offered under it.",
             "Forecast: Plans > Recurring > Forecast. The money you can spend day by day, to 30, 60 or 90 days, your payday or a date you pick, up to 12 months ahead.",
@@ -58,6 +59,7 @@ enum class GuideTopic(
             "Bank statement import: Settings > Data & Backup > Import > Import a bank statement.",
             "Card limit warning: a card with a limit is listed in Notifications once 30% of it is used. Settings > Wallet & Cards > Card limit warning changes the level.",
             "Sending a card over NFC is now encrypted: both phones show the same six-digit code, and the card goes only once you tap Match.",
+            "Updates open in your browser: Download update (on Home's banner, or in Settings > Updates & changelog) opens the new version in a browser tab. The browser downloads it; open the download and tap Update. The first time, Android asks you to let your browser install apps. Your data stays.",
         ),
         link = GuideLink.Plans,
     ),
@@ -76,7 +78,8 @@ enum class GuideTopic(
             "Deleted one by mistake? Undo stays on screen for a few seconds.",
             "A picture you attach can be read again to fill the form in.",
             "One bill for food and soap? Tap Split in the form to share it between two to ten categories; the parts have to add up to the total. Each part is its own row, so budgets and Insights count every category's share.",
-            "Press and hold the NormPix icon on your home screen for Add expense, Add income and Transfer. For one tap from anywhere, add the Add expense tile to your Quick Settings (edit the tiles and find NormPix). A locked NormPix opens on its lock first.",
+            "Press and hold the NormPix icon on your home screen for Add expense, Add income and Transfer. For one tap from anywhere, add the Add expense tile to your Quick Settings (edit the tiles and find NormPix). The Add widget's buttons do the same.",
+            "From the icon, the tile and the widget the form opens as a sheet over the app you are in, and NormPix itself does not open. It is the same form, with everything it has; save or close it and you are back where you were. A locked NormPix asks for your fingerprint, face or screen lock first.",
         ),
         link = GuideLink.Home,
     ),
@@ -86,13 +89,14 @@ enum class GuideTopic(
         hue = 5,
         steps = listOf(
             "In Google Pay, PhonePe or your bank app, open the receipt or take a screenshot of it.",
-            "Tap Share, then choose NormPix.",
+            "Tap Share, then choose NormPix. The form opens as a sheet over that app: NormPix itself does not open.",
             "NormPix reads the picture on this phone and fills in the amount, the payee, the account and the category.",
-            "Check what it found, change anything that is off, and save.",
+            "Check what it found, change anything that is off, and save. You are back in the app you shared from.",
         ),
         tips = listOf(
             "The picture is read on the phone. Nothing is uploaded, and NormPix never reads your SMS or notifications.",
             "Shared text works the same way as a shared picture.",
+            "It is the same form as in the app, so the category, account, date, tags, split and repeat can all be changed in the sheet. A locked NormPix asks for your fingerprint, face or screen lock first.",
         ),
     ),
     Home(
@@ -101,7 +105,7 @@ enum class GuideTopic(
         hue = 3,
         steps = listOf(
             "The top card shows what came in, what went out and your total balance.",
-            "Needs attention is one banner that says how many things are waiting - overdue reminders, budgets nearly used or over, cards about to expire or near their limit, a backup due - and opens Notifications. An update waiting to install keeps its own banner here, with its own buttons.",
+            "Needs attention is one banner that says how many things are waiting - overdue reminders, budgets nearly used or over, cards about to expire or near their limit, a backup due - and opens Notifications. A new version keeps its own banner here, with Download update and Later.",
             "Top spending shows where most of the month went.",
             "Next 7 days lists what is coming up. Recent shows your latest transactions; See all opens the whole history.",
         ),
@@ -288,7 +292,7 @@ enum class GuideTopic(
             "Open Settings > Security & Lock and turn on Require unlock.",
             "Choose the lock's scope: the Wallet only, or the entire app. Auto-lock decides how soon it locks again.",
             "To keep card numbers hidden even after unlocking, turn on Tap an NFC tag to reveal and register your tag.",
-            "NormPix connects only to GitHub, to check for and download its own updates.",
+            "NormPix connects only to GitHub, to check for its own updates. When you tap Download update, your browser downloads the file; NormPix itself downloads and installs nothing.",
         ),
         tips = listOf(
             "Your data and card details are encrypted on this phone, backups can be locked with a password, and the app's screen " +

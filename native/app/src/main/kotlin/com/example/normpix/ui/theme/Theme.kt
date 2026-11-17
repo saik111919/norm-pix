@@ -328,6 +328,11 @@ fun Appearance.resolveDark(): Boolean = when (mode) {
 @Composable
 fun NormPixTheme(
     appearance: Appearance = Appearance(),
+    /**
+     * Paint the activity's window in the app's surface colour. False for a see-through window (the quick-add overlay over another app),
+     * where a painted window would hide the app underneath.
+     */
+    paintWindow: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val dark = appearance.resolveDark()
@@ -341,6 +346,7 @@ fun NormPixTheme(
     // and any moment nothing is drawn over it (a page arriving, the keyboard resizing) would flash the wrong one.
     val view = LocalView.current
     SideEffect {
+        if (!paintWindow) return@SideEffect
         var host: Context? = view.context
         while (host is ContextWrapper && host !is Activity) host = host.baseContext
         (host as? Activity)?.window?.setBackgroundDrawable(scheme.surface.toArgb().toDrawable())

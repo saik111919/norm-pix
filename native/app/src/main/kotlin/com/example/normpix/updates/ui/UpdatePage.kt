@@ -52,19 +52,18 @@ import com.example.normpix.updates.release
 
 /**
  * Check for updates (Settings, and Automatic updates' Check now) on a page of its own: opened, it asks GitHub for the latest
- * release - unless an update is already found, downloading or waiting - and shows where updating stands as the update sheet
- * does: the versions, what's new, the download's progress, and the one thing to do next. A tapped update notification opens
- * it too. While it is on screen no update sheet comes up over it.
+ * release - unless an update is already found - and shows where updating stands as the update sheet does: the versions,
+ * what's new, and the one thing to do next. A tapped update notification opens it too. While it is on screen no update sheet
+ * comes up over it.
  *
  * It is laid out as a Pixel's system update screen is ([UpdateScreenBody]): a bare icon and a large headline open the page, with
  * no title of the page's own above them, and all that scrolls while the buttons stay pinned at the foot of the screen
- * ([UpdateActionStack]): Update now - or Install, or whatever is next - filled and across the page, and Later, or whatever
- * the way out is, outlined under it.
+ * ([UpdateActionStack]): Download update - which opens the file in the user's browser - filled and across the page, and Later, or
+ * whatever the way out is, outlined under it, with what happens next said under them ([DownloadSteps]). Errors (no browser) are
+ * said on the page itself, in the headline's place.
  *
  * Under that come the changelog pill (which opens [ChangelogPage] on tap) and the way to Automatic updates, so this one page
  * is where everything about updating is.
- *
- * Leaving it never stops a download: that carries on with NormPix closed, its progress in a notification.
  */
 @Composable
 fun UpdatePage() {
@@ -98,7 +97,7 @@ private fun UpdatePageFor(updater: AppUpdater, onClose: () -> Unit) {
     val prefs by LocalAppContainer.current.preferences.state.collectAsStateWithLifecycle()
     val is24Hour = DateFormat.is24HourFormat(LocalContext.current)
     val navigator = LocalNavigator.current
-    val actions = updateActionsFor(updater, onClose)
+    val actions = updateActionsFor(updater, onClose, rememberDownloadTabLook())
     val listState = rememberLazyListState()
     AppSubPage(
         title = PAGE_TITLE,
@@ -131,8 +130,8 @@ private fun UpdatePageFor(updater: AppUpdater, onClose: () -> Unit) {
             }
             item(key = "privacy") {
                 Text(
-                    "Only GitHub is contacted. Every update is checked against its release, and Android installs it only if it's " +
-                        "signed with the same key as the NormPix on this phone. Your data stays as it is.",
+                    "Only GitHub is contacted, to check for updates. The download is your browser's, and Android installs it only " +
+                        "if it's signed with the same key as the NormPix on this phone. Your data stays as it is.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = AppSpacing.xl).padding(top = AppSpacing.lg),
@@ -147,7 +146,10 @@ private fun UpdatePageFor(updater: AppUpdater, onClose: () -> Unit) {
 fun ChangelogPill(onClick: () -> Unit, modifier: Modifier = Modifier) =
     PagePill(Icons.Outlined.History, "Changelog", onClick, modifier)
 
-/** The buttons pinned at the foot of the page, with a line above them while there is more of the page to scroll to. */
+/**
+ * The buttons pinned at the foot of the page, with a line above them while there is more of the page to scroll to, and, for an
+ * update, what happens after Download update under them.
+ */
 @Composable
 private fun UpdateBottomBar(state: UpdateState, actions: UpdateSheetActions, listState: LazyListState) {
     val moreBelow by remember(listState) { derivedStateOf { listState.canScrollForward } }
@@ -158,5 +160,6 @@ private fun UpdateBottomBar(state: UpdateState, actions: UpdateSheetActions, lis
             actions,
             Modifier.padding(start = AppSpacing.xl, top = AppSpacing.md, end = AppSpacing.xl, bottom = AppSpacing.md),
         )
+        DownloadSteps(state, Modifier.padding(start = AppSpacing.xl, end = AppSpacing.xl, bottom = AppSpacing.md))
     }
 }

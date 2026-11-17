@@ -276,7 +276,10 @@ Use these before writing anything new:
   system blur off, before Android 12) everything is **solid** with Material's usual dim. A sheet stops under the status bar.
 - Gate for all of it: Settings > Appearance > Effects > Background blur, Android 12+, **and** the system's window blur
   (`rememberWindowBlurAvailable()` follows `WindowManager.isCrossWindowBlurEnabled` and its listener: battery saver, the
-  developer option, or "Reduce blur effects" turn it off; there is no public API for the last).
+  developer option, or "Reduce blur effects" turn it off; there is no public API for the last), **and** a NormPix page behind
+  (`LocalPageBehindToBlur`, `SheetSurface.kt`; false in the quick-add overlay over another app, whose sheets are therefore solid -
+  glass over another app's icons was unreadable, seen on the emulator 2026-11-16). A see-through window also needs
+  `NormPixTheme(paintWindow = false)`: the theme paints every activity's window in the surface colour.
 - **Footer blur** (`ui/components/FooterBlur.kt`, Settings > Appearance > Effects > Footer blur, follows Background blur): behind the dock / back row
   the page is blurred (`AppFrostedTokens.footerBlurRadius`) and washed with the page colour, fading in from nothing over `footerFade` above the bars
   (a `DstIn` gradient on an offscreen layer), like DropSauce's `BarBlur`; it draws from the same `frostedSource` recording, takes no touches, and

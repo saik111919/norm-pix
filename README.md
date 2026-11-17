@@ -55,7 +55,7 @@ NormPix is a personal finance tracker and card wallet for Android, built nativel
 ## Highlights
 
 - **Private by design.** Your data lives in on-device SQLite databases; cards sit in an AES-256-GCM vault. There's no account and no analytics, and the network security config refuses every host but GitHub.
-- **Add a transaction in seconds.** Share a receipt or payment screenshot from Google Pay, PhonePe or your bank app, and NormPix reads it on the device (ML Kit) and fills in the amount, payee, account and category for you to check.
+- **Add a transaction in seconds.** Share a receipt or payment screenshot from Google Pay, PhonePe or your bank app, and NormPix reads it on the device (ML Kit) and fills in the amount, payee, account and category for you to check, in a sheet over that app. The icon's shortcuts (press and hold), a Quick Settings tile and the Add widget open the same form over whatever app you are in.
 - **Plans that keep up.** Monthly budgets per category, repeating payments that record themselves, and reminders with snooze, all on the Plans & Activity tab.
 - **Insights that answer questions.** Where the money went, what changed from last month, spending per person, and any range of days you pick.
 - **Encrypted on your phone.** Accounts, transactions, budgets, people and reminders are kept encrypted with SQLCipher (AES-256), its key held by the Android Keystore; a backup can be locked with a password of your own.
@@ -101,15 +101,15 @@ NormPix is a personal finance tracker and card wallet for Android, built nativel
 - Six page-transition styles, ten launcher icons, and an animated splash screen
 
 **Updates**
-- Checks GitHub once a day (or when you ask) and installs only an update signed with the same key
-- Downloads carry on with the app closed, with progress in a notification, then install with one tap
+- Checks GitHub once a day (or when you ask) and says when a new version is out
+- **Download update** opens the new version in a browser tab; your browser downloads it, you open the download, and Android installs it only if it is signed with the same key (your data stays)
 
 </details>
 
 <details>
 <summary><b>Recent improvements</b></summary>
 
-- A dedicated update page; download progress in a notification, with Download and Install buttons there too
+- A dedicated update page; updates download through your browser, so NormPix needs no "install apps" permission
 - A date range sheet in the month picker's style, with ready-made ranges
 - An animated splash screen that writes out the app's name
 - Linux window transitions you can actually see
@@ -122,7 +122,7 @@ NormPix is a personal finance tracker and card wallet for Android, built nativel
 
 1. Download `NormPix-<version>.apk` from [Releases](../../releases/latest). It is the one APK there and works on every supported phone, 64-bit or 32-bit. (The page also lists `update.json`: it is what the app reads to update itself, not something to install. GitHub shows each file's SHA-256 beside it.)
 2. Open it on your phone. If Android asks, allow your browser or files app to install unknown apps.
-3. That's it: NormPix checks for updates by itself (Settings → Updates & changelog → Automatic updates), and installs them over the app you have, keeping your data.
+3. That's it: NormPix checks for updates by itself (Settings → Updates & changelog → Automatic updates). When one is out, **Download update** opens it in your browser; open the download and Android installs it over the app you have, keeping your data.
 
 > [!NOTE]
 > Only release builds update themselves. Debug and qa builds are signed with another key, so a release can't install over them; uninstall one first.
@@ -130,7 +130,7 @@ NormPix is a personal finance tracker and card wallet for Android, built nativel
 ## FAQ
 
 ### Does NormPix send my data anywhere?
-> No. Your transactions, cards and reminders never leave the phone. The only connection is to GitHub, to check for and download NormPix's own updates. Android's network security config refuses every other host, and ML Kit's telemetry upload is taken out.
+> No. Your transactions, cards and reminders never leave the phone. The only connection is to GitHub, to check for NormPix's own updates (the download itself is your browser's). Android's network security config refuses every other host, and ML Kit's telemetry upload is taken out.
 
 ### Can I try it without entering my own data?
 > Yes. Turn on **Settings → Data & backup → Sample data**: about three months of accounts, transactions, budgets, repeating payments, reminders and cards appear. It lives in memory only, so turning it off brings your own data back, untouched.
@@ -141,8 +141,8 @@ NormPix is a personal finance tracker and card wallet for Android, built nativel
 ### Does it read my SMS or notifications?
 > No. NormPix has no SMS or notification-listener permission. To add a transaction from a payment app, share its receipt or screenshot with NormPix.
 
-### Why does the update notification stay while downloading?
-> A download you start runs in a foreground service, so it keeps going after you close the app. Android needs that service to show a notification; it goes away when the download finishes or you tap **Cancel**.
+### How does an update install?
+> Tap **Download update** (on Home's banner, or in Settings → Updates & changelog). The release's APK opens in a browser tab, and your browser downloads it. Open the download and tap **Update**; the first time, Android asks you to let your browser install apps. NormPix downloads and installs nothing itself, which is why it has no "install apps" permission (Google Play Protect blocked the app as harmful when it had one). The file stays in Downloads: **Settings → Updates & changelog → Automatic updates → Delete downloaded APK files** clears it.
 
 ## Project structure
 
@@ -153,10 +153,11 @@ native/                         The Android app (Kotlin, Jetpack Compose)
 │   ├── wallet/                 Cards: encrypted vault, card faces, NFC, expiry reminders, secure clipboard
 │   ├── storage/                How the databases are opened: encrypted with SQLCipher, the key in the Android Keystore
 │   ├── reminders/              Reminders: model, alarms, notifications, screens
+│   ├── quickadd/               The add form as a sheet over the app you are in: a shared receipt, the icon's shortcuts, the Quick Settings tile
 │   ├── screens/                Home, Plans & Activity, Wallet tabs
 │   ├── navigation/             App shell, navigation bar, page transitions, splash, search
 │   ├── settings/               Preferences and the Settings pages
-│   ├── updates/                In-app updates from GitHub releases
+│   ├── updates/                Update checks from GitHub releases; the download opens in the browser
 │   ├── ui/                     Design system: theme, tokens, sheets, lists, components
 │   └── banks/, availability/   Bank directory, scheduled features
 ├── app/src/test/               Unit and Robolectric UI tests (and the README's screenshots)
@@ -209,9 +210,9 @@ cd native
 
 ### Releases and in-app updates
 
-The app checks GitHub for a newer release once a day, in the background and at launch (Settings → Updates & changelog → Automatic updates, on by default; turn it off and the app only checks when asked), or when asked: Settings → Updates & changelog (or Check now under Automatic updates) opens the update page, which asks GitHub and shows where updating stands. Under the status the page holds the **changelog**: what every published version changed, newest first, as a short list of changes per version, with the installed version open and a newer one marked "New". It is read from the releases' own notes (the hand-written `native/release-notes.md`, one line for each change, when it changed since the last release; otherwise the commit subjects CI writes, or a tag's message), kept on the phone so it reads offline, and also shown for a build that doesn't update itself. What happens to an update found in the background is the user's choice there: **Tell me** (a notification), **Download it, then ask** (the default: downloaded in the background, then a notification says it's ready to install), or **Install it automatically** (downloaded and installed without asking once the app has been closed for a while, on Android 12 and later; a notification says what was installed, and if Android wants a confirmation it waits for the user's Install instead). Background downloads wait for Wi-Fi unless **Download on mobile data** is on. The daily run is a JobScheduler job (`UpdateJobService`), kept over a restart, and not run while the battery is low.
+The app checks GitHub for a newer release once a day, in the background and at launch (Settings → Updates & changelog → Automatic updates, on by default; turn it off and the app only checks when asked), or when asked: Settings → Updates & changelog (or Check now under Automatic updates) opens the update page, which asks GitHub and shows where updating stands. Under the status the page holds the **changelog**: what every published version changed, newest first, as a short list of changes per version, with the installed version open and a newer one marked "New". It is read from the releases' own notes (the hand-written `native/release-notes.md`, one line for each change, when it changed since the last release; otherwise the commit subjects CI writes, or a tag's message), kept on the phone so it reads offline, and also shown for a build that doesn't update itself. An update found in the background is said in a notification (and on Home); the background run only asks GitHub, on any network, and downloads nothing (the "download it" and "install it automatically" choices of earlier versions are gone; a stored one is read as **Tell me**). The daily run is a JobScheduler job (`UpdateJobService`), kept over a restart, and not run while the battery is low.
 
-In the app, **Update now** downloads the APK and checks its size, SHA-256, package name, version and signing key; the page (or sheet) then says it's ready, and only **Install** hands it to Android's installer, which asks the user to confirm. While it downloads, a notification shows how far it is, with **Cancel**; a download the user started runs in a foreground service (`UpdateDownloadService`, `FOREGROUND_SERVICE_DATA_SYNC`), so it carries on with the app closed, and once it's done the notification says it's ready to install, with **Install**. An "Update available" notification has **Download**, which downloads it the same way without opening the app. Every download, in the app or in the background, gets the same checks, and the app is never uninstalled. Only release builds update themselves: debug and qa builds carry another key, so no release could install over them.
+NormPix downloads and installs nothing itself, so it has no `REQUEST_INSTALL_PACKAGES` permission (Google Play Protect's cloud scan blocked the app as harmful with it, and passed it without). **Download update** opens the release's APK link - only `https://github.com/<repository>/releases/download/<tag>/<file>` of the repository the app was built for, nothing else - in a Chrome Custom Tab (the user's browser, its toolbar in the app's colours; a plain browser link where there is no Custom Tabs), and the app lock lets that short trip pass. The browser downloads the file; the user opens it and Android's own installer asks before updating NormPix over itself, which it does only for an APK signed with the same key, keeping the data. The first time, Android asks to let the browser install apps. The page and the sheet say what happens next under the button, and say it there if no browser could open the link. The app is never uninstalled. Only release builds update themselves: debug and qa builds carry another key, so no release could install over them.
 
 Every push to `main` publishes one on its own. To publish a version of your choosing, with notes of your own:
 

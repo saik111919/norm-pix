@@ -8,6 +8,9 @@ import android.os.Bundle
 import androidx.test.core.app.ApplicationProvider
 import com.example.normpix.MainActivity
 import com.example.normpix.NormPixApplication
+import com.example.normpix.quickadd.QuickAddActivity
+import com.example.normpix.quickadd.QuickAddRequest
+import com.example.normpix.quickadd.quickAddRequestOf
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -18,12 +21,14 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/** The share sheet's way in: found for shared text, hands the text over once, opens NormPix's own task. */
+/**
+ * The share sheet's way in: found for shared text and pictures, and hands each share on - once - to the overlay that opens the form
+ * over the sharing app. The main screen is not opened.
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ShareTransactionActivityTest {
     private val app: NormPixApplication = ApplicationProvider.getApplicationContext()
-    private val inbox get() = app.container.sharedText
 
     private fun send(text: Any? = "Sent Rs.250.00 To SWIGGY On 10/10/26", type: String = "text/plain") =
         Intent(Intent.ACTION_SEND).setClass(app, ShareTransactionActivity::class.java).setType(type).apply {
@@ -47,21 +52,27 @@ class ShareTransactionActivityTest {
         // The main screen stays out of the share sheet.
         assertTrue(MainActivity::class.java.name !in targetsFor("text/plain"))
         assertTrue(MainActivity::class.java.name !in targetsFor("image/png"))
+        // The overlay it hands on to is not a target of its own: only NormPix reaches it.
+        assertTrue(QuickAddActivity::class.java.name !in targetsFor("text/plain"))
+        assertTrue(QuickAddActivity::class.java.name !in targetsFor("image/png"))
         val info = app.packageManager.getActivityInfo(ComponentName(app, ShareTransactionActivity::class.java), 0)
         assertTrue(info.exported)
+        assertTrue(!app.packageManager.getActivityInfo(ComponentName(app, QuickAddActivity::class.java), 0).exported)
     }
 
     @Test
-    fun `a share hands its text over and opens the app's own task`() {
+    fun `a share hands its text on to the overlay, not to the main screen`() {
         val controller = Robolectric.buildActivity(ShareTransactionActivity::class.java, send()).create()
         val activity = controller.get()
 
-        assertEquals(listOf("Sent Rs.250.00 To SWIGGY On 10/10/26"), inbox.waiting.value.map { it.text })
         val started = shadowOf(activity).nextStartedActivity
-        assertEquals(MainActivity::class.java.name, started.component?.className)
-        assertTrue((started.flags and Intent.FLAG_ACTIVITY_NEW_TASK) != 0)
-        // The text travels in memory, not in the intent the system keeps with the task.
-        assertNull(started.extras?.getCharSequence(Intent.EXTRA_TEXT))
+        assertEquals(QuickAddActivity::class.java.name, started.component?.className)
+        // Over the sharing app: the overlay's own manifest entry (single task, empty affinity) makes its task, not a flag here, and
+        // nothing opens the main screen.
+        assertTrue((started.flags and Intent.FLAG_ACTIVITY_NEW_TASK) == 0)
+        assertNull(shadowOf(activity).nextStartedActivity)
+        assertEquals("Sent Rs.250.00 To SWIGGY On 10/10/26", sharedTextOf(started))
+        assertEquals(QuickAddRequest.Share::class, quickAddRequestOf(started, app.packageName)!!::class)
         assertTrue(activity.isFinishing)
     }
 
@@ -76,18 +87,28 @@ class ShareTransactionActivityTest {
         }
 
     @Test
-    fun `a shared picture is handed over with the permission to read it`() {
+    fun `a shared picture is handed on with the permission to read it`() {
         val activity = Robolectric.buildActivity(ShareTransactionActivity::class.java, sendPicture()).create().get()
 
-        val share = inbox.waiting.value.single()
+        val started = shadowOf(activity).nextStartedActivity
+        assertEquals(QuickAddActivity::class.java.name, started.component?.className)
+        val share = quickAddRequestOf(started, app.packageName) as QuickAddRequest.Share
         assertEquals(receipt, share.picture)
         assertEquals("", share.text)
-        val started = shadowOf(activity).nextStartedActivity
-        assertEquals(MainActivity::class.java.name, started.component?.className)
-        // The permission to read the picture would end with this activity: the main screen is given it.
+        // The permission to read the picture would end with this activity: the overlay is given it.
         assertEquals(receipt, started.clipData?.getItemAt(0)?.uri)
         assertTrue((started.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0)
+        assertNull(shadowOf(activity).nextStartedActivity)
         assertTrue(activity.isFinishing)
+    }
+
+    @Test
+    fun `a picture of NormPix's own is never handed on`() {
+        val own = Uri.parse("content://${app.packageName}.scanfiles/scan/card.jpg")
+        val activity = Robolectric.buildActivity(ShareTransactionActivity::class.java, sendPicture(own)).create().get()
+
+        val share = quickAddRequestOf(shadowOf(activity).nextStartedActivity, app.packageName) as QuickAddRequest.Share
+        assertNull(share.picture)
     }
 
     @Test
@@ -111,27 +132,38 @@ class ShareTransactionActivityTest {
     }
 
     @Test
-    fun `a recreated or reopened share is not handed over again`() {
-        Robolectric.buildActivity(ShareTransactionActivity::class.java, send()).create(Bundle())
+    fun `a recreated or reopened share is not handed on again`() {
+        val recreated = Robolectric.buildActivity(ShareTransactionActivity::class.java, send()).create(Bundle()).get()
+        assertNull(shadowOf(recreated).nextStartedActivity)
         val fromRecents = send().addFlags(Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY)
         val reopened = Robolectric.buildActivity(ShareTransactionActivity::class.java, fromRecents).create().get()
-        assertTrue(inbox.waiting.value.isEmpty())
         assertNull(shadowOf(reopened).nextStartedActivity)
         assertTrue(reopened.isFinishing)
     }
 
     @Test
-    fun `a share without readable text still opens the app, which explains`() {
+    fun `a share without readable text still opens the overlay, which explains`() {
         val activity = Robolectric.buildActivity(ShareTransactionActivity::class.java, send(text = 42)).create().get()
-        assertEquals(listOf(""), inbox.waiting.value.map { it.text })
-        assertEquals(MainActivity::class.java.name, shadowOf(activity).nextStartedActivity.component?.className)
+        val started = shadowOf(activity).nextStartedActivity
+        assertEquals(QuickAddActivity::class.java.name, started.component?.className)
+        val share = quickAddRequestOf(started, app.packageName) as QuickAddRequest.Share
+        assertEquals("", share.text)
+        assertNull(share.picture)
+    }
+
+    @Test
+    fun `a text far longer than a payment message is cut before it is handed on`() {
+        val long = "x".repeat(1_000_000)
+        val activity = Robolectric.buildActivity(ShareTransactionActivity::class.java, send(text = long)).create().get()
+        val share = quickAddRequestOf(shadowOf(activity).nextStartedActivity, app.packageName) as QuickAddRequest.Share
+        // Only enough is kept to tell it is too long.
+        assertEquals(SharedTransactionParser.MAX_LENGTH + 1, share.text.length)
     }
 
     @Test
     fun `anything but a send does nothing`() {
         val view = Intent(Intent.ACTION_VIEW).setClass(app, ShareTransactionActivity::class.java)
         val activity = Robolectric.buildActivity(ShareTransactionActivity::class.java, view).create().get()
-        assertTrue(inbox.waiting.value.isEmpty())
         assertNull(shadowOf(activity).nextStartedActivity)
         assertTrue(activity.isFinishing)
     }
@@ -148,18 +180,5 @@ class ShareTransactionActivityTest {
         // A subject the text already contains isn't repeated.
         val repeated = send(text = "Payment receipt: ₹250 paid").putExtra(Intent.EXTRA_SUBJECT, "Payment receipt")
         assertEquals("Payment receipt: ₹250 paid", sharedTextOf(repeated))
-    }
-
-    @Test
-    fun `the inbox gives each share out once and keeps only a few`() {
-        val box = SharedTextInbox()
-        val first = box.offer("a")
-        assertTrue(box.take(first))
-        assertTrue(!box.take(first))
-        repeat(SharedTextInbox.MAX_WAITING + 2) { box.offer("share $it") }
-        assertEquals(SharedTextInbox.MAX_WAITING, box.waiting.value.size)
-        assertEquals("share 2", box.waiting.value.first().text)
-        // Far too long to be a payment message: only enough is kept to tell.
-        assertEquals(SharedTransactionParser.MAX_LENGTH + 1, box.offer("x".repeat(1_000_000)).text.length)
     }
 }

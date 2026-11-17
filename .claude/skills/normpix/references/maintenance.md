@@ -21,8 +21,8 @@ When a fact drifts: fix the prose that mentions it **first**, then change the va
 nothing needed changing.
 
 <!-- facts:begin -->
-verified_commit=73dd8cf2
-verified_date=2026-11-16
+verified_commit=04b634ed
+verified_date=2026-11-17
 versionName=1.6.0
 finance_db_version=17
 reminders_db_version=2
@@ -64,7 +64,8 @@ SharedTransactionParser
 ReceiptLayout
 rupeeRestored
 BrandedReceipts
-SharedTextInbox
+QuickAddActivity
+QuickAddRequests
 MlKitSharedPictureReader
 CardsPolicy
 CardsController
@@ -139,7 +140,8 @@ WidgetRequest
 WidgetIntents
 DropTelemetryBackend
 UpdateJobService
-UpdateDownloadService
+BrowserDownloadOpener
+DownloadLink
 ReleaseMetadata
 ChangelogPill
 ReminderDelivery
