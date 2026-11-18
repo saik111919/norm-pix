@@ -121,20 +121,24 @@ internal fun pictureName(resolver: ContentResolver, uri: Uri): String? = try {
 /** How unsure of a character the recognizer is when it is reading a ₹ it has no letter for (as "7", "2" or "Z"). */
 private const val RUPEE_DOUBT = 0.25f
 
-/** A figure with something in front that may be a ₹: "730", "Z10", "7360", "21,250.50". */
-private val rupeeFront = Regex("""^[\dA-Za-z%*?]\d(?:[\d,]{0,8}\d)?(?:\.\d{1,2})?$""")
+/**
+ * A figure with something in front that may be a ₹: "730", "Z10", "7360", "21,250.50" - behind the sign of a debit or a credit
+ * where the app prints one ("-₹199" read as "-7199" or "-Z199": Kotak 811). The sign is any dash the recognizer gives.
+ */
+private val rupeeFront = Regex("""^([+\-‐-―−]?)[\dA-Za-z%*?]\d(?:[\d,]{0,8}\d)?(?:\.\d{1,2})?$""")
 
 /**
- * [word] with its first character put back as the ₹ it stands for. The recognizer has no ₹, and reads one as "7", "2"
- * or "Z" - scoring that character far below the digits after it ([sure], one score per character: 0.07-0.12 against
- * 0.6-0.95 on real PhonePe and Google Pay receipts, where a real digit beside a ₹ it swallowed still scores 0.29 or
- * more). Unchanged unless [word] is a figure whose first character is that unsure.
+ * [word] with the character in front of its figure put back as the ₹ it stands for - its first, or the one after a sign. The
+ * recognizer has no ₹, and reads one as "7", "2" or "Z" - scoring that character far below the digits after it ([sure], one
+ * score per character: 0.07-0.12 against 0.6-0.95 on real PhonePe, Google Pay and Kotak 811 receipts, where a real digit beside
+ * a ₹ it swallowed still scores 0.29 or more). Unchanged unless [word] is a figure whose mark is that unsure.
  */
 internal fun rupeeRestored(word: String, sure: List<Float>): String {
-    if (sure.size != word.length || word.length < 2 || !rupeeFront.matches(word)) return word
-    val first = sure.first()
-    if (first >= RUPEE_DOUBT || first >= sure.drop(1).min() / 2) return word
-    return "₹" + word.substring(1)
+    if (sure.size != word.length) return word
+    val at = rupeeFront.matchEntire(word)?.groupValues?.get(1)?.length ?: return word
+    val mark = sure[at]
+    if (mark >= RUPEE_DOUBT || mark >= sure.drop(at + 1).min() / 2) return word
+    return word.substring(0, at) + "₹" + word.substring(at + 1)
 }
 
 /** Wider than this many times the text's height, a gap between two words parts them into pieces: a name, and far right, the amount. */

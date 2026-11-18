@@ -156,6 +156,8 @@ Format: `claim - applies to - source - status/date`.
 - ML Kit returns **scrambled line order** and reads the rupee sign as `7`, `Z` or nothing; per-symbol confidence for a misread rupee
   is ~0.07-0.12 versus 0.6-0.95 for real digits, which `rupeeRestored` uses (threshold 0.25 and below half the rest). - ML Kit
   text-recognition 16.0.1 on the owner's phone - NOTES (2026-10-13).
+- One receipt gives different readings at different sizes: Kotak 811's "-₹199" read at 15 sizes and compressions came out "-199",
+  "-7199" (the 7 scored 0.08) and "-Z199" (the Z 0.09-0.12) - so test a reading at more than one size - owner's phone, 2026-11-18.
 - Google Pay names its shared image `<id> - 30.00 To <payee> on Google Pay.png` (amount, payee, direction) and
   `OpenableColumns.DISPLAY_NAME` returns it - Google Pay Android share - NOTES (2026-10-13).
 - UPI receipts show the receiving bank's KYC name, which for a self transfer is the user's own; no app prints a self-transfer-specific
@@ -280,6 +282,11 @@ Format: `claim - applies to - source - status/date`.
   don't tie anything that must stay closed to focus loss alone - 2026-11-18. Not checked on a phone.
 - Window blur-behind: `WindowManager.LayoutParams.FLAG_BLUR_BEHIND` + `blurBehindRadius` (API 31), set through `window.attributes`; Robolectric
   keeps the values (QuickAddBlurTest reads them) but draws no blur - 2026-11-18.
+- With blur-behind and **no** `FLAG_DIM_BEHIND`, the window manager's "Dim Layer for - Task" has colour alpha 0, and on the owner's motorola
+  edge 50 neo (Android 16) SurfaceFlinger counted it invisible in 3 shares of 6 though it held the full radius (`dumpsys SurfaceFlinger`:
+  "invisible reason= color{< 0, 0, 0, 0 >} backgroundBlurRadius=112"), so nothing was blurred; with a 1% dim alongside, 8 of 8 were
+  "visible reason= color{< 0, 0, 0, 0.0100021 >}" and blurred. The Android 17 emulator never showed it. Check: the `dumpsys SurfaceFlinger`
+  line after "Layer [n] Dim Layer for - Task" - observed on the device 2026-11-18, cause inside SurfaceFlinger not read.
 
 ## How to add an entry
 

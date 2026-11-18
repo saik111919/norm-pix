@@ -280,7 +280,9 @@ Use these before writing anything new:
   (`LocalPageBehindToBlur`, `SheetSurface.kt`). In the quick-add overlay over another app it is the same gate (since 2026-11-18,
   owner: "the same blur effect as sheet background"): there the **system** blurs the other app behind the overlay's window
   (`FLAG_BLUR_BEHIND` + `blurBehindRadius`, `BlurAppBehind` in `QuickAddHost.kt`), set as the sheet moves on the page's own curve
-  (`backdropBlurRadius`, shared with `blurredBy`) and radius, so the sheets are glass as in the app. Without that blur they are solid
+  (`backdropBlurRadius`, shared with `blurredBy`) and radius, so the sheets are glass as in the app. The blur always goes with
+  `FLAG_DIM_BEHIND` at `DIM_WITH_BLUR` (1%): with no dim, the layer the window manager blurs with has no colour, and the owner's
+  motorola (Android 16) counted it invisible in 3 shares of 6 and left the other app sharp (2026-11-18). Without that blur they are solid
   with Material's dim: glass over another app left sharp was unreadable (emulator, 2026-11-16). A see-through window also needs
   `NormPixTheme(paintWindow = false)`: the theme paints every activity's window in the surface colour.
 - **Footer blur** (`ui/components/FooterBlur.kt`, Settings > Appearance > Effects > Footer blur, follows Background blur): behind the dock / back row

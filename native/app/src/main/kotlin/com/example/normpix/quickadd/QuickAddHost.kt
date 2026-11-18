@@ -227,14 +227,29 @@ private fun BlurAppBehind(enabled: Boolean) {
     DisposableEffect(window) { onDispose { window.blurBehind(0) } }
 }
 
-/** Blurs what is behind this window by [radius] px (none at 0), changing the window only when that changes it. */
+/**
+ * The dim that goes with the blur behind the overlay: 1%, which nobody sees. The blur is drawn by a layer the window manager puts
+ * behind the window, of the dim's colour; with no dim at all it is a layer of no colour that only blurs, and the motorola edge 50 neo
+ * (Android 16) then drew it about half the time - its SurfaceFlinger counted it invisible though it held the full radius
+ * (`dumpsys SurfaceFlinger`: "invisible reason= color{< 0, 0, 0, 0 >} backgroundBlurRadius=112"), and the other app stayed sharp
+ * behind the glass sheet (2026-11-18, 3 shares in 6; with this dim, 8 in 8 were drawn). A layer with any colour is always one it draws.
+ */
+internal const val DIM_WITH_BLUR = 0.01f
+
+/**
+ * Blurs what is behind this window by [radius] px (none at 0), with the [DIM_WITH_BLUR] that makes sure the blur is drawn, changing
+ * the window only when that changes it.
+ */
 @RequiresApi(Build.VERSION_CODES.S)
 internal fun Window.blurBehind(radius: Int) {
     val attrs = attributes
-    val flags = if (radius > 0) attrs.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND else attrs.flags and WindowManager.LayoutParams.FLAG_BLUR_BEHIND.inv()
-    if (attrs.flags == flags && attrs.blurBehindRadius == radius) return
+    val both = WindowManager.LayoutParams.FLAG_BLUR_BEHIND or WindowManager.LayoutParams.FLAG_DIM_BEHIND
+    val flags = if (radius > 0) attrs.flags or both else attrs.flags and both.inv()
+    val dim = if (radius > 0) DIM_WITH_BLUR else 0f
+    if (attrs.flags == flags && attrs.blurBehindRadius == radius && attrs.dimAmount == dim) return
     attrs.flags = flags
     attrs.blurBehindRadius = radius
+    attrs.dimAmount = dim
     attributes = attrs
 }
 

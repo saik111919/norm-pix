@@ -403,7 +403,8 @@ path, never NormPix's own providers - judged by the authority **after the last `
 `user@name` and `0@<own provider>` is the app's own files (2026-11-13).
 
 - Recognizer reality (not what the screen looks like): line order is **scrambled**; the rupee sign is read as `7`, `Z` or
-  dropped (`rupeeRestored` uses ML Kit's per-symbol confidence: a misread symbol scores ~0.07-0.12, real digits 0.6-0.95);
+  dropped (`rupeeRestored` uses ML Kit's per-symbol confidence: a misread symbol scores ~0.07-0.12, real digits 0.6-0.95;
+  it looks past a debit's or credit's sign, since Kotak 811 prints "-₹199", read "-7199" or "-Z199");
   the user's bank can be a logo only; "Powered by UPI <PSP bank>" is not the user's bank. So `ReceiptLayout` rebuilds rows
   from bounding boxes; readers never assume label-then-value adjacency.
 - **One reader per payment app** (`PaymentAppReceipt`, `finance/share/PaymentAppReceipts.kt`): PhonePe, Paytm, Kredit.Pe,
