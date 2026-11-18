@@ -362,6 +362,26 @@ object PhoneReceipts {
         line("Kredit.Pe", 470, 1362, 672, 1408),
     )
 
+    /**
+     * Kotak 811's share of a ₹199 bill payment, read at 1081 x 1880 (2026-11-18): the amount printed largest as a debit, "-₹199",
+     * the date under it, the biller's reference, To / From rows, the account behind the 811 logo (read as "8Il"), the bank's own
+     * transaction id. The ₹ is put back here; at this size the phone read it as a 7 ("-7199"). The person, the account's digits,
+     * the reference and the id are stand-ins of the same shape.
+     */
+    val kotak811 = listOf(
+        line("kotak", 391, 166, 584, 220),
+        line("-₹199", 161, 478, 417, 553),
+        line("18 Nov 2026, 01:25 pm", 155, 594, 635, 642),
+        line("811:BD/260000000001/VI PREPAID", 170, 738, 918, 782),
+        line("To:", 153, 1013, 218, 1050),
+        line("Vi Prepaid", 364, 999, 621, 1066),
+        line("From: ASHA VERMANI", 170, 1164, 848, 1226),
+        line("8Il Kotak811 • XXXXXX0001", 338, 1248, 923, 1288),
+        line("Kotak txn ID:", 156, 1444, 424, 1480),
+        line("M1000001", 158, 1528, 416, 1568),
+        line("Paid securely by Kotak Mahindra Bank", 124, 1729, 954, 1783),
+    )
+
     /** [lines] with [text] read [asRead] instead: how a line came out before the ₹ was put back. */
     fun raw(lines: List<PictureLine>, text: String, asRead: String) = lines.map { if (it.text == text) it.copy(text = asRead) else it }
 

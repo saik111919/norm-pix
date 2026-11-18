@@ -404,10 +404,11 @@ object SharedTransactionParser {
 
     /**
      * A line that is just a figure, perhaps behind a currency mark - or behind what the recognizer made of a `₹` (`%`, `*`,
-     * `{`, `Z`, `R`). A bare year is not one.
+     * `{`, `Z`, `R`) - and the sign of a debit or a credit before it (Kotak 811's "-₹199", read as "-Z199"). A bare year is
+     * not one.
      */
     private val headlineShape = Regex(
-        """^\s*(?:₹|rs\.?|inr|[zr]|[^\p{L}\p{N}\s]{1,2})?\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(?:/-)?\s*(?:[©®@✓✔√]+\s*)?$""",
+        """^\s*(?:[+\-]\s*(?=[₹zr]))?(?:₹|rs\.?|inr|[zr]|[^\p{L}\p{N}\s]{1,2})?\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(?:/-)?\s*(?:[©®@✓✔√]+\s*)?$""",
         RegexOption.IGNORE_CASE,
     )
     private val yearLike = Regex("""(?:19|20)\d\d""")
@@ -437,7 +438,7 @@ object SharedTransactionParser {
 
     /** [headlineShape] again, but only with something in front of the figure: a rupee sign, or what the recognizer made of one. */
     private val markedFigureShape = Regex(
-        """^\s*(?:₹|rs\.?|inr|[zr]|[^\p{L}\p{N}\s]{1,2})\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(?:/-)?\s*(?:[©®@✓✔√]+\s*)?$""",
+        """^\s*(?:[+\-]\s*(?=[₹zr]))?(?:₹|rs\.?|inr|[zr]|[^\p{L}\p{N}\s]{1,2})\s*(\d[\d,]*(?:\.\d{1,2})?)\s*(?:/-)?\s*(?:[©®@✓✔√]+\s*)?$""",
         RegexOption.IGNORE_CASE,
     )
     private val bareFigureShape = Regex("""^\s*(\d[\d,]*(?:\.\d{1,2})?)\s*$""")

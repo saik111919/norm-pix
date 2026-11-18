@@ -36,6 +36,45 @@ class PaymentAppReceiptsTest {
     }
 
     @Test
+    fun `behind a debit's minus the rupee sign is put back as well`() {
+        // Kotak 811 prints "-₹199"; the owner's phone read one receipt, at different sizes, as these (2026-11-18).
+        assertEquals("-₹199", rupeeRestored("-7199", listOf(0.58f, 0.08f, 0.61f, 0.89f, 0.81f)))
+        assertEquals("-₹199", rupeeRestored("-Z199", listOf(0.68f, 0.09f, 0.65f, 0.84f, 0.88f)))
+        assertEquals("-₹199", rupeeRestored("-Z199", listOf(0.53f, 0.12f, 0.54f, 0.84f, 0.84f)))
+        assertEquals("-₹199", rupeeRestored("-Z199", listOf(0.56f, 0.10f, 0.44f, 0.84f, 0.85f)))
+        // Any dash the recognizer gives, and a credit's plus.
+        assertEquals("−₹199", rupeeRestored("−7199", listOf(0.58f, 0.08f, 0.61f, 0.89f, 0.81f)))
+        assertEquals("+₹500", rupeeRestored("+Z500", listOf(0.70f, 0.10f, 0.80f, 0.90f, 0.90f)))
+        // The ₹ dropped (its "1" scored lower, not that low): nothing to put back. A real 7 after the sign stays.
+        assertEquals("-199", rupeeRestored("-199", listOf(0.60f, 0.50f, 0.86f, 0.80f)))
+        assertEquals("-7199", rupeeRestored("-7199", listOf(0.60f, 0.85f, 0.90f, 0.90f, 0.90f)))
+        // A sign is not a figure on its own, and the sign itself is never what is replaced.
+        assertEquals("-7", rupeeRestored("-7", listOf(0.1f, 0.9f)))
+        assertEquals("-₹99", rupeeRestored("-799", listOf(0.05f, 0.08f, 0.90f, 0.90f)))
+    }
+
+    @Test
+    fun `Kotak 811's amount behind its minus is the amount, however the rupee sign was read`() {
+        // As the phone read "-₹199" off one receipt at different sizes: the ₹ as a 7 or a Z scored far below the digits, or
+        // dropped. Before, these gave ₹7,199, no amount, and ₹199.
+        val reads = listOf(
+            "-7199" to listOf(0.58f, 0.08f, 0.61f, 0.89f, 0.81f),
+            "-Z199" to listOf(0.68f, 0.09f, 0.65f, 0.84f, 0.88f),
+            "-199" to listOf(0.60f, 0.50f, 0.86f, 0.80f),
+        )
+        for ((asRead, scores) in reads) {
+            val lines = PhoneReceipts.raw(PhoneReceipts.kotak811, "-₹199", rupeeRestored(asRead, scores))
+            val draft = assertIs<SharedTextReading.Draft>(PaymentAppReceipts.read("", picture(lines), CurrencySpec.INR, today)).draft
+            assertEquals(19900L, draft.amount, "read as $asRead")
+            assertEquals(emptyList(), draft.ambiguousAmounts, "read as $asRead")
+        }
+        // A Z the recognizer was surer of is not put back, and still marks the figure behind the minus as the amount.
+        val surerZ = PhoneReceipts.raw(PhoneReceipts.kotak811, "-₹199", "-Z199")
+        val draft = assertIs<SharedTextReading.Draft>(PaymentAppReceipts.read("", picture(surerZ), CurrencySpec.INR, today)).draft
+        assertEquals(19900L, draft.amount)
+    }
+
+    @Test
     fun `a line's words part where a wide gap is between them`() {
         val words = listOf(line("Asha", 213, 311, 300, 342), line("Verma", 312, 311, 510, 342), line("₹10", 948, 309, 1014, 340))
         assertEquals(listOf("Asha Verma", "₹10"), splitAtGaps(words).map { it.text })

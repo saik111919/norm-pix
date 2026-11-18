@@ -5,7 +5,7 @@ description: "Everything about the NormPix project - a private, offline-first An
 
 # NormPix project skill
 
-Stamp: verified against commit `fc9913cf` (phases 75-76: browser updates, the quick-add overlay) plus the uncommitted phase 77 on `features` (the amount keypad and calculator, Frequent, Add again, the overlay's blur, and the token-ratchet fixes after the full suite; `versionName` 1.6.0 in the tree) on 2026-11-18. If `git log` shows newer commits on source paths, or
+Stamp: verified against commit `74275d2b` (v1.6.2, with phase 77: the amount keypad and calculator, Frequent, Add again, the overlay's blur) plus phase 78, the commit after it (the overlay's blur kept drawn with a 1% dim, a ₹ put back behind a debit's minus; `versionName` 1.6.0 in the tree) on 2026-11-19. If `git log` shows newer commits on source paths, or
 `bash .claude/skills/normpix/scripts/verify.sh` reports drift, trust the code and fix the skill (`references/maintenance.md`).
 
 ## 1. The 60-second picture

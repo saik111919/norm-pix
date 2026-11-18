@@ -57,12 +57,16 @@ class QuickAddBlurTest {
         compose.waitUntil(10_000) { shown("New expense") }
         compose.waitUntil(5_000) { blur() == fullRadius }
         assertTrue(fullRadius > 0)
+        val up = compose.activity.window.attributes
+        assertTrue(up.flags and WindowManager.LayoutParams.FLAG_DIM_BEHIND != 0, "a dim goes with the blur, so a phone draws its layer")
+        assertEquals(DIM_WITH_BLUR, up.dimAmount, "one nobody sees")
 
         dismissSheet()
         compose.waitUntil(10_000) { !shown("New expense") }
         compose.waitUntil(5_000) { blur() == 0 }
         val attrs = compose.activity.window.attributes
         assertEquals(0, attrs.flags and WindowManager.LayoutParams.FLAG_BLUR_BEHIND, "the flag goes with the blur")
+        assertEquals(0, attrs.flags and WindowManager.LayoutParams.FLAG_DIM_BEHIND, "and so does the dim")
     }
 
     @Test
@@ -73,6 +77,7 @@ class QuickAddBlurTest {
         compose.waitUntil(10_000) { shown("New expense") }
         compose.waitForIdle()
         assertEquals(0, blur(), "Background blur is off")
+        assertEquals(0, compose.activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_DIM_BEHIND, "no window dim either: the sheet's scrim dims")
     }
 
     @Test
