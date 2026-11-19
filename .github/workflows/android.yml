@@ -27,6 +27,8 @@ env:
   # What a push to main publishes: "release" (the app offers it as an update) or "prerelease" (a test build to install by
   # hand, which the app never offers).
   MAIN_BUILDS: release
+  # Robolectric 4.17's Android jars for SDK 33, 34 and 35, fetched before the tests (see "Fetch Robolectric's Android jars").
+  ROBOLECTRIC_ANDROID_ALL: 13-robolectric-9030017-i7 14-robolectric-10818077-i7 15-robolectric-13954326-i7
   # JDK 24 and later warn on every native library a Java program loads (Gradle's own, Robolectric's) unless it is allowed
   # to: GRADLE_OPTS reaches the JVM that starts Gradle, native-access in native/gradle.properties and native/app/build.gradle.kts
   # the daemon and the test JVMs.
@@ -54,6 +56,35 @@ jobs:
           java-version: 25
 
       - uses: gradle/actions/setup-gradle@v5
+
+      # Robolectric fetches an Android jar for each SDK the tests run on from Maven Central while the tests run, once, with no
+      # retry: when Maven Central did not answer, every Robolectric test class failed at once (2026-11-05: 221 classes; 2026-11-18:
+      # 316 classes, on main, so that release was never published). They are fetched here instead - kept between runs, downloaded
+      # with retries and checked against Maven Central's own SHA-512 - into the local Maven folder Robolectric looks in before it
+      # downloads anything. ROBOLECTRIC_ANDROID_ALL is Robolectric 4.17's jar for SDK 33, 34 and 35, the levels the tests ask for
+      # (@Config(sdk = ...)); after a Robolectric update or a new level, add its jar here (Robolectric still downloads a missing one
+      # itself, as before, so nothing breaks - it is only less sure).
+      - name: Keep Robolectric's Android jars between runs
+        uses: actions/cache@v6
+        with:
+          path: ~/.m2/repository/org/robolectric/android-all-instrumented
+          key: robolectric-android-all-${{ env.ROBOLECTRIC_ANDROID_ALL }}
+
+      - name: Fetch Robolectric's Android jars
+        run: |
+          base=https://repo1.maven.org/maven2/org/robolectric/android-all-instrumented
+          for v in $ROBOLECTRIC_ANDROID_ALL; do
+            dir="$HOME/.m2/repository/org/robolectric/android-all-instrumented/$v"
+            jar="$dir/android-all-instrumented-$v.jar"
+            if [ -s "$jar" ] && [ -s "$jar.sha512" ] && echo "$(head -c 128 "$jar.sha512")  $jar" | sha512sum -c --status; then
+              echo "$v: kept from an earlier run"
+              continue
+            fi
+            mkdir -p "$dir"
+            curl -fsSL --retry 6 --retry-all-errors --retry-delay 10 -o "$jar.sha512" "$base/$v/android-all-instrumented-$v.jar.sha512"
+            curl -fsSL --retry 6 --retry-all-errors --retry-delay 10 -o "$jar" "$base/$v/android-all-instrumented-$v.jar"
+            echo "$(head -c 128 "$jar.sha512")  $jar" | sha512sum -c -
+          done
 
       # The output is kept so the step that names failures can point at a compile error too.
       - name: Unit and Robolectric UI tests

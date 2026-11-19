@@ -129,6 +129,16 @@ commit the tree mid-session and it would be swept in). Don't write PNGs with Pow
 - `.github/workflows/screenshots.yml` (`Render`): re-renders `docs/screenshots` when the app changes on `main`; on a PR it pushes
   them to `readme-screenshots/<branch>` (a PR's own branch is never pushed to).
 - PR checks to wait for: **Tests and lint (~8 min), Release APK (~5 min), Render (~3 min)**. "GitHub release" is skipped on PRs.
+- **Robolectric's Android jars are fetched before the tests** (since 2026-11-19): Robolectric downloads an `android-all-instrumented`
+  jar per SDK from Maven Central during the run, once, with no retry, and a Maven Central hiccup failed every Robolectric class at
+  `classMethod` (`MavenArtifactFetcher` -> `IOException`: 221 classes on 2026-11-05, 316 on main on 2026-11-18, whose release was then
+  skipped). The `verify` job now keeps `~/.m2/repository/org/robolectric/android-all-instrumented` in `actions/cache@v6` and fetches
+  the jars named in the workflow's `ROBOLECTRIC_ANDROID_ALL` (Robolectric 4.17's for SDK 33 / 34 / 35 = `13-robolectric-9030017-i7`,
+  `14-robolectric-10818077-i7`, `15-robolectric-13954326-i7`, read from `DefaultSdkProvider` in the 4.17 jar) with `curl --retry`,
+  checked against Maven Central's `.sha512`; Robolectric finds them there ("Found ... in local maven repository") and downloads
+  nothing. **A Robolectric update or a test on a new SDK level needs its jar added to that list** (a missing one is still downloaded by
+  Robolectric itself, so nothing breaks - it is only exposed to the flake again). If the flake comes back anyway: all failures
+  `classMethod` with that one cause = `gh run rerun <run> --failed` once the run has finished; don't change code for it.
 - **A push to `main` publishes a release** at the next free patch of `versionName`'s `X.Y` (highest `vX.Y.*` tag + 1), so only a
   minor/major bump is edited by hand (`versionName` in `native/app/build.gradle.kts`; `versionCode` follows). Notes = the commit
   subjects since the last release (so write commit subjects a user can read), or an annotated tag's message, or - the way to get one short bullet for each change into the app's Changelog page - **`native/release-notes.md`** (hand-written, `##` headings and `-` lines, comment lines allowed): a release of main uses it **only if it changed since the last release** (else the commit subjects, so a release never repeats the last one's notes; `ReleaseNotesFileTest` keeps it in shape - rewrite it for each release); `mandatory: true` in
