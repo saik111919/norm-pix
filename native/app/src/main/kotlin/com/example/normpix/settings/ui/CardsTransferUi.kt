@@ -37,6 +37,8 @@ import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.wallet.CardsState
 import com.example.normpix.wallet.CardsTransfer
 import com.example.normpix.wallet.StoredCard
+import com.example.normpix.wallet.passes.PassesState
+import com.example.normpix.wallet.passes.StoredPass
 import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
@@ -53,8 +55,11 @@ internal sealed interface CardsForBackup {
     /** They are not in the backup: there are none to keep, Wallet keeps no cards, or the user chose to leave them out. */
     data object LeftOut : CardsForBackup
 
-    /** They are in the backup, locked with the password just set: the cards file's text (see [CardsTransfer.encode]) and how many cards it holds. */
-    class Locked(val file: String, val count: Int) : CardsForBackup
+    /**
+     * They are in the backup, locked with the password just set: the cards file's text (see [CardsTransfer.encode]), how many cards it
+     * holds and how many loyalty and gift cards ([passes], 2026-11-19).
+     */
+    class Locked(val file: String, val count: Int, val passes: Int = 0) : CardsForBackup
 }
 
 /**
@@ -70,19 +75,26 @@ internal class CardsTransferFlows(
     private val files: BackupFiles,
 ) {
     suspend fun export() {
-        if (!container.preferences.state.value.walletCardsEnabled) {
+        // The loyalty and gift cards go with the cards (2026-11-19); with none of them, everything below is as it always was.
+        val passes = readPasses()
+        val cardsOn = container.preferences.state.value.walletCardsEnabled
+        if (!cardsOn && passes.isEmpty()) {
             snackbars.show("NormPix isn't storing cards, so there are none to export.", SnackbarKind.Warning)
             return
         }
-        val cardsController = container.cards
-        if (cardsController.state.value !is CardsState.Ready) cardsController.load()
-        val state = cardsController.state.value
-        if (state !is CardsState.Ready) {
-            snackbars.show("Your cards can't be read right now, so nothing was exported.", SnackbarKind.Error)
-            return
+        val cards = if (!cardsOn) {
+            emptyList()
+        } else {
+            val cardsController = container.cards
+            if (cardsController.state.value !is CardsState.Ready) cardsController.load()
+            val state = cardsController.state.value
+            if (state !is CardsState.Ready) {
+                snackbars.show("Your cards can't be read right now, so nothing was exported.", SnackbarKind.Error)
+                return
+            }
+            state.cards
         }
-        val cards = state.cards
-        if (cards.isEmpty()) {
+        if (cards.isEmpty() && passes.isEmpty()) {
             snackbars.show("There are no saved cards to export.")
             return
         }
@@ -91,7 +103,7 @@ internal class CardsTransferFlows(
             return
         }
         val now = LocalDateTime.now()
-        val text = lock(cards, now) ?: return
+        val text = lock(cards, now, passes) ?: return
         val saved = try {
             files.save("normpix-cards-${cardsFileDate.format(now)}.json", "application/json", text.toByteArray(Charsets.UTF_8))
         } catch (e: CancellationException) {
@@ -100,8 +112,24 @@ internal class CardsTransferFlows(
             snackbars.show("Couldn't save the file there. Try another location.", SnackbarKind.Error)
             return
         }
-        if (saved) snackbars.show("${count(cards.size)} exported, locked with your password")
+        if (saved) snackbars.show("${countWithPasses(cards.size, passes.size)} exported, locked with your password")
     }
+
+    /** The loyalty and gift cards, to go with the cards; none when there are none or their vault can't be read. */
+    private suspend fun readPasses(): List<StoredPass> {
+        val passes = container.passes
+        if (passes.state.value !is PassesState.Ready) passes.load()
+        return (passes.state.value as? PassesState.Ready)?.passes.orEmpty()
+    }
+
+    /** "3 cards", or "3 cards and 2 loyalty cards" with any passes, or "2 loyalty cards" with no cards. */
+    private fun countWithPasses(cards: Int, passes: Int): String = when {
+        passes == 0 -> count(cards)
+        cards == 0 -> passCount(passes)
+        else -> "${count(cards)} and ${passCount(passes)}"
+    }
+
+    private fun passCount(n: Int) = "$n ${if (n == 1) "loyalty or gift card" else "loyalty and gift cards"}"
 
     suspend fun import() {
         if (container.preferences.state.value.dummyDataEnabled) {
@@ -148,19 +176,31 @@ internal class CardsTransferFlows(
             return
         }
         val found = unlock(text) ?: return
-        if (found.cards.isEmpty()) {
+        if (found.cards.isEmpty() && found.passes.isEmpty()) {
             snackbars.show("The file has no cards in it.")
+            return
+        }
+        // The loyalty and gift cards in the file (a version 2 one) are added beside the cards, skipping any already kept.
+        val passesAdded = if (found.passes.isEmpty()) null else container.passes.addAll(found.passes)
+        val passesSaid = when {
+            found.passes.isEmpty() -> ""
+            passesAdded == null -> ". The loyalty and gift cards couldn't be saved"
+            passesAdded.first == 0 -> ". Its loyalty and gift cards are already in Wallet"
+            else -> ". ${passCount(passesAdded.first)} added"
+        }
+        if (found.cards.isEmpty()) {
+            snackbars.show("The file has no cards in it" + passesSaid)
             return
         }
         // The controller holds the import to the card settings: refused while Store cards is off (it may have been turned off
         // while the password was being typed), and CVVs left out while Save CVV is off.
         val merge = container.cards.addAll(found.cards)
         if (merge == null) {
-            snackbars.show("The cards couldn't be saved, so nothing was added.", SnackbarKind.Error)
+            snackbars.show(if (passesSaid.isEmpty()) "The cards couldn't be saved, so nothing was added." else "The cards couldn't be saved$passesSaid", SnackbarKind.Error)
             return
         }
         if (merge.refused) {
-            snackbars.show("NormPix isn't storing cards, so nothing was added.", SnackbarKind.Warning)
+            snackbars.show(if (passesSaid.isEmpty()) "NormPix isn't storing cards, so nothing was added." else "NormPix isn't storing cards, so no cards were added$passesSaid", SnackbarKind.Warning)
             return
         }
         val cvvLeftOut = merge.added.isNotEmpty() && !container.preferences.state.value.cardCvvEnabled && found.cards.any { it.hasCvv }
@@ -168,22 +208,22 @@ internal class CardsTransferFlows(
             merge.added.isEmpty() -> "Every card in the file is already in Wallet"
             merge.alreadyThere == 0 -> "${count(merge.added.size)} added to Wallet"
             else -> "${count(merge.added.size)} added. ${merge.alreadyThere} already in Wallet, kept as they were"
-        }
+        } + passesSaid
         snackbars.show(if (cvvLeftOut) "$said. CVVs weren't kept, because Save CVV is off" else said)
     }
 
     /**
-     * Asks for a password and locks [cards] with it: the text of a cards file. Null if the user closed the sheet. Building the
-     * key takes a moment, so a sheet says so meanwhile.
+     * Asks for a password and locks [cards] - and the loyalty and gift cards, [passes] - with it: the text of a cards file. Null if the
+     * user closed the sheet. Building the key takes a moment, so a sheet says so meanwhile.
      */
-    private suspend fun lock(cards: List<StoredCard>, now: LocalDateTime): String? {
+    private suspend fun lock(cards: List<StoredCard>, now: LocalDateTime, passes: List<StoredPass> = emptyList()): String? {
         val password = overlays.sheet<String> { dismiss ->
             // Worked out in the sheet, not before it: a Boolean held by the sheet's lambda trips the build's Compose stack
             // trace mapping ("Failed to tokenize ... lock").
             CardsPasswordSheet(forExport = true, cardCount = cards.size, onDone = dismiss, withCvv = cards.any { it.hasCvv })
         } ?: return null
         return overlays.loading("Locking the file") {
-            withContext(Dispatchers.Default) { CardsTransfer.encode(cards, password.toCharArray(), exportedAt = now) }
+            withContext(Dispatchers.Default) { CardsTransfer.encode(cards, password.toCharArray(), exportedAt = now, passes = passes) }
         }
     }
 
@@ -235,25 +275,37 @@ internal class CardsTransferFlows(
      * out of the whole backup (closed a sheet, or couldn't unlock).
      */
     suspend fun forBackup(now: LocalDateTime, backupPassword: String? = null): CardsForBackup? {
-        if (!container.preferences.state.value.walletCardsEnabled) return CardsForBackup.LeftOut
-        val cardsController = container.cards
-        if (cardsController.state.value !is CardsState.Ready) cardsController.load()
-        val state = cardsController.state.value
-        if (state !is CardsState.Ready) {
-            val goOn = overlays.confirm(
-                title = "Back up without your cards?",
-                message = "Your saved cards can't be read right now, so they can't go into the backup. Everything else can.",
-                confirmLabel = "Back up without them",
-                icon = Icons.Outlined.CreditCard,
-            )
-            return if (goOn) CardsForBackup.LeftOut else null
+        // The loyalty and gift cards go in the same locked file as the cards (2026-11-19); with none, all below is as it always was.
+        val passes = readPasses()
+        val cardsOn = container.preferences.state.value.walletCardsEnabled
+        if (!cardsOn && passes.isEmpty()) return CardsForBackup.LeftOut
+        val cards = if (!cardsOn) {
+            emptyList()
+        } else {
+            val cardsController = container.cards
+            if (cardsController.state.value !is CardsState.Ready) cardsController.load()
+            val state = cardsController.state.value
+            if (state !is CardsState.Ready) {
+                val goOn = overlays.confirm(
+                    title = "Back up without your cards?",
+                    message = "Your saved cards can't be read right now, so they can't go into the backup. Everything else can.",
+                    confirmLabel = "Back up without them",
+                    icon = Icons.Outlined.CreditCard,
+                )
+                return if (goOn) CardsForBackup.LeftOut else null
+            }
+            state.cards
         }
-        val cards = state.cards
-        if (cards.isEmpty()) return CardsForBackup.LeftOut
+        if (cards.isEmpty() && passes.isEmpty()) return CardsForBackup.LeftOut
+        val what = when {
+            passes.isEmpty() -> "${count(cards.size)} with their full numbers, expiry and CVV where one is kept. "
+            cards.isEmpty() -> "${passCount(passes.size)} with their numbers and PINs. "
+            else -> "${count(cards.size)} with their full numbers, expiry and CVV where one is kept, and ${passCount(passes.size)}. "
+        }
         val include = overlays.sheet<Boolean> { dismiss ->
             ConfirmSheetContent(
                 title = "Include saved cards?",
-                message = "${count(cards.size)} with their full numbers, expiry and CVV where one is kept. " + if (backupPassword != null) {
+                message = what + if (backupPassword != null) {
                     "They are locked with the backup's password."
                 } else {
                     "They are locked with a password you set next, and nothing else in the backup is."
@@ -273,12 +325,12 @@ internal class CardsTransferFlows(
         }
         val file = if (backupPassword != null) {
             overlays.loading("Locking your cards") {
-                withContext(Dispatchers.Default) { CardsTransfer.encode(cards, backupPassword.toCharArray(), exportedAt = now) }
+                withContext(Dispatchers.Default) { CardsTransfer.encode(cards, backupPassword.toCharArray(), exportedAt = now, passes = passes) }
             }
         } else {
-            lock(cards, now)
+            lock(cards, now, passes)
         } ?: return null
-        return CardsForBackup.Locked(file, cards.size)
+        return CardsForBackup.Locked(file, cards.size, passes.size)
     }
 
     private suspend fun problem(reason: String, nothingChanged: Boolean = true) {

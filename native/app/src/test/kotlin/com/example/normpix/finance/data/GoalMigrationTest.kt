@@ -361,7 +361,11 @@ class GoalMigrationTest {
                     assertEquals(sql, after[name], "$name is as it was")
                 }
             }
-            assertEquals(schemaBefore.keys + "goals" + "idx_tx_split", after.keys, "only the goals table and the split index are new")
+            assertEquals(
+                schemaBefore.keys + "goals" + "idx_tx_split" + "debts" + "idx_debts_person" + "idx_debts_transaction",
+                after.keys,
+                "only the goals table, the split index (v17) and the debts table with its indexes (v18) are new",
+            )
         } finally {
             upgraded.close()
         }

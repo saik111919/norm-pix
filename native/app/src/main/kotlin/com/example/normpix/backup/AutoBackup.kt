@@ -7,6 +7,8 @@ import com.example.normpix.wallet.CardsState
 import com.example.normpix.wallet.CardsTransfer
 import com.example.normpix.wallet.KeystoreKeyProvider
 import com.example.normpix.wallet.StoredCard
+import com.example.normpix.wallet.passes.PassesState
+import com.example.normpix.wallet.passes.StoredPass
 import com.example.normpix.wallet.VaultKeyProvider
 import java.io.File
 import java.io.FileNotFoundException
@@ -113,6 +115,9 @@ interface AutoBackupData {
 
     /** The saved cards; empty when there are none or NormPix keeps none (Store cards off); null when they can't be read. */
     suspend fun cards(): List<StoredCard>?
+
+    /** The loyalty and gift cards, which go in the same locked file as the cards; none when there are none or they can't be read. */
+    suspend fun passes(): List<StoredPass> = emptyList()
 }
 
 /** The data of [container] - the app's own, the real one (see [AppContainer.isSampleData]) - as an automatic backup reads it. */
@@ -132,6 +137,12 @@ class ContainerBackupData(context: Context, private val container: AppContainer)
         val cards = container.cards
         if (cards.state.value !is CardsState.Ready) cards.load()
         return (cards.state.value as? CardsState.Ready)?.cards
+    }
+
+    override suspend fun passes(): List<StoredPass> {
+        val passes = container.passes
+        if (passes.state.value !is PassesState.Ready) passes.load()
+        return (passes.state.value as? PassesState.Ready)?.passes.orEmpty()
     }
 }
 
@@ -285,14 +296,16 @@ class AutoBackupService(
         try {
             cardsFile = if (prefs.autoBackupCards) {
                 val cards = data.cards()
+                // The loyalty and gift cards go in the same locked file (2026-11-19); with none, it is as it always was.
+                val passes = data.passes()
                 when {
                     cards == null -> {
                         cardsLeftOut = true
                         null
                     }
-                    cards.isEmpty() -> null
+                    cards.isEmpty() && passes.isEmpty() -> null
                     // Locked with the backup's password, as the cards in a locked manual backup are.
-                    else -> CardsTransfer.encode(cards, password, exportedAt = at, iterations = iterations)
+                    else -> CardsTransfer.encode(cards, password, exportedAt = at, iterations = iterations, passes = passes)
                 }
             } else {
                 null

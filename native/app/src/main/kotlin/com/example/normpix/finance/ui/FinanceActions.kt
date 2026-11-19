@@ -33,6 +33,10 @@ import com.example.normpix.finance.domain.Account
 import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.Category
 import com.example.normpix.finance.domain.CategoryType
+import com.example.normpix.finance.domain.DebtEntry
+import com.example.normpix.finance.domain.DebtKind
+import com.example.normpix.finance.domain.debtBalancePhrase
+import com.example.normpix.finance.domain.settleUpFor
 import com.example.normpix.finance.domain.FinanceConflictException
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.Person
@@ -693,14 +697,23 @@ class FinanceActions(
                 }
                 "delete" -> {
                     val count = spent?.count ?: 0
+                    // Their records of money lent and borrowed go with them (they are about them only); an open balance is said first.
+                    val records = state.debtsWith(id).size
+                    val owing = state.debtBalances[id] ?: 0L
+                    val debtsNote = when {
+                        records == 0 -> ""
+                        owing != 0L -> " " + debtBalancePhrase(person.name, owing) { state.money.format(it) } +
+                            ": that and their $records ${if (records == 1) "record" else "records"} of money lent and borrowed are deleted too."
+                        else -> " Their $records ${if (records == 1) "record" else "records"} of money lent and borrowed (all settled) are deleted too."
+                    }
                     val confirmed = overlays.confirm(
                         title = "Delete ${person.name}?",
                         message = if (count == 0) {
-                            "${person.name} has no expenses."
+                            "${person.name} has no expenses.$debtsNote"
                         } else {
                             "${person.name}'s $count ${if (count == 1) "expense" else "expenses"} (${state.money.format(spent!!.amount)}) " +
                                 "stay in your history and in every balance, total and budget - they just won't be for anyone " +
-                                "any more. To keep them attached and only hide ${person.name}, archive instead."
+                                "any more.$debtsNote To keep them attached and only hide ${person.name}, archive instead."
                         },
                         confirmLabel = "Delete",
                         destructive = true,
@@ -720,6 +733,78 @@ class FinanceActions(
                         scope,
                     )
                     onDeleted()
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------- money lent and borrowed
+
+    /**
+     * Records money of [kind] with [person] (see `DebtFormSheet`); [amount] fills the form (Settle up's balance). Saved, the snackbar
+     * says what it did and where that leaves the two of them ("You lent Ravi ₹500 · Ravi owes you ₹500").
+     */
+    fun addDebt(person: Person, kind: DebtKind, amount: Long? = null) {
+        scope.launch {
+            val saved = overlays.sheet<DebtEntry> { dismiss -> DebtFormSheet(person, kind, amount, onDone = dismiss) } ?: return@launch
+            val balance = state.debtBalances[person.id] ?: 0L
+            val now = debtBalancePhrase(person.name, balance) { state.money.format(it) }
+            snackbars.show("${kind.phrase(person.name)} ${state.money.format(saved.amount)} · $now")
+        }
+    }
+
+    /**
+     * Settles up with [person]: the form for whoever owes to pay the other back, filled with all of it - lowered, it records part of it.
+     * Nothing happens when they are settled.
+     */
+    fun settleUp(person: Person) {
+        val balance = state.debtBalances[person.id ?: return] ?: 0L
+        val (kind, amount) = settleUpFor(balance) ?: return
+        addDebt(person, kind, amount)
+    }
+
+    /**
+     * One record's sheet: what it says, when, its note and whether it moved money through an account; "See the transaction" for one that
+     * did, and Delete - which asks first, says the transaction stays, and offers Undo.
+     */
+    fun manageDebt(record: DebtEntry, person: Person) {
+        scope.launch {
+            val id = record.id ?: return@launch
+            val transaction = record.transactionId?.let { runCatching { finance.repository.transactionById(it) }.getOrNull() }
+            val subtitle = listOfNotNull(
+                "${state.money.format(record.amount)} · ${shortDate(record.occurredAt)}",
+                record.note,
+                transaction?.let { "Recorded in ${state.account(it.accountId)?.name ?: "an account"}" } ?: "Not recorded in an account",
+            ).joinToString("\n")
+            val actions = buildList {
+                if (transaction != null) add(SheetAction("open", Icons.AutoMirrored.Outlined.ReceiptLong, "See the transaction"))
+                add(SheetAction("delete", Icons.Outlined.DeleteOutline, "Delete record"))
+            }
+            val action = overlays.sheet<String> { dismiss ->
+                ActionListSheet(title = record.kind.phrase(person.name), subtitle = subtitle, actions = actions, onPick = dismiss)
+            } ?: return@launch
+            when (action) {
+                "open" -> transaction?.let(::showDetails)
+                "delete" -> {
+                    val confirmed = overlays.confirm(
+                        title = "Delete this record?",
+                        message = if (transaction != null) {
+                            "What ${person.name} and you owe each other changes by ${state.money.format(record.amount)}. The " +
+                                "${transaction.type.label.lowercase()} it recorded stays in your history; delete it there if it was a mistake."
+                        } else {
+                            "What ${person.name} and you owe each other changes by ${state.money.format(record.amount)}."
+                        },
+                        confirmLabel = "Delete",
+                        destructive = true,
+                        icon = Icons.Outlined.DeleteOutline,
+                    )
+                    if (!confirmed) return@launch
+                    val undo = finance.undoable {
+                        deleteDebt(id)
+                        emptyList()
+                    }
+                    haptics.success()
+                    snackbars.offerUndo("Record deleted", finance, undo, scope)
                 }
             }
         }

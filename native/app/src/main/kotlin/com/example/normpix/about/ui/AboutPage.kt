@@ -187,6 +187,20 @@ fun AboutPage() {
                             },
                         )
                     }
+                    item {
+                        // The Apache licence asks for a copy of itself to go with the app: the row opens it in full.
+                        ListRow(
+                            headline = "ZXing",
+                            supporting = "Draws the barcodes and QR codes of your loyalty and gift cards. By the ZXing authors, under the Apache License 2.0.",
+                            trailing = { Icon(Icons.Rounded.ChevronRight, contentDescription = null) },
+                            supportingMaxLines = 4,
+                            onClick = {
+                                scope.launch {
+                                    overlays.sheet<Unit>(expandable = true) { done -> LicenceSheet("ZXing", ZXING_LICENCE) { done(Unit) } }
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -213,6 +227,9 @@ private const val SQLCIPHER_LICENCE = "licenses/sqlcipher.txt"
 
 /** Lucide's licence file at the release the icons are from (`assets/licenses/lucide.txt`, unchanged). */
 private const val LUCIDE_LICENCE = "licenses/lucide.txt"
+
+/** The Apache License 2.0 that ZXing's repository gives as its LICENSE (`assets/licenses/zxing.txt`, unchanged; ZXing has no NOTICE). */
+private const val ZXING_LICENCE = "licenses/zxing.txt"
 
 /** A licence in full, read from the app's [asset] and laid out for the phone's width. */
 @Composable

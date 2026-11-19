@@ -7,6 +7,8 @@ import com.example.normpix.finance.domain.AccountKind
 import com.example.normpix.finance.domain.Budget
 import com.example.normpix.finance.domain.Category
 import com.example.normpix.finance.domain.CategoryType
+import com.example.normpix.finance.domain.DebtEntry
+import com.example.normpix.finance.domain.DebtKind
 import com.example.normpix.finance.domain.CustomBank
 import com.example.normpix.finance.domain.FinanceTransaction
 import com.example.normpix.finance.domain.LoanTerms
@@ -270,6 +272,31 @@ internal object FinanceRows {
         accountId = c.longOrNull("account_id"),
         saved = c.long("saved"),
         sortOrder = c.int("sort_order"),
+        createdAt = c.long("created_at").toLocalDateTime(),
+        updatedAt = c.long("updated_at").toLocalDateTime(),
+    )
+
+    fun debt(d: DebtEntry) = ContentValues().apply {
+        d.id?.let { put("id", it) }
+        put("person_id", d.personId)
+        put("kind", d.kind.key)
+        put("amount", d.amount)
+        put("occurred_at", d.occurredAt.toStorage())
+        putNullable("note", d.note)
+        putNullable("transaction_id", d.transactionId)
+        put("created_at", d.createdAt.toStorage())
+        put("updated_at", d.updatedAt.toStorage())
+    }
+
+    fun toDebt(c: Cursor) = DebtEntry(
+        id = c.long("id"),
+        personId = c.long("person_id"),
+        // The table only takes the four kinds (a CHECK), so an unknown one is a database no build of this app wrote.
+        kind = DebtKind.of(c.string("kind")) ?: error("Unknown debt kind ${c.string("kind")}"),
+        amount = c.long("amount"),
+        occurredAt = c.long("occurred_at").toLocalDateTime(),
+        note = c.stringOrNull("note"),
+        transactionId = c.longOrNull("transaction_id"),
         createdAt = c.long("created_at").toLocalDateTime(),
         updatedAt = c.long("updated_at").toLocalDateTime(),
     )

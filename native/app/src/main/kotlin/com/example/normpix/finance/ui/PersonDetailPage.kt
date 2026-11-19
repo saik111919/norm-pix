@@ -77,7 +77,13 @@ fun PersonDetailPage(personId: Long) {
                 Icon(Icons.Rounded.MoreVert, contentDescription = "Person options")
             }
         },
-        summaryHeader = { view -> PersonSummary(person, view) },
+        // What was spent on them, then what the two of them owe each other (money lent and borrowed, 2026-11-19).
+        summaryHeader = { view ->
+            Column {
+                PersonSummary(person, view)
+                PersonDebtsCard(person)
+            }
+        },
         showSpentLine = false,
     )
 }

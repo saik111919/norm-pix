@@ -1,5 +1,6 @@
 package com.example.normpix.wallet
 
+import com.example.normpix.wallet.passes.StoredPass
 import java.security.SecureRandom
 import java.time.LocalDateTime
 import java.util.Base64
@@ -26,10 +27,18 @@ import kotlinx.serialization.json.put
  * The file is JSON: `{"format": "normpix-cards", "version": 1, "kdf": ..., "iterations": n, "salt": b64, "iv": b64,
  * "data": b64}`, where `data` is the ciphertext (with its tag) of `{"exportedAt": ..., "cards": [card, ...]}`. Only the
  * format, version and key parameters are readable without the password; how many cards there are is not.
+ *
+ * Version 2 (2026-11-19) also carries the Wallet's loyalty, membership and gift cards: `"passes": [pass, ...]` beside the cards. A
+ * file is written as version 2 only when it has any, so a file of cards alone is exactly what it always was and an older NormPix
+ * still opens it; one with passes is refused by an older NormPix ("made by a newer NormPix") rather than opened without them. The
+ * header bound into the encryption names the file's own version.
  */
 object CardsTransfer {
     const val FORMAT = "normpix-cards"
-    const val VERSION = 1
+    const val VERSION = 2
+
+    /** The version a file of cards alone is written as: the first one, which every NormPix opens. */
+    private const val CARDS_ONLY_VERSION = 1
 
     /** The shortest password a card file may be locked with. */
     const val MIN_PASSWORD = 8
@@ -47,14 +56,16 @@ object CardsTransfer {
     private const val TAG_BITS = 128
     private const val KEY_BITS = 256
 
-    /** The cards in a card file, locked with [password]. */
+    /** The cards - and the loyalty and gift cards, [passes] - in a card file, locked with [password]. */
     fun encode(
         cards: List<StoredCard>,
         password: CharArray,
         exportedAt: LocalDateTime,
         random: SecureRandom = SecureRandom(),
         iterations: Int = ITERATIONS,
+        passes: List<StoredPass> = emptyList(),
     ): String {
+        val version = if (passes.isEmpty()) CARDS_ONLY_VERSION else VERSION
         val salt = ByteArray(SALT_BYTES).also(random::nextBytes)
         val iv = ByteArray(IV_BYTES).also(random::nextBytes)
         val clear = Json.encodeToString(
@@ -62,11 +73,12 @@ object CardsTransfer {
             buildJsonObject {
                 put("exportedAt", exportedAt.toString())
                 put("cards", JsonArray(cards.map { it.toJson() }))
+                if (passes.isNotEmpty()) put("passes", JsonArray(passes.map { it.toJson() }))
             },
         ).toByteArray(Charsets.UTF_8)
         val cipher = Cipher.getInstance(CIPHER)
         cipher.init(Cipher.ENCRYPT_MODE, key(password, salt, iterations), GCMParameterSpec(TAG_BITS, iv))
-        cipher.updateAAD(header(iterations).toByteArray(Charsets.UTF_8))
+        cipher.updateAAD(header(version, iterations).toByteArray(Charsets.UTF_8))
         val sealed = cipher.doFinal(clear)
         clear.fill(0)
         val b64 = Base64.getEncoder()
@@ -74,7 +86,7 @@ object CardsTransfer {
             JsonElement.serializer(),
             buildJsonObject {
                 put("format", FORMAT)
-                put("version", VERSION)
+                put("version", version)
                 put("kdf", KDF)
                 put("iterations", iterations)
                 put("salt", b64.encodeToString(salt))
@@ -86,7 +98,7 @@ object CardsTransfer {
 
     /** What reading a card file came to. */
     sealed interface Result {
-        data class Cards(val cards: List<StoredCard>, val exportedAt: LocalDateTime?) : Result
+        data class Cards(val cards: List<StoredCard>, val exportedAt: LocalDateTime?, val passes: List<StoredPass> = emptyList()) : Result
 
         /** The password doesn't open it (or the file was changed since it was written: the two can't be told apart). */
         data object WrongPassword : Result
@@ -106,7 +118,7 @@ object CardsTransfer {
         fun field(name: String) = (root[name] as? JsonPrimitive)?.takeIf { it.isString }?.content
         if (field("format") != FORMAT) return Result.Invalid("This file isn't a NormPix cards file.")
         val version = (root["version"] as? JsonPrimitive)?.intOrNull
-        if (version == null || version > VERSION) return Result.Invalid("This cards file was made by a newer NormPix. Update the app to open it.")
+        if (version == null || version < 1 || version > VERSION) return Result.Invalid("This cards file was made by a newer NormPix. Update the app to open it.")
         if (field("kdf") != KDF) return Result.Invalid("This cards file is locked in a way NormPix can't open.")
         val iterations = (root["iterations"] as? JsonPrimitive)?.intOrNull?.takeIf { it in ITERATIONS_ALLOWED }
             ?: return Result.Invalid("This cards file is damaged.")
@@ -120,7 +132,7 @@ object CardsTransfer {
         val clear = try {
             val cipher = Cipher.getInstance(CIPHER)
             cipher.init(Cipher.DECRYPT_MODE, key(password, salt, iterations), GCMParameterSpec(TAG_BITS, iv))
-            cipher.updateAAD(header(iterations).toByteArray(Charsets.UTF_8))
+            cipher.updateAAD(header(version, iterations).toByteArray(Charsets.UTF_8))
             cipher.doFinal(data)
         } catch (_: AEADBadTagException) {
             return Result.WrongPassword
@@ -131,7 +143,9 @@ object CardsTransfer {
             val content = Json.parseToJsonElement(clear.toString(Charsets.UTF_8)) as JsonObject
             val cards = (content["cards"] as JsonArray).map { StoredCard.fromJson(it as JsonObject) }
             val exportedAt = (content["exportedAt"] as? JsonPrimitive)?.content?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
-            Result.Cards(cards, exportedAt)
+            // Only in a version 2 file, and only when it has any.
+            val passes = (content["passes"] as? JsonArray)?.map { StoredPass.fromJson(it as JsonObject) }.orEmpty()
+            Result.Cards(cards, exportedAt, passes)
         } catch (_: Exception) {
             Result.Invalid("This cards file is damaged.")
         } finally {
@@ -143,7 +157,7 @@ object CardsTransfer {
      * What the cards file says about how it is locked, bound into the encryption: a file whose rounds were changed after it
      * was written fails to open rather than open with weaker protection than it was made with.
      */
-    private fun header(iterations: Int) = "$FORMAT/$VERSION/$KDF/$iterations"
+    private fun header(version: Int, iterations: Int) = "$FORMAT/$version/$KDF/$iterations"
 
     private fun key(password: CharArray, salt: ByteArray, iterations: Int): SecretKeySpec {
         val spec = PBEKeySpec(password, salt, iterations, KEY_BITS)

@@ -52,6 +52,7 @@ import com.example.normpix.finance.domain.MonthKey
 import com.example.normpix.finance.domain.PeopleSpending
 import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.percentLabel
+import com.example.normpix.finance.domain.debtTotals
 import com.example.normpix.finance.domain.rankedBy
 import com.example.normpix.navigation.LocalNavigator
 import com.example.normpix.ui.components.AppEmptyState
@@ -184,6 +185,16 @@ fun PeoplePage() {
             // The page gutter is horizontal only, so without this the card sat flush under the month switcher.
             Column(Modifier.padding(AppSpacing.page).padding(top = AppSpacing.md)) {
                 SpendingSummary(totals = totals, periodLabel = periodLabel, loaded = loaded)
+            }
+        }
+
+        // What is owed between the user and the people, whatever the period: money lent and borrowed is not spending of a month.
+        val owing = finance.debtBalances
+        if (owing.isNotEmpty()) {
+            item(key = "debts") {
+                Column(Modifier.padding(AppSpacing.page).padding(top = AppSpacing.md)) {
+                    DebtsBanner(totals = debtTotals(owing), people = owing.size)
+                }
             }
         }
 
@@ -344,9 +355,12 @@ private fun PersonRow(
     onOpen: () -> Unit,
     onManage: () -> Unit,
 ) {
-    val money = rememberFinanceState().money
+    val finance = rememberFinanceState()
+    val money = finance.money
     val amount = total?.amount ?: 0L
     val count = total?.count ?: 0
+    // What they and the user owe each other, in words ("Owes you ₹500") and a status colour; nothing while they are settled.
+    val owing = debtLine(person.id?.let { finance.debtBalances[it] } ?: 0L)
         val summary = if (count == 0) {
         "Nothing spent in this period"
     } else {
@@ -360,6 +374,7 @@ private fun PersonRow(
                     append(person.name)
                     if (person.archived) append(", archived")
                     append(", ").append(if (count == 0) "nothing spent" else "${money.format(amount)} spent, $summary")
+                    owing?.let { append(", ").append(it.first) }
                 }
                 onClick(label = "Open ${person.name}") { onOpen(); true }
                 customActions = listOf(CustomAccessibilityAction("Options") { onManage(); true })
@@ -370,6 +385,9 @@ private fun PersonRow(
         supportingContent = {
             Column {
                 Text(summary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                owing?.let { (words, tone) ->
+                    Text(words, color = tone, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 if (count > 0) {
                     Spacer(Modifier.height(AppSpacing.xs))
                     // Calm, as every other row of a list is (budgets, category shares): at a small share the wave is still rising and

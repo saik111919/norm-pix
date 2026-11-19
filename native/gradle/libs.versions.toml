@@ -12,6 +12,8 @@ biometric = "1.1.0"
 materialKolor = "5.0.1"
 graphicsShapes = "1.1.0"
 mlkitText = "16.0.1"
+mlkitBarcode = "17.3.0"
+zxing = "3.5.4"
 androidSvg = "1.4"
 coroutines = "1.10.2"
 serializationJson = "1.10.0"
@@ -44,6 +46,8 @@ androidx-compose-material-icons-extended = { module = "androidx.compose.material
 androidx-graphics-shapes = { module = "androidx.graphics:graphics-shapes", version.ref = "graphicsShapes" }
 material-kolor = { module = "com.materialkolor:material-kolor", version.ref = "materialKolor" }
 mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "mlkitText" }
+mlkit-barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version.ref = "mlkitBarcode" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 androidsvg = { module = "com.caverock:androidsvg-aar", version.ref = "androidSvg" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }

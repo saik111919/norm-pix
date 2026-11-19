@@ -127,6 +127,10 @@ import com.example.normpix.wallet.CardCarousel
 import com.example.normpix.wallet.CardFolderStack
 import com.example.normpix.wallet.CardStack
 import com.example.normpix.wallet.CardsState
+import com.example.normpix.wallet.passes.PassesGrid
+import com.example.normpix.wallet.passes.PassesHeader
+import com.example.normpix.wallet.passes.PassesState
+import com.example.normpix.wallet.passes.rememberPassFlows
 import com.example.normpix.wallet.WalletCardView
 import com.example.normpix.wallet.expiry.CardExpiryNotice
 import com.example.normpix.wallet.motion.CardTiltState
@@ -170,6 +174,10 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
     val revealed = reveal.revealed
 
     LaunchedEffect(cardsOn) { if (cardsOn && container.cards.state.value is CardsState.Loading) container.cards.load() }
+    // Loyalty, membership and gift cards (2026-11-19): read from their own vault the first time the Wallet opens.
+    val passesState by container.passes.state.collectAsState()
+    val passFlows = rememberPassFlows()
+    LaunchedEffect(container.passes) { if (container.passes.state.value is PassesState.Loading) container.passes.load() }
 
     // Expiry reminders follow the card list. The app keeps them in step on its own (so they work without this tab
     // ever opening); doing it here too covers the sample-data cards, which have their own, silent tracker.
@@ -489,6 +497,37 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                 }
             }
         }
+        // Loyalty, membership and gift cards, after the cards: shown whatever "Store cards" says (they are not payment cards).
+        val passBlocks = buildList<WalletBlock> {
+            add(
+                WalletBlock("passes-header") {
+                    Box(Modifier.padding(AppSpacing.page).padding(top = AppSpacing.xxl, bottom = AppSpacing.sm)) {
+                        PassesHeader(count = (passesState as? PassesState.Ready)?.passes?.size, onAdd = passFlows::add)
+                    }
+                },
+            )
+            when (val state = passesState) {
+                is PassesState.Loading -> Unit
+                is PassesState.Failed -> add(
+                    WalletBlock("passes-failed") {
+                        AppErrorState(
+                            title = "Couldn't open your loyalty and gift cards",
+                            message = "They are still stored on this device. Try again, or restart the app.",
+                            onRetry = { scope.launch { container.passes.load() } },
+                        )
+                    },
+                )
+                is PassesState.Ready -> if (state.passes.isNotEmpty()) {
+                    add(
+                        WalletBlock("passes") { modifier ->
+                            Box(modifier.padding(AppSpacing.page).padding(bottom = AppSpacing.xxl)) {
+                                PassesGrid(state.passes, onOpen = passFlows::open)
+                            }
+                        },
+                    )
+                }
+            }
+        }
         if (wide) {
             // The total across the top, then the accounts and the cards side by side, scrolling together.
             item(key = "overview") {
@@ -501,6 +540,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                     // Insights' (AdaptiveColumns).
                     Column(Modifier.weight(1f)) {
                         for (b in cardBlocks) key(b.key) { b.content(Modifier) }
+                        for (b in passBlocks) key(b.key) { b.content(Modifier) }
                     }
                 }
             }
@@ -509,6 +549,7 @@ fun WalletScreen(listState: LazyListState = rememberLazyListState(), active: Boo
                 Column(Modifier.padding(AppSpacing.page)) { accountsSection(true) }
             }
             for (b in cardBlocks) item(key = b.key) { b.content(Modifier.animateItem()) }
+            for (b in passBlocks) item(key = b.key) { b.content(Modifier.animateItem()) }
         }
     }
 }

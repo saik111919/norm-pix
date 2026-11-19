@@ -74,12 +74,15 @@ class SplitBackupTest {
     // --------------------------------------------------------------------------------------------- the format
 
     @Test
-    fun `the format is 7, and a file newer than that is refused`() {
-        assertEquals(7, FinanceBackupCodec.FORMAT_VERSION)
+    fun `splits came with format 7, a format 7 file still reads, and a file newer than the app's format is refused`() {
+        // Format 8 (2026-11-19) added money lent and borrowed; its own pin is in DebtRepositoryTest.
+        val current = FinanceBackupCodec.FORMAT_VERSION
+        assertTrue(current >= 7)
         val json = encode(FinanceSnapshot("INR", accounts = emptyList(), categories = emptyList(), transactions = emptyList(), budgets = emptyList(), recurringRules = emptyList()))
-        assertTrue("\"version\": 7" in json)
+        assertTrue("\"version\": $current" in json)
         assertTrue(FinanceBackupCodec.decode(json).isValid)
-        val newer = FinanceBackupCodec.decode(json.replace("\"version\": 7", "\"version\": 8"))
+        assertTrue(FinanceBackupCodec.decode(json.replace("\"version\": $current", "\"version\": 7")).isValid, "a format 7 file reads")
+        val newer = FinanceBackupCodec.decode(json.replace("\"version\": $current", "\"version\": ${current + 1}"))
         assertEquals(listOf("This backup was made by a newer version of NormPix. Update the app, then try again."), newer.errors)
     }
 

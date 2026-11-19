@@ -143,6 +143,10 @@ class AboutPageTest {
         compose.onNodeWithText("3D category pictures").assertExists()
         compose.onNodeWithText("GS Flex font").assertExists()
         compose.onNodeWithText("Microsoft Fluent Emoji, under the MIT licence.").assertExists()
+        compose.onNodeWithText("ZXing").assertExists()
+        // The licence it names is in the app, whole.
+        val zxing = ApplicationProvider.getApplicationContext<Application>().assets.open("licenses/zxing.txt").bufferedReader().use { it.readText() }
+        assertTrue("Apache License" in zxing && "Version 2.0, January 2004" in zxing && "END OF TERMS AND CONDITIONS" in zxing)
     }
 
     @Test

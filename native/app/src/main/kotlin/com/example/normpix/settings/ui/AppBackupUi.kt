@@ -31,6 +31,7 @@ import com.example.normpix.ui.components.SnackbarKind
 import com.example.normpix.ui.components.rememberAppHaptics
 import com.example.normpix.ui.theme.AppSpacing
 import com.example.normpix.wallet.StoredCard
+import com.example.normpix.wallet.passes.StoredPass
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -108,7 +109,14 @@ internal class AppBackupFlows(
             if (source.reminderCount > 0) add(count(source.reminderCount, "reminder"))
             if (source.hasPhoto) add("your profile picture")
             if (source.hasFont) add("your font")
-            if (locked != null) add(if (lock.locked) count(locked.count, "card") else "${count(locked.count, "card")}, locked with your password")
+            if (locked != null) {
+                // The cards, and the loyalty and gift cards beside them in the same locked file (2026-11-19).
+                val held = listOfNotNull(
+                    locked.count.takeIf { it > 0 }?.let { count(it, "card") },
+                    locked.passes.takeIf { it > 0 }?.let { count(it, "loyalty or gift card", "loyalty and gift cards") },
+                ).joinToString(" and ")
+                add(if (lock.locked) held else "$held, locked with your password")
+            }
         }
         val prefix = if (container.preferences.state.value.dummyDataEnabled) "Sample app backup saved" else "App backup saved"
         snackbars.show("$prefix${lock.said}: ${contents.joinWords()}")
@@ -154,11 +162,14 @@ internal class AppBackupFlows(
 
         // The saved cards are opened before anything is changed: without their password the user can still go back.
         var opened: List<StoredCard>? = null
+        // The loyalty and gift cards that came in the same locked file (a version 2 one), added beside the cards once all else is in.
+        var openedPasses: List<StoredPass> = emptyList()
         if (BackupPart.Cards in chosen) {
             val file = plan.cardsFile
             val unlocked = if (file != null) cards.unlock(file, alone = false, password = password) else null
             if (unlocked != null) {
                 opened = unlocked.cards
+                openedPasses = unlocked.passes
             } else {
                 if ((chosen - BackupPart.Cards).isEmpty()) return
                 val goOn = overlays.confirm(
@@ -185,12 +196,22 @@ internal class AppBackupFlows(
             )
             return
         }
+        val passes = if (openedPasses.isEmpty()) null else container.passes.addAll(openedPasses)
         haptics.success()
-        tell(plan, wanted, restored, offer.cardsOn)
+        tell(plan, wanted, restored, offer.cardsOn, passes, openedPasses.isNotEmpty())
     }
 
     /** Says what was restored, in a snackbar with Undo for as long as anything of it can be taken back. */
-    private fun tell(plan: AppBackupPlan, wanted: Set<BackupPart>, restored: AppRestorer.Restored, cardsOn: Boolean) {
+    private fun tell(
+        plan: AppBackupPlan,
+        wanted: Set<BackupPart>,
+        restored: AppRestorer.Restored,
+        cardsOn: Boolean,
+        /** What adding the loyalty and gift cards came to (added, already there), or null when they couldn't be saved. */
+        passes: Pair<Int, Int>? = null,
+        /** Whether the backup had any loyalty and gift cards to add. */
+        hadPasses: Boolean = false,
+    ) {
         val done = buildList {
             if (BackupPart.Finance in wanted) add("finance data")
             if (BackupPart.Settings in wanted) add("settings")
@@ -205,12 +226,21 @@ internal class AppBackupFlows(
                     restored.cardsFailed -> add("The saved cards couldn't be saved")
                     merge == null -> add("The saved cards were left out")
                     merge.refused -> add("The saved cards were left out: Store cards is off")
+                    // A file of loyalty and gift cards only (no card in it): nothing to say about cards.
+                    merge.added.isEmpty() && merge.alreadyThere == 0 -> Unit
                     merge.added.isEmpty() -> add("Every saved card was already in Wallet")
                     merge.alreadyThere == 0 -> add("${count(merge.added.size, "card")} added to Wallet")
                     else -> add("${count(merge.added.size, "card")} added. ${merge.alreadyThere} already in Wallet, kept as they were")
                 }
             } else if (BackupPart.Cards in plan.parts && !cardsOn) {
                 add("The saved cards were left out: Store cards is off")
+            }
+            if (hadPasses) {
+                when {
+                    passes == null -> add("The loyalty and gift cards couldn't be saved")
+                    passes.first == 0 -> add("Every loyalty and gift card was already in Wallet")
+                    else -> add("${count(passes.first, "loyalty or gift card", "loyalty and gift cards")} added to Wallet")
+                }
             }
             val settingsLeft = restored.skippedSettings + (if (BackupPart.Settings in wanted) plan.skippedSettings else 0)
             if (settingsLeft > 0) add("${count(settingsLeft, "setting")} couldn't be used and stayed as they were")

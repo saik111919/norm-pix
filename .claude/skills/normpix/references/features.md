@@ -210,6 +210,26 @@ Contents: 1 Screens · 2 Money rules · 3 Reading receipts shared into the app �
   again** sits beside Share receipt in a transaction's details (not a split payment's): `FinanceActions.addAgain` opens the new sheet with
   `TransactionEditorSheet(copyOf = ...)` - type, amount, category, account(s), payee, note, person, tags (archived or deleted ones
   dropped), dated now, no picture, not repeating; not "dirty" until changed, and no keypad on opening (it is often saved as it is).
+- **Lent and borrowed** (2026-11-19, the owner's "6" of the suggestions list: "Ravi owes me ₹500, then settle up with one tap, which records
+  the transfer"; Phase 79). Rules in `finance/domain/Debts.kt` (pure), stored in table `debts` (database v18), backed up as `debts` (format 8).
+  A record (`DebtEntry`) is one movement of what is owed between the user and **one person**: `DebtKind` Lent (+, they owe more), Borrowed
+  (-), RepaidToMe (-), RepaidByMe (+); a person's balance is the sum, positive = they owe the user (`debtBalance`, `FinanceState.debtBalances`,
+  settled people left out). **Money that moved** (the form's "Paid from an account" / "Received into an account" switch, on by default) is
+  also an ordinary transaction, saved in the same SQL transaction as the record (`FinanceRepository.saveDebt(debt, moved)`, checked as
+  `saveTransaction` checks one) and named by it (`transaction_id`): an expense for Lent / RepaidByMe, an income for Borrowed / RepaidToMe, in
+  the app's own default sub-categories for it - "Lent to someone" / "Repaid to someone" under Money sent, "Borrowed money" / "Loan repaid to
+  me" under Money received (`debtCategoryFor`: by name, else the family, never archived; any other can be picked) - with the person's name
+  as the **payee**, but **not** the person (lending is not spending on them, so it stays out of "Spent on Ravi"). Off keeps only the record
+  (half of a bill already recorded). Deleting a record keeps its transaction; deleting the transaction keeps the record (`ON DELETE SET
+  NULL`); deleting the person deletes their records (`ON DELETE CASCADE` - the person's delete confirm says the open balance and the count;
+  Undo puts it all back, the snapshot carries `debts`); a new record for an archived person is refused. **Screens** (`finance/ui/DebtsUi.kt`):
+  a person's page has a "Money between you" card under their spending (`PersonDebtsCard`): the balance in words ("Ravi owes you ₹500" in
+  the success colour, "You owe Ravi ₹200" in the warning colour - words, not colour alone), **Settle up** while anything is owed (the form
+  for whoever owes, filled with the whole balance - lowered, it records part), "You lent" | "You borrowed" (`ConnectedButtonGroup`), and every
+  record newest first (a tap: its sheet - See the transaction, Delete with Undo). The form (`DebtFormSheet`, an `EditorSheet`) opens on the
+  amount with the keypad, unless Settle up filled it. The People page has an "Owed to you | You owe" `SplitStatBanner` when anything is owed
+  (whatever the period: it is not a month's spending) and each row a line "Owes you ₹500" / "You owe them ₹200". Tests: `DebtsTest`,
+  `DebtRepositoryTest`, `DebtMigrationTest`, `DebtsUiTest`. Not done: editing a record (delete and add again), reminders to settle, a Home banner.
 
 ## 2. Money rules
 
@@ -449,6 +469,24 @@ path, never NormPix's own providers - judged by the authority **after the last `
   public PPSE directory, then NDEF; **never GPO / READ RECORD**; a bank card prefills network/kind and explains that the
   number must be typed or scanned). Card numbers are never in a normal backup; a separate password-locked **cards file**
   moves them (`CardsTransfer`).
+- **Loyalty, membership and gift cards** (2026-11-19, the owner's "7" of the suggestions list: "Scan the barcode once, show it at the
+  counter, stored in the encrypted vault"; Phase 79; package `wallet/passes/`). A `StoredPass` (`PassKind` Loyalty / Membership / GiftCard /
+  Other; name, number, `PassCodeFormat` - Code 128, QR, EAN-13/8, UPC-A/E, Code 39/93, Codabar, ITF, PDF417, Aztec, Data Matrix, or None
+  for a number with no code; one of 6 palette colours; a gift card's PIN, balance in minor units and expiry; a note) lives in its own
+  encrypted file `pass_vault.bin` (`FilePassVault`, the card vault's format and key), through `PassesController` (`AppContainer.passes`;
+  never writes over a vault it couldn't read). **Not payment cards, so Store cards off doesn't hide or refuse them** (`CardsPolicy` is not
+  involved). Wallet: a "Loyalty & gift cards" section after the cards (phone list and the wide layout's second column), tiles two to a row
+  (`PassesGrid`; TalkBack reads "name, kind, ending 1234" - never the whole number). Tapping one opens `PassSheet`: the code drawn by ZXing
+  black on white with its quiet zone and whole-pixel modules (so a counter's scanner reads it), the window at full brightness while it is
+  open, the number grouped in fours, a gift card's balance and "Valid until", its PIN hidden until Show; Edit and Delete (confirmed, with
+  Undo). The form (`PassFormSheet`): Name, Kind, Number, **Scan the card** (the card scanner's camera picture) and **From a screenshot**
+  (photo picker), both read by `MlKitPassCodeReader` (ML Kit barcode-scanning, bundled, on the phone; the largest code in the picture);
+  a typed number's code is guessed (`likelyFormatOf`: valid EAN-13/EAN-8/UPC-A check digits, else Code 128), and a number its code can't
+  hold is refused with the reason (`passCodeFault`), drawn live under the Code field. **Moving them**: the cards file carries them as
+  version 2 (`passes` array; a file with no passes stays version 1), so Export cards (its rows show only while Store cards is on), the
+  app backup's `app/cards.json` and automatic backups take them - the last two even with Store cards off - and an import or restore adds
+  the ones not already there (`mergePasses`: same id, or same name and number). Sample data has two.
+  Tests: `PassesTest`, `PassesUiTest`. Not done: a home-screen shortcut or widget to open one card, a gift card's balance updated by spending.
 - **Keyboard card fill** (2026-11-14, owner: "keyboard gives an option to scan the cards like how Swiggy does"; Settings > Wallet & Cards,
   `cardKeyboardFill`, key `card_keyboard_fill`, **off by default**, never carried by a backup). That "Scan card" chip is the phone's
   autofill service (Autofill with Google, shown by the keyboard), so turning it on routes the card form through a service outside the

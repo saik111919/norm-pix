@@ -24,6 +24,8 @@ import com.example.normpix.finance.domain.RecurrenceFrequency
 import com.example.normpix.finance.domain.MAX_LOAN_RATE_BP
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.SavingsGoal
+import com.example.normpix.finance.domain.DebtEntry
+import com.example.normpix.finance.domain.DebtKind
 import com.example.normpix.finance.domain.MAX_TAG_NAME
 import com.example.normpix.finance.domain.Tag
 import com.example.normpix.finance.domain.TransactionType
@@ -86,6 +88,8 @@ data class FinanceSnapshot(
     val tags: List<Tag> = emptyList(),
     /** The savings goals the user set; backups from before goals existed simply have none. */
     val goals: List<SavingsGoal> = emptyList(),
+    /** The records of money lent and borrowed with the people; backups from before them simply have none. */
+    val debts: List<DebtEntry> = emptyList(),
 )
 
 /** A default category by what the app calls it: its kind ("expense" / "income"), its name and, for a sub-category, its family's. */
@@ -184,8 +188,13 @@ object FinanceBackupCodec {
      * parts as separate payments. A group is only valid when it holds together (`splitFault` in `Splits.kt`): 2 to 10 rows, all
      * expenses or all income, on one account, at one date and time, with one payee and one person; else the file is refused. A file
      * this app writes never carries the mark of a group that does not hold.
+     *
+     * 8 (2026-11-19): money lent and borrowed with the people. A top-level "debts" list (`{"id", "personId", "kind", "amount",
+     * "occurredAt", "note", "transactionId", "createdAt", "updatedAt"}`; `kind` is "lent", "borrowed", "repaid_to_me" or "repaid_by_me";
+     * `transactionId` the transaction that moved the money, or null). Optional - absent is none - so a file of version 1 to 7 is read and
+     * restored exactly as before; an app from before this refuses a version 8 file rather than restoring it without what people owe.
      */
-    const val FORMAT_VERSION = 7
+    const val FORMAT_VERSION = 8
 
     private val prettyJson = Json { prettyPrint = true }
     private val isoLocal: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")
@@ -306,6 +315,26 @@ object FinanceBackupCodec {
                                 put("sortOrder", g.sortOrder)
                                 put("createdAt", iso(g.createdAt))
                                 put("updatedAt", iso(g.updatedAt))
+                            },
+                        )
+                    }
+                },
+            )
+            put(
+                "debts",
+                buildJsonArray {
+                    for (d in s.debts) {
+                        add(
+                            buildJsonObject {
+                                put("id", d.id)
+                                put("personId", d.personId)
+                                put("kind", d.kind.key)
+                                put("amount", d.amount)
+                                put("occurredAt", iso(d.occurredAt))
+                                put("note", d.note)
+                                put("transactionId", d.transactionId)
+                                put("createdAt", iso(d.createdAt))
+                                put("updatedAt", iso(d.updatedAt))
                             },
                         )
                     }
@@ -498,6 +527,20 @@ object FinanceBackupCodec {
             },
             // Absent in every file before version 6: no goals.
             goals = list("goals").map(::goalOf),
+            // Absent in every file before version 8: no records of money owed.
+            debts = list("debts").map { m ->
+                DebtEntry(
+                    id = m.requireLong("id", "debt"),
+                    personId = m.requireLong("personId", "debt"),
+                    kind = m.string("kind")?.let(DebtKind::of) ?: throw BackupFormatError("A record of money owed has an unknown \"kind\"."),
+                    amount = m.requireLong("amount", "debt"),
+                    occurredAt = m.date("occurredAt", "debt"),
+                    note = m.stringOrNull("note"),
+                    transactionId = m.longOrNull("transactionId", "debt"),
+                    createdAt = m.date("createdAt", "debt"),
+                    updatedAt = m.date("updatedAt", "debt"),
+                )
+            },
             accounts = list("accounts").map { m ->
                 Account(
                     id = m.requireLong("id", "account"),
@@ -730,7 +773,8 @@ object FinanceBackupCodec {
         val personIds = ids(s.people.map { it.id }, "person")
         val tagIds = ids(s.tags.map { it.id }, "tag")
         ids(s.goals.map { it.id }, "goal")
-        ids(s.transactions.map { it.id }, "transaction")
+        val transactionIds = ids(s.transactions.map { it.id }, "transaction")
+        ids(s.debts.map { it.id }, "record of money owed")
         ids(s.budgets.map { it.id }, "budget")
         val categoryTypes = s.categories.associate { it.id to it.type }
 
@@ -796,6 +840,16 @@ object FinanceBackupCodec {
                 else -> add("Goal \"${cleanGoalName(g.name)}\" ${fault.reason}.")
             }
             if (g.accountId != null && g.accountId !in accountIds) add("Goal \"${cleanGoalName(g.name)}\" is linked to an account that is not in the backup.")
+        }
+        // A record of money owed holds as the app's own do (an amount above zero, a short note), is with a person in the file, and names
+        // a transaction in the file or none.
+        for (d in s.debts) {
+            when (val fault = d.fault()) {
+                null -> Unit
+                else -> add("A record of money owed ${fault.reason}.")
+            }
+            if (d.personId !in personIds) add("A record of money owed is with a person who is not in the backup.")
+            if (d.transactionId != null && d.transactionId !in transactionIds) add("A record of money owed names a transaction that is not in the backup.")
         }
         for (c in s.categories) if (c.name.isBlank()) add("A category has no name.")
         val categoriesById = s.categories.associateBy { it.id }

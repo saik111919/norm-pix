@@ -202,12 +202,12 @@ fun WalletSettingsPage() {
                 if (cardsOn) {
                     ListSection(
                         title = "Export and import",
-                        footer = "Only your saved cards, apart from the finance backup. The file holds each card in full, so it is " +
+                        footer = "Your saved cards, and your loyalty and gift cards, apart from the finance backup. The file holds each card in full, so it is " +
                             "always locked with a password you choose. Importing adds cards; any already saved are kept as they are" +
                             if (prefs.cardCvvEnabled) "." else ", without their CVVs while Save CVV is off.",
                     ) {
                         item {
-                            TransferRow("export", Icons.Rounded.SaveAlt, SettingsRowEmoji.EXPORT, "Export cards", "A password-protected file of your saved cards") {
+                            TransferRow("export", Icons.Rounded.SaveAlt, SettingsRowEmoji.EXPORT, "Export cards", "A password-protected file of your saved cards and loyalty cards") {
                                 run("export") { transfer.export() }
                             }
                         }

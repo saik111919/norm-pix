@@ -47,6 +47,7 @@ import com.example.normpix.finance.domain.numberStartOrNull
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.RepeatSchedule
 import com.example.normpix.finance.domain.SavingsGoal
+import com.example.normpix.finance.domain.DebtEntry
 import com.example.normpix.finance.domain.SelfTransferPair
 import com.example.normpix.finance.domain.SplitFault
 import com.example.normpix.finance.domain.SplitPart
@@ -1319,6 +1320,55 @@ class FinanceRepository(
         }
     }
 
+    // ------------------------------------------------- money lent and borrowed
+
+    /** Every record of money lent and borrowed between the user and the people, oldest first (see `finance/domain/Debts.kt`). */
+    suspend fun debts(): List<DebtEntry> = io { readDebts() }
+
+    private fun SupportSQLiteDatabase.readDebts(): List<DebtEntry> =
+        query(FinanceDatabase.DEBTS, null, null, null, null, null, "occurred_at ASC, id ASC").map(FinanceRows::toDebt)
+
+    /**
+     * Keeps [debt] - a new record, or an edit of one kept already - and, with a new one, the transaction [moved] that moved its money
+     * through one of the user's accounts (lending ₹500 from Cash is an expense in "Lent to someone"), if it did: both are written in one
+     * step, or neither, and the record names the transaction. The transaction is checked as [saveTransaction] checks one; the person
+     * must exist, and a new record is refused for an archived one, as a new expense for them is. Returns the record as kept.
+     */
+    suspend fun saveDebt(debt: DebtEntry, moved: FinanceTransaction? = null): DebtEntry = io {
+        debt.fault()?.let { throw FinanceValidationException(it.advice) }
+        if (moved != null && debt.id != null) throw FinanceValidationException("Only a new record can record its money in an account.")
+        val now = clock()
+        transaction {
+            val person = readPerson(debt.personId) ?: throw FinanceValidationException("Choose a person from the list, or add them first.")
+            if (debt.id == null && person.archived) throw FinanceValidationException("${person.name} is archived. Restore them first.")
+            var transactionId = debt.transactionId?.takeIf { exists(FinanceDatabase.TRANSACTIONS, it) }
+            if (moved != null) {
+                validateShape(moved.type, moved.amount, moved.accountId, moved.toAccountId, moved.categoryId)
+                validatePerson(moved.type, moved.personId, null)
+                validateTags(moved.type, moved.tagIds)
+                val tx = moved.copy(id = null, payee = clean(moved.payee), note = clean(moved.note), updatedAt = now, splitGroup = null)
+                transactionId = insertOrThrow(FinanceDatabase.TRANSACTIONS, null, FinanceRows.transaction(tx)).also { writeTags(it, tx.tagIds) }
+            }
+            val toSave = debt.copy(note = clean(debt.note), transactionId = transactionId, updatedAt = now)
+            if (debt.id == null) {
+                val made = toSave.copy(createdAt = now)
+                made.copy(id = insertOrThrow(FinanceDatabase.DEBTS, null, FinanceRows.debt(made)))
+            } else {
+                val count = update(FinanceDatabase.DEBTS, FinanceRows.debt(toSave), "id = ?", arrayOf(debt.id.toString()))
+                if (count == 0) throw FinanceConflictException("This record no longer exists.")
+                toSave
+            }
+        }
+    }
+
+    /**
+     * Deletes a record of money owed. The transaction it recorded, if any, stays: it moved real money, and is deleted from the history if
+     * it was a mistake.
+     */
+    suspend fun deleteDebt(id: Long) = io {
+        if (delete(FinanceDatabase.DEBTS, "id = ?", arrayOf(id.toString())) == 0) throw FinanceConflictException("This record no longer exists.")
+    }
+
     /**
      * Records one EMI on a loan (see `Loans.kt`): a Transfer of the principal from [LoanEmi.fromAccountId] onto the loan - what is owed
      * goes down by that and no money is spent - and an Expense of the interest from the same account in the interest category - which
@@ -2265,6 +2315,7 @@ class FinanceRepository(
             people = readPeople(),
             tags = readTags(),
             goals = readGoals(),
+            debts = readDebts(),
         )
     }
 
@@ -2302,6 +2353,9 @@ class FinanceRepository(
                 // A file from before tags (format 1 to 4) has none: nothing is written.
                 if (t.tagIds.isNotEmpty()) writeTags(t.id!!, t.tagIds)
             }
+            // The records of money owed name a person and, perhaps, a transaction, so they go in after both, with their ids: a file from
+            // before them (format 1 to 7) has none.
+            for (d in snapshot.debts) insertOrThrow(FinanceDatabase.DEBTS, null, FinanceRows.debt(d))
             for (b in snapshot.budgets) {
                 insertOrThrow(
                     FinanceDatabase.BUDGETS,
@@ -2334,6 +2388,7 @@ class FinanceRepository(
     private fun SupportSQLiteDatabase.clearAll() {
         // Children before parents (foreign keys are enforced).
         for (table in listOf(
+            FinanceDatabase.DEBTS,
             FinanceDatabase.GOALS,
             FinanceDatabase.TRANSACTION_TAGS,
             FinanceDatabase.TRANSACTIONS,
