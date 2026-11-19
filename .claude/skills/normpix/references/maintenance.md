@@ -21,14 +21,14 @@ When a fact drifts: fix the prose that mentions it **first**, then change the va
 nothing needed changing.
 
 <!-- facts:begin -->
-verified_commit=74275d2b
+verified_commit=d868220e
 verified_date=2026-11-19
 versionName=1.6.0
-finance_db_version=17
+finance_db_version=18
 reminders_db_version=2
-finance_backup_format=7
+finance_backup_format=8
 app_backup_version=1
-cards_file_version=1
+cards_file_version=2
 min_sdk=26
 target_sdk=35
 compile_sdk=37
@@ -247,6 +247,15 @@ openStatement
 billsMonth
 BillsCalendarPage
 openBillsCalendar
+PersonDebtsCard
+DebtFormSheet
+debtBalances
+StoredPass
+FilePassVault
+PassesController
+MlKitPassCodeReader
+PassFormSheet
+likelyFormatOf
 <!-- symbols:end -->
 
 ## 2. What to update when

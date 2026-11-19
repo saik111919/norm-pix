@@ -36,6 +36,11 @@ import com.example.normpix.reminders.RepeatRule
 import com.example.normpix.wallet.CardKind
 import com.example.normpix.wallet.CardVault
 import com.example.normpix.wallet.StoredCard
+import com.example.normpix.wallet.passes.InMemoryPassVault
+import com.example.normpix.wallet.passes.PassCodeFormat
+import com.example.normpix.wallet.passes.PassKind
+import com.example.normpix.wallet.passes.PassesController
+import com.example.normpix.wallet.passes.StoredPass
 import java.io.File
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -113,6 +118,9 @@ class DummyData private constructor(
         // Automatic backups are of the user's own data: the real container's service, which reads the real container, never this set.
         autoBackup = real.autoBackup,
         isSampleData = true,
+        // The sample passes are in memory only, as its cards are; reading a code from a picture is the app's, not the data's.
+        passes = PassesController(InMemoryPassVault()),
+        passScanner = real.passScanner,
     )
 
     /** Drops the sample set and frees its stores, its pictures too. */
@@ -167,6 +175,7 @@ class DummyData private constructor(
                 data.container.finance.load()
                 data.container.reminders.load()
                 data.container.cards.load()
+                data.container.passes.load()
             } catch (e: CancellationException) {
                 data.close()
                 throw e
@@ -201,6 +210,19 @@ class DummyData private constructor(
             writeFinance(data.container.finance.repository)
             writeReminders(ReminderDao(data.remindersDatabase, dispatcher = data.remindersDispatcher))
             data.container.vault.saveCards(cards())
+            for (pass in passes()) data.container.passes.add(pass)
+        }
+
+        /** Two passes to show the Wallet's loyalty and gift cards: made-up numbers, as every sample is. */
+        private fun passes(): List<StoredPass> {
+            val at = now.minusDays(40)
+            return listOf(
+                StoredPass(kind = PassKind.Loyalty, name = "Big Basket Star", number = "BB4417 2093 5521", format = PassCodeFormat.Code128, colorIndex = 4, createdAt = at, updatedAt = at),
+                StoredPass(
+                    kind = PassKind.GiftCard, name = "Gift voucher", number = "6061 2204 9918 3307", format = PassCodeFormat.Qr, colorIndex = 1,
+                    pin = "482913", balance = rupees(750), expiry = now.toLocalDate().plusMonths(8), createdAt = at, updatedAt = at,
+                ),
+            )
         }
 
         private suspend fun writeFinance(repo: FinanceRepository) {

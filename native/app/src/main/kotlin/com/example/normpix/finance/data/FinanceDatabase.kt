@@ -65,6 +65,7 @@ class FinanceDatabase(
                 if (oldVersion < 15) addTags(db)
                 if (oldVersion < 16) addGoals(db)
                 if (oldVersion < 17) addSplitGroup(db)
+                if (oldVersion < 18) addDebts(db)
             }
 
             override fun onOpen(db: SupportSQLiteDatabase) {
@@ -81,6 +82,9 @@ class FinanceDatabase(
                 // And the split group on transactions (version 17): every read of a transaction names the column, so a database numbered
                 // 17 without it would show no history at all. Only ever adds the empty column and its index; never touches a row.
                 runCatching { if (!db.isReadOnly) addSplitGroup(db) }
+                // And the money owed between the user and people (version 18): read with the rest of the reference data, so a database
+                // numbered 18 without the table would not load. Only ever creates what is missing; never touches a row.
+                runCatching { if (!db.isReadOnly) addDebts(db) }
             }
         },
     )
@@ -94,7 +98,7 @@ class FinanceDatabase(
 
     companion object {
         const val DB_NAME = "normpix_finance.db"
-        const val VERSION = 17
+        const val VERSION = 18
 
         /**
          * The columns that make an account a loan (version 14), all empty for an account that is not one: what was borrowed and the
@@ -150,6 +154,9 @@ class FinanceDatabase(
 
         /** The savings goals the user set (version 16). */
         const val GOALS = "goals"
+
+        /** Money lent and borrowed between the user and the people (version 18). */
+        const val DEBTS = "debts"
 
         fun createSchema(db: SupportSQLiteDatabase) {
             db.execSQL(
@@ -283,6 +290,40 @@ class FinanceDatabase(
             db.execSQL("CREATE TABLE $META (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
             addTags(db)
             addGoals(db)
+            addDebts(db)
+        }
+
+        /**
+         * Version 18: money lent and borrowed between the user and the people (`finance/domain/Debts.kt`). Adds one new, empty table and
+         * its indexes - nothing that was there is touched: no row, column or table - and is safe to run again (`IF NOT EXISTS`), so a
+         * retried migration, or the safety net in `onOpen`, can never fail on "already exists" and leave the database refusing to open.
+         *
+         * - `kind` is one of `lent`, `borrowed`, `repaid_to_me`, `repaid_by_me` ([com.example.normpix.finance.domain.DebtKind]); `amount`
+         *   is above zero (the kind says which way it counts); `occurred_at` is kept as every moment here is (INTEGER milliseconds of the
+         *   wall clock, see `toStorage`).
+         * - `person_id` is who it is with; deleting the person takes their records with them (`ON DELETE CASCADE` - the person's delete
+         *   says so first, and Undo puts both back): a record about nobody means nothing.
+         * - `transaction_id` is the transaction that moved the money through one of the user's accounts, or null. Deleting that
+         *   transaction leaves the record, without it (`ON DELETE SET NULL`): what is owed is not undone by a mistyped entry going.
+         */
+        fun addDebts(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS $DEBTS (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  person_id INTEGER NOT NULL REFERENCES $PEOPLE(id) ON DELETE CASCADE,
+                  kind TEXT NOT NULL CHECK (kind IN ('lent', 'borrowed', 'repaid_to_me', 'repaid_by_me')),
+                  amount INTEGER NOT NULL CHECK (amount > 0),
+                  occurred_at INTEGER NOT NULL,
+                  note TEXT,
+                  transaction_id INTEGER REFERENCES $TRANSACTIONS(id) ON DELETE SET NULL,
+                  created_at INTEGER NOT NULL,
+                  updated_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_debts_person ON $DEBTS(person_id)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_debts_transaction ON $DEBTS(transaction_id)")
         }
 
         /**

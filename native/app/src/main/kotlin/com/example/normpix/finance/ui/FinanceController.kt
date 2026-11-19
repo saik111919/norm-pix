@@ -29,6 +29,7 @@ import com.example.normpix.finance.domain.Person
 import com.example.normpix.finance.domain.RecurringRule
 import com.example.normpix.finance.domain.RepeatSchedule
 import com.example.normpix.finance.domain.SavingsGoal
+import com.example.normpix.finance.domain.DebtEntry
 import com.example.normpix.finance.domain.SelfTransferPair
 import com.example.normpix.finance.domain.SplitPart
 import com.example.normpix.finance.domain.Tag
@@ -80,7 +81,16 @@ data class FinanceState(
     val tags: List<Tag> = emptyList(),
     /** The savings goals, in the order the user keeps them (what each has saved is worked out from [balances] and the goal: `goalSaved`). */
     val goals: List<SavingsGoal> = emptyList(),
+    /** Every record of money lent and borrowed with the people, oldest first (see `finance/domain/Debts.kt`). */
+    val debts: List<DebtEntry> = emptyList(),
 ) {
+    /** What each person owes the user (positive) or is owed by them (negative), by person id; settled people are left out. */
+    val debtBalances: Map<Long, Long> by lazy(LazyThreadSafetyMode.NONE) { com.example.normpix.finance.domain.debtBalances(debts) }
+
+    /** The records with person [personId], newest first. */
+    fun debtsWith(personId: Long): List<DebtEntry> =
+        debts.filter { it.personId == personId }.sortedWith(compareByDescending<DebtEntry> { it.occurredAt }.thenByDescending { it.id ?: 0L })
+
     val money: MoneyFormatter = MoneyFormatter(currency, hidden = amountsHidden)
 
     /** Every bank accounts and cards can belong to: the built-in directory plus the user's own. */
@@ -209,6 +219,7 @@ class FinanceController(
         val people = repository.people()
         val tags = repository.tags()
         val goals = repository.goals()
+        val debts = repository.debts()
         val previous = _state.value
         _state.value = previous.copy(
             status = status,
@@ -224,6 +235,7 @@ class FinanceController(
             upcomingCount = upcoming,
             tags = tags,
             goals = goals,
+            debts = debts,
         )
     }
 
@@ -343,6 +355,15 @@ class FinanceController(
 
     /** Saves a savings goal, new or edited (see [FinanceRepository.saveGoal]). */
     suspend fun saveGoal(goal: SavingsGoal): SavingsGoal = mutate { it.saveGoal(goal) }
+
+    /**
+     * Keeps a record of money lent or borrowed with a person, and - when [moved] is given - the transaction that moved its money through
+     * an account, in one step (see [FinanceRepository.saveDebt]).
+     */
+    suspend fun saveDebt(debt: DebtEntry, moved: FinanceTransaction? = null): DebtEntry = mutate { it.saveDebt(debt, moved) }
+
+    /** Deletes a record of money owed; the transaction it recorded, if any, stays. */
+    suspend fun deleteDebt(id: Long) = mutate { it.deleteDebt(id) }
 
     /** Deletes a goal: only a target, so no account or balance changes. */
     suspend fun deleteGoal(id: Long) = mutate { it.deleteGoal(id) }

@@ -245,6 +245,11 @@ dependencies {
     implementation(libs.androidx.graphics.shapes)
     implementation(libs.material.kolor)
     implementation(libs.mlkit.text.recognition)
+    // Loyalty and gift cards in the Wallet (2026-11-19): a card's barcode or QR code read from a photo or screenshot on the phone (the
+    // bundled ML Kit model, as the receipts' text recognizer is - its telemetry backend is dropped the same way, see DropTelemetryBackend),
+    // and drawn large at the counter by ZXing's encoders (pure Java, Apache-2.0, no native code, no network).
+    implementation(libs.mlkit.barcode.scanning)
+    implementation(libs.zxing.core)
     implementation(libs.androidsvg)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)

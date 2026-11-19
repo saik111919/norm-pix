@@ -361,8 +361,8 @@ class SplitMigrationTest {
         val upgraded = FinanceDatabase(context, dbName)
         try {
             val db = upgraded.writableDatabase
-            assertEquals(17, FinanceDatabase.VERSION)
-            assertEquals(17, db.version, "opened at version 17")
+            assertTrue(FinanceDatabase.VERSION >= 17)
+            assertEquals(FinanceDatabase.VERSION, db.version, "opened at the current version")
             // Every row of every table, exactly as it was - transactions with the one new column (null) and nothing else different.
             for (table in tables) {
                 if (table == "transactions") {
@@ -392,7 +392,11 @@ class SplitMigrationTest {
                     assertEquals(sql, after[name], "$name is as it was")
                 }
             }
-            assertEquals(schemaBefore.keys + "idx_tx_split", after.keys, "only the split index is new")
+            assertEquals(
+                schemaBefore.keys + "idx_tx_split" + "debts" + "idx_debts_person" + "idx_debts_transaction",
+                after.keys,
+                "only the split index and, from v18, the debts table with its indexes are new",
+            )
         } finally {
             upgraded.close()
         }
@@ -501,7 +505,7 @@ class SplitMigrationTest {
         val database = FinanceDatabase(context, dbName)
         try {
             val db = database.writableDatabase
-            assertEquals(17, db.version)
+            assertEquals(FinanceDatabase.VERSION, db.version, "numbered 17, opened at the current version")
             assertTrue("split_group" in columnsOf(db, "transactions"))
             assertTrue(db.rows("transactions").all { it["split_group"] == null })
             assertEquals(5, count(db, "transactions"))

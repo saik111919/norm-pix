@@ -35,6 +35,11 @@ import com.example.normpix.wallet.CardsController
 import com.example.normpix.wallet.CardsState
 import com.example.normpix.wallet.FileCardVault
 import com.example.normpix.wallet.KeystoreKeyProvider
+import com.example.normpix.wallet.passes.FilePassVault
+import com.example.normpix.wallet.passes.InMemoryPassVault
+import com.example.normpix.wallet.passes.MlKitPassCodeReader
+import com.example.normpix.wallet.passes.PassCodeReader
+import com.example.normpix.wallet.passes.PassesController
 import com.example.normpix.wallet.NfcTagReveal
 import com.example.normpix.wallet.PrefsTagStore
 import com.example.normpix.wallet.ReaderModeNfcTagReveal
@@ -114,6 +119,10 @@ class AppContainer(
     val autoBackup: AutoBackupService? = null,
     /** True only for the in-memory sample set ([DummyData]): data that is never backed up, and never the user's. */
     val isSampleData: Boolean = false,
+    /** The loyalty, membership and gift cards (Wallet), in their own encrypted vault; in memory only in tests and the sample set. */
+    val passes: PassesController = PassesController(InMemoryPassVault()),
+    /** Reads a card's code from a picture on the device; null where there is no reader (tests): the number is then typed. */
+    val passScanner: PassCodeReader? = null,
 ) {
     /** A reminder whose alert screen should open (notification tapped), consumed by the UI. */
     val reminderAlerts = MutableStateFlow<Long?>(null)
@@ -290,6 +299,9 @@ class NormPixApplication : Application() {
                     notifier = SystemExpiryNotifier(app),
                 ),
                 autoBackup = autoBackup,
+                // Beside the card vault, made the same way and under its key, in a file of its own (see FilePassVault).
+                passes = PassesController(FilePassVault(File(app.filesDir, "pass_vault.bin"))),
+                passScanner = MlKitPassCodeReader(app),
             )
             return built
         }
