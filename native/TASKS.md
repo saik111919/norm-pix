@@ -1169,6 +1169,13 @@ Asked (owner, 2026-11-19): from the suggestions list, "6. Lent and borrowed with
 - [x] Tests: `PassesTest` (10) and `PassesUiTest` (6); `AboutPageTest` checks the credit and that the licence is in the app. Rendered the Wallet section, an EAN-13 card, a gift card (QR, balance, hidden PIN) and the edit form.
 - [x] Gate for both features (2026-11-19): the full unit suite ran (3,819 tests, 4 failed - the version pins above - fixed and rerun green), `lintDebug` alone with 0 errors (two `StateFlow.value` reads in `DebtsUiTest` and a lower-case composable in `PassFlows` fixed), `verify.sh` OK.
 - [ ] Not done: a shortcut or widget straight to one card, a gift card's balance going down as it is spent; scanning not yet tried on a phone or the emulator, and a release (R8) build not yet run with the barcode reader.
+- [x] Shipped as v1.6.4 (PR #46, merged 2026-11-19; the first Release APK run failed on a one-off "Could not find com.google.zxing:core:3.5.4" from Maven Central while the tests job resolved it - rerun green).
+
+## Phase 80 - release notes that reach the Changelog (2026-11-19)
+Found after v1.6.4: its notes were the commit subject, not `native/release-notes.md`. Owner (2026-11-19): correct v1.6.4's notes now, and "PR to main now" for the fix.
+- [x] Cause: the Release APK job's steps run in `native/` (`defaults.run.working-directory`), and the notes step looked for `native/release-notes.md` from there, so it never found the file and every release from v1.6.0 to v1.6.4 listed commit subjects. The workflow now names `$GITHUB_WORKSPACE/native/release-notes.md`.
+- [x] v1.6.4 corrected by hand: its release text is the nine lines (`gh release edit --notes-file`), which the Changelog page reads. Its `update.json` can't be changed: the repository's releases are immutable (`--clobber` refused, HTTP 422, nothing deleted), so the update prompt for 1.6.4 keeps the one-line notes.
+- [x] v1.6.5's notes are one line in `native/release-notes.md`, so that release itself shows the fix working.
 
 ## Backlog - to come back to
 

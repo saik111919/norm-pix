@@ -367,7 +367,9 @@ jobs:
             if [ -n "$previous" ]; then range="$previous..$ref"; else range="$ref"; fi
             # Notes written by hand for this release (native/release-notes.md, one line for each change) are used when that file has
             # changed since the last release, so a release never repeats the last one's notes; its comment lines are left out.
-            curated="native/release-notes.md"
+            # Named from the checkout's root: this job's steps run in native/, where "native/release-notes.md" is not a file - so
+            # until 2026-11-19 (v1.6.0 to v1.6.4) every release fell through to the commit subjects.
+            curated="$GITHUB_WORKSPACE/native/release-notes.md"
             if [ -s "$curated" ] && { [ -z "$previous" ] || ! git diff --quiet "$previous" "$ref" -- "$curated"; }; then
               grep -v '^[[:space:]]*<!--' "$curated" > "$notes" || true
             fi
